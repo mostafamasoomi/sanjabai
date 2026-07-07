@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block title %}مدل‌ها{% endblock %}
+{% block content %}
+<h2>مدل‌های فعال</h2>
+<div class="card">
+  <table>
+    <thead><tr><th>ارائه‌دهنده</th><th>مدل</th><th>وضعیت</th><th>اولویت</th><th>عملیات</th></tr></thead>
+    <tbody>
+      {% for m in models %}
+      <tr>
+        <form class="inline" method="post" action="/admin/models/toggle">
+          <td>{{ m.provider }}</td>
+          <td>{{ m.model }}</td>
+          <td>
+            <select name="enabled">
+              <option value="1" {% if m.enabled %}selected{% endif %}>فعال</option>
+              <option value="0" {% if not m.enabled %}selected{% endif %}>غیرفعال</option>
+            </select>
+          </td>
+          <td>{{ m.priority }}</td>
+          <td><button class="btn" type="submit">بروزرسانی</button><input type="hidden" name="item_id" value="{{ m.id }}" /></td>
+        </form>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

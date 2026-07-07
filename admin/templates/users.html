@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block title %}کاربران{% endblock %}
+{% block content %}
+<h2>مدیریت کاربران</h2>
+<div class="card">
+  <table>
+    <thead><tr><th>نام کاربری</th><th>نقش</th><th>اعتبار</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <form class="inline" method="post" action="/admin/users/update">
+          <td>{{ u.username }}</td>
+          <td>{{ u.role }}</td>
+          <td><input type="number" name="credits" value="{{ u.credits }}" style="width:90px;" /></td>
+          <td>
+            <select name="is_active">
+              <option value="1" {% if u.is_active %}selected{% endif %}>فعال</option>
+              <option value="0" {% if not u.is_active %}selected{% endif %}>غیرفعال</option>
+            </select>
+          </td>
+          <td><button class="btn" type="submit">ذخیره</button><input type="hidden" name="item_id" value="{{ u.id }}" /></td>
+        </form>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

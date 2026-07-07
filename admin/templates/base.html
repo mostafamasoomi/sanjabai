@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ ui.brand }} - {% block title %}مدیریت{% endblock %}</title>
+  <style>
+    :root { font-family: 'Vazirmatn','Tahoma',sans-serif; }
+    body { margin:0; direction: rtl; background:#f6f7fb; color:#1f2430; }
+    .navbar { background:#0f5a8a; color:#fff; padding:16px; display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+    .navbar a { color:#fff; text-decoration:none; background:#124f79; padding:8px 12px; border-radius:10px; font-size:14px; }
+    .navbar a:hover { background:# def6 }
+    .container { max-width:1100px; margin:24px auto; padding:0 16px; }
+    .card { background:#fff; padding:18px; border-radius:14px; box-shadow:0 2px 8px rgba(20,50,80,0.08); margin-bottom:16px; }
+    table { width:100%; border-collapse:collapse; }
+    th,td { padding:10px 8px; border-bottom:1px solid #eef1f6; text-align:right; }
+    input,select,button { font-family:inherit; }
+    label { display:block; margin-bottom:6px; }
+    .field { margin-bottom:12px; }
+    .btn { border:none; padding:10px 14px; border-radius:10px; cursor:pointer; background:#0f5a8a; color:#fff; font-weight:600; }
+    .btn.secondary { background:#5b6575; }
+    .muted { color:#607080; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:16px; }
+    .stat { background:#fff; padding:16px 18px; border-radius:14px; box-shadow:0 2px 8px rgba(20,50,80,0.08); }
+    .errors { background:#fdecec; color:#8a2c2c; padding:10px 12px; border-radius:10px; margin-bottom:10px; }
+    form.inline { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  </style>
+</head>
+<body>
+  <div class="navbar">
+    <div>{{ ui.brand }}</div>
+    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <a href="/admin/pricing">{{ ui.nav_pricing }}</a>
+      <a href="/admin/models">{{ ui.nav_models }}</a>
+      <a href="/admin/users">{{ ui.nav_users }}</a>
+      <span class="muted">| {{ username }}</span>
+      <a href="/admin/logout">{{ ui.logout }}</a>
+    </div>
+  </div>
+  <div class="container">
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

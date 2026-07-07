@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %}قیمت‌گذاری{% endblock %}
+{% block content %}
+<h2>قیمت‌گذاری مدل‌ها</h2>
+<div class="card">
+  <table>
+    <thead><tr><th>ارائه‌دهنده</th><th>مدل</th><th>قیمت ورودی</th><th>قیمت خروجی</th><th>واحد</th><th>عملیات</th></tr></thead>
+    <tbody>
+      {% for p in prices %}
+      <tr>
+        <form class="inline" method="post" action="/admin/pricing/update">
+          <td>{{ p.provider }}</td>
+          <td>{{ p.model }}</td>
+          <td><input type="number" name="input" value="{{ p.input_price }}" style="width:90px;" /></td>
+          <td><input type="number" name="output" value="{{ p.output_price }}" style="width:90px;" /></td>
+          <td>{{ p.currency }}</td>
+          <td><button class="btn" type="submit">ذخیره</button><input type="hidden" name="item_id" value="{{ p.id }}" /></td>
+        </form>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

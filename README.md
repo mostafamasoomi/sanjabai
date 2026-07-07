@@ -1,2 +1,1 @@
-# MultiAI Gateway
-Phase 0: LiteLLM + wallet + billing.
+# MultiAI Gateway\nPhase 0: LiteLLM + wallet + billing.\n

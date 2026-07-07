@@ -12,7 +12,7 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
   litellm:
-    image: ghcr.io/berriai/litellm:stable-[VERIFY: litellm docs]
+    image: ghcr.io/berriai/litellm:stable-latest
     command: ["--config", "/app/config.yaml"]
     volumes:
       - ./backend/config.example.yaml:/app/config.yaml:ro

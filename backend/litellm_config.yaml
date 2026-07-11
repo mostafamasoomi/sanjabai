@@ -1,0 +1,54 @@
+model_list:
+  - model_name: kr/bynara-auto
+    litellm_params:
+      model: openai/auto
+      api_base: https://router.bynara.id/v1
+      api_key: sk-nry-FDhIv6pz99vtozIEn49SmZu_k41z12EB9jhedTyygRw
+      api_type: openai
+  - model_name: kr/claude-3.5-sonnet
+    litellm_params:
+      model: openai/claude-3.5-sonnet
+      api_base: https://router.bynara.id/v1
+      api_key: sk-nry-FDhIv6pz99vtozIEn49SmZu_k41z12EB9jhedTyygRw
+      api_type: openai
+  - model_name: kr/claude-opus-4
+    litellm_params:
+      model: openai/claude-opus-4
+      api_base: https://router.bynara.id/v1
+      api_key: sk-nry-FDhIv6pz99vtozIEn49SmZu_k41z12EB9jhedTyygRw
+      api_type: openai
+  - model_name: kr/gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_base: https://router.bynara.id/v1
+      api_key: sk-nry-FDhIv6pz99vtozIEn49SmZu_k41z12EB9jhedTyygRw
+      api_type: openai
+  - model_name: kr/gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_base: https://router.bynara.id/v1
+      api_key: sk-nry-FDhIv6pz99vtozIEn49SmZu_k41z12EB9jhedTyygRw
+      api_type: openai
+  - model_name: kr/gemini-2.5-pro
+    litellm_params:
+      model: openai/gemini-2.5-pro
+      api_base: https://router.bynara.id/v1
+      api_key: sk-nry-FDhIv6pz99vtozIEn49SmZu_k41z12EB9jhedTyygRw
+      api_type: openai
+  - model_name: kr/deepseek-chat
+    litellm_params:
+      model: openai/deepseek-chat
+      api_base: https://router.bynara.id/v1
+      api_key: sk-nry-FDhIv6pz99vtozIEn49SmZu_k41z12EB9jhedTyygRw
+      api_type: openai
+  - model_name: kr/llama-3.1-405b
+    litellm_params:
+      model: openai/llama-3.1-405b
+      api_base: https://router.bynara.id/v1
+      api_key: sk-nry-FDhIv6pz99vtozIEn49SmZu_k41z12EB9jhedTyygRw
+      api_type: openai
+
+litellm_settings:
+  drop_params: true
+  request_timeout: 120
+  proxy: socks5://ted:T%23d%40123234@multiai_tunnel:9090

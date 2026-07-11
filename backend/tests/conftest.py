@@ -9,13 +9,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # ── Mock Redis BEFORE app import ──────────────────────────
+_mock_redis_instance = MagicMock()
+_mock_redis_instance.incr.return_value = 1
+_mock_redis_instance.expire.return_value = True
+_mock_redis_instance.get.return_value = None
+_mock_redis_instance.set.return_value = True
+_mock_redis_instance.delete.return_value = True
+
 _mock_redis_module = MagicMock()
 _mock_redis_module.Redis = MagicMock()
-_mock_redis_module.Redis.from_url = MagicMock(return_value=MagicMock())
+_mock_redis_module.Redis.from_url = MagicMock(return_value=_mock_redis_instance)
 sys.modules['redis'] = _mock_redis_module
 
 # ── Mock asyncpg ──────────────────────────────────────────
 sys.modules['asyncpg'] = MagicMock()
+
+# ── Mock migrate module BEFORE app import ─────────────────
+# This prevents the lifespan from running real migrations
+_mock_migrate_module = MagicMock()
+_mock_migrate_module.migrate = AsyncMock()
+sys.modules['migrate'] = _mock_migrate_module
 
 # ── Set test ADMIN_TOKEN ──────────────────────────────────
 import os
@@ -34,8 +47,10 @@ def pytest_configure(config):
 @pytest.fixture
 def client():
     """FastAPI TestClient with mocked DB engine"""
-    with patch('app.create_async_engine') as mock_engine:
-        mock_engine.return_value = MagicMock()
+    with patch('app.create_async_engine') as mock_engine_fn:
+        mock_eng = MagicMock()
+        mock_eng.dispose = AsyncMock()
+        mock_engine_fn.return_value = mock_eng
         from fastapi.testclient import TestClient
         with TestClient(app) as c:
             yield c
@@ -97,12 +112,10 @@ def make_row(**kwargs):
         setattr(row, k, v)
     return row
 
-
 def make_fetchone(**kwargs):
     """Create a mock for execute().fetchone() returning a row"""
     row = make_row(**kwargs) if kwargs else None
     return row
-
 
 def make_result(fetchone=None, fetchall=None):
     """Create a mock SQLAlchemy result"""

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Icon, iconNames, type IconName } from './Icon'
+import { Icon, iconNames, type IconName } from './ui/Icon'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Command Palette — ⌘K / Ctrl+K to open, keyboard-first navigation.

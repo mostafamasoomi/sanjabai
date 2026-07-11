@@ -1,0 +1,3 @@
+FROM ghcr.io/berriai/litellm:main-latest
+USER root
+RUN /app/.venv/bin/python -m ensurepip && /app/.venv/bin/python -m pip install --no-cache-dir "httpx[socks]" "socksio"

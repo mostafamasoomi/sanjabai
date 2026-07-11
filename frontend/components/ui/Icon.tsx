@@ -42,10 +42,11 @@ interface IconProps {
   name: IconName
   size?: number
   className?: string
+  style?: React.CSSProperties
   'aria-label'?: string
 }
 
-export function Icon({ name, size = 20, className = '', 'aria-label': ariaLabel }: IconProps) {
+export function Icon({ name, size = 20, className = '', style, 'aria-label': ariaLabel }: IconProps) {
   const path = icons[name]
   if (!path) return null
 
@@ -56,6 +57,7 @@ export function Icon({ name, size = 20, className = '', 'aria-label': ariaLabel 
       viewBox="0 0 24 24"
       fill="currentColor"
       className={className}
+      style={style}
       aria-label={ariaLabel || name}
       aria-hidden={!ariaLabel}
     >

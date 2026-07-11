@@ -1,0 +1,10 @@
+.next/
+node_modules/
+__pycache__/
+lab/
+.env
+
+# Secrets
+.env
+infra/ssh_key
+infra/ssh_tunnel/

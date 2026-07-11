@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>پنل مدیریت - Multiai</title>
+<link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+<style>
+  :root{--bg:#0f1117;--card:#1a1d27;--border:#2a2e3a;--text:#e4e6eb;--muted:#8b92a5;--accent:#6c5ce7;--green:#00b894;--red:#e74c3c;--input:#232733}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Vazirmatn',system-ui,sans-serif}
+  body{background:var(--bg);color:var(--text);min-height:100vh}
+  .login{display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:1rem}
+  .login input{padding:.75rem 1rem;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--text);width:280px;font-size:1rem}
+  .login button{padding:.75rem 2rem;border:none;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;font-size:1rem;font-weight:600}
+  .wrap{display:flex;min-height:100vh}
+  .sidebar{width:240px;background:var(--card);border-inline-end:1px solid var(--border);padding:1.5rem .75rem;display:flex;flex-direction:column;gap:.25rem}
+  .sidebar h2{font-size:1.1rem;padding:.5rem;color:var(--accent);margin-bottom:1rem}
+  .nav-item{padding:.65rem .85rem;border-radius:8px;cursor:pointer;color:var(--muted);transition:.15s;font-size:.92rem}
+  .nav-item:hover{background:var(--input);color:var(--text)}
+  .nav-item.active{background:var(--accent);color:#fff}
+  .content{flex:1;padding:2rem;overflow-y:auto}
+  .page{display:none}
+  .page.active{display:block}
+  h1{font-size:1.5rem;margin-bottom:1.5rem}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin-bottom:1.5rem}
+  label{display:block;font-size:.82rem;color:var(--muted);margin:.75rem 0 .35rem}
+  input,textarea,select{width:100%;padding:.6rem .8rem;border-radius:8px;border:1px solid var(--border);background:var(--input);color:var(--text);font-size:.9rem;font-family:inherit}
+  textarea{min-height:120px;resize:vertical}
+  button.btn{padding:.6rem 1.4rem;border:none;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;font-weight:600;margin-top:1rem;font-size:.9rem}
+  button.btn.danger{background:var(--red)}
+  button.btn.sm{padding:.35rem .8rem;font-size:.8rem;margin:0}
+  .row{display:flex;gap:1rem;flex-wrap:wrap}
+  .row>div{flex:1;min-width:160px}
+  table{width:100%;border-collapse:collapse;margin-top:1rem}
+  th,td{text-align:right;padding:.6rem .8rem;border-bottom:1px solid var(--border);font-size:.85rem}
+  th{color:var(--muted);font-weight:500}
+  .badge{display:inline-block;padding:.2rem .6rem;border-radius:20px;font-size:.75rem}
+  .badge.on{background:rgba(0,184,148,.15);color:var(--green)}
+  .badge.off{background:rgba(231,76,60,.15);color:var(--red)}
+  .item{display:flex;justify-content:space-between;align-items:center;padding:.75rem;border:1px solid var(--border);border-radius:8px;margin-bottom:.5rem;background:var(--input)}
+  .toast{position:fixed;bottom:2rem;left:50%;transform:translateX(-50%);background:var(--green);color:#fff;padding:.75rem 1.5rem;border-radius:8px;opacity:0;transition:.3s;pointer-events:none}
+  .toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="login" id="loginScreen">
+  <h2>ورود به پنل مدیریت</h2>
+  <input type="password" id="tokenInput" placeholder="توکن ادمین">
+  <button onclick="login()">ورود</button>
+</div>
+
+<div class="wrap" id="adminPanel" style="display:none">
+  <div class="sidebar">
+    <h2>Multiai Admin</h2>
+    <div class="nav-item active" data-page="pricing">تعرفه‌ها</div>
+    <div class="nav-item" data-page="features">امکانات</div>
+    <div class="nav-item" data-page="discounts">تخفیف‌ها</div>
+    <div class="nav-item" data-page="about">درباره ما</div>
+    <div class="nav-item" data-page="proxy">پروکسی / تونل</div>
+    <div class="nav-item" data-page="models">مدل‌ها</div>
+  </div>
+  <div class="content">
+    <div class="page active" id="page-pricing"><h1>مدیریت تعرفه‌ها</h1><div id="pricingList"></div><div class="card"><h3>افزودن / ویرایش</h3><div class="row"><div><label>نام مدل</label><input id="pz-model" placeholder="kr/gpt-4o"></div><div><label>ورودی / میلیون توکن</label><input id="pz-in" type="number" placeholder="0"></div><div><label>خروجی / میلیون توکن</label><input id="pz-out" type="number" placeholder="0"></div></div><label>واحد پول</label><input id="pz-cur" value="IRT"><button class="btn" onclick="savePricing()">ذخیره</button></div></div>
+    <div class="page" id="page-features"><h1>امکانات / ویژگی‌ها</h1><div id="featuresList"></div><div class="card"><h3>افزودن / ویرایش</h3><input id="ft-id" type="hidden"><div><label>عنوان</label><input id="ft-title" placeholder="چت هوشمند"></div><div><label>توضیحات</label><textarea id="ft-desc"></textarea></div><div class="row"><div><label>آیکون (emoji)</label><input id="ft-icon" placeholder="💬"></div><div><label>ترتیب</label><input id="ft-order" type="number" value="0"></div><div><label>فعال</label><select id="ft-active"><option value="true">بله</option><option value="false">خیر</option></select></div></div><button class="btn" onclick="saveFeature()">ذخیره</button></div></div>
+    <div class="page" id="page-discounts"><h1>کدهای تخفیف</h1><div id="discountsList"></div><div class="card"><h3>افزودن / ویرایش</h3><input id="dc-id" type="hidden"><div class="row"><div><label>کد تخفیف</label><input id="dc-code" placeholder="WELCOME10"></div><div><label>درصد</label><input id="dc-percent" type="number" value="10"></div><div><label>فعال</label><select id="dc-active"><option value="true">بله</option><option value="false">خیر</option></select></div></div><button class="btn" onclick="saveDiscount()">ذخیره</button></div></div>
+    <div class="page" id="page-about"><h1>درباره ما</h1><div class="card"><label>عنوان</label><input id="ab-title" value="درباره ما"><label>متن</label><textarea id="ab-body" placeholder="متن درباره ما به فارسی..."></textarea><button class="btn" onclick="saveAbout()">ذخیره</button></div></div>
+    <div class="page" id="page-proxy"><h1>تنظیمات پروکسی / تونل</h1><div class="card"><div class="row"><div><label>نوع پروکسی</label><select id="px-type"><option value="socks5">SOCKS5</option><option value="http">HTTP</option></select></div><div><label>آدرس پروکسی</label><input id="px-url" placeholder="socks5://user:pass@host:port"></div><div><label>فعال</label><select id="px-active"><option value="true">بله</option><option value="false">خیر</option></select></div></div><button class="btn" onclick="saveProxy()">ذخیره و اعمال</button><p style="margin-top:1rem;color:var(--muted);font-size:.82rem" id="px-status"></p></div></div>
+    <div class="page" id="page-models"><h1>مدل‌های فعال</h1><div id="modelsList"></div></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="/static/admin.js"></script>
+</body>
+</html>

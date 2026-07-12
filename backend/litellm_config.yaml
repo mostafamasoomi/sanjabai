@@ -15,6 +15,19 @@ model_list:
   - model_name: kimi-k2.7-code-free
     litellm_params: {model: openai/kimi-k2.7-code-free, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY_2}
 
+  - model_name: qwen3-coder-free
+    litellm_params: {model: openrouter/qwen/qwen3-coder:free, api_key: os.environ/BYNARA_API_KEY}
+  - model_name: nemotron-3-ultra-550b-free
+    litellm_params: {model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free, api_key: os.environ/BYNARA_API_KEY}
+  - model_name: llama-3-3-70b-free
+    litellm_params: {model: openrouter/meta-llama/llama-3.3-70b-instruct:free, api_key: os.environ/BYNARA_API_KEY}
+  - model_name: gemma-4-31b-free
+    litellm_params: {model: openrouter/google/gemma-4-31b-it:free, api_key: os.environ/BYNARA_API_KEY}
+  - model_name: hermes-3-405b-free
+    litellm_params: {model: openrouter/nousresearch/hermes-3-llama-3.1-405b:free, api_key: os.environ/BYNARA_API_KEY}
+  - model_name: tencent-hy3-free
+    litellm_params: {model: openrouter/tencent/hy3:free, api_key: os.environ/BYNARA_API_KEY}
+
 litellm_settings:
   drop_params: true
   request_timeout: 90

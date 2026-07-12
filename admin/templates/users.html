@@ -24,7 +24,7 @@
 
 <!-- User Detail Modal -->
 <div class="modal-overlay" id="userModal">
-  <div class="modal">
+  <div class="modal" style="max-width:800px;">
     <div class="modal-header">
       <h2>جزئیات کاربر</h2>
       <button class="modal-close" onclick="closeUserModal()">✕</button>
@@ -33,9 +33,100 @@
   </div>
 </div>
 
+<!-- Conversation Viewer Sub-Modal -->
+<div class="modal-overlay" id="chatViewModal">
+  <div class="modal" style="max-width:700px;">
+    <div class="modal-header">
+      <h2 id="chatViewTitle">مکالمه</h2>
+      <button class="modal-close" onclick="closeChatViewModal()">✕</button>
+    </div>
+    <div id="chatViewBody" class="chat-container"></div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
+<style>
+  .user-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0;
+  }
+  .user-tab {
+    padding: 10px 20px;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-family: var(--font);
+    font-size: .88rem;
+    font-weight: 600;
+    border-bottom: 3px solid transparent;
+    transition: all .2s;
+    position: relative;
+    bottom: -1px;
+  }
+  .user-tab:hover { color: var(--text); }
+  .user-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  .usage-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .usage-summary-card {
+    background: var(--input);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    text-align: center;
+  }
+  .usage-summary-card .value {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .usage-summary-card .label {
+    font-size: .78rem;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .conv-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(42,46,58,.5);
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .conv-item:hover { background: rgba(108,92,231,.08); }
+  .conv-item:last-child { border-bottom: none; }
+  .conv-item .conv-title {
+    font-weight: 600;
+    font-size: .9rem;
+    margin-bottom: 2px;
+  }
+  .conv-item .conv-meta {
+    font-size: .78rem;
+    color: var(--muted);
+    display: flex;
+    gap: 12px;
+  }
+  .conv-item .conv-right {
+    text-align: left;
+    flex-shrink: 0;
+  }
+</style>
+
 <script>
 (function() {
   const pagination = new Pagination('usersPagination', {
@@ -79,7 +170,7 @@
         html += '<td>' + formatDate(u.created_at) + '</td>';
         html += '<td>' + formatCurrency(u.wallet_balance || 0) + '</td>';
         html += '<td>' + formatNumber(u.usage_count || u.total_requests || 0) + '</td>';
-        html += '<td>' + formatNumber(u.conversations_count || 0) + '</td>';
+        html += '<td>' + formatNumber(u.conversation_count || u.conversations_count || 0) + '</td>';
         var status = u.is_active !== false ? 'active' : 'inactive';
         var statusLabel = u.is_active !== false ? 'فعال' : 'غیرفعال';
         html += '<td><span class="badge ' + status + '">' + statusLabel + '</span></td>';
@@ -94,6 +185,9 @@
     }
   };
 
+  // Store fetched user data globally for tab switching
+  var _currentUserData = null;
+
   window.showUserDetail = async function(userId) {
     document.getElementById('userModal').classList.add('show');
     document.getElementById('userModalBody').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
@@ -101,23 +195,190 @@
     try {
       const res = await fetchAPI('/admin/api/users/' + encodeURIComponent(userId));
       if (!res.ok) throw new Error();
-      const u = await res.json();
-
-      let html = '<div style="display:grid; gap:12px;">';
-      html += '<div class="form-row"><div><label>ایمیل</label><div style="padding:8px; background:var(--input); border-radius:8px;">' + escapeHtml(u.email || '—') + '</div></div>';
-      html += '<div><label>تلفن</label><div style="padding:8px; background:var(--input); border-radius:8px;">' + escapeHtml(u.phone || '—') + '</div></div></div>';
-      html += '<div class="form-row"><div><label>موجودی کیف پول</label><div style="padding:8px; background:var(--input); border-radius:8px;">' + formatCurrency(u.wallet_balance || 0) + '</div></div>';
-      html += '<div><label>تاریخ عضویت</label><div style="padding:8px; background:var(--input); border-radius:8px;">' + formatDate(u.created_at) + '</div></div></div>';
-      html += '</div>';
-      document.getElementById('userModalBody').innerHTML = html;
+      _currentUserData = await res.json();
+      renderUserModal(_currentUserData);
     } catch(e) {
       document.getElementById('userModalBody').innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">خطا در بارگذاری</div></div>';
     }
   };
 
+  function renderUserModal(u) {
+    var usageByModel = u.usage_by_model || [];
+    var convos = u.conversations || [];
+
+    // Compute totals
+    var totalTokens = 0, totalCost = 0, totalRequests = 0;
+    usageByModel.forEach(function(r) {
+      totalTokens += (Number(r.total_input) || 0) + (Number(r.total_output) || 0);
+      totalCost += Number(r.total_cost) || 0;
+      totalRequests += Number(r.request_count) || 0;
+    });
+
+    var html = '';
+
+    // Tabs
+    html += '<div class="user-tabs">';
+    html += '<button class="user-tab active" onclick="switchUserTab(\'info\', this)">👤 اطلاعات کاربر</button>';
+    html += '<button class="user-tab" onclick="switchUserTab(\'conversations\', this)">💬 مکالمات (' + convos.length + ')</button>';
+    html += '<button class="user-tab" onclick="switchUserTab(\'usage\', this)">📈 مصرف توکن</button>';
+    html += '</div>';
+
+    // Tab 1: User Info
+    html += '<div class="tab-content active" id="tab-info">';
+    html += '<div style="display:grid; gap:12px;">';
+    html += '<div class="form-row"><div><label>ایمیل</label><div style="padding:8px; background:var(--input); border-radius:8px;">' + escapeHtml(u.email || '—') + '</div></div>';
+    html += '<div><label>تلفن</label><div style="padding:8px; background:var(--input); border-radius:8px;">' + escapeHtml(u.phone || '—') + '</div></div></div>';
+    html += '<div class="form-row"><div><label>موجودی کیف پول</label><div style="padding:8px; background:var(--input); border-radius:8px;">' + formatCurrency(u.wallet_balance || 0) + '</div></div>';
+    html += '<div><label>تاریخ عضویت</label><div style="padding:8px; background:var(--input); border-radius:8px;">' + formatDate(u.created_at) + '</div></div></div>';
+
+    // Quick summary
+    if (usageByModel.length > 0) {
+      html += '<div style="margin-top:8px;">';
+      html += '<div class="form-row"><div><label>کل توکن‌ها مصرف شده</label><div style="padding:8px; background:var(--input); border-radius:8px; font-weight:700; color:var(--accent);">' + formatNumber(totalTokens) + '</div></div>';
+      html += '<div><label>کل هزینه</label><div style="padding:8px; background:var(--input); border-radius:8px; font-weight:700; color:var(--orange);">' + formatCurrency(totalCost) + ' تومان</div></div></div>';
+      html += '</div>';
+    }
+    html += '</div>';
+    html += '</div>';
+
+    // Tab 2: Conversations
+    html += '<div class="tab-content" id="tab-conversations">';
+    if (convos.length === 0) {
+      html += '<div class="empty-state"><div class="empty-icon">💬</div><div class="empty-text">مکالمه‌ای ثبت نشده</div></div>';
+    } else {
+      html += '<div style="max-height:50vh; overflow-y:auto;">';
+      convos.forEach(function(c) {
+        html += '<div class="conv-item" onclick="viewUserConversation(' + c.id + ')">';
+        html += '<div>';
+        html += '<div class="conv-title">' + escapeHtml(c.title || 'بدون عنوان') + '</div>';
+        html += '<div class="conv-meta">';
+        if (c.model) html += '<span><span class="badge info">' + escapeHtml(c.model) + '</span></span>';
+        html += '<span>' + formatNumber(c.message_count || 0) + ' پیام</span>';
+        html += '<span>' + formatDate(c.created_at) + '</span>';
+        html += '</div></div>';
+        html += '<div class="conv-right" style="color:var(--muted); font-size:.82rem;">مشاهده ←</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+
+    // Tab 3: Token Usage
+    html += '<div class="tab-content" id="tab-usage">';
+    if (usageByModel.length === 0) {
+      html += '<div class="empty-state"><div class="empty-icon">📈</div><div class="empty-text">مصرفی ثبت نشده</div></div>';
+    } else {
+      // Summary cards
+      html += '<div class="usage-summary">';
+      html += '<div class="usage-summary-card"><div class="value">' + formatNumber(totalTokens) + '</div><div class="label">کل توکن‌ها</div></div>';
+      html += '<div class="usage-summary-card"><div class="value">' + formatNumber(totalRequests) + '</div><div class="label">کل درخواست‌ها</div></div>';
+      html += '<div class="usage-summary-card"><div class="value">' + formatCurrency(totalCost) + '</div><div class="label">کل هزینه (تومان)</div></div>';
+      html += '</div>';
+
+      // Usage table
+      html += '<div class="table-wrapper">';
+      html += '<table><thead><tr>';
+      html += '<th>مدل</th><th>توکن ورودی</th><th>توکن خروجی</th><th>کش شده</th><th>تعداد درخواست</th><th>هزینه (تومان)</th>';
+      html += '</tr></thead><tbody>';
+
+      usageByModel.forEach(function(r) {
+        html += '<tr>';
+        html += '<td><span class="badge info">' + escapeHtml(r.model || '—') + '</span></td>';
+        html += '<td>' + formatNumber(r.total_input || 0) + '</td>';
+        html += '<td>' + formatNumber(r.total_output || 0) + '</td>';
+        html += '<td>' + formatNumber(r.total_cached || 0) + '</td>';
+        html += '<td>' + formatNumber(r.request_count || 0) + '</td>';
+        html += '<td style="font-weight:600; color:var(--orange);">' + formatCurrency(r.total_cost || 0) + '</td>';
+        html += '</tr>';
+      });
+
+      html += '</tbody></table>';
+      html += '</div>';
+
+      // Pricing reference
+      var pricing = u.pricing || [];
+      if (pricing.length > 0) {
+        html += '<div style="margin-top:20px;">';
+        html += '<h3 style="font-size:.95rem; margin-bottom:12px; color:var(--muted);">💰 قیمت‌گذاری مدل‌ها (هر ۱ میلیون توکن)</h3>';
+        html += '<div class="table-wrapper">';
+        html += '<table><thead><tr><th>مدل</th><th>ورودی</th><th>خروجی</th><th>واحد</th></tr></thead><tbody>';
+        pricing.forEach(function(p) {
+          html += '<tr>';
+          html += '<td>' + escapeHtml(p.display_name || p.id || '—') + '</td>';
+          html += '<td>' + formatNumber(p.input_per_million || 0) + '</td>';
+          html += '<td>' + formatNumber(p.output_per_million || 0) + '</td>';
+          html += '<td>' + escapeHtml(p.currency || 'IRT') + '</td>';
+          html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+        html += '</div>';
+      }
+    }
+    html += '</div>';
+
+    document.getElementById('userModalBody').innerHTML = html;
+  }
+
+  window.switchUserTab = function(tabName, btnEl) {
+    // Deactivate all tabs and content
+    document.querySelectorAll('.user-tab').forEach(function(t) { t.classList.remove('active'); });
+    document.querySelectorAll('.tab-content').forEach(function(t) { t.classList.remove('active'); });
+    // Activate selected
+    btnEl.classList.add('active');
+    var el = document.getElementById('tab-' + tabName);
+    if (el) el.classList.add('active');
+  };
+
+  window.viewUserConversation = async function(convId) {
+    document.getElementById('chatViewModal').classList.add('show');
+    document.getElementById('chatViewTitle').textContent = 'در حال بارگذاری...';
+    document.getElementById('chatViewBody').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+    try {
+      const res = await fetchAPI('/admin/api/conversations/' + encodeURIComponent(convId));
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      var messages = data.messages || [];
+
+      document.getElementById('chatViewTitle').textContent = data.title || 'مکالمه';
+
+      if (!messages.length) {
+        document.getElementById('chatViewBody').innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">پیامی وجود ندارد</div></div>';
+        return;
+      }
+
+      var html = '';
+      messages.forEach(function(m) {
+        var role = (m.role || 'user').toLowerCase();
+        var roleLabel = role === 'user' ? 'کاربر' : 'دستیار';
+        html += '<div class="chat-bubble ' + role + '">';
+        html += '<div class="chat-role ' + role + '">' + roleLabel + '</div>';
+        html += escapeHtml(m.content || m.text || '');
+        html += '</div>';
+      });
+
+      document.getElementById('chatViewBody').innerHTML = html;
+    } catch(e) {
+      document.getElementById('chatViewBody').innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">خطا در بارگذاری مکالمه</div></div>';
+    }
+  };
+
+  window.closeChatViewModal = function() {
+    document.getElementById('chatViewModal').classList.remove('show');
+  };
+
   window.closeUserModal = function() {
     document.getElementById('userModal').classList.remove('show');
+    _currentUserData = null;
   };
+
+  // Close modals on overlay click
+  document.getElementById('chatViewModal').addEventListener('click', function(e) {
+    if (e.target === this) closeChatViewModal();
+  });
+  document.getElementById('userModal').addEventListener('click', function(e) {
+    if (e.target === this) closeUserModal();
+  });
 
   loadUsers();
 })();

@@ -62,7 +62,7 @@
       pagination.setTotal(data.total || items.length);
 
       if (!items.length) {
-        showEmpty('convTable', 'مکالمه‌ای یافت نشد', '💬');
+        showEmpty('convTable', 'مکالمهای یافت نشد', '💬');
         return;
       }
 
@@ -125,6 +125,11 @@
   window.closeConvModal = function() {
     document.getElementById('convModal').classList.remove('show');
   };
+
+  // Close modal on overlay click
+  document.getElementById('convModal').addEventListener('click', function(e) {
+    if (e.target === this) closeConvModal();
+  });
 
   loadConversations();
 })();

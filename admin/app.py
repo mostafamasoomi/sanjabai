@@ -448,7 +448,8 @@ async def api_user_detail(request: Request, user_id: int):
                     {'id': user_id})
 
                 convos = await _fetch_all(session,
-                    'SELECT id, title, created_at FROM conversations WHERE user_id = :id ORDER BY created_at DESC LIMIT 50',
+                    'SELECT id, title, model, jsonb_array_length(messages) as message_count, created_at '
+                    'FROM conversations WHERE user_id = :id ORDER BY created_at DESC LIMIT 50',
                     {'id': user_id})
 
                 payments = await _fetch_all(session,
@@ -463,12 +464,101 @@ async def api_user_detail(request: Request, user_id: int):
                 user['conversations'] = convos
                 user['payments'] = payments
                 user['api_keys'] = keys
+
+                # Usage by model aggregation
+                usage_by_model = await _fetch_all(session, """
+                    SELECT model,
+                        COALESCE(SUM(input_tokens), 0) AS total_input,
+                        COALESCE(SUM(output_tokens), 0) AS total_output,
+                        COALESCE(SUM(cached_input_tokens), 0) AS total_cached,
+                        COALESCE(SUM(reasoning_tokens), 0) AS total_reasoning,
+                        COUNT(*) AS request_count,
+                        COALESCE(SUM(charged_amount), 0) AS total_cost
+                    FROM usage_events WHERE user_id = :id
+                    GROUP BY model ORDER BY total_cost DESC
+                """, {'id': user_id})
+
+                # Model catalog pricing for reference
+                pricing = await _fetch_all(session, """
+                    SELECT id, display_name, input_per_million, output_per_million, currency
+                    FROM model_catalog WHERE availability = 'available'
+                    ORDER BY display_name
+                """)
+
+                user['usage_by_model'] = usage_by_model
+                user['pricing'] = pricing
                 return _json_response(user)
     except Exception as e:
         return _json_response({'error': str(e)}, 500)
 
 
 # --- Usage ---
+
+@app.get('/admin/api/users/{user_id}/conversations')
+async def api_user_conversations(request: Request, user_id: int):
+    """Return all conversations for a user with full messages."""
+    _require_api_session(request)
+    try:
+        async with async_session() as session:
+            async with session.begin():
+                convos = await _fetch_all(session, """
+                    SELECT id, title, model, messages,
+                        jsonb_array_length(messages) AS message_count, created_at
+                    FROM conversations WHERE user_id = :id
+                    ORDER BY created_at DESC
+                """, {'id': user_id})
+                return _json_response(convos)
+    except Exception as e:
+        return _json_response({'error': str(e)}, 500)
+
+
+@app.get('/admin/api/users/{user_id}/usage')
+async def api_user_usage(request: Request, user_id: int):
+    """Return per-model token usage breakdown for a user."""
+    _require_api_session(request)
+    try:
+        async with async_session() as session:
+            async with session.begin():
+                rows = await _fetch_all(session, """
+                    SELECT model,
+                        COALESCE(SUM(input_tokens), 0) AS total_input,
+                        COALESCE(SUM(output_tokens), 0) AS total_output,
+                        COALESCE(SUM(cached_input_tokens), 0) AS total_cached,
+                        COALESCE(SUM(reasoning_tokens), 0) AS total_reasoning,
+                        COUNT(*) AS request_count,
+                        COALESCE(SUM(charged_amount), 0) AS total_cost_irt
+                    FROM usage_events WHERE user_id = :uid
+                    GROUP BY model ORDER BY total_cost_irt DESC
+                """, {'uid': user_id})
+
+                # Also get pricing from model_catalog
+                pricing = await _fetch_all(session, """
+                    SELECT id, display_name, input_per_million, output_per_million, currency
+                    FROM model_catalog WHERE availability = 'available'
+                    ORDER BY display_name
+                """)
+
+                # Compute totals
+                total_input = sum(r.get('total_input', 0) or 0 for r in rows)
+                total_output = sum(r.get('total_output', 0) or 0 for r in rows)
+                total_requests = sum(r.get('request_count', 0) or 0 for r in rows)
+                total_cost = sum(r.get('total_cost_irt', 0) or 0 for r in rows)
+
+                return _json_response({
+                    'usage_by_model': rows,
+                    'pricing': pricing,
+                    'totals': {
+                        'total_input': total_input,
+                        'total_output': total_output,
+                        'total_requests': total_requests,
+                        'total_cost_irt': total_cost,
+                    }
+                })
+    except Exception as e:
+        return _json_response({'error': str(e)}, 500)
+
+
+# --- Usage (global) ---
 
 @app.get('/admin/api/usage')
 async def api_usage(
@@ -544,16 +634,19 @@ async def api_conversations(
                 where = []
                 params = {'lim': limit, 'off': offset}
                 if user_id:
-                    where.append('user_id = :uid')
+                    where.append('c.user_id = :uid')
                     params['uid'] = user_id
                 where_sql = ('WHERE ' + ' AND '.join(where)) if where else ''
 
-                count_row = await _fetch_one(session, f'SELECT COUNT(*) AS cnt FROM conversations {where_sql}', params)
+                count_row = await _fetch_one(session,
+                    f'SELECT COUNT(*) AS cnt FROM conversations c {where_sql}', params)
                 total = count_row['cnt'] if count_row else 0
 
                 rows = await _fetch_all(session,
-                    f'SELECT id, user_id, title, model, created_at '
-                    f'FROM conversations {where_sql} ORDER BY created_at DESC LIMIT :lim OFFSET :off', params)
+                    f'SELECT c.id, c.user_id, u.email AS user_email, c.title, c.model, '
+                    f'jsonb_array_length(c.messages) AS message_count, c.created_at '
+                    f'FROM conversations c LEFT JOIN users u ON u.id = c.user_id '
+                    f'{where_sql} ORDER BY c.created_at DESC LIMIT :lim OFFSET :off', params)
 
                 return _json_response({'items': rows, 'total': total, 'page': page, 'limit': limit})
     except Exception as e:

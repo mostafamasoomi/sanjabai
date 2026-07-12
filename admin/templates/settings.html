@@ -1,0 +1,150 @@
+{% extends 'base.html' %}
+{% block title %}تنظیمات{% endblock %}
+{% block topbar_title %}تنظیمات سیستم{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>⚙️ تنظیمات</h1>
+  <p>مدیریت تنظیمات عمومی سیستم</p>
+</div>
+
+<!-- About Section -->
+<div class="card">
+  <div class="card-header">
+    <h2>📝 درباره ما</h2>
+  </div>
+  <form onsubmit="saveAbout(event)">
+    <div class="form-group">
+      <label>عنوان</label>
+      <input type="text" id="ab-title" placeholder="درباره ما">
+    </div>
+    <div class="form-group">
+      <label>متن</label>
+      <textarea id="ab-body" rows="5" placeholder="متن درباره ما به فارسی..."></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">ذخیره</button>
+  </form>
+</div>
+
+<!-- Proxy Section -->
+<div class="card">
+  <div class="card-header">
+    <h2>🌐 تنظیمات پروکسی / تونل</h2>
+  </div>
+  <form onsubmit="saveProxy(event)">
+    <div class="form-row">
+      <div class="form-group">
+        <label>نوع پروکسی</label>
+        <select id="px-type">
+          <option value="socks5">SOCKS5</option>
+          <option value="http">HTTP</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>آدرس پروکسی</label>
+        <input type="text" id="px-url" placeholder="socks5://user:pass@host:port">
+      </div>
+      <div class="form-group">
+        <label>وضعیت</label>
+        <select id="px-active">
+          <option value="true">فعال</option>
+          <option value="false">غیرفعال</option>
+        </select>
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">ذخیره و اعمال</button>
+    <p id="px-status" style="margin-top:12px; color:var(--muted); font-size:.85rem;"></p>
+  </form>
+</div>
+
+<!-- App Info -->
+<div class="card">
+  <div class="card-header">
+    <h2>ℹ️ اطلاعات سیستم</h2>
+  </div>
+  <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap:16px;">
+    <div style="padding:12px; background:var(--input); border-radius:10px;">
+      <div style="color:var(--muted); font-size:.78rem; margin-bottom:4px;">نسخه پلتفرم</div>
+      <div style="font-weight:600;">Multiai v1.0</div>
+    </div>
+    <div style="padding:12px; background:var(--input); border-radius:10px;">
+      <div style="color:var(--muted); font-size:.78rem; margin-bottom:4px;">پنل مدیریت</div>
+      <div style="font-weight:600;">v2.0</div>
+    </div>
+    <div style="padding:12px; background:var(--input); border-radius:10px;">
+      <div style="color:var(--muted); font-size:.78rem; margin-bottom:4px;">محیط</div>
+      <div style="font-weight:600;">Production</div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  async function loadSettings() {
+    try {
+      // Load About
+      const aboutRes = await fetchAPI('/admin/api/about');
+      if (aboutRes.ok) {
+        const d = await aboutRes.json();
+        document.getElementById('ab-title').value = d.title || '';
+        document.getElementById('ab-body').value = d.body || d.content || '';
+      }
+    } catch(e) {}
+
+    try {
+      // Load Proxy
+      const proxyRes = await fetchAPI('/admin/api/proxy');
+      if (proxyRes.ok) {
+        const d = await proxyRes.json();
+        document.getElementById('px-type').value = d.proxy_type || 'socks5';
+        document.getElementById('px-url').value = d.proxy_url || d.url || '';
+        document.getElementById('px-active').value = String(d.active !== false);
+        document.getElementById('px-status').textContent = d.active ? '✅ تونل فعال' : '⚠️ تونل غیرفعال';
+      }
+    } catch(e) {}
+  }
+
+  window.saveAbout = async function(e) {
+    e.preventDefault();
+    var payload = {
+      title: document.getElementById('ab-title').value.trim(),
+      body: document.getElementById('ab-body').value.trim()
+    };
+    try {
+      const res = await fetchAPI('/admin/api/about', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) toast('تنظیمات درباره ما ذخیره شد', 'success');
+      else toast('خطا در ذخیره', 'error');
+    } catch(e) { toast('خطا در ارتباط', 'error'); }
+  };
+
+  window.saveProxy = async function(e) {
+    e.preventDefault();
+    var payload = {
+      proxy_type: document.getElementById('px-type').value,
+      proxy_url: document.getElementById('px-url').value.trim(),
+      active: document.getElementById('px-active').value === 'true'
+    };
+    try {
+      const res = await fetchAPI('/admin/api/proxy', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        toast('تنظیمات پروکسی ذخیره شد', 'success');
+        loadSettings();
+      } else {
+        toast('خطا در ذخیره', 'error');
+      }
+    } catch(e) { toast('خطا', 'error'); }
+  };
+
+  loadSettings();
+})();
+</script>
+{% endblock %}

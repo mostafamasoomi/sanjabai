@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% block title %}اعلانها{% endblock %}
+{% block topbar_title %}مدیریت اعلانها{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>🔔 اعلانها</h1>
+  <p>مشاهده و مدیریت اعلان‌های سیستم</p>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h2>لیست اعلان‌ها</h2>
+    <button class="btn btn-secondary btn-sm" onclick="loadNotifications()">🔄 بروزرسانی</button>
+  </div>
+  <div id="notificationsList">
+    <div class="loading"><div class="spinner"></div></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  window.loadNotifications = async function() {
+    try {
+      const res = await fetchAPI('/admin/api/notifications');
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : (data.items || data.data || []);
+
+      if (!items.length) {
+        document.getElementById('notificationsList').innerHTML = '<div class="empty-state"><div class="empty-icon">🔔</div><div class="empty-text">اعلانی وجود ندارد</div></div>';
+        return;
+      }
+
+      let html = '<div style="display:flex; flex-direction:column; gap:10px;">';
+      items.forEach(function(n) {
+        var isRead = n.is_read || n.read;
+        var borderColor = isRead ? 'var(--border)' : 'var(--accent)';
+        html += '<div style="display:flex; gap:14px; padding:16px 18px; background:var(--input); border:1px solid ' + borderColor + '; border-radius:12px; transition:border-color .2s;">';
+
+        // Icon based on type
+        var icon = '🔔';
+        var typeStr = (n.type || '').toLowerCase();
+        if (typeStr.includes('payment') || typeStr.includes('پرداخت')) icon = '💳';
+        else if (typeStr.includes('warning') || typeStr.includes('هشدار')) icon = '⚠️';
+        else if (typeStr.includes('error') || typeStr.includes('خطا')) icon = '❌';
+        else if (typeStr.includes('success') || typeStr.includes('موفق')) icon = '✅';
+        else if (typeStr.includes('info') || typeStr.includes('اطلاع')) icon = 'ℹ️';
+
+        html += '<span style="font-size:1.4rem;">' + icon + '</span>';
+        html += '<div style="flex:1;">';
+        html += '<div style="font-weight:' + (isRead ? '500' : '700') + '; margin-bottom:4px;">' + escapeHtml(n.title || n.message || '—') + '</div>';
+        if (n.body || n.description) {
+          html += '<div style="color:var(--muted); font-size:.85rem;">' + escapeHtml(n.body || n.description) + '</div>';
+        }
+        html += '<div style="color:var(--muted); font-size:.78rem; margin-top:6px;">' + formatDate(n.created_at) + '</div>';
+        html += '</div>';
+
+        if (!isRead) {
+          html += '<button class="btn btn-ghost btn-sm" onclick="markRead(' + (n.id || 0) + ')">خوانده شد</button>';
+        }
+
+        html += '</div>';
+      });
+      html += '</div>';
+      document.getElementById('notificationsList').innerHTML = html;
+    } catch(e) {
+      console.error(e);
+      document.getElementById('notificationsList').innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">خطا در بارگذاری</div></div>';
+    }
+  };
+
+  window.markRead = async function(id) {
+    try {
+      await fetchAPI('/admin/api/notifications/' + id + '/read', { method: 'POST' });
+      loadNotifications();
+    } catch(e) {}
+  };
+
+  loadNotifications();
+})();
+</script>
+{% endblock %}

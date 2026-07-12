@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+{% block title %}لاگها{% endblock %}
+{% block topbar_title %}لاگ‌های سیستم{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>📋 لاگ‌های سیستم</h1>
+  <p>مشاهده رویدادها و فعالیت‌های سیستم</p>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h2>لاگ‌های ممیزی</h2>
+    <button class="btn btn-secondary btn-sm" onclick="loadAudit()">🔄 بروزرسانی</button>
+  </div>
+  <div class="search-bar">
+    <div class="search-input">
+      <input type="text" id="auditSearch" placeholder="جستجو در لاگ‌ها..." oninput="debouncedSearch()">
+    </div>
+  </div>
+  <div class="table-wrapper" id="auditTable">
+    <div class="loading"><div class="spinner"></div></div>
+  </div>
+  <div id="auditPagination"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const pagination = new Pagination('auditPagination', {
+    perPage: 30,
+    onChange: function() { loadAudit(); }
+  });
+  window._pagination = pagination;
+
+  const debouncedSearch = debounce(function() { pagination.page = 1; loadAudit(); }, 400);
+  window.debouncedSearch = debouncedSearch;
+
+  window.loadAudit = async function() {
+    const search = document.getElementById('auditSearch').value.trim();
+    showLoading('auditTable');
+
+    try {
+      let url = '/admin/api/audit?limit=' + pagination.perPage + '&offset=' + pagination.offset;
+      if (search) url += '&search=' + encodeURIComponent(search);
+
+      const res = await fetchAPI(url);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : (data.items || data.data || []);
+      pagination.setTotal(data.total || items.length);
+
+      if (!items.length) {
+        showEmpty('auditTable', 'لاگی ثبت نشده', '📋');
+        return;
+      }
+
+      let html = '<table><thead><tr>';
+      html += '<th>زمان</th><th>کاربر</th><th>عملیات</th><th>جزئیات</th><th>آی‌پی</th>';
+      html += '</tr></thead><tbody>';
+
+      items.forEach(function(log) {
+        html += '<tr>';
+        html += '<td style="white-space:nowrap;">' + formatDate(log.created_at || log.timestamp) + '</td>';
+        html += '<td>' + escapeHtml(log.user_email || log.admin || log.user || '—') + '</td>';
+        html += '<td><span class="badge info">' + escapeHtml(log.action || log.event || '—') + '</span></td>';
+        html += '<td style="font-size:.82rem; color:var(--muted); max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + escapeHtml(log.details || log.description || '—') + '</td>';
+        html += '<td style="font-family:monospace; font-size:.82rem; color:var(--muted);">' + escapeHtml(log.ip_address || log.ip || '—') + '</td>';
+        html += '</tr>';
+      });
+
+      html += '</tbody></table>';
+      document.getElementById('auditTable').innerHTML = html;
+    } catch(e) {
+      console.error(e);
+      showEmpty('auditTable', 'خطا در بارگذاری', '⚠️');
+    }
+  };
+
+  loadAudit();
+})();
+</script>
+{% endblock %}

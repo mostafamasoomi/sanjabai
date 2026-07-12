@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+{% block title %}داشبورد{% endblock %}
+{% block topbar_title %}داشبورد{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>📊 داشبورد</h1>
+  <p>نمای کلی سیستم و آمار لحظه‌ای</p>
+</div>
+
+<div class="stat-grid" id="statsGrid">
+  <div class="stat-card purple">
+    <div class="stat-icon">👥</div>
+    <div class="stat-value" id="stat-users">—</div>
+    <div class="stat-label">کل کاربران</div>
+  </div>
+  <div class="stat-card green">
+    <div class="stat-icon">💬</div>
+    <div class="stat-value" id="stat-conversations">—</div>
+    <div class="stat-label">مکالمات فعال</div>
+  </div>
+  <div class="stat-card blue">
+    <div class="stat-icon">📈</div>
+    <div class="stat-value" id="stat-tokens">—</div>
+    <div class="stat-label">کل توکن مصرف شده</div>
+  </div>
+  <div class="stat-card orange">
+    <div class="stat-icon">💰</div>
+    <div class="stat-value" id="stat-revenue">—</div>
+    <div class="stat-label">کل درآمد (تومان)</div>
+  </div>
+</div>
+
+<!-- System Status -->
+<div class="card">
+  <div class="card-header">
+    <h2>🔧 وضعیت سیستم</h2>
+  </div>
+  <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap:12px;" id="systemStatus">
+    <div style="display:flex; align-items:center; gap:10px; padding:12px; background:var(--input); border-radius:10px;">
+      <span style="font-size:1.2rem;">🟢</span>
+      <div>
+        <div style="font-weight:600; font-size:.9rem;">سرویس اصلی</div>
+        <div style="color:var(--muted); font-size:.78rem;">آنلاین</div>
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px; padding:12px; background:var(--input); border-radius:10px;">
+      <span style="font-size:1.2rem;">🟢</span>
+      <div>
+        <div style="font-weight:600; font-size:.9rem;">پایگاه داده</div>
+        <div style="color:var(--muted); font-size:.78rem;">اتصال برقرار</div>
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px; padding:12px; background:var(--input); border-radius:10px;">
+      <span style="font-size:1.2rem;">🟢</span>
+      <div>
+        <div style="font-weight:600; font-size:.9rem;">پنل مدیریت</div>
+        <div style="color:var(--muted); font-size:.78rem;">فعال</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="card">
+  <div class="card-header">
+    <h2>🕐 آخرین فعالیت‌ها</h2>
+  </div>
+  <div class="table-wrapper" id="recentActivity">
+    <div class="loading"><div class="spinner"></div><span>در حال بارگذاری...</span></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  async function loadStats() {
+    try {
+      const res = await fetchAPI('/admin/api/stats');
+      if (!res.ok) return;
+      const data = await res.json();
+
+      document.getElementById('stat-users').textContent = formatNumber(data.total_users || 0);
+      document.getElementById('stat-conversations').textContent = formatNumber(data.active_conversations || data.total_conversations || 0);
+      document.getElementById('stat-tokens').textContent = formatTokens(data.total_tokens || 0);
+      document.getElementById('stat-revenue').textContent = formatCurrency(data.total_revenue || 0);
+    } catch(e) {
+      console.error('Stats load error:', e);
+    }
+  }
+
+  async function loadRecentActivity() {
+    try {
+      const res = await fetchAPI('/admin/api/usage?limit=10');
+      if (!res.ok) {
+        document.getElementById('recentActivity').innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">هنوز فعالیتی ثبت نشده</div></div>';
+        return;
+      }
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : (data.items || data.data || []);
+
+      if (!items.length) {
+        document.getElementById('recentActivity').innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">هنوز فعالیتی ثبت نشده</div></div>';
+        return;
+      }
+
+      let html = '<table><thead><tr>';
+      html += '<th>کاربر</th><th>مدل</th><th>ورودی</th><th>خروجی</th><th>هزینه</th><th>زمان</th>';
+      html += '</tr></thead><tbody>';
+
+      items.forEach(function(row) {
+        html += '<tr>';
+        html += '<td>' + escapeHtml(row.user_email || row.email || row.user_id || '—') + '</td>';
+        html += '<td><span class="badge info">' + escapeHtml(row.model || '—') + '</span></td>';
+        html += '<td>' + formatTokens(row.input_tokens || 0) + '</td>';
+        html += '<td>' + formatTokens(row.output_tokens || 0) + '</td>';
+        html += '<td>' + formatCurrency(row.charged_amount || row.cost || 0) + '</td>';
+        html += '<td>' + formatDate(row.created_at) + '</td>';
+        html += '</tr>';
+      });
+
+      html += '</tbody></table>';
+      document.getElementById('recentActivity').innerHTML = html;
+    } catch(e) {
+      console.error('Activity load error:', e);
+      document.getElementById('recentActivity').innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">خطا در بارگذاری</div></div>';
+    }
+  }
+
+  loadStats();
+  loadRecentActivity();
+})();
+</script>
+{% endblock %}

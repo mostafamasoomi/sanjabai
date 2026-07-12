@@ -1,0 +1,162 @@
+{% extends 'base.html' %}
+{% block title %}مصرف توکن{% endblock %}
+{% block topbar_title %}ردیابی مصرف توکن{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>📈 مصرف توکن</h1>
+  <p>ردیابی و بررسی مصرف توکن کاربران</p>
+</div>
+
+<div class="stat-grid" id="usageStats">
+  <div class="stat-card blue">
+    <div class="stat-icon">📥</div>
+    <div class="stat-value" id="stat-input">—</div>
+    <div class="stat-label">توکن ورودی</div>
+  </div>
+  <div class="stat-card green">
+    <div class="stat-icon">📤</div>
+    <div class="stat-value" id="stat-output">—</div>
+    <div class="stat-label">توکن خروجی</div>
+  </div>
+  <div class="stat-card orange">
+    <div class="stat-icon">💰</div>
+    <div class="stat-value" id="stat-cost">—</div>
+    <div class="stat-label">کل هزینه</div>
+  </div>
+</div>
+
+<!-- Usage by Model Chart -->
+<div class="card">
+  <div class="card-header">
+    <h2>📊 مصرف بر اساس مدل</h2>
+  </div>
+  <div id="modelChart" class="bar-chart">
+    <div class="loading"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="card">
+  <div class="card-header">
+    <h2>📋 جزئیات مصرف</h2>
+  </div>
+  <div class="search-bar">
+    <div class="search-input">
+      <input type="text" id="usageUserFilter" placeholder="فیلتر بر اساس کاربر..." oninput="debouncedFilter()">
+    </div>
+    <select id="usageModelFilter" onchange="resetAndLoad()" style="width:auto; min-width:160px;">
+      <option value="">همه مدل‌ها</option>
+    </select>
+    <button class="btn btn-secondary" onclick="loadUsage()">🔄 بروزرسانی</button>
+  </div>
+  <div class="table-wrapper" id="usageTable">
+    <div class="loading"><div class="spinner"></div></div>
+  </div>
+  <div id="usagePagination"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const pagination = new Pagination('usagePagination', {
+    perPage: 25,
+    onChange: function() { loadUsage(); }
+  });
+  window._pagination = pagination;
+
+  const debouncedFilter = debounce(function() { pagination.page = 1; loadUsage(); }, 400);
+  window.debouncedFilter = debouncedFilter;
+  window.resetAndLoad = function() { pagination.page = 1; loadUsage(); };
+
+  async function loadSummary() {
+    try {
+      const res = await fetchAPI('/admin/api/usage/summary');
+      if (!res.ok) return;
+      const data = await res.json();
+
+      document.getElementById('stat-input').textContent = formatTokens(data.total_input_tokens || 0);
+      document.getElementById('stat-output').textContent = formatTokens(data.total_output_tokens || 0);
+      document.getElementById('stat-cost').textContent = formatCurrency(data.total_cost || data.total_charged || 0);
+
+      // Model chart
+      var models = data.by_model || data.models || [];
+      if (models.length) {
+        var maxVal = Math.max.apply(null, models.map(function(m) { return m.total_tokens || m.input_tokens + m.output_tokens || 0; }));
+        var colors = ['var(--accent)', 'var(--blue)', 'var(--green)', 'var(--orange)', 'var(--red)'];
+        var chartHtml = '';
+        models.forEach(function(m, i) {
+          var val = m.total_tokens || ((m.input_tokens || 0) + (m.output_tokens || 0));
+          var pct = maxVal > 0 ? (val / maxVal * 100) : 0;
+          chartHtml += '<div class="bar-row">';
+          chartHtml += '<div class="bar-label">' + escapeHtml(m.model || m.name) + '</div>';
+          chartHtml += '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%; background:' + (colors[i % colors.length]) + '">' + formatTokens(val) + '</div></div>';
+          chartHtml += '<div class="bar-value">' + formatTokens(val) + '</div>';
+          chartHtml += '</div>';
+        });
+        document.getElementById('modelChart').innerHTML = chartHtml;
+
+        // Populate model filter
+        var sel = document.getElementById('usageModelFilter');
+        sel.innerHTML = '<option value="">همه مدل‌ها</option>';
+        models.forEach(function(m) {
+          sel.innerHTML += '<option value="' + escapeHtml(m.model || m.name) + '">' + escapeHtml(m.model || m.name) + '</option>';
+        });
+      }
+    } catch(e) {
+      console.error(e);
+    }
+  }
+
+  window.loadUsage = async function() {
+    const userFilter = document.getElementById('usageUserFilter').value.trim();
+    const modelFilter = document.getElementById('usageModelFilter').value;
+    showLoading('usageTable');
+
+    try {
+      let url = '/admin/api/usage?limit=' + pagination.perPage + '&offset=' + pagination.offset;
+      if (userFilter) url += '&user=' + encodeURIComponent(userFilter);
+      if (modelFilter) url += '&model=' + encodeURIComponent(modelFilter);
+
+      const res = await fetchAPI(url);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : (data.items || data.data || []);
+      pagination.setTotal(data.total || items.length);
+
+      if (!items.length) {
+        showEmpty('usageTable', 'موردی یافت نشد', '📈');
+        return;
+      }
+
+      let html = '<table><thead><tr>';
+      html += '<th>شناسه درخواست</th><th>کاربر</th><th>مدل</th><th>ورودی</th><th>خروجی</th><th>هزینه</th><th>تاریخ</th>';
+      html += '</tr></thead><tbody>';
+
+      items.forEach(function(r) {
+        html += '<tr>';
+        html += '<td style="font-size:.8rem; color:var(--muted); font-family:monospace;">' + escapeHtml((r.request_id || r.id || '—').toString().substring(0, 12)) + '</td>';
+        html += '<td>' + escapeHtml(r.user_email || r.email || r.user_id || '—') + '</td>';
+        html += '<td><span class="badge info">' + escapeHtml(r.model || '—') + '</span></td>';
+        html += '<td>' + formatTokens(r.input_tokens || 0) + '</td>';
+        html += '<td>' + formatTokens(r.output_tokens || 0) + '</td>';
+        html += '<td>' + formatCurrency(r.charged_amount || r.cost || 0) + '</td>';
+        html += '<td>' + formatDate(r.created_at) + '</td>';
+        html += '</tr>';
+      });
+
+      html += '</tbody></table>';
+      document.getElementById('usageTable').innerHTML = html;
+    } catch(e) {
+      console.error(e);
+      showEmpty('usageTable', 'خطا در بارگذاری', '⚠️');
+    }
+  };
+
+  loadSummary();
+  loadUsage();
+})();
+</script>
+{% endblock %}

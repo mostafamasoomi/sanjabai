@@ -1,28 +1,97 @@
 {% extends 'base.html' %}
-{% block title %}مدل‌ها{% endblock %}
+{% block title %}مدلها{% endblock %}
+{% block topbar_title %}مدیریت مدلها{% endblock %}
 {% block content %}
-<h2>مدل‌های فعال</h2>
-<div class="card">
-  <table>
-    <thead><tr><th>ارائه‌دهنده</th><th>مدل</th><th>وضعیت</th><th>اولویت</th><th>عملیات</th></tr></thead>
-    <tbody>
-      {% for m in models %}
-      <tr>
-        <form class="inline" method="post" action="/admin/models/toggle">
-          <td>{{ m.provider }}</td>
-          <td>{{ m.model }}</td>
-          <td>
-            <select name="enabled">
-              <option value="1" {% if m.enabled %}selected{% endif %}>فعال</option>
-              <option value="0" {% if not m.enabled %}selected{% endif %}>غیرفعال</option>
-            </select>
-          </td>
-          <td>{{ m.priority }}</td>
-          <td><button class="btn" type="submit">بروزرسانی</button><input type="hidden" name="item_id" value="{{ m.id }}" /></td>
-        </form>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+
+<div class="page-header">
+  <h1>🤖 مدلها</h1>
+  <p>مدیریت مدل‌های هوش مصنوعی و دسترس‌پذیری آنها</p>
 </div>
+
+<div class="card">
+  <div class="card-header">
+    <h2>لیست مدل‌ها</h2>
+    <button class="btn btn-secondary btn-sm" onclick="loadModels()">🔄 بروزرسانی</button>
+  </div>
+  <div id="modelsGrid">
+    <div class="loading"><div class="spinner"></div></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  window.loadModels = async function() {
+    try {
+      const res = await fetchAPI('/admin/api/models');
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : (data.items || data.data || []);
+
+      if (!items.length) {
+        document.getElementById('modelsGrid').innerHTML = '<div class="empty-state"><div class="empty-icon">🤖</div><div class="empty-text">مدلی ثبت نشده</div></div>';
+        return;
+      }
+
+      let html = '<div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap:16px;">';
+
+      items.forEach(function(m) {
+        var isActive = m.availability === 'available';
+        var badgeClass = isActive ? 'active' : 'inactive';
+        var badgeLabel = m.availability || 'نامشخص';
+
+        html += '<div style="background:var(--input); border:1px solid var(--border); border-radius:14px; padding:20px; transition:border-color .2s;" onmouseover="this.style.borderColor=\'rgba(108,92,231,.4)\'" onmouseout="this.style.borderColor=\'var(--border)\'">';
+        html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">';
+        html += '<div style="font-weight:700; font-size:1rem;">' + escapeHtml(m.display_name || m.provider_model_id || m.id) + '</div>';
+        html += '<span class="badge ' + badgeClass + '">' + badgeLabel + '</span>';
+        html += '</div>';
+
+        html += '<div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:.85rem;">';
+        html += '<div><span style="color:var(--muted);">ارائه‌دهنده:</span> ' + escapeHtml(m.provider || '—') + '</div>';
+        html += '<div><span style="color:var(--muted);">پنجره زمینه:</span> ' + formatNumber(m.context_window || 0) + '</div>';
+
+        var inputPrice = m.input_per_million || m.input_price || 0;
+        var outputPrice = m.output_per_million || m.output_price || 0;
+        html += '<div><span style="color:var(--muted);">ورودی:</span> ' + formatCurrency(inputPrice) + '/M</div>';
+        html += '<div><span style="color:var(--muted);">خروجی:</span> ' + formatCurrency(outputPrice) + '/M</div>';
+        html += '</div>';
+
+        html += '<div style="margin-top:14px; display:flex; gap:8px;">';
+        html += '<button class="btn btn-sm ' + (isActive ? 'btn-danger' : 'btn-primary') + '" onclick="toggleModel(\'' + escapeHtml(m.id) + '\')">';
+        html += isActive ? 'غیرفعال کردن' : 'فعال کردن';
+        html += '</button>';
+        html += '</div>';
+
+        html += '</div>';
+      });
+
+      html += '</div>';
+      document.getElementById('modelsGrid').innerHTML = html;
+    } catch(e) {
+      console.error(e);
+      document.getElementById('modelsGrid').innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">خطا در بارگذاری</div></div>';
+    }
+  };
+
+  window.toggleModel = async function(modelId) {
+    try {
+      const res = await fetchAPI('/admin/api/models/' + encodeURIComponent(modelId) + '/toggle', {
+        method: 'POST'
+      });
+      if (res.ok) {
+        toast(active ? 'مدل فعال شد' : 'مدل غیرفعال شد', 'success');
+        loadModels();
+      } else {
+        toast('خطا در تغییر وضعیت', 'error');
+      }
+    } catch(e) {
+      toast('خطا در ارتباط با سرور', 'error');
+    }
+  };
+
+  loadModels();
+})();
+</script>
 {% endblock %}

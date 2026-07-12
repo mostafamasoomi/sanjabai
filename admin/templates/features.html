@@ -1,0 +1,164 @@
+{% extends 'base.html' %}
+{% block title %}ویژگیها{% endblock %}
+{% block topbar_title %}مدیریت ویژگیها{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>✨ ویژگیها</h1>
+  <p>مدیریت ویژگی‌ها و امکانات پلتفرم</p>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h2>لیست ویژگی‌ها</h2>
+    <button class="btn btn-primary btn-sm" onclick="showFeatureForm()">+ افزودن ویژگی</button>
+  </div>
+  <div id="featuresList">
+    <div class="loading"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<div class="card" id="featureForm" style="display:none;">
+  <div class="card-header">
+    <h2 id="featureFormTitle">افزودن ویژگی جدید</h2>
+  </div>
+  <form onsubmit="saveFeature(event)">
+    <input type="hidden" id="ft-id">
+    <div class="form-group">
+      <label>عنوان</label>
+      <input type="text" id="ft-title" placeholder="مثال: چت هوشمند" required>
+    </div>
+    <div class="form-group">
+      <label>توضیحات</label>
+      <textarea id="ft-desc" placeholder="توضیحات ویژگی..."></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>آیکون (ایموجی)</label>
+        <input type="text" id="ft-icon" placeholder="💬">
+      </div>
+      <div class="form-group">
+        <label>ترتیب نمایش</label>
+        <input type="number" id="ft-order" value="0">
+      </div>
+      <div class="form-group">
+        <label>وضعیت</label>
+        <select id="ft-active">
+          <option value="true">فعال</option>
+          <option value="false">غیرفعال</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button type="submit" class="btn btn-primary">ذخیره</button>
+      <button type="button" class="btn btn-secondary" onclick="hideFeatureForm()">انصراف</button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  window.loadFeatures = async function() {
+    try {
+      const res = await fetchAPI('/admin/api/features');
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : (data.items || data.data || []);
+
+      if (!items.length) {
+        document.getElementById('featuresList').innerHTML = '<div class="empty-state"><div class="empty-icon">✨</div><div class="empty-text">ویژگی ثبت نشده</div></div>';
+        return;
+      }
+
+      let html = '<div style="display:flex; flex-direction:column; gap:10px;">';
+      items.forEach(function(f) {
+        var isActive = f.active !== false && f.is_active !== false;
+        html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:16px 18px; background:var(--input); border:1px solid var(--border); border-radius:12px;">';
+        html += '<div style="display:flex; align-items:center; gap:14px;">';
+        html += '<span style="font-size:1.6rem;">' + escapeHtml(f.icon || '✨') + '</span>';
+        html += '<div>';
+        html += '<div style="font-weight:600;">' + escapeHtml(f.title) + '</div>';
+        if (f.description) html += '<div style="color:var(--muted); font-size:.82rem; margin-top:2px;">' + escapeHtml(f.description).substring(0, 80) + '</div>';
+        html += '</div>';
+        html += '<span class="badge ' + (isActive ? 'active' : 'inactive') + '">' + (isActive ? 'فعال' : 'غیرفعال') + '</span>';
+        html += '</div>';
+        html += '<div style="display:flex; gap:6px;">';
+        html += '<button class="btn btn-secondary btn-sm" onclick=\'editFeature(' + JSON.stringify(f) + ')\'>ویرایش</button>';
+        html += '<button class="btn btn-danger btn-sm" onclick="deleteFeature(' + f.id + ')">حذف</button>';
+        html += '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+      document.getElementById('featuresList').innerHTML = html;
+    } catch(e) {
+      console.error(e);
+      document.getElementById('featuresList').innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">خطا در بارگذاری</div></div>';
+    }
+  };
+
+  window.showFeatureForm = function() {
+    document.getElementById('ft-id').value = '';
+    document.getElementById('ft-title').value = '';
+    document.getElementById('ft-desc').value = '';
+    document.getElementById('ft-icon').value = '';
+    document.getElementById('ft-order').value = '0';
+    document.getElementById('ft-active').value = 'true';
+    document.getElementById('featureFormTitle').textContent = 'افزودن ویژگی جدید';
+    document.getElementById('featureForm').style.display = 'block';
+  };
+
+  window.hideFeatureForm = function() {
+    document.getElementById('featureForm').style.display = 'none';
+  };
+
+  window.editFeature = function(f) {
+    document.getElementById('ft-id').value = f.id;
+    document.getElementById('ft-title').value = f.title || '';
+    document.getElementById('ft-desc').value = f.description || '';
+    document.getElementById('ft-icon').value = f.icon || '';
+    document.getElementById('ft-order').value = f.order_idx || f.order || 0;
+    document.getElementById('ft-active').value = String(f.active !== false);
+    document.getElementById('featureFormTitle').textContent = 'ویرایش: ' + (f.title || '');
+    document.getElementById('featureForm').style.display = 'block';
+    document.getElementById('featureForm').scrollIntoView({ behavior: 'smooth' });
+  };
+
+  window.saveFeature = async function(e) {
+    e.preventDefault();
+    var payload = {
+      title: document.getElementById('ft-title').value.trim(),
+      description: document.getElementById('ft-desc').value.trim(),
+      icon: document.getElementById('ft-icon').value.trim(),
+      order_idx: parseInt(document.getElementById('ft-order').value) || 0,
+      active: document.getElementById('ft-active').value === 'true'
+    };
+    var id = document.getElementById('ft-id').value;
+    if (id) payload.id = parseInt(id);
+    if (!payload.title) return toast('عنوان الزامی است', 'error');
+
+    try {
+      const res = await fetchAPI('/admin/api/features', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) { toast('ذخیره شد', 'success'); hideFeatureForm(); loadFeatures(); }
+      else toast('خطا در ذخیره', 'error');
+    } catch(e) { toast('خطا در ارتباط', 'error'); }
+  };
+
+  window.deleteFeature = async function(id) {
+    if (!confirm('آیا از حذف این ویژگی اطمینان دارید؟')) return;
+    try {
+      const res = await fetchAPI('/admin/api/features/' + id, { method: 'DELETE' });
+      if (res.ok) { toast('حذف شد', 'success'); loadFeatures(); }
+      else toast('خطا در حذف', 'error');
+    } catch(e) { toast('خطا', 'error'); }
+  };
+
+  loadFeatures();
+})();
+</script>
+{% endblock %}

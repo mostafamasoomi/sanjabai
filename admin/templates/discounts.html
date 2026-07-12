@@ -1,0 +1,154 @@
+{% extends 'base.html' %}
+{% block title %}تخفیفها{% endblock %}
+{% block topbar_title %}مدیریت کدهای تخفیف{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>🏷️ کدهای تخفیف</h1>
+  <p>مدیریت کدهای تخفیف سیستم</p>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h2>لیست کدهای تخفیف</h2>
+    <button class="btn btn-primary btn-sm" onclick="showDiscountForm()">+ افزودن کد</button>
+  </div>
+  <div id="discountsList">
+    <div class="loading"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<div class="card" id="discountForm" style="display:none;">
+  <div class="card-header">
+    <h2 id="discountFormTitle">افزودن کد تخفیف جدید</h2>
+  </div>
+  <form onsubmit="saveDiscount(event)">
+    <input type="hidden" id="dc-id">
+    <div class="form-row">
+      <div class="form-group">
+        <label>کد تخفیف</label>
+        <input type="text" id="dc-code" placeholder="WELCOME10" required>
+      </div>
+      <div class="form-group">
+        <label>درصد تخفیف</label>
+        <input type="number" id="dc-percent" min="0" max="100" value="10">
+      </div>
+      <div class="form-group">
+        <label>وضعیت</label>
+        <select id="dc-active">
+          <option value="true">فعال</option>
+          <option value="false">غیرفعال</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button type="submit" class="btn btn-primary">ذخیره</button>
+      <button type="button" class="btn btn-secondary" onclick="hideDiscountForm()">انصراف</button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  window.loadDiscounts = async function() {
+    try {
+      const res = await fetchAPI('/admin/api/discounts');
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : (data.items || data.data || []);
+
+      if (!items.length) {
+        document.getElementById('discountsList').innerHTML = '<div class="empty-state"><div class="empty-icon">🏷️</div><div class="empty-text">کد تخفیفی ثبت نشده</div></div>';
+        return;
+      }
+
+      let html = '<div style="display:flex; flex-direction:column; gap:10px;">';
+      items.forEach(function(d) {
+        var isActive = d.active !== false && d.is_active !== false;
+        html += '<div style="display:flex; justify-content:space-between; align-items:center; padding:14px 18px; background:var(--input); border:1px solid var(--border); border-radius:12px;">';
+        html += '<div style="display:flex; align-items:center; gap:16px;">';
+        html += '<span style="font-weight:700; font-size:1rem; font-family:monospace; color:var(--accent);">' + escapeHtml(d.code) + '</span>';
+        html += '<span style="color:var(--muted); font-size:.9rem;">' + (d.percent || 0) + '%</span>';
+        html += '<span class="badge ' + (isActive ? 'active' : 'inactive') + '">' + (isActive ? 'فعال' : 'غیرفعال') + '</span>';
+        html += '</div>';
+        html += '<div style="display:flex; gap:6px;">';
+        html += '<button class="btn btn-secondary btn-sm" onclick=\'editDiscount(' + JSON.stringify(d) + ')\'>ویرایش</button>';
+        html += '<button class="btn btn-danger btn-sm" onclick="deleteDiscount(' + d.id + ')">حذف</button>';
+        html += '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+      document.getElementById('discountsList').innerHTML = html;
+    } catch(e) {
+      console.error(e);
+      document.getElementById('discountsList').innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">خطا در بارگذاری</div></div>';
+    }
+  };
+
+  window.showDiscountForm = function() {
+    document.getElementById('dc-id').value = '';
+    document.getElementById('dc-code').value = '';
+    document.getElementById('dc-percent').value = '10';
+    document.getElementById('dc-active').value = 'true';
+    document.getElementById('discountFormTitle').textContent = 'افزودن کد تخفیف جدید';
+    document.getElementById('discountForm').style.display = 'block';
+  };
+
+  window.hideDiscountForm = function() {
+    document.getElementById('discountForm').style.display = 'none';
+  };
+
+  window.editDiscount = function(d) {
+    document.getElementById('dc-id').value = d.id;
+    document.getElementById('dc-code').value = d.code || '';
+    document.getElementById('dc-percent').value = d.percent || 0;
+    document.getElementById('dc-active').value = String(d.active !== false);
+    document.getElementById('discountFormTitle').textContent = 'ویرایش کد: ' + (d.code || '');
+    document.getElementById('discountForm').style.display = 'block';
+    document.getElementById('discountForm').scrollIntoView({ behavior: 'smooth' });
+  };
+
+  window.saveDiscount = async function(e) {
+    e.preventDefault();
+    var payload = {
+      code: document.getElementById('dc-code').value.trim(),
+      percent: parseInt(document.getElementById('dc-percent').value) || 0,
+      active: document.getElementById('dc-active').value === 'true'
+    };
+    var id = document.getElementById('dc-id').value;
+    if (id) payload.id = parseInt(id);
+    if (!payload.code) return toast('کد تخفیف الزامی است', 'error');
+
+    try {
+      const res = await fetchAPI('/admin/api/discounts', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        toast('ذخیره شد', 'success');
+        hideDiscountForm();
+        loadDiscounts();
+      } else {
+        toast('خطا در ذخیره', 'error');
+      }
+    } catch(e) {
+      toast('خطا در ارتباط با سرور', 'error');
+    }
+  };
+
+  window.deleteDiscount = async function(id) {
+    if (!confirm('آیا از حذف این کد تخفیف اطمینان دارید؟')) return;
+    try {
+      const res = await fetchAPI('/admin/api/discounts/' + id, { method: 'DELETE' });
+      if (res.ok) { toast('حذف شد', 'success'); loadDiscounts(); }
+      else toast('خطا در حذف', 'error');
+    } catch(e) { toast('خطا در ارتباط با سرور', 'error'); }
+  };
+
+  loadDiscounts();
+})();
+</script>
+{% endblock %}

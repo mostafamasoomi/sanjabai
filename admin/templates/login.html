@@ -1,34 +1,190 @@
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{{ ui.login_title }}</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ورود — Multiai Admin</title>
+  <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
   <style>
-    body { margin:0; font-family:'Vazirmatn','Tahoma',sans-serif; background:#eef2f7; display:flex; align-items:center; justify-content:center; min-height:100vh; }
-    .card { background:#fff; width:100%; max-width:380px; padding:24px; border-radius:18px; box-shadow:0 12px 24px rgba(20,60,120,0.12); }
-    h1 { margin:0 0 14px; text-align:center; font-size:20px; }
-    label { display:block; margin-bottom:6px; font-size:14px; color:#304055; }
-    input { width:100%; padding:10px 12px; border:1px solid #d5dbe3; border-radius:10px; margin-bottom:12px; }
-    button { width:100%; padding:11px; border:none; border-radius:10px; background:#0f5a8a; color:#fff; font-weight:700; cursor:pointer; }
-    .errors { background:#fdecec; color:#8a2c2c; padding:10px; border-radius:10px; margin-bottom:10px; font-size:13px; }
-    .hint { text-align:center; color:#8a96a6; font-size:12px; margin-top:10px; }
+    :root {
+      --bg: #0f1117;
+      --card: #1a1d27;
+      --border: #2a2e3a;
+      --text: #e4e6eb;
+      --muted: #8b92a5;
+      --accent: #6c5ce7;
+      --input: #232733;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Vazirmatn', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    /* Animated background */
+    body::before {
+      content: '';
+      position: fixed;
+      top: -50%; left: -50%;
+      width: 200%; height: 200%;
+      background: radial-gradient(circle at 30% 40%, rgba(108,92,231,.12) 0%, transparent 50%),
+                  radial-gradient(circle at 70% 60%, rgba(9,132,227,.1) 0%, transparent 50%),
+                  radial-gradient(circle at 50% 80%, rgba(0,184,148,.08) 0%, transparent 50%);
+      animation: bgMove 20s ease-in-out infinite alternate;
+      z-index: 0;
+    }
+    @keyframes bgMove {
+      0% { transform: translate(0,0) rotate(0deg); }
+      100% { transform: translate(-5%,-3%) rotate(3deg); }
+    }
+
+    .login-wrapper {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 420px;
+      padding: 20px;
+    }
+
+    .login-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 40px 32px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 0 60px rgba(108,92,231,.1), 0 20px 40px rgba(0,0,0,.3);
+    }
+    .login-card::before {
+      content: '';
+      position: absolute;
+      top: -2px; left: -2px; right: -2px; bottom: -2px;
+      background: linear-gradient(135deg, var(--accent), #0984e3, #00b894, var(--accent));
+      background-size: 300% 300%;
+      border-radius: 22px;
+      z-index: -1;
+      animation: glow 4s ease-in-out infinite;
+      opacity: .4;
+    }
+    @keyframes glow {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+
+    .brand {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .brand-logo {
+      font-size: 2.4rem;
+      font-weight: 900;
+      background: linear-gradient(135deg, var(--accent), #0984e3);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -1px;
+      margin-bottom: 8px;
+    }
+    .brand-sub {
+      color: var(--muted);
+      font-size: .88rem;
+    }
+
+    .form-group { margin-bottom: 20px; }
+    .form-group label {
+      display: block;
+      font-size: .85rem;
+      color: var(--muted);
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--input);
+      color: var(--text);
+      font-family: 'Vazirmatn', system-ui, sans-serif;
+      font-size: .95rem;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .form-group input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(108,92,231,.15);
+    }
+
+    .login-btn {
+      width: 100%;
+      padding: 13px;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), #5a4bd6);
+      color: #fff;
+      font-family: 'Vazirmatn', system-ui, sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform .2s, box-shadow .2s;
+      margin-top: 8px;
+    }
+    .login-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(108,92,231,.3);
+    }
+    .login-btn:active { transform: translateY(0); }
+
+    .error-box {
+      background: rgba(231,76,60,.1);
+      border: 1px solid rgba(231,76,60,.3);
+      color: #e74c3c;
+      padding: 12px 16px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      font-size: .88rem;
+      text-align: center;
+    }
+
+    .footer-text {
+      text-align: center;
+      color: var(--muted);
+      font-size: .78rem;
+      margin-top: 24px;
+      opacity: .7;
+    }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>{{ ui.login_heading }}</h1>
-    {% if error %}
-      <div class="errors">{{ error }}</div>
-    {% endif %}
-    <form method="post" action="/admin/login">
-      <label>{{ ui.username_label }}</label>
-      <input name="username" autocomplete="username" />
-      <label>{{ ui.password_label }}</label>
-      <input name="password" type="password" autocomplete="current-password" />
-      <button type="submit">{{ ui.login_button }}</button>
-    </form>
-    <div class="hint">پلتفرم هوش مصنوعی فارسی</div>
+  <div class="login-wrapper">
+    <div class="login-card">
+      <div class="brand">
+        <div class="brand-logo">Multiai</div>
+        <div class="brand-sub">پنل مدیریت پلتفرم هوش مصنوعی</div>
+      </div>
+
+      {% if error %}
+        <div class="error-box">{{ error }}</div>
+      {% endif %}
+
+      <form method="post" action="/admin/login">
+        <div class="form-group">
+          <label>نام کاربری</label>
+          <input type="text" name="username" autocomplete="username" placeholder="نام کاربری خود را وارد کنید" required>
+        </div>
+        <div class="form-group">
+          <label>رمز عبور</label>
+          <input type="password" name="password" autocomplete="current-password" placeholder="رمز عبور خود را وارد کنید" required>
+        </div>
+        <button type="submit" class="login-btn">ورود به پنل</button>
+      </form>
+    </div>
+    <div class="footer-text">پلتفرم هوش مصنوعی فارسی — Multiai © 2025</div>
   </div>
 </body>
 </html>

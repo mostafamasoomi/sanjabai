@@ -1,24 +1,154 @@
 {% extends 'base.html' %}
-{% block title %}قیمت‌گذاری{% endblock %}
+{% block title %}قیمتگذاری{% endblock %}
+{% block topbar_title %}مدیریت قیمتگذاری{% endblock %}
 {% block content %}
-<h2>قیمت‌گذاری مدل‌ها</h2>
-<div class="card">
-  <table>
-    <thead><tr><th>ارائه‌دهنده</th><th>مدل</th><th>قیمت ورودی</th><th>قیمت خروجی</th><th>واحد</th><th>عملیات</th></tr></thead>
-    <tbody>
-      {% for p in prices %}
-      <tr>
-        <form class="inline" method="post" action="/admin/pricing/update">
-          <td>{{ p.provider }}</td>
-          <td>{{ p.model }}</td>
-          <td><input type="number" name="input" value="{{ p.input_price }}" style="width:90px;" /></td>
-          <td><input type="number" name="output" value="{{ p.output_price }}" style="width:90px;" /></td>
-          <td>{{ p.currency }}</td>
-          <td><button class="btn" type="submit">ذخیره</button><input type="hidden" name="item_id" value="{{ p.id }}" /></td>
-        </form>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+
+<div class="page-header">
+  <h1>💰 قیمتگذاری مدل‌ها</h1>
+  <p>مدیریت قیمت ورودی و خروجی توکن برای هر مدل</p>
 </div>
+
+<div class="card">
+  <div class="card-header">
+    <h2>لیست تعرفه‌ها</h2>
+    <button class="btn btn-primary btn-sm" onclick="showAddPricing()">+ افزودن تعرفه</button>
+  </div>
+  <div class="table-wrapper" id="pricingTable">
+    <div class="loading"><div class="spinner"></div></div>
+  </div>
+</div>
+
+<!-- Add/Edit Form -->
+<div class="card" id="pricingForm" style="display:none;">
+  <div class="card-header">
+    <h2 id="pricingFormTitle">افزودن تعرفه جدید</h2>
+  </div>
+  <form onsubmit="savePricingForm(event)">
+    <div class="form-row">
+      <div class="form-group">
+        <label>نام مدل</label>
+        <input type="text" id="pz-model" placeholder="مثال: gpt-4o" required>
+      </div>
+      <div class="form-group">
+        <label>ارائه‌دهنده</label>
+        <input type="text" id="pz-provider" placeholder="مثال: openai">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>قیمت ورودی (به ازای هر میلیون توکن)</label>
+        <input type="number" id="pz-input" placeholder="0" min="0" step="any">
+      </div>
+      <div class="form-group">
+        <label>قیمت خروجی (به ازای هر میلیون توکن)</label>
+        <input type="number" id="pz-output" placeholder="0" min="0" step="any">
+      </div>
+      <div class="form-group">
+        <label>واحد پول</label>
+        <input type="text" id="pz-currency" value="IRT">
+      </div>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <button type="submit" class="btn btn-primary">ذخیره</button>
+      <button type="button" class="btn btn-secondary" onclick="hidePricingForm()">انصراف</button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  window.loadPricing = async function() {
+    try {
+      const res = await fetchAPI('/admin/api/pricing');
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : (data.items || data.data || []);
+
+      if (!items.length) {
+        showEmpty('pricingTable', 'تعرفه‌ای ثبت نشده', '💰');
+        return;
+      }
+
+      let html = '<table><thead><tr>';
+      html += '<th>ارائه‌دهنده</th><th>مدل</th><th>قیمت ورودی</th><th>قیمت خروجی</th><th>واحد</th><th>عملیات</th>';
+      html += '</tr></thead><tbody>';
+
+      items.forEach(function(p) {
+        html += '<tr>';
+        html += '<td>' + escapeHtml(p.provider || '—') + '</td>';
+        html += '<td style="font-weight:600;">' + escapeHtml(p.model || '—') + '</td>';
+        html += '<td>' + formatCurrency(p.input_per_million || p.input_price || 0) + '</td>';
+        html += '<td>' + formatCurrency(p.output_per_million || p.output_price || 0) + '</td>';
+        html += '<td>' + escapeHtml(p.currency || 'IRT') + '</td>';
+        html += '<td><button class="btn btn-secondary btn-sm" onclick=\'editPricing(' + JSON.stringify(p) + ')\'>ویرایش</button></td>';
+        html += '</tr>';
+      });
+
+      html += '</tbody></table>';
+      document.getElementById('pricingTable').innerHTML = html;
+    } catch(e) {
+      console.error(e);
+      showEmpty('pricingTable', 'خطا در بارگذاری', '⚠️');
+    }
+  };
+
+  window.showAddPricing = function() {
+    document.getElementById('pz-model').value = '';
+    document.getElementById('pz-provider').value = '';
+    document.getElementById('pz-input').value = '';
+    document.getElementById('pz-output').value = '';
+    document.getElementById('pz-currency').value = 'IRT';
+    document.getElementById('pricingFormTitle').textContent = 'افزودن تعرفه جدید';
+    document.getElementById('pricingForm').style.display = 'block';
+  };
+
+  window.hidePricingForm = function() {
+    document.getElementById('pricingForm').style.display = 'none';
+  };
+
+  window.editPricing = function(p) {
+    document.getElementById('pz-model').value = p.model || '';
+    document.getElementById('pz-provider').value = p.provider || '';
+    document.getElementById('pz-input').value = p.input_per_million || p.input_price || '';
+    document.getElementById('pz-output').value = p.output_per_million || p.output_price || '';
+    document.getElementById('pz-currency').value = p.currency || 'IRT';
+    document.getElementById('pricingFormTitle').textContent = 'ویرایش تعرفه: ' + (p.model || '');
+    document.getElementById('pricingForm').style.display = 'block';
+    document.getElementById('pricingForm').scrollIntoView({ behavior: 'smooth' });
+  };
+
+  window.savePricingForm = async function(e) {
+    e.preventDefault();
+    const payload = {
+      model: document.getElementById('pz-model').value.trim(),
+      provider: document.getElementById('pz-provider').value.trim(),
+      input_per_million: parseFloat(document.getElementById('pz-input').value) || 0,
+      output_per_million: parseFloat(document.getElementById('pz-output').value) || 0,
+      currency: document.getElementById('pz-currency').value.trim() || 'IRT'
+    };
+    if (!payload.model) return toast('نام مدل الزامی است', 'error');
+
+    try {
+      const res = await fetchAPI('/admin/api/pricing', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        toast('تعرفه با موفقیت ذخیره شد', 'success');
+        hidePricingForm();
+        loadPricing();
+      } else {
+        toast('خطا در ذخیره تعرفه', 'error');
+      }
+    } catch(e) {
+      toast('خطا در ارتباط با سرور', 'error');
+    }
+  };
+
+  loadPricing();
+})();
+</script>
 {% endblock %}

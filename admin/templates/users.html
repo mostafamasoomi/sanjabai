@@ -1,28 +1,125 @@
 {% extends 'base.html' %}
 {% block title %}کاربران{% endblock %}
+{% block topbar_title %}مدیریت کاربران{% endblock %}
 {% block content %}
-<h2>مدیریت کاربران</h2>
-<div class="card">
-  <table>
-    <thead><tr><th>نام کاربری</th><th>نقش</th><th>اعتبار</th><th>وضعیت</th><th>عملیات</th></tr></thead>
-    <tbody>
-      {% for u in users %}
-      <tr>
-        <form class="inline" method="post" action="/admin/users/update">
-          <td>{{ u.username }}</td>
-          <td>{{ u.role }}</td>
-          <td><input type="number" name="credits" value="{{ u.credits }}" style="width:90px;" /></td>
-          <td>
-            <select name="is_active">
-              <option value="1" {% if u.is_active %}selected{% endif %}>فعال</option>
-              <option value="0" {% if not u.is_active %}selected{% endif %}>غیرفعال</option>
-            </select>
-          </td>
-          <td><button class="btn" type="submit">ذخیره</button><input type="hidden" name="item_id" value="{{ u.id }}" /></td>
-        </form>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+
+<div class="page-header">
+  <h1>👥 مدیریت کاربران</h1>
+  <p>مشاهده و مدیریت کاربران سیستم</p>
 </div>
+
+<div class="search-bar">
+  <div class="search-input">
+    <input type="text" id="userSearch" placeholder="جستجو بر اساس ایمیل یا شماره تلفن..." oninput="debouncedSearch()">
+  </div>
+  <button class="btn btn-secondary" onclick="loadUsers()">🔄 بروزرسانی</button>
+</div>
+
+<div class="card">
+  <div class="table-wrapper" id="usersTable">
+    <div class="loading"><div class="spinner"></div><span>در حال بارگذاری...</span></div>
+  </div>
+  <div id="usersPagination"></div>
+</div>
+
+<!-- User Detail Modal -->
+<div class="modal-overlay" id="userModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>جزئیات کاربر</h2>
+      <button class="modal-close" onclick="closeUserModal()">✕</button>
+    </div>
+    <div id="userModalBody"></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const pagination = new Pagination('usersPagination', {
+    perPage: 20,
+    onChange: function(page) { loadUsers(); }
+  });
+  window._pagination = pagination;
+
+  const debouncedSearch = debounce(function() { pagination.page = 1; loadUsers(); }, 400);
+  window.debouncedSearch = debouncedSearch;
+
+  window.loadUsers = async function() {
+    const search = document.getElementById('userSearch').value.trim();
+    showLoading('usersTable');
+
+    try {
+      let url = '/admin/api/users?limit=' + pagination.perPage + '&offset=' + pagination.offset;
+      if (search) url += '&search=' + encodeURIComponent(search);
+
+      const res = await fetchAPI(url);
+      if (!res.ok) throw new Error('Failed');
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : (data.items || data.data || []);
+      const total = data.total || items.length;
+
+      pagination.setTotal(total);
+
+      if (!items.length) {
+        showEmpty('usersTable', 'کاربری یافت نشد', '👤');
+        return;
+      }
+
+      let html = '<table><thead><tr>';
+      html += '<th>ایمیل</th><th>تلفن</th><th>تاریخ عضویت</th><th>موجودی کیف پول</th><th>تعداد مصرف</th><th>مکالمات</th><th>وضعیت</th>';
+      html += '</tr></thead><tbody>';
+
+      items.forEach(function(u) {
+        html += '<tr style="cursor:pointer" onclick="showUserDetail(\'' + escapeHtml(u.id || u.email) + '\')">';
+        html += '<td>' + escapeHtml(u.email || '—') + '</td>';
+        html += '<td>' + escapeHtml(u.phone || '—') + '</td>';
+        html += '<td>' + formatDate(u.created_at) + '</td>';
+        html += '<td>' + formatCurrency(u.wallet_balance || 0) + '</td>';
+        html += '<td>' + formatNumber(u.usage_count || u.total_requests || 0) + '</td>';
+        html += '<td>' + formatNumber(u.conversations_count || 0) + '</td>';
+        var status = u.is_active !== false ? 'active' : 'inactive';
+        var statusLabel = u.is_active !== false ? 'فعال' : 'غیرفعال';
+        html += '<td><span class="badge ' + status + '">' + statusLabel + '</span></td>';
+        html += '</tr>';
+      });
+
+      html += '</tbody></table>';
+      document.getElementById('usersTable').innerHTML = html;
+    } catch(e) {
+      console.error(e);
+      showEmpty('usersTable', 'خطا در بارگذاری اطلاعات', '⚠️');
+    }
+  };
+
+  window.showUserDetail = async function(userId) {
+    document.getElementById('userModal').classList.add('show');
+    document.getElementById('userModalBody').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+    try {
+      const res = await fetchAPI('/admin/api/users/' + encodeURIComponent(userId));
+      if (!res.ok) throw new Error();
+      const u = await res.json();
+
+      let html = '<div style="display:grid; gap:12px;">';
+      html += '<div class="form-row"><div><label>ایمیل</label><div style="padding:8px; background:var(--input); border-radius:8px;">' + escapeHtml(u.email || '—') + '</div></div>';
+      html += '<div><label>تلفن</label><div style="padding:8px; background:var(--input); border-radius:8px;">' + escapeHtml(u.phone || '—') + '</div></div></div>';
+      html += '<div class="form-row"><div><label>موجودی کیف پول</label><div style="padding:8px; background:var(--input); border-radius:8px;">' + formatCurrency(u.wallet_balance || 0) + '</div></div>';
+      html += '<div><label>تاریخ عضویت</label><div style="padding:8px; background:var(--input); border-radius:8px;">' + formatDate(u.created_at) + '</div></div></div>';
+      html += '</div>';
+      document.getElementById('userModalBody').innerHTML = html;
+    } catch(e) {
+      document.getElementById('userModalBody').innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">خطا در بارگذاری</div></div>';
+    }
+  };
+
+  window.closeUserModal = function() {
+    document.getElementById('userModal').classList.remove('show');
+  };
+
+  loadUsers();
+})();
+</script>
 {% endblock %}

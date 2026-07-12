@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block title %}پرداختها{% endblock %}
+{% block topbar_title %}مدیریت پرداختها{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>💳 پرداختها</h1>
+  <p>مشاهده و پیگیری تراکنش‌های مالی</p>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h2>لیست پرداختها</h2>
+    <button class="btn btn-secondary btn-sm" onclick="loadPayments()">🔄 بروزرسانی</button>
+  </div>
+  <div class="table-wrapper" id="paymentsTable">
+    <div class="loading"><div class="spinner"></div><span>در حال بارگذاری...</span></div>
+  </div>
+  <div id="paymentsPagination"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const pagination = new Pagination('paymentsPagination', {
+    perPage: 25,
+    onChange: function() { loadPayments(); }
+  });
+  window._pagination = pagination;
+
+  window.loadPayments = async function() {
+    showLoading('paymentsTable');
+
+    try {
+      const url = '/admin/api/payments?limit=' + pagination.perPage + '&offset=' + pagination.offset;
+      const res = await fetchAPI(url);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : (data.items || data.data || []);
+      pagination.setTotal(data.total || items.length);
+
+      if (!items.length) {
+        showEmpty('paymentsTable', 'پرداختی ثبت نشده', '💳');
+        return;
+      }
+
+      let html = '<table><thead><tr>';
+      html += '<th>کاربر</th><th>مبلغ</th><th>وضعیت</th><th>کد پیگیری</th><th>مرجع</th><th>تاریخ</th>';
+      html += '</tr></thead><tbody>';
+
+      items.forEach(function(p) {
+        var status = (p.status || '').toLowerCase();
+        var badgeClass = 'pending';
+        var statusLabel = 'در انتظار';
+        if (status === 'completed' || status === 'success' || status === 'paid') { badgeClass = 'completed'; statusLabel = 'تکمیل شده'; }
+        else if (status === 'failed' || status === 'error' || status === 'rejected') { badgeClass = 'failed'; statusLabel = 'ناموفق'; }
+
+        html += '<tr>';
+        html += '<td>' + escapeHtml(p.user_email || p.email || p.user_id || '—') + '</td>';
+        html += '<td style="font-weight:600;">' + formatCurrency(p.amount_irr || 0) + '</td>';
+        html += '<td><span class="badge ' + badgeClass + '">' + statusLabel + '</span></td>';
+        html += '<td style="font-family:monospace; font-size:.82rem;">' + escapeHtml(p.ref_id || p.reference_id || '—') + '</td>';
+        html += '<td style="font-family:monospace; font-size:.82rem; color:var(--muted);">' + escapeHtml(p.authority || '—') + '</td>';
+        html += '<td>' + formatDate(p.created_at) + '</td>';
+        html += '</tr>';
+      });
+
+      html += '</tbody></table>';
+      document.getElementById('paymentsTable').innerHTML = html;
+    } catch(e) {
+      console.error(e);
+      showEmpty('paymentsTable', 'خطا در بارگذاری', '⚠️');
+    }
+  };
+
+  loadPayments();
+})();
+</script>
+{% endblock %}

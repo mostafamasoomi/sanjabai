@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% block title %}کلیدهای API{% endblock %}
+{% block topbar_title %}مدیریت کلیدهای API{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>🔑 کلیدهای API</h1>
+  <p>مشاهده و مدیریت کلیدهای API کاربران</p>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h2>لیست کلیدها</h2>
+    <button class="btn btn-secondary btn-sm" onclick="loadApiKeys()">🔄 بروزرسانی</button>
+  </div>
+  <div class="table-wrapper" id="apiKeysTable">
+    <div class="loading"><div class="spinner"></div></div>
+  </div>
+  <div id="apiKeysPagination"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const pagination = new Pagination('apiKeysPagination', {
+    perPage: 25,
+    onChange: function() { loadApiKeys(); }
+  });
+  window._pagination = pagination;
+
+  window.loadApiKeys = async function() {
+    showLoading('apiKeysTable');
+
+    try {
+      const url = '/admin/api/api-keys?limit=' + pagination.perPage + '&offset=' + pagination.offset;
+      const res = await fetchAPI(url);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : (data.items || data.data || []);
+      pagination.setTotal(data.total || items.length);
+
+      if (!items.length) {
+        showEmpty('apiKeysTable', 'کلید API ثبت نشده', '🔑');
+        return;
+      }
+
+      let html = '<table><thead><tr>';
+      html += '<th>کاربر</th><th>پیشوند کلید</th><th>نام</th><th>وضعیت</th><th>آخرین استفاده</th><th>تاریخ ایجاد</th><th>دسترسی‌ها</th>';
+      html += '</tr></thead><tbody>';
+
+      items.forEach(function(k) {
+        var isActive = k.is_active !== false && k.active !== false;
+        html += '<tr>';
+        html += '<td>' + escapeHtml(k.user_email || k.email || k.user_id || '—') + '</td>';
+        html += '<td style="font-family:monospace; font-size:.82rem; color:var(--muted);">' + escapeHtml(k.key_prefix || k.prefix || '—') + '</td>';
+        html += '<td>' + escapeHtml(k.name || '—') + '</td>';
+        html += '<td><span class="badge ' + (isActive ? 'active' : 'inactive') + '">' + (isActive ? 'فعال' : 'غیرفعال') + '</span></td>';
+        html += '<td>' + formatDate(k.last_used || k.last_used_at) + '</td>';
+        html += '<td>' + formatDate(k.created_at) + '</td>';
+        var scopes = k.scopes || k.permissions || [];
+        if (Array.isArray(scopes)) scopes = scopes.join(', ');
+        html += '<td style="font-size:.82rem; color:var(--muted);">' + escapeHtml(scopes || '—') + '</td>';
+        html += '</tr>';
+      });
+
+      html += '</tbody></table>';
+      document.getElementById('apiKeysTable').innerHTML = html;
+    } catch(e) {
+      console.error(e);
+      showEmpty('apiKeysTable', 'خطا در بارگذاری', '⚠️');
+    }
+  };
+
+  loadApiKeys();
+})();
+</script>
+{% endblock %}

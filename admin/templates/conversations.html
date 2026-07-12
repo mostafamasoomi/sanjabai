@@ -1,0 +1,132 @@
+{% extends 'base.html' %}
+{% block title %}مکالمات{% endblock %}
+{% block topbar_title %}مشاهده مکالمات{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>💬 مکالمات</h1>
+  <p>مشاهده و بررسی مکالمات کاربران</p>
+</div>
+
+<div class="search-bar">
+  <div class="search-input">
+    <input type="text" id="convSearch" placeholder="جستجو در عنوان مکالمات..." oninput="debouncedSearch()">
+  </div>
+  <button class="btn btn-secondary" onclick="loadConversations()">🔄 بروزرسانی</button>
+</div>
+
+<div class="card">
+  <div class="table-wrapper" id="convTable">
+    <div class="loading"><div class="spinner"></div><span>در حال بارگذاری...</span></div>
+  </div>
+  <div id="convPagination"></div>
+</div>
+
+<!-- Conversation Detail Modal -->
+<div class="modal-overlay" id="convModal">
+  <div class="modal" style="max-width:700px;">
+    <div class="modal-header">
+      <h2 id="convModalTitle">مکالمه</h2>
+      <button class="modal-close" onclick="closeConvModal()">✕</button>
+    </div>
+    <div id="convModalBody" class="chat-container"></div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  const pagination = new Pagination('convPagination', {
+    perPage: 20,
+    onChange: function() { loadConversations(); }
+  });
+  window._pagination = pagination;
+
+  const debouncedSearch = debounce(function() { pagination.page = 1; loadConversations(); }, 400);
+  window.debouncedSearch = debouncedSearch;
+
+  window.loadConversations = async function() {
+    const search = document.getElementById('convSearch').value.trim();
+    showLoading('convTable');
+
+    try {
+      let url = '/admin/api/conversations?limit=' + pagination.perPage + '&offset=' + pagination.offset;
+      if (search) url += '&search=' + encodeURIComponent(search);
+
+      const res = await fetchAPI(url);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : (data.items || data.data || []);
+      pagination.setTotal(data.total || items.length);
+
+      if (!items.length) {
+        showEmpty('convTable', 'مکالمه‌ای یافت نشد', '💬');
+        return;
+      }
+
+      let html = '<table><thead><tr>';
+      html += '<th>کاربر</th><th>عنوان</th><th>مدل</th><th>پیام‌ها</th><th>تاریخ</th>';
+      html += '</tr></thead><tbody>';
+
+      items.forEach(function(c) {
+        html += '<tr style="cursor:pointer" onclick="showConversation(\'' + escapeHtml(c.id) + '\')">';
+        html += '<td>' + escapeHtml(c.user_email || c.email || '—') + '</td>';
+        html += '<td>' + escapeHtml(c.title || 'بدون عنوان') + '</td>';
+        html += '<td><span class="badge info">' + escapeHtml(c.model || '—') + '</span></td>';
+        html += '<td>' + formatNumber(c.message_count || c.messages_count || 0) + '</td>';
+        html += '<td>' + formatDate(c.created_at) + '</td>';
+        html += '</tr>';
+      });
+
+      html += '</tbody></table>';
+      document.getElementById('convTable').innerHTML = html;
+    } catch(e) {
+      console.error(e);
+      showEmpty('convTable', 'خطا در بارگذاری', '⚠️');
+    }
+  };
+
+  window.showConversation = async function(id) {
+    document.getElementById('convModal').classList.add('show');
+    document.getElementById('convModalTitle').textContent = 'در حال بارگذاری...';
+    document.getElementById('convModalBody').innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+    try {
+      const res = await fetchAPI('/admin/api/conversations/' + encodeURIComponent(id));
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const messages = data.messages || data.items || [];
+
+      document.getElementById('convModalTitle').textContent = data.title || 'مکالمه';
+
+      if (!messages.length) {
+        document.getElementById('convModalBody').innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">پیامی وجود ندارد</div></div>';
+        return;
+      }
+
+      let html = '';
+      messages.forEach(function(m) {
+        var role = (m.role || 'user').toLowerCase();
+        var roleLabel = role === 'user' ? 'کاربر' : 'دستیار';
+        html += '<div class="chat-bubble ' + role + '">';
+        html += '<div class="chat-role ' + role + '">' + roleLabel + '</div>';
+        html += escapeHtml(m.content || m.text || '');
+        html += '</div>';
+      });
+
+      document.getElementById('convModalBody').innerHTML = html;
+    } catch(e) {
+      document.getElementById('convModalBody').innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">خطا در بارگذاری مکالمه</div></div>';
+    }
+  };
+
+  window.closeConvModal = function() {
+    document.getElementById('convModal').classList.remove('show');
+  };
+
+  loadConversations();
+})();
+</script>
+{% endblock %}

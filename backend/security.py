@@ -52,7 +52,7 @@ class RateLimiter:
 # Different rate limits for different endpoint types
 general_limiter = RateLimiter(window_seconds=60, max_requests=60)     # 60 req/min
 auth_limiter = RateLimiter(window_seconds=60, max_requests=10)       # 10 req/min
-chat_limiter = RateLimiter(window_seconds=60, max_requests=20)       # 20 req/min
+chat_limiter = RateLimiter(window_seconds=60, max_requests=120)      # 120 req/min (streaming needs headroom)
 admin_limiter = RateLimiter(window_seconds=60, max_requests=30)      # 30 req/min
 
 
@@ -62,9 +62,15 @@ def get_client_identifier(request: Request) -> str:
     token = request.headers.get('Authorization', '').removeprefix('Bearer ')
     if token:
         try:
-            uid = _get_redis().get(f'session:{token}')
-            if uid:
-                return f'user:{uid}'
+            import json as _json
+            session_data = _get_redis().get(f'session:{token}')
+            if session_data:
+                try:
+                    uid = (_json.loads(session_data) or {}).get('user_id')
+                    if uid:
+                        return f'user:{uid}'
+                except (ValueError, AttributeError):
+                    return f'user:{session_data}'
         except Exception:
             pass
     # Fallback to IP + User-Agent hash

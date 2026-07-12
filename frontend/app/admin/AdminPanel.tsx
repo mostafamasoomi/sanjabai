@@ -205,7 +205,7 @@ export default function AdminPage() {
         setPxActive(d.active !== false)
       }, label: 'proxy' },
       { fn: async () => {
-        const r = await fetch('/v1/models')
+        const r = await fetch('/api/models')
         const d = await r.json()
         setModels((d.data || []).map((m: { id: string }) => m.id))
       }, label: 'models' },

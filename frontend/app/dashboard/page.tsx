@@ -319,11 +319,11 @@ export default function DashboardPage() {
 
     try {
       const [meRes, usageRes, walletRes, ledgerRes, modelsRes] = await Promise.allSettled([
-        fetch('/api/me', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),
-        fetch('/me/usage', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),
+        fetch('/api/auth/me', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),
+        fetch('/api/usage', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),
         fetch('/api/wallet', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),
         fetch('/api/wallet/ledger', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),
-        fetch('/v1/models', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),
+        fetch('/api/models', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),
       ])
 
       if (meRes.status === 'fulfilled') setProfile(meRes.value)

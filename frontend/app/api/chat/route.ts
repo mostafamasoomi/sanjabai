@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     })
 
     // For streaming, pass through the raw response
-    if (body.stream) {
+    if (body.stream && res.ok) {
       return new Response(res.body, {
         status: res.status,
         headers: {
@@ -31,6 +31,7 @@ export async function POST(request: Request) {
       })
     }
 
+    // For errors or non-streaming, read the body and forward it
     const data = await res.json()
     return new Response(JSON.stringify(data), {
       status: res.status,

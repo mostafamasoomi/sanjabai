@@ -138,7 +138,7 @@ export default function WalletPage() {
         const [walletRes, ledgerRes, payRes] = await Promise.all([
           fetch('/api/wallet', { headers }),
           fetch('/api/wallet/ledger', { headers }),
-          fetch('/pay/history', { headers }),
+          fetch('/api/payment/history', { headers }),
         ])
         const [wallet, ledgerData, payData] = await Promise.all([
           walletRes.ok ? walletRes.json() : null,

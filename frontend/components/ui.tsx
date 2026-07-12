@@ -164,9 +164,9 @@ export function Tabs({
 export function Progress({ value, max = 100, size = 'md' }: { value: number; max?: number; size?: 'sm' | 'md' | 'lg' }) {
   const pct = Math.min(100, Math.round((value / max) * 100))
   const heights = { sm: 'h-1', md: 'h-2', lg: 'h-3' }
-  const color = pct > 90 ? 'var(--danger)' : pct > 70 ? 'var(--warn)' : 'var(--accent)'
+  const color = pct > 90 ? 'var(--danger)' : pct > 70 ? 'var(--warning)' : 'var(--accent)'
   return (
-    <div className={`w-full bg-[var(--bg-elev2)] rounded-full ${heights[size]}`}>
+    <div className={`w-full bg-[var(--bg-elev)] rounded-full ${heights[size]}`}>
       <div
         className={`${heights[size]} rounded-full transition-all duration-500`}
         style={{ width: `${pct}%`, background: color }}

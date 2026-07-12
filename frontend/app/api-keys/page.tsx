@@ -30,7 +30,7 @@ export default function ApiKeysPage() {
 
   const fetchKeys = async () => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('auth_token')
       const r = await fetch('/api/api-keys', { headers: { Authorization: `Bearer ${token}` } })
       if (r.ok) setKeys(await r.json())
     } catch {}
@@ -39,7 +39,7 @@ export default function ApiKeysPage() {
   const generateKey = async () => {
     setLoading(true)
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('auth_token')
       const r = await fetch('/api/api-keys', {
         method: 'POST',
         headers: {
@@ -64,7 +64,7 @@ export default function ApiKeysPage() {
 
   const revokeKey = async (id: number) => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('auth_token')
       const r = await fetch(`/api/api-keys/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },

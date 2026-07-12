@@ -2,11 +2,14 @@
 Security middleware: rate limiting, security headers, input validation.
 All rate limits use Redis for persistence across restarts.
 """
+import logging
 import time
 import hashlib
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+
+logger = logging.getLogger(__name__)
 
 # ── Lazy Redis import (avoids circular import) ────────────
 
@@ -41,8 +44,9 @@ class RateLimiter:
                 _get_redis().expire(key, self.window * 2)
             remaining = max(0, self.max - count)
             return count <= self.max, remaining
-        except Exception:
-            return False, 0  # Fail closed: do not bypass abuse controls on Redis failure
+        except Exception as e:
+            logger.warning("Rate limiter Redis unavailable, failing open: %s", e)
+            return True, self.max  # Fail open: allow traffic when Redis is down
 
 
 # Different rate limits for different endpoint types
@@ -85,7 +89,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         # Skip health check and static
-        if request.url.path in ['/health', '/health/detailed', '/']:
+        if request.url.path in ['/health', '/health/live', '/health/ready', '/health/detailed', '/']:
             return await call_next(request)
 
         identifier = get_client_identifier(request)

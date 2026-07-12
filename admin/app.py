@@ -11,7 +11,7 @@ DATABASE_URL = os.getenv(
     'DATABASE_URL',
     'postgresql+asyncpg://persian:persian@localhost:5432/persian_gateway'
 )
-SECRET_KEY = os.getenv('ADMIN_SECRET_KEY', 'admin-placeholder-change-me')
+SECRET_KEY = os.getenv('ADMIN_SECRET_KEY', '')  # empty = fail-closed
 SESSION_COOKIE = 'admin_session'
 
 templates = Jinja2Templates(directory='/app/templates')
@@ -48,14 +48,22 @@ UI = {
     'welcome': PERSIAN['welcome'],
 }
 
-FAKE_USERS = {
-    'admin': {'password': 'admin', 'display': 'مدیر'},
-}
+ADMIN_USER = os.getenv('ADMIN_USER', 'admin')
+ADMIN_PASS = os.getenv('ADMIN_PASS', '')
+
+FAKE_USERS = {}
+if ADMIN_PASS:
+    FAKE_USERS[ADMIN_USER] = {'password': ADMIN_PASS, 'display': 'مدیر'}
 
 sessions = {}
 SESSION_EXPIRY = timedelta(hours=8)
 
 app = FastAPI(title='Persian AI Gateway Admin')
+
+
+@app.get('/health')
+async def health():
+    return {'status': 'ok'}
 
 
 def _session_token() -> str:
@@ -83,6 +91,12 @@ async def login_page(request: Request, error: str | None = None):
 
 @app.post('/admin/login')
 async def login(request: Request, username: str = Form(...), password: str = Form(...)):
+    if not ADMIN_PASS:
+        return templates.TemplateResponse('login.html', {
+            'request': request,
+            'ui': UI,
+            'error': 'ورود غیرفعال است',
+        })
     user = FAKE_USERS.get(username)
     if not user or user['password'] != password:
         return templates.TemplateResponse('login.html', {
@@ -126,7 +140,7 @@ def _redirect_or_html(request: Request, template: str, context: dict):
 async def pricing_page(request: Request):
     async with async_session() as session:
         async with session.begin():
-            rows = (await session.execute(text('SELECT id, provider, model, input_price, output_price, currency, updated_at FROM pricing ORDER BY provider, model'))).mappings().all()
+            rows = (await session.execute(text('SELECT id, provider, model, input_per_million AS input_price, output_per_million AS output_price, currency, updated_at FROM pricing ORDER BY provider, model'))).mappings().all()
     prices = [dict(r) for r in rows]
     return _redirect_or_html(request, 'pricing.html', {'prices': prices})
 
@@ -156,7 +170,7 @@ async def pricing_update(request: Request, item_id: str = Form(...), input: int 
         return redirect
     async with async_session() as session:
         async with session.begin():
-            await session.execute(text('UPDATE pricing SET input_price=:i, output_price=:o, updated_at=:u WHERE id=:id'), {'i': input, 'o': output, 'u': datetime.utcnow(), 'id': item_id})
+            await session.execute(text('UPDATE pricing SET input_per_million=:i, output_per_million=:o, updated_at=:u WHERE id=:id'), {'i': input, 'o': output, 'u': datetime.utcnow(), 'id': item_id})
     return RedirectResponse(url='/admin/pricing?updated=1', status_code=302)
 
 

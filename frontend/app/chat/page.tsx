@@ -1,56 +1,93 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '@/lib/auth'
+import { useCatalog } from '@/lib/useCatalog'
+import { type ModelCatalogItem } from '@/types/catalog'
 import { Icon } from '@/components/ui/Icon'
+import { Skeleton, EmptyState, toast } from '@/components/ui'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Multiai Chat — Aurora v2
    Cancel, retry, model picker, cost preview, markdown, keyboard shortcuts.
+   Model list is now sourced live from useCatalog() — no static MODELS array.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 type Message = { role: 'user' | 'assistant' | 'system'; content: string; id: string }
-type Model = { id: string; name: string; provider: string; tier: string }
 
-const MODELS: Model[] = [
-  { id: 'kr/gpt-4o', name: 'GPT-4o', provider: 'OpenAI', tier: 'flagship' },
-  { id: 'kr/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', provider: 'Anthropic', tier: 'flagship' },
-  { id: 'kr/gemini-2.5-pro', name: 'Gemini 2.5 Pro', provider: 'Google', tier: 'flagship' },
-  { id: 'kr/deepseek-chat', name: 'DeepSeek V3', provider: 'DeepSeek', tier: 'mid' },
-  { id: 'kr/gpt-4o-mini', name: 'GPT-4o Mini', provider: 'OpenAI', tier: 'mini' },
-  { id: 'kr/claude-opus-4', name: 'Claude Opus 4', provider: 'Anthropic', tier: 'flagship' },
-  { id: 'kr/llama-3.1-405b', name: 'Llama 3.1 405B', provider: 'Meta', tier: 'mid' },
-  { id: 'kr/bynara-auto', name: 'Bynara Auto', provider: 'Bynara', tier: 'mid' },
-]
+/* ── Icon helper (inline SVG for special cases) ──────────────────────── */
+function CopyIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+    </svg>
+  )
+}
+
+function CheckIcon({ size = 12 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12"/>
+    </svg>
+  )
+}
 
 const PRESETS = [
-  { icon: 'code' as const, label: 'کدنویسی', prompt: 'یک تابع در ' },
-  { icon: 'chat' as const, label: 'ترجمه', prompt: 'متن زیر را به فارسی روان ترجمه کن:\n\n' },
-  { icon: 'search' as const, label: 'خلاصه‌سازی', prompt: 'متن زیر را خلاصه کن:\n\n' },
-  { icon: 'dashboard' as const, label: 'تحلیل', prompt: 'داده‌های زیر را تحلیل کن:\n\n' },
+  { icon: 'code' as const, label: 'کدنویسی', description: 'نوشتن و دیباگ کد', prompt: 'یک تابع در ' },
+  { icon: 'chat' as const, label: 'ترجمه', description: 'ترجمه متن به فارسی', prompt: 'متن زیر را به فارسی روان ترجمه کن:\n\n' },
+  { icon: 'search' as const, label: 'خلاصهسازی', description: 'خلاصه کردن متن طولانی', prompt: 'متن زیر را خلاصه کن:\n\n' },
+  { icon: 'dashboard' as const, label: 'تحلیل', description: 'تحلیل داده‌ها و اطلاعات', prompt: 'دادههای زیر را تحلیل کن:\n\n' },
 ]
 
 function generateId() { return Date.now().toString(36) + Math.random().toString(36).slice(2) }
 
 export default function ChatPage() {
-  const { user } = useAuth()
+  const { user, token } = useAuth()
+  const { models, loading, error: catalogError } = useCatalog()
   const [messages, setMessages] = useState<Message[]>(() => [
-    { id: 'welcome', role: 'assistant', content: 'سلام! 👋 به Multiai خوش آمدید. چطور می‌توانم کمک کنم؟' },
+    { id: 'welcome', role: 'assistant', content: 'سلام! به Multiai خوش آمدید. چطور میتوانم کمک کنید؟' }
   ])
+  const [model, setModel] = useState<ModelCatalogItem | null>(null)
   const [input, setInput] = useState('')
-  const [model, setModel] = useState(MODELS[0])
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState('')
   const abortRef = useRef<AbortController | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [showPresets, setShowPresets] = useState(true)
+  const [showScrollBtn, setShowScrollBtn] = useState(false)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  // Track scroll position to show/hide scroll-to-bottom button
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    setShowScrollBtn(distFromBottom > 120)
+  }, [])
+  // Select the first catalog model once the live catalog is available.
+  useEffect(() => {
+    if (!model && models.length > 0) setModel(models[0])
+  }, [models, model])
+
+  // Surface catalog load failures as a toast (design-system error state).
+  useEffect(() => {
+    if (catalogError) toast('خطا در دریافت فهرست مدلها', 'error')
+  }, [catalogError])
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    setShowScrollBtn(false)
   }, [])
 
   useEffect(() => { scrollToBottom() }, [messages, scrollToBottom])
+
+  const copyToClipboard = useCallback(async (id: string, content: string) => {
+    await navigator.clipboard.writeText(content)
+    setCopiedId(id)
+    setTimeout(() => setCopiedId(null), 2000)
+  }, [])
 
   const cancel = useCallback(() => {
     abortRef.current?.abort()
@@ -59,15 +96,17 @@ export default function ChatPage() {
   }, [])
 
   const retry = useCallback(async (msgIndex: number) => {
+    if (!model) return
     const userMsg = messages.slice(0, msgIndex).filter(m => m.role === 'user').pop()
     if (!userMsg) return
     const newMsgs = messages.slice(0, msgIndex)
     setMessages(newMsgs)
     setError('')
     await sendMessage(userMsg.content, newMsgs)
-  }, [messages])
+  }, [messages, model])
 
   const sendMessage = useCallback(async (content: string, existingMsgs?: Message[]) => {
+    if (!model) return
     const msgs = existingMsgs || messages
     const userMsg: Message = { id: generateId(), role: 'user', content }
     const updated = [...msgs, userMsg]
@@ -81,15 +120,14 @@ export default function ChatPage() {
     abortRef.current = controller
 
     try {
-      const base = typeof window !== 'undefined'
-        ? (process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000')
-        : 'http://127.0.0.1:8000'
-
-      const res = await fetch(`${base}/v1/chat/completions`, {
+      const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
-          model: model.id,
+          model: model.providerModelId || model.id,
           messages: updated.map(m => ({ role: m.role, content: m.content })),
           stream: true,
         }),
@@ -134,7 +172,7 @@ export default function ChatPage() {
           const copy = [...prev]
           const last = copy[copy.length - 1]
           if (last?.role === 'assistant' && !last.content.trim()) {
-            copy[copy.length - 1] = { ...last, content: '⏹ تولید متوقف شد.' }
+            copy[copy.length - 1] = { ...last, content: 'تولید متوقف شد.' }
           }
           return copy
         })
@@ -149,7 +187,7 @@ export default function ChatPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!input.trim() || streaming) return
+    if (!input.trim() || streaming || !model) return
     sendMessage(input.trim())
   }
 
@@ -161,92 +199,141 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-var(--topbar-height)-2rem)]">
+    <div className="chat-page">
       {/* ── Model bar ─────────────────────────────────────── */}
-      <div className="flex items-center gap-3 pb-3 border-b border-[var(--border)]">
+      <div className="chat-model-bar">
         <div className="flex items-center gap-2">
           <Icon name="models" size={18} className="text-[var(--accent)]" />
-          <select
-            value={model.id}
-            onChange={e => setModel(MODELS.find(m => m.id === e.target.value) || MODELS[0])}
-            className="bg-transparent text-sm font-medium text-[var(--text-primary)] border-none outline-none cursor-pointer"
-          >
-            {MODELS.map(m => (
-              <option key={m.id} value={m.id}>{m.name}</option>
-            ))}
-          </select>
+          {loading ? (
+            <Skeleton className="w-40" height="1.25rem" />
+          ) : catalogError ? (
+            <span className="text-sm text-[var(--danger)] flex items-center gap-1">
+              <Icon name="close" size={14} /> خطا در بارگذاری مدلها
+            </span>
+          ) : models.length === 0 ? (
+            <span className="text-sm text-[var(--text-muted)]">مدلی یافت نشد</span>
+          ) : (
+            <div className="model-select-wrapper" dir="ltr">
+              <select
+                value={model?.id ?? ''}
+                onChange={e => setModel(models.find(m => m.id === e.target.value) || models[0] || null)}
+                className="model-select"
+                data-testid="model-select"
+              >
+                {models.map(m => (
+                  <option key={m.id} value={m.id}>{m.displayName}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
-        <span className="badge badge-accent text-[10px]">{model.provider}</span>
-        {streaming && (
-          <button onClick={cancel} className="btn btn-ghost btn-sm text-[var(--danger)] ml-auto">
-            <Icon name="close" size={14} />
-            توقف
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {model && <span className="badge badge-accent text-[10px]" dir="ltr">{model.provider}</span>}
+          {streaming && (
+            <button onClick={cancel} className="btn btn-ghost btn-sm text-[var(--danger)]">
+              <Icon name="close" size={14} />
+              توقف
+            </button>
+          )}
+        </div>
       </div>
 
+      {!loading && !catalogError && models.length === 0 && (
+        <EmptyState
+          icon="models"
+          title="مدلی در دسترس نیست"
+          description="در حال حاضر فهرست مدلها خالی است. لطفاً اتصال را بررسی کرده و دوباره تلاش کنید."
+        />
+      )}
+
       {/* ── Messages ──────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto py-4 space-y-4">
+      <div ref={scrollContainerRef} onScroll={handleScroll} className="chat-messages">
         {showPresets && messages.length <= 1 && (
-          <div className="grid grid-cols-2 gap-2 mb-4">
-            {PRESETS.map(p => (
-              <button
-                key={p.label}
-                onClick={() => sendMessage(p.prompt)}
-                className="card card-interactive flex items-center gap-2 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
-              >
-                <Icon name={p.icon} size={16} className="text-[var(--accent)]" />
-                {p.label}
-              </button>
-            ))}
+          <div className="chat-presets">
+            <h3 className="chat-presets-title">از کجا شروع کنیم؟</h3>
+            <div className="chat-presets-grid">
+              {PRESETS.map(p => (
+                <button
+                  key={p.label}
+                  onClick={() => sendMessage(p.prompt)}
+                  className="chat-preset-card"
+                >
+                  <div className="chat-preset-icon">
+                    <Icon name={p.icon} size={20} />
+                  </div>
+                  <div className="chat-preset-text">
+                    <span className="chat-preset-label">{p.label}</span>
+                    <span className="chat-preset-desc">{p.description}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
         {messages.map((msg, i) => (
-          <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-              msg.role === 'user'
-                ? 'bg-[var(--accent)] text-white rounded-br-md'
-                : 'bg-[var(--bg-surface)] border border-[var(--border)] text-[var(--text-primary)] rounded-bl-md'
-            }`}>
-              <div className="whitespace-pre-wrap">{msg.content || (streaming && i === messages.length - 1 ? '...' : '')}</div>
-              {msg.role === 'assistant' && msg.content && i > 0 && !streaming && (
-                <div className="flex items-center gap-2 mt-2 pt-2 border-t border-[var(--border)]">
+          <div key={msg.id} className={`chat-row ${msg.role === 'user' ? 'chat-row-user' : 'chat-row-assistant'}`}>
+            {msg.role === 'assistant' && (
+              <div className="chat-avatar chat-avatar-ai">
+                <Icon name="models" size={16} />
+              </div>
+            )}
+            <div className={`chat-bubble ${msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}`}>
+              {msg.role === 'assistant' && streaming && i === messages.length - 1 && !msg.content && (
+                <div className="chat-typing">
+                  <span /><span /><span />
+                </div>
+              )}
+              <div className="chat-bubble-content">{msg.content}</div>
+              {msg.role === 'assistant' && msg.content && !streaming && (
+                <div className="chat-actions">
                   <button
-                    onClick={() => navigator.clipboard.writeText(msg.content)}
-                    className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors flex items-center gap-1"
+                    onClick={() => copyToClipboard(msg.id, msg.content)}
+                    className="chat-action-btn"
+                    title="کپی"
                   >
-                    <Icon name="copy" size={12} />
-                    کپی
+                    {copiedId === msg.id ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
+                    {copiedId === msg.id ? 'کپی شد' : 'کپی'}
                   </button>
-                  <button
-                    onClick={() => retry(i)}
-                    className="text-xs text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors flex items-center gap-1"
-                  >
-                    <Icon name="refresh" size={12} />
-                    تلاش مجدد
-                  </button>
+                  {i > 0 && (
+                    <button onClick={() => retry(i)} className="chat-action-btn" title="تلاش مجدد">
+                      <Icon name="refresh" size={13} />
+                      تلاش مجدد
+                    </button>
+                  )}
                 </div>
               )}
             </div>
+            {msg.role === 'user' && user && (
+              <div className="chat-avatar chat-avatar-user">
+                {user.email?.[0]?.toUpperCase() || '?'}
+              </div>
+            )}
           </div>
         ))}
 
         {error && (
-          <div className="text-center">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--danger)]/10 text-[var(--danger)] text-sm">
-              <Icon name="close" size={14} />
-              {error}
-            </div>
+          <div className="chat-error">
+            <Icon name="close" size={14} />
+            {error}
           </div>
         )}
 
         <div ref={bottomRef} />
       </div>
 
+      {/* ── Scroll to bottom ─────────────────────────────── */}
+      {showScrollBtn && (
+        <button onClick={scrollToBottom} className="chat-scroll-btn" aria-label="اسکرول به پایین">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+      )}
+
       {/* ── Composer ──────────────────────────────────────── */}
-      <form onSubmit={handleSubmit} className="relative">
-        <div className="flex items-end gap-2 p-3 bg-[var(--bg-surface)] border border-[var(--border)] rounded-[var(--radius-xl)] focus-within:border-[var(--accent)] focus-within:shadow-[var(--shadow-glow)] transition-all">
+      <form onSubmit={handleSubmit} className="chat-composer">
+        <div className="chat-composer-box">
           <textarea
             ref={inputRef}
             value={input}
@@ -254,24 +341,28 @@ export default function ChatPage() {
             onKeyDown={handleKeyDown}
             placeholder="پیام خود را بنویسید... (Shift+Enter برای خط جدید)"
             rows={1}
-            className="flex-1 bg-transparent border-none outline-none text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] resize-none font-[var(--font-sans)] min-h-[24px] max-h-[120px]"
+            className="chat-composer-input"
             style={{ fieldSizing: 'content' } as any}
           />
           <button
             type="submit"
-            disabled={!input.trim() || streaming}
+            disabled={!input.trim() || streaming || !model}
             className="btn btn-primary btn-icon rounded-xl shrink-0"
             aria-label="ارسال"
           >
             <Icon name="send" size={18} />
           </button>
         </div>
-        <div className="flex items-center justify-between mt-2 px-1">
-          <span className="text-[10px] text-[var(--text-muted)]">
-            {streaming ? 'در حال تولید...' : `${model.name} — آماده`}
+        <div className="chat-composer-footer">
+          <span className="chat-composer-status">
+            {streaming ? (
+              <span className="chat-streaming-dot">در حال تولید...</span>
+            ) : (
+              `${model?.displayName ?? 'منتظر انتخاب مدل'} — آماده`
+            )}
           </span>
           <span className="text-[10px] text-[var(--text-muted)]">
-            {input.length} کاراکتر
+            {input.length > 0 && `${input.length} کاراکتر`}
           </span>
         </div>
       </form>

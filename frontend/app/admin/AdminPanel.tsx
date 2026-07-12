@@ -1,0 +1,1034 @@
+'use client'
+
+import { useState, useEffect, useCallback } from 'react'
+import { Icon, type IconName } from '@/components/ui/Icon'
+import { toast } from '@/components/ui'
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Multiai Admin Panel — Aurora Design System
+   RTL Persian, dark theme, Stripe/Linear inspired
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type Page = 'dashboard' | 'pricing' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'users'
+
+interface Analytics {
+  user_count: number
+  active_users: number
+  total_revenue: number
+  total_tokens: number
+  conv_count: number
+  recent_ledger: { id: number; user_id: number; amount: number; reason: string; created_at: string }[]
+}
+
+interface PricingRow {
+  model: string
+  input_per_million: number
+  output_per_million: number
+  currency: string
+}
+
+interface FeatureRow {
+  id: number
+  title: string
+  description: string
+  icon: string
+  order_idx: number
+  active: boolean
+}
+
+interface DiscountRow {
+  id: number
+  code: string
+  percent: number
+  active: boolean
+}
+
+interface ProxyConfig {
+  proxy_type: string
+  proxy_url: string
+  active: boolean
+}
+
+interface UserRow {
+  id: number
+  email: string
+  username: string
+  is_active: boolean
+  plan: string
+  wallet_balance: number
+}
+
+// ─── Sidebar Navigation ──────────────────────────────────────────────────────
+
+const NAV_ITEMS: { key: Page; label: string; icon: IconName }[] = [
+  { key: 'dashboard', label: 'داشبورد', icon: 'dashboard' },
+  { key: 'users', label: 'کاربران', icon: 'profile' },
+  { key: 'pricing', label: 'تعرفه‌ها', icon: 'pricing' },
+  { key: 'features', label: 'امکانات', icon: 'models' },
+  { key: 'discounts', label: 'تخفیف‌ها', icon: 'wallet' },
+  { key: 'about', label: 'درباره ما', icon: 'notification' },
+  { key: 'proxy', label: 'پروکسی', icon: 'security' },
+  { key: 'models', label: 'مدل‌ها', icon: 'code' },
+]
+
+// ─── API Helper ──────────────────────────────────────────────────────────────
+
+let TOKEN = ''
+
+async function api(path: string, opts: RequestInit = {}) {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (TOKEN) headers['Authorization'] = 'Bearer ' + TOKEN
+  const res = await fetch(path, { ...opts, headers })
+  if (res.status === 401) {
+    TOKEN = ''
+    throw new Error('unauthorized')
+  }
+  if (!res.ok) throw new Error(`خطای سرور (${res.status})`)
+  return res
+}
+
+// ─── Stat Card ───────────────────────────────────────────────────────────────
+
+function StatCard({ icon, label, value, color }: { icon: React.ComponentProps<typeof Icon>['name']; label: string; value: string | number; color: string }) {
+  return (
+    <div className="admin-card" style={{ borderRight: `3px solid ${color}` }}>
+      <div className="flex items-center gap-3 mb-2">
+        <div className="p-2 rounded-lg" style={{ background: `${color}15` }}>
+          <Icon name={icon} size={18} className="opacity-80" style={{ color }} />
+        </div>
+        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{label}</span>
+      </div>
+      <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{value}</p>
+    </div>
+  )
+}
+
+// ─── Section Header ──────────────────────────────────────────────────────────
+
+function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div className="mb-6">
+      <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>{title}</h1>
+      {subtitle && <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{subtitle}</p>}
+    </div>
+  )
+}
+
+// ─── Form Field ──────────────────────────────────────────────────────────────
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>{label}</label>
+      {children}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Main Component
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export default function AdminPage() {
+  // ─── Auth State ──────────────────────────────────────────────────────────
+  const [authed, setAuthed] = useState(false)
+  const [tokenInput, setTokenInput] = useState('')
+  const [loggingIn, setLoggingIn] = useState(false)
+  const [page, setPage] = useState<Page>('dashboard')
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // ─── Data State ──────────────────────────────────────────────────────────
+  const [analytics, setAnalytics] = useState<Analytics | null>(null)
+  const [prices, setPrices] = useState<PricingRow[]>([])
+  const [features, setFeatures] = useState<FeatureRow[]>([])
+  const [discounts, setDiscounts] = useState<DiscountRow[]>([])
+  const [proxyConfig, setProxyConfig] = useState<ProxyConfig>({ proxy_type: 'socks5', proxy_url: '', active: false })
+  const [models, setModels] = useState<string[]>([])
+  const [users, setUsers] = useState<UserRow[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // ─── Pricing Form ────────────────────────────────────────────────────────
+  const [pzModel, setPzModel] = useState('')
+  const [pzIn, setPzIn] = useState('')
+  const [pzOut, setPzOut] = useState('')
+  const [pzCur, setPzCur] = useState('IRT')
+
+  // ─── Features Form ───────────────────────────────────────────────────────
+  const [ftId, setFtId] = useState('')
+  const [ftTitle, setFtTitle] = useState('')
+  const [ftDesc, setFtDesc] = useState('')
+  const [ftIcon, setFtIcon] = useState('')
+  const [ftOrder, setFtOrder] = useState('0')
+  const [ftActive, setFtActive] = useState(true)
+
+  // ─── Discounts Form ──────────────────────────────────────────────────────
+  const [dcId, setDcId] = useState('')
+  const [dcCode, setDcCode] = useState('')
+  const [dcPercent, setDcPercent] = useState('10')
+  const [dcActive, setDcActive] = useState(true)
+
+  // ─── About Form ──────────────────────────────────────────────────────────
+  const [abTitle, setAbTitle] = useState('')
+  const [abBody, setAbBody] = useState('')
+
+  // ─── Proxy Form ──────────────────────────────────────────────────────────
+  const [pxType, setPxType] = useState('socks5')
+  const [pxUrl, setPxUrl] = useState('')
+  const [pxActive, setPxActive] = useState(true)
+
+  // ─── User Edit ───────────────────────────────────────────────────────────
+  const [editingUser, setEditingUser] = useState<UserRow | null>(null)
+
+  // ─── Load Data ───────────────────────────────────────────────────────────
+
+  const loadAll = useCallback(async () => {
+    setLoading(true)
+    const tasks = [
+      { fn: async () => { const r = await api('/admin/analytics'); setAnalytics(await r.json()) }, label: 'analytics' },
+      { fn: async () => { const r = await api('/admin/pricing'); setPrices(await r.json()) }, label: 'pricing' },
+      { fn: async () => { const r = await api('/admin/features'); setFeatures(await r.json()) }, label: 'features' },
+      { fn: async () => { const r = await api('/admin/discounts'); setDiscounts(await r.json()) }, label: 'discounts' },
+      { fn: async () => {
+        const r = await api('/admin/about')
+        const d = await r.json()
+        setAbTitle(d.title || '')
+        setAbBody(d.body || '')
+      }, label: 'about' },
+      { fn: async () => {
+        const r = await api('/admin/proxy')
+        const d = await r.json()
+        setProxyConfig(d)
+        setPxType(d.proxy_type || 'socks5')
+        setPxUrl(d.proxy_url || '')
+        setPxActive(d.active !== false)
+      }, label: 'proxy' },
+      { fn: async () => {
+        const r = await fetch('/v1/models')
+        const d = await r.json()
+        setModels((d.data || []).map((m: { id: string }) => m.id))
+      }, label: 'models' },
+      { fn: async () => { const r = await api('/admin/users'); setUsers(await r.json()) }, label: 'users' },
+    ]
+
+    await Promise.allSettled(tasks.map((t) => t.fn()))
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    if (authed) loadAll()
+  }, [authed, loadAll])
+
+  // ─── Login ───────────────────────────────────────────────────────────────
+
+  const login = async () => {
+    const token = tokenInput.trim()
+    if (!token) return
+    setLoggingIn(true)
+    try {
+      const res = await fetch('/admin/analytics', { headers: { Authorization: 'Bearer ' + token } })
+      if (res.ok) {
+        TOKEN = token
+        setAuthed(true)
+        toast('ورود موفقیت‌آمیز بود', 'success')
+      } else {
+        toast('توکن نامعتبر است', 'error')
+      }
+    } catch {
+      toast('خطا در اتصال به سرور', 'error')
+    } finally {
+      setLoggingIn(false)
+    }
+  }
+
+  // ─── Pricing Actions ─────────────────────────────────────────────────────
+
+  const savePricing = async () => {
+    if (!pzModel.trim()) return
+    try {
+      await api('/admin/pricing', {
+        method: 'POST',
+        body: JSON.stringify({ model: pzModel, input_per_million: +pzIn || 0, output_per_million: +pzOut || 0, currency: pzCur }),
+      })
+      toast('تعرفه ذخیره شد', 'success')
+      setPzModel(''); setPzIn(''); setPzOut(''); setPzCur('IRT')
+      loadAll()
+    } catch { toast('خطا در ذخیره تعرفه', 'error') }
+  }
+
+  // ─── Features Actions ────────────────────────────────────────────────────
+
+  const saveFeature = async () => {
+    if (!ftTitle.trim()) return
+    try {
+      await api('/admin/features', {
+        method: 'POST',
+        body: JSON.stringify({ id: ftId ? +ftId : undefined, title: ftTitle, description: ftDesc, icon: ftIcon, order_idx: +ftOrder || 0, active: ftActive }),
+      })
+      toast(ftId ? 'ویژگی ویرایش شد' : 'ویژگی اضافه شد', 'success')
+      resetFeatureForm()
+      loadAll()
+    } catch { toast('خطا در ذخیره ویژگی', 'error') }
+  }
+
+  const editFeature = (f: FeatureRow) => {
+    setFtId(String(f.id)); setFtTitle(f.title); setFtDesc(f.description); setFtIcon(f.icon)
+    setFtOrder(String(f.order_idx)); setFtActive(f.active)
+  }
+
+  const delFeature = async (id: number) => {
+    try {
+      await api('/admin/features/' + id, { method: 'DELETE' })
+      toast('ویژگی حذف شد', 'success')
+      loadAll()
+    } catch { toast('خطا در حذف ویژگی', 'error') }
+  }
+
+  const resetFeatureForm = () => {
+    setFtId(''); setFtTitle(''); setFtDesc(''); setFtIcon(''); setFtOrder('0'); setFtActive(true)
+  }
+
+  // ─── Discounts Actions ───────────────────────────────────────────────────
+
+  const saveDiscount = async () => {
+    if (!dcCode.trim()) return
+    try {
+      await api('/admin/discounts', {
+        method: 'POST',
+        body: JSON.stringify({ id: dcId ? +dcId : undefined, code: dcCode, percent: +dcPercent || 0, active: dcActive }),
+      })
+      toast(dcId ? 'تخفیف ویرایش شد' : 'تخفیف اضافه شد', 'success')
+      resetDiscountForm()
+      loadAll()
+    } catch { toast('خطا در ذخیره تخفیف', 'error') }
+  }
+
+  const editDiscount = (d: DiscountRow) => {
+    setDcId(String(d.id)); setDcCode(d.code); setDcPercent(String(d.percent)); setDcActive(d.active)
+  }
+
+  const delDiscount = async (id: number) => {
+    try {
+      await api('/admin/discounts/' + id, { method: 'DELETE' })
+      toast('تخفیف حذف شد', 'success')
+      loadAll()
+    } catch { toast('خطا در حذف تخفیف', 'error') }
+  }
+
+  const resetDiscountForm = () => {
+    setDcId(''); setDcCode(''); setDcPercent('10'); setDcActive(true)
+  }
+
+  // ─── About Actions ───────────────────────────────────────────────────────
+
+  const saveAbout = async () => {
+    try {
+      await api('/admin/about', { method: 'POST', body: JSON.stringify({ title: abTitle, body: abBody }) })
+      toast('درباره ما ذخیره شد', 'success')
+    } catch { toast('خطا در ذخیره', 'error') }
+  }
+
+  // ─── Proxy Actions ───────────────────────────────────────────────────────
+
+  const saveProxy = async () => {
+    try {
+      await api('/admin/proxy', { method: 'POST', body: JSON.stringify({ proxy_type: pxType, proxy_url: pxUrl, active: pxActive }) })
+      toast('تنظیمات پروکسی ذخیره شد', 'success')
+      loadAll()
+    } catch { toast('خطا در ذخیره پروکسی', 'error') }
+  }
+
+  // ─── User Actions ────────────────────────────────────────────────────────
+
+  const banUser = async (uid: number) => {
+    try {
+      await api(`/admin/users/${uid}/ban`, { method: 'POST' })
+      toast('کاربر مسدود شد', 'success')
+      loadAll()
+    } catch { toast('خطا در مسدودسازی', 'error') }
+  }
+
+  const saveUserEdit = async () => {
+    if (!editingUser) return
+    try {
+      await api(`/admin/users/${editingUser.id}`, {
+        method: 'PUT',
+        body: JSON.stringify(editingUser),
+      })
+      toast('کاربر ویرایش شد', 'success')
+      setEditingUser(null)
+      loadAll()
+    } catch { toast('خطا در ویرایش کاربر', 'error') }
+  }
+
+  // ─── Logout ──────────────────────────────────────────────────────────────
+
+  const logout = () => {
+    TOKEN = ''
+    setAuthed(false)
+    setTokenInput('')
+    setAnalytics(null)
+    setPrices([])
+    setFeatures([])
+    setDiscounts([])
+    setModels([])
+    setUsers([])
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // RENDER: Login Screen
+  // ═════════════════════════════════════════════════════════════════════════
+
+  if (!authed) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--bg-base)' }}>
+        <div className="card w-full max-w-sm">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4" style={{ background: 'var(--accent-dim)' }}>
+              <Icon name="settings" size={28} style={{ color: 'var(--accent)' }} />
+            </div>
+            <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>پنل مدیریت</h1>
+            <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Multiai Admin Dashboard</p>
+          </div>
+
+          <div className="space-y-4">
+            <Field label="توکن ادمین">
+              <input
+                type="password"
+                className="input w-full"
+                placeholder="توکن خود را وارد کنید..."
+                value={tokenInput}
+                onChange={(e) => setTokenInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && login()}
+                autoFocus
+              />
+            </Field>
+            <button
+              className="btn btn-lg w-full"
+              onClick={login}
+              disabled={loggingIn || !tokenInput.trim()}
+            >
+              {loggingIn ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  در حال ورود...
+                </span>
+              ) : (
+                'ورود'
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // RENDER: Admin Panel
+  // ═════════════════════════════════════════════════════════════════════════
+
+  const currentNav = NAV_ITEMS.find((n) => n.key === page)
+
+  return (
+    <div className="admin-layout min-h-screen" dir="rtl">
+      {/* Mobile Header */}
+      <div className="lg:hidden flex items-center justify-between p-4 border-b" style={{ borderColor: 'var(--border)', background: 'var(--bg-surface)' }}>
+        <button className="btn btn-icon btn-sm" onClick={() => setSidebarOpen(!sidebarOpen)}>
+          <Icon name={sidebarOpen ? 'close' : 'menu'} size={20} />
+        </button>
+        <span className="text-sm font-bold" style={{ color: 'var(--accent)' }}>
+          {currentNav?.label}
+        </span>
+        <button className="btn btn-icon btn-sm" onClick={logout}>
+          <Icon name="logout" size={18} />
+        </button>
+      </div>
+
+      <div className="flex">
+        {/* ─── Sidebar ─────────────────────────────────────────────────── */}
+        <aside
+          className={`
+            fixed lg:sticky top-0 right-0 z-40 h-screen w-64 shrink-0
+            border-l overflow-y-auto transition-transform duration-200
+            lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}
+          `}
+          style={{
+            background: 'var(--bg-surface)',
+            borderColor: 'var(--border)',
+          }}
+        >
+          {/* Logo */}
+          <div className="p-5 border-b" style={{ borderColor: 'var(--border)' }}>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'var(--accent-dim)' }}>
+                <Icon name="settings" size={18} style={{ color: 'var(--accent)' }} />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>Multiai</h2>
+                <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>Admin Panel</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Navigation */}
+          <nav className="p-3 space-y-0.5">
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.key}
+                className={`
+                  w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150
+                  ${page === item.key
+                    ? 'font-medium'
+                    : 'hover:opacity-80'
+                  }
+                `}
+                style={{
+                  background: page === item.key ? 'var(--accent-dim)' : 'transparent',
+                  color: page === item.key ? 'var(--accent)' : 'var(--text-secondary)',
+                }}
+                onClick={() => { setPage(item.key); setSidebarOpen(false) }}
+              >
+                <Icon name={item.icon} size={18} />
+                <span>{item.label}</span>
+                {item.key === 'users' && users.length > 0 && (
+                  <span className="badge badge-accent mr-auto text-[10px]">{users.length}</span>
+                )}
+                {item.key === 'models' && models.length > 0 && (
+                  <span className="badge badge-accent mr-auto text-[10px]">{models.length}</span>
+                )}
+              </button>
+            ))}
+          </nav>
+
+          {/* Sidebar Footer */}
+          <div className="absolute bottom-0 right-0 left-0 p-3 border-t" style={{ borderColor: 'var(--border)' }}>
+            <button
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors"
+              style={{ color: 'var(--text-muted)' }}
+              onClick={logout}
+            >
+              <Icon name="logout" size={18} />
+              <span>خروج</span>
+            </button>
+          </div>
+        </aside>
+
+        {/* Mobile Overlay */}
+        {sidebarOpen && (
+          <div className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />
+        )}
+
+        {/* ─── Main Content ────────────────────────────────────────────── */}
+        <main className="admin-main flex-1 min-w-0 p-4 lg:p-8 overflow-y-auto" style={{ background: 'var(--bg-base)' }}>
+          {/* Refresh Button */}
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>{currentNav?.label}</h1>
+            </div>
+            <button className="btn btn-sm" onClick={loadAll} title="بروزرسانی">
+              <Icon name="refresh" size={16} />
+            </button>
+          </div>
+
+          {/* ─────────────────────────────────────────────────────────────
+              Dashboard
+             ───────────────────────────────────────────────────────────── */}
+          {page === 'dashboard' && (
+            <div className="space-y-6">
+              {analytics ? (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+                    <StatCard icon="profile" label="کل کاربران" value={analytics.user_count.toLocaleString('fa-IR')} color="var(--accent)" />
+                    <StatCard icon="check" label="کاربران فعال" value={analytics.active_users.toLocaleString('fa-IR')} color="var(--positive)" />
+                    <StatCard icon="payment" label="درآمد کل (تومان)" value={analytics.total_revenue?.toLocaleString('fa-IR') || '0'} color="var(--info)" />
+                    <StatCard icon="code" label="توکن مصرفی" value={analytics.total_tokens?.toLocaleString('fa-IR') || '0'} color="var(--warning)" />
+                    <StatCard icon="chat" label="گفتگوها" value={analytics.conv_count?.toLocaleString('fa-IR') || '0'} color="var(--accent)" />
+                  </div>
+
+                  <div className="admin-card">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Icon name="history" size={18} style={{ color: 'var(--text-secondary)' }} />
+                      <h3 className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>تراکنش‌های اخیر</h3>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="admin-table w-full text-sm">
+                        <thead>
+                          <tr>
+                            <th className="text-right p-3">شناسه کاربر</th>
+                            <th className="text-right p-3">مبلغ</th>
+                            <th className="text-right p-3">شرح</th>
+                            <th className="text-right p-3">تاریخ</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(analytics.recent_ledger || []).length === 0 ? (
+                            <tr>
+                              <td colSpan={4} className="p-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+                                تراکنشی ثبت نشده
+                              </td>
+                            </tr>
+                          ) : (
+                            (analytics.recent_ledger || []).map((l) => (
+                              <tr key={l.id}>
+                                <td className="p-3 text-xs font-mono">{l.user_id}</td>
+                                <td className="p-3">
+                                  <span className={l.amount > 0 ? 'badge badge-positive' : 'badge badge-danger'}>
+                                    {l.amount > 0 ? '+' : ''}{l.amount.toLocaleString('fa-IR')}
+                                  </span>
+                                </td>
+                                <td className="p-3 text-xs" style={{ color: 'var(--text-secondary)' }}>{l.reason}</td>
+                                <td className="p-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                                  {new Date(l.created_at).toLocaleDateString('fa-IR')}
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="admin-card">
+                      <div className="skeleton h-3 w-20 mb-3 rounded" />
+                      <div className="skeleton h-7 w-16 rounded" />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ─────────────────────────────────────────────────────────────
+              Users
+             ───────────────────────────────────────────────────────────── */}
+          {page === 'users' && (
+            <div className="space-y-4">
+              <SectionHeader title="مدیریت کاربران" subtitle={`${users.length} کاربر ثبت‌نام شده`} />
+
+              <div className="admin-card overflow-x-auto">
+                <table className="admin-table w-full text-sm">
+                  <thead>
+                    <tr>
+                      <th className="text-right p-3">شناسه</th>
+                      <th className="text-right p-3">نام کاربری</th>
+                      <th className="text-right p-3">ایمیل</th>
+                      <th className="text-right p-3">پلن</th>
+                      <th className="text-right p-3">موجودی</th>
+                      <th className="text-right p-3">وضعیت</th>
+                      <th className="text-right p-3">عملیات</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {users.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+                          کاربری یافت نشد
+                        </td>
+                      </tr>
+                    ) : (
+                      users.map((u) => (
+                        <tr key={u.id}>
+                          <td className="p-3 text-xs font-mono">{u.id}</td>
+                          <td className="p-3 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{u.username || '—'}</td>
+                          <td className="p-3 text-xs" style={{ color: 'var(--text-secondary)' }}>{u.email}</td>
+                          <td className="p-3">
+                            <span className="badge badge-accent">{u.plan || 'رایگان'}</span>
+                          </td>
+                          <td className="p-3 text-xs">{u.wallet_balance?.toLocaleString('fa-IR')}</td>
+                          <td className="p-3">
+                            <span className={u.is_active ? 'badge badge-positive' : 'badge badge-danger'}>
+                              {u.is_active ? 'فعال' : 'غیرفعال'}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <div className="flex gap-1">
+                              <button className="btn btn-sm" onClick={() => setEditingUser(u)}>
+                                <Icon name="settings" size={14} />
+                              </button>
+                              {u.is_active && (
+                                <button className="btn btn-sm btn-danger" onClick={() => banUser(u.id)}>
+                                  <Icon name="security" size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* User Edit Modal */}
+              {editingUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setEditingUser(null)}>
+                  <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                  <div className="card relative w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-bold" style={{ color: 'var(--text-primary)' }}>ویرایش کاربر</h3>
+                      <button className="btn btn-icon btn-sm" onClick={() => setEditingUser(null)}>
+                        <Icon name="close" size={16} />
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      <Field label="نام کاربری">
+                        <input className="input w-full" value={editingUser.username || ''} onChange={(e) => setEditingUser({ ...editingUser, username: e.target.value })} />
+                      </Field>
+                      <Field label="ایمیل">
+                        <input className="input w-full" value={editingUser.email || ''} onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })} />
+                      </Field>
+                      <Field label="پلن">
+                        <select className="input w-full" value={editingUser.plan || ''} onChange={(e) => setEditingUser({ ...editingUser, plan: e.target.value })}>
+                          <option value="">رایگان</option>
+                          <option value="pro">Pro</option>
+                          <option value="enterprise">Enterprise</option>
+                        </select>
+                      </Field>
+                      <Field label="موجودی کیف پول">
+                        <input className="input w-full" type="number" value={editingUser.wallet_balance || 0} onChange={(e) => setEditingUser({ ...editingUser, wallet_balance: +e.target.value })} />
+                      </Field>
+                    </div>
+                    <div className="flex gap-2 mt-5">
+                      <button className="btn flex-1" onClick={saveUserEdit}>ذخیره</button>
+                      <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={() => setEditingUser(null)}>انصراف</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ─────────────────────────────────────────────────────────────
+              Pricing
+             ───────────────────────────────────────────────────────────── */}
+          {page === 'pricing' && (
+            <div className="space-y-6">
+              <SectionHeader title="مدیریت تعرفه‌ها" subtitle="قیمت‌گذاری مدل‌ها به ازای هر میلیون توکن" />
+
+              <div className="admin-card overflow-x-auto">
+                <table className="admin-table w-full text-sm">
+                  <thead>
+                    <tr>
+                      <th className="text-right p-3">مدل</th>
+                      <th className="text-right p-3">ورودی</th>
+                      <th className="text-right p-3">خروجی</th>
+                      <th className="text-right p-3">واحد</th>
+                      <th className="text-right p-3">عملیات</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {prices.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="p-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+                          تعرفه‌ای ثبت نشده
+                        </td>
+                      </tr>
+                    ) : (
+                      prices.map((p) => (
+                        <tr key={p.model}>
+                          <td className="p-3 text-sm font-mono font-medium" style={{ color: 'var(--text-primary)' }}>{p.model}</td>
+                          <td className="p-3 text-xs">{p.input_per_million.toLocaleString('fa-IR')}</td>
+                          <td className="p-3 text-xs">{p.output_per_million.toLocaleString('fa-IR')}</td>
+                          <td className="p-3"><span className="badge">{p.currency}</span></td>
+                          <td className="p-3">
+                            <button className="btn btn-sm" onClick={() => { setPzModel(p.model); setPzIn(String(p.input_per_million)); setPzOut(String(p.output_per_million)); setPzCur(p.currency) }}>
+                              <Icon name="settings" size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="admin-card">
+                <h3 className="font-semibold text-sm mb-4" style={{ color: 'var(--text-primary)' }}>
+                  {pzModel ? `ویرایش ${pzModel}` : 'افزودن تعرفه جدید'}
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <Field label="نام مدل">
+                    <input className="input w-full" value={pzModel} onChange={(e) => setPzModel(e.target.value)} placeholder="gpt-4o" />
+                  </Field>
+                  <Field label="ورودی / میلیون توکن">
+                    <input className="input w-full" type="number" value={pzIn} onChange={(e) => setPzIn(e.target.value)} placeholder="0" />
+                  </Field>
+                  <Field label="خروجی / میلیون توکن">
+                    <input className="input w-full" type="number" value={pzOut} onChange={(e) => setPzOut(e.target.value)} placeholder="0" />
+                  </Field>
+                  <Field label="واحد پول">
+                    <input className="input w-full" value={pzCur} onChange={(e) => setPzCur(e.target.value)} />
+                  </Field>
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <button className="btn" onClick={savePricing}>
+                    <Icon name="check" size={16} />
+                    <span>ذخیره</span>
+                  </button>
+                  {pzModel && (
+                    <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={() => { setPzModel(''); setPzIn(''); setPzOut(''); setPzCur('IRT') }}>
+                      انصراف
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ─────────────────────────────────────────────────────────────
+              Features
+             ───────────────────────────────────────────────────────────── */}
+          {page === 'features' && (
+            <div className="space-y-6">
+              <SectionHeader title="امکانات و ویژگی‌ها" subtitle={`${features.length} ویژگی ثبت شده`} />
+
+              <div className="space-y-2">
+                {features.length === 0 && (
+                  <div className="admin-card text-center py-8" style={{ color: 'var(--text-muted)' }}>
+                    ویژگی‌ای ثبت نشده
+                  </div>
+                )}
+                {features.map((f) => (
+                  <div key={f.id} className="admin-card flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm" style={{ background: 'var(--bg-elevated)' }}>
+                        {f.icon || '—'}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{f.title}</p>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{f.description || 'بدون توضیح'}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={f.active ? 'badge badge-positive' : 'badge badge-warning'}>
+                        {f.active ? 'فعال' : 'غیرفعال'}
+                      </span>
+                      <span className="badge text-[10px]">#{f.order_idx}</span>
+                      <button className="btn btn-sm" onClick={() => editFeature(f)}>
+                        <Icon name="settings" size={14} />
+                      </button>
+                      <button className="btn btn-sm btn-danger" onClick={() => delFeature(f.id)}>
+                        <Icon name="close" size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="admin-card">
+                <h3 className="font-semibold text-sm mb-4" style={{ color: 'var(--text-primary)' }}>
+                  {ftId ? 'ویرایش ویژگی' : 'افزودن ویژگی جدید'}
+                </h3>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Field label="عنوان">
+                      <input className="input w-full" value={ftTitle} onChange={(e) => setFtTitle(e.target.value)} placeholder="چت هوشمند" />
+                    </Field>
+                    <Field label="آیکون">
+                      <input className="input w-full" value={ftIcon} onChange={(e) => setFtIcon(e.target.value)} placeholder="icon-name" />
+                    </Field>
+                  </div>
+                  <Field label="توضیحات">
+                    <textarea className="input w-full min-h-[80px] resize-y" value={ftDesc} onChange={(e) => setFtDesc(e.target.value)} />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Field label="ترتیب نمایش">
+                      <input className="input w-full" type="number" value={ftOrder} onChange={(e) => setFtOrder(e.target.value)} />
+                    </Field>
+                    <Field label="وضعیت">
+                      <select className="input w-full" value={String(ftActive)} onChange={(e) => setFtActive(e.target.value === 'true')}>
+                        <option value="true">فعال</option>
+                        <option value="false">غیرفعال</option>
+                      </select>
+                    </Field>
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <button className="btn" onClick={saveFeature}>
+                    <Icon name="check" size={16} />
+                    <span>{ftId ? 'بروزرسانی' : 'افزودن'}</span>
+                  </button>
+                  {ftId && (
+                    <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={resetFeatureForm}>
+                      انصراف
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ─────────────────────────────────────────────────────────────
+              Discounts
+             ───────────────────────────────────────────────────────────── */}
+          {page === 'discounts' && (
+            <div className="space-y-6">
+              <SectionHeader title="کدهای تخفیف" subtitle={`${discounts.length} کد تخفیف فعال`} />
+
+              <div className="space-y-2">
+                {discounts.length === 0 && (
+                  <div className="admin-card text-center py-8" style={{ color: 'var(--text-muted)' }}>
+                    کد تخفیفی ثبت نشده
+                  </div>
+                )}
+                {discounts.map((d) => (
+                  <div key={d.id} className="admin-card flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="px-3 py-1.5 rounded-lg font-mono text-sm font-bold" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
+                        {d.code}
+                      </div>
+                      <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{d.percent}%</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={d.active ? 'badge badge-positive' : 'badge badge-warning'}>
+                        {d.active ? 'فعال' : 'غیرفعال'}
+                      </span>
+                      <button className="btn btn-sm" onClick={() => editDiscount(d)}>
+                        <Icon name="settings" size={14} />
+                      </button>
+                      <button className="btn btn-sm btn-danger" onClick={() => delDiscount(d.id)}>
+                        <Icon name="close" size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="admin-card">
+                <h3 className="font-semibold text-sm mb-4" style={{ color: 'var(--text-primary)' }}>
+                  {dcId ? 'ویرایش کد تخفیف' : 'افزودن کد تخفیف'}
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <Field label="کد تخفیف">
+                    <input className="input w-full" value={dcCode} onChange={(e) => setDcCode(e.target.value)} placeholder="WELCOME10" />
+                  </Field>
+                  <Field label="درصد تخفیف">
+                    <input className="input w-full" type="number" value={dcPercent} onChange={(e) => setDcPercent(e.target.value)} />
+                  </Field>
+                  <Field label="وضعیت">
+                    <select className="input w-full" value={String(dcActive)} onChange={(e) => setDcActive(e.target.value === 'true')}>
+                      <option value="true">فعال</option>
+                      <option value="false">غیرفعال</option>
+                    </select>
+                  </Field>
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <button className="btn" onClick={saveDiscount}>
+                    <Icon name="check" size={16} />
+                    <span>{dcId ? 'بروزرسانی' : 'افزودن'}</span>
+                  </button>
+                  {dcId && (
+                    <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={resetDiscountForm}>
+                      انصراف
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ─────────────────────────────────────────────────────────────
+              About
+             ───────────────────────────────────────────────────────────── */}
+          {page === 'about' && (
+            <div className="space-y-6">
+              <SectionHeader title="درباره ما" subtitle="محتوای صفحه درباره ما" />
+
+              <div className="admin-card">
+                <div className="space-y-4">
+                  <Field label="عنوان">
+                    <input className="input w-full" value={abTitle} onChange={(e) => setAbTitle(e.target.value)} placeholder="درباره Multiai" />
+                  </Field>
+                  <Field label="متن">
+                    <textarea
+                      className="input w-full min-h-[200px] resize-y leading-relaxed"
+                      value={abBody}
+                      onChange={(e) => setAbBody(e.target.value)}
+                      placeholder="متن درباره ما به فارسی..."
+                    />
+                  </Field>
+                </div>
+                <button className="btn mt-4" onClick={saveAbout}>
+                  <Icon name="check" size={16} />
+                  <span>ذخیره</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ─────────────────────────────────────────────────────────────
+              Proxy
+             ───────────────────────────────────────────────────────────── */}
+          {page === 'proxy' && (
+            <div className="space-y-6">
+              <SectionHeader title="تنظیمات پروکسی" subtitle="مدیریت تونل و پروکسی اتصال" />
+
+              <div className="admin-card">
+                <div className="flex items-center gap-3 mb-4 p-3 rounded-lg" style={{ background: proxyConfig.active ? 'var(--positive)' + '15' : 'var(--warning)' + '15' }}>
+                  <Icon name={proxyConfig.active ? 'check' : 'notification'} size={18} style={{ color: proxyConfig.active ? 'var(--positive)' : 'var(--warning)' }} />
+                  <span className="text-sm font-medium" style={{ color: proxyConfig.active ? 'var(--positive)' : 'var(--warning)' }}>
+                    {proxyConfig.active ? 'تونل فعال است' : 'تونل غیرفعال است'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <Field label="نوع پروکسی">
+                    <select className="input w-full" value={pxType} onChange={(e) => setPxType(e.target.value)}>
+                      <option value="socks5">SOCKS5</option>
+                      <option value="http">HTTP</option>
+                    </select>
+                  </Field>
+                  <Field label="آدرس پروکسی">
+                    <input className="input w-full" value={pxUrl} onChange={(e) => setPxUrl(e.target.value)} placeholder="socks5://user:pass@host:port" />
+                  </Field>
+                  <Field label="وضعیت">
+                    <select className="input w-full" value={String(pxActive)} onChange={(e) => setPxActive(e.target.value === 'true')}>
+                      <option value="true">فعال</option>
+                      <option value="false">غیرفعال</option>
+                    </select>
+                  </Field>
+                </div>
+                <button className="btn mt-4" onClick={saveProxy}>
+                  <Icon name="check" size={16} />
+                  <span>ذخیره و اعمال</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ─────────────────────────────────────────────────────────────
+              Models
+             ───────────────────────────────────────────────────────────── */}
+          {page === 'models' && (
+            <div className="space-y-6">
+              <SectionHeader title="مدل‌های فعال" subtitle={`${models.length} مدل در دسترس`} />
+
+              {models.length === 0 ? (
+                <div className="admin-card text-center py-12">
+                  <Icon name="models" size={40} style={{ color: 'var(--text-muted)', margin: '0 auto 12px' }} />
+                  <p style={{ color: 'var(--text-muted)' }}>مدلی بارگذاری نشده</p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>پروکسی را بررسی کنید</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {models.map((m) => (
+                    <div key={m} className="admin-card flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--accent-dim)' }}>
+                        <Icon name="models" size={16} style={{ color: 'var(--accent)' }} />
+                      </div>
+                      <span className="text-sm font-mono" style={{ color: 'var(--text-primary)' }}>{m}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </main>
+      </div>
+    </div>
+  )
+}

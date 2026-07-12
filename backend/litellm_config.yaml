@@ -1,54 +1,20 @@
 model_list:
-  - model_name: kr/bynara-auto
-    litellm_params:
-      model: openai/auto
-      api_base: https://router.bynara.id/v1
-      api_key: sk-nry-FDhIv6pz99vtozIEn49SmZu_k41z12EB9jhedTyygRw
-      api_type: openai
-  - model_name: kr/claude-3.5-sonnet
-    litellm_params:
-      model: openai/claude-3.5-sonnet
-      api_base: https://router.bynara.id/v1
-      api_key: sk-nry-FDhIv6pz99vtozIEn49SmZu_k41z12EB9jhedTyygRw
-      api_type: openai
-  - model_name: kr/claude-opus-4
-    litellm_params:
-      model: openai/claude-opus-4
-      api_base: https://router.bynara.id/v1
-      api_key: sk-nry-FDhIv6pz99vtozIEn49SmZu_k41z12EB9jhedTyygRw
-      api_type: openai
-  - model_name: kr/gpt-4o
-    litellm_params:
-      model: openai/gpt-4o
-      api_base: https://router.bynara.id/v1
-      api_key: sk-nry-FDhIv6pz99vtozIEn49SmZu_k41z12EB9jhedTyygRw
-      api_type: openai
-  - model_name: kr/gpt-4o-mini
-    litellm_params:
-      model: openai/gpt-4o-mini
-      api_base: https://router.bynara.id/v1
-      api_key: sk-nry-FDhIv6pz99vtozIEn49SmZu_k41z12EB9jhedTyygRw
-      api_type: openai
-  - model_name: kr/gemini-2.5-pro
-    litellm_params:
-      model: openai/gemini-2.5-pro
-      api_base: https://router.bynara.id/v1
-      api_key: sk-nry-FDhIv6pz99vtozIEn49SmZu_k41z12EB9jhedTyygRw
-      api_type: openai
-  - model_name: kr/deepseek-chat
-    litellm_params:
-      model: openai/deepseek-chat
-      api_base: https://router.bynara.id/v1
-      api_key: sk-nry-FDhIv6pz99vtozIEn49SmZu_k41z12EB9jhedTyygRw
-      api_type: openai
-  - model_name: kr/llama-3.1-405b
-    litellm_params:
-      model: openai/llama-3.1-405b
-      api_base: https://router.bynara.id/v1
-      api_key: sk-nry-FDhIv6pz99vtozIEn49SmZu_k41z12EB9jhedTyygRw
-      api_type: openai
+  - model_name: mimo-v2.5
+    litellm_params: {model: openai/mimo-v2.5, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY_2}
+  - model_name: mimo-v2.5-pro-ultraspeed
+    litellm_params: {model: openai/mimo-v2.5-pro-ultraspeed, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY_2}
+
+  - model_name: mistral-medium-3-5
+    litellm_params: {model: openai/mistral-medium-3-5, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY_2}
+  - model_name: tencent-hy3
+    litellm_params: {model: openai/tencent-hy3, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY_2}
+  - model_name: mimo-v2.5-pro
+    litellm_params: {model: openai/mimo-v2.5-pro, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY_2}
+  - model_name: gpt-5.6-luna
+    litellm_params: {model: openai/gpt-5.6-luna, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY_2}
+  - model_name: kimi-k2.7-code-free
+    litellm_params: {model: openai/kimi-k2.7-code-free, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY_2}
 
 litellm_settings:
   drop_params: true
-  request_timeout: 120
-  proxy: socks5://ted:T%23d%40123234@multiai_tunnel:9090
+  request_timeout: 90

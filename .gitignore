@@ -6,5 +6,6 @@ lab/
 
 # Secrets
 .env
+backend/litellm_config.yaml
 infra/ssh_key
 infra/ssh_tunnel/

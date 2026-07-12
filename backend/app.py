@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os, hashlib, secrets, base64, hmac
+import os, hashlib, secrets, base64, hmac, json
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -14,9 +14,12 @@ from pydantic import BaseModel
 import httpx
 import redis
 import sqlalchemy
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase, Mapped, mapped_column
 from dotenv import load_dotenv
+
+from services.billing import SqlBillingRepo
 
 load_dotenv()
 DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql+asyncpg://multiai:multiai@127.0.0.1:5432/multiai')
@@ -61,6 +64,7 @@ class Ledger(Base):
     balance_after: Mapped[int]
     reason: Mapped[str]
     meta: Mapped[dict[str, Any] | None] = mapped_column(sqlalchemy.JSON, nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(unique=True, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 class Quota(Base):
@@ -82,13 +86,32 @@ class ModelAlias(Base):
     enabled: Mapped[bool] = mapped_column(default=True)
 
 class Pricing(Base):
+    """Versioned model pricing.
+
+    Prices are immutable history: ``set_pricing`` never UPDATEs an existing
+    row, it INSERTs a new version (a higher ``price_version``) for the model.
+    The active price for a model is the row with the greatest
+    ``effective_from`` (see :func:`get_active_price`).
+    """
     __tablename__ = 'pricing'
     id: Mapped[int] = mapped_column(primary_key=True)
-    model: Mapped[str] = mapped_column(unique=True)
-    input_per_million: Mapped[int]
-    output_per_million: Mapped[int]
+    model: Mapped[str] = mapped_column(index=True)
+    provider: Mapped[str] = mapped_column(default='unknown')
+    input_per_million: Mapped[int] = mapped_column(default=0)
+    output_per_million: Mapped[int] = mapped_column(default=0)
     currency: Mapped[str] = mapped_column(default='IRT')
-    updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    source: Mapped[str | None] = mapped_column(nullable=True)
+    price_version: Mapped[int] = mapped_column(default=1)
+    effective_from: Mapped[datetime] = mapped_column(
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+    effective_to: Mapped[datetime | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+    __table_args__ = (
+        sqlalchemy.UniqueConstraint('model', 'price_version', name='uq_pricing_model_version'),
+    )
 
 class Feature(Base):
     __tablename__ = 'features'
@@ -142,8 +165,65 @@ class Payment(Base):
     authority: Mapped[str] = mapped_column(unique=True, index=True)
     ref_id: Mapped[str | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(default='pending')
+    idempotency_key: Mapped[str | None] = mapped_column(unique=True, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     verified_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+class Wallet(Base):
+    """Authoritative per-user balance row. Locked with FOR UPDATE on writes.
+
+    ``balance`` is committed (spendable + held); ``reserved`` is the sum of open
+    holds. Available balance = balance - reserved.
+    """
+    __tablename__ = 'wallet'
+    user_id: Mapped[int] = mapped_column(sqlalchemy.ForeignKey('users.id'), primary_key=True)
+    balance: Mapped[int] = mapped_column(default=0)
+    reserved: Mapped[int] = mapped_column(default=0)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
+class WalletReservation(Base):
+    """A hold taken against the wallet before an upstream (paid) call."""
+    __tablename__ = 'wallet_reservations'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    reservation_id: Mapped[str] = mapped_column(unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(sqlalchemy.ForeignKey('users.id'), index=True)
+    amount: Mapped[int]
+    currency: Mapped[str] = mapped_column(default='IRT')
+    status: Mapped[str] = mapped_column(default='reserved')
+    model: Mapped[str | None] = mapped_column(nullable=True)
+    price_version: Mapped[str | None] = mapped_column(nullable=True)
+    request_id: Mapped[str | None] = mapped_column(nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(unique=True, index=True)
+    reason: Mapped[str | None] = mapped_column(nullable=True)
+    meta: Mapped[dict[str, Any] | None] = mapped_column(sqlalchemy.JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    settled_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    released_at: Mapped[datetime | None] = mapped_column(nullable=True)
+
+
+class UsageEvent(Base):
+    """Immutable record of a single upstream model call / charge."""
+    __tablename__ = 'usage_events'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    request_id: Mapped[str] = mapped_column(unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(sqlalchemy.ForeignKey('users.id'), index=True)
+    model: Mapped[str]
+    price_version: Mapped[str | None] = mapped_column(nullable=True)
+    provider: Mapped[str | None] = mapped_column(nullable=True)
+    input_tokens: Mapped[int] = mapped_column(default=0)
+    output_tokens: Mapped[int] = mapped_column(default=0)
+    cached_input_tokens: Mapped[int] = mapped_column(default=0)
+    reasoning_tokens: Mapped[int] = mapped_column(default=0)
+    reservation_id: Mapped[str | None] = mapped_column(nullable=True)
+    charged_amount: Mapped[int] = mapped_column(default=0)
+    currency: Mapped[str] = mapped_column(default='IRT')
+    upstream_status: Mapped[str | None] = mapped_column(nullable=True)
+    upstream_error: Mapped[str | None] = mapped_column(nullable=True)
+    meta: Mapped[dict[str, Any] | None] = mapped_column(sqlalchemy.JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 class Notification(Base):
     __tablename__ = 'notifications'
@@ -164,7 +244,22 @@ class ApiKey(Base):
     key_prefix: Mapped[str] = mapped_column(default='sk-')
     active: Mapped[bool] = mapped_column(default=True)
     last_used: Mapped[datetime | None] = mapped_column(nullable=True)
+    scopes: Mapped[str] = mapped_column(default='read')
+    expires_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+class AuditLog(Base):
+    """Immutable record of privileged/admin actions for compliance + forensics."""
+    __tablename__ = 'audit_logs'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    admin_user_id: Mapped[int | None] = mapped_column(nullable=True)
+    action: Mapped[str] = mapped_column(nullable=False)
+    target_type: Mapped[str | None] = mapped_column(nullable=True)
+    target_id: Mapped[str | None] = mapped_column(nullable=True)
+    details: Mapped[dict[str, Any] | None] = mapped_column(sqlalchemy.JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
 
 class HealthResponse(BaseModel):
     status: str
@@ -188,7 +283,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title='Persian AI Gateway', version='0.1.0', lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['*'],
+    allow_origins=os.getenv('CORS_ORIGINS', 'https://multiai.ir,http://localhost:3003').split(','),
     allow_credentials=False,
     allow_methods=['*'],
     allow_headers=['*'],
@@ -206,8 +301,84 @@ async def get_db() -> AsyncIterator[AsyncSession]:
         yield session
 
 def admin_required(request: Request) -> bool:
+    # Primary: isolated server-side admin session cookie (CSRF-protected mutations)
+    sid = request.cookies.get(ADMIN_COOKIE_NAME)
+    if sid:
+        sess = _get_admin_session(sid)
+        if sess:
+            if request.method in ('POST', 'PUT', 'DELETE', 'PATCH'):
+                csrf = request.headers.get('x-csrf-token') or request.headers.get('x-csrf')
+                if not csrf or not hmac.compare_digest(csrf, sess.get('csrf', '')):
+                    return False
+            return True
+    # Legacy: constant-time header token (no CSRF needed for header-based auth)
     token = request.headers.get('x-admin-token') or request.headers.get('authorization', '').removeprefix('Bearer ')
     return bool(ADMIN_TOKEN) and bool(token) and hmac.compare_digest(token, ADMIN_TOKEN)
+
+
+class AdminLogin(BaseModel):
+    token: str
+
+
+@app.post('/admin/login')
+async def admin_login(payload: AdminLogin) -> JSONResponse:
+    """Validate admin token and establish an isolated server-side session."""
+    if not ADMIN_TOKEN or not hmac.compare_digest(payload.token, ADMIN_TOKEN):
+        return JSONResponse({'detail': 'invalid admin token'}, status_code=401)
+    sid, csrf = _create_admin_session()
+    await _write_audit_log('admin.login')
+    response = JSONResponse({'status': 'ok', 'csrf': csrf})
+    response.set_cookie(
+        ADMIN_COOKIE_NAME, sid, httponly=True,
+        secure=SESSION_COOKIE_SECURE, samesite='lax',
+        max_age=ADMIN_SESSION_TTL, path='/',
+    )
+    response.set_cookie(
+        ADMIN_CSRF_COOKIE_NAME, csrf, httponly=False,
+        secure=SESSION_COOKIE_SECURE, samesite='lax',
+        max_age=ADMIN_SESSION_TTL, path='/',
+    )
+    return response
+
+
+@app.post('/admin/logout')
+async def admin_logout(request: Request) -> JSONResponse:
+    """Clear the server-side admin session."""
+    sid = request.cookies.get(ADMIN_COOKIE_NAME)
+    if sid:
+        rds.delete(f'admin_session:{sid}')
+    await _write_audit_log('admin.logout')
+    response = JSONResponse({'status': 'ok'})
+    response.delete_cookie(ADMIN_COOKIE_NAME, path='/')
+    response.delete_cookie(ADMIN_CSRF_COOKIE_NAME, path='/')
+    return response
+
+
+@app.get('/health/live')
+async def health_live() -> dict[str, str]:
+    return {'status': 'ok'}
+
+
+@app.get('/health/ready')
+async def health_ready() -> Response:
+    db_ok = True
+    redis_ok = True
+    try:
+        if engine is None:
+            db_ok = False
+        else:
+            async with engine.connect() as _:
+                pass
+    except Exception:
+        db_ok = False
+    try:
+        rds.ping()
+    except Exception:
+        redis_ok = False
+    if db_ok and redis_ok:
+        return JSONResponse({'status': 'ok'}, status_code=200)
+    return JSONResponse({'status': 'unavailable', 'db': 'ok' if db_ok else 'down', 'redis': 'ok' if redis_ok else 'down'}, status_code=503)
+
 
 @app.get('/health')
 async def health(request: Request) -> HealthResponse:
@@ -294,8 +465,227 @@ async def list_models(request: Request) -> dict[str, Any]:
         pass
     return {'object': 'list', 'data': models}
 
+def _catalog_row_to_item(m: dict[str, Any]) -> dict[str, Any]:
+    """Map a model_catalog DB row (dict) to the camelCase catalog contract."""
+    return {
+        'id': m['id'],
+        'providerModelId': m['provider_model_id'],
+        'provider': m['provider'],
+        'displayName': m['display_name'],
+        'description': m.get('description'),
+        'modalities': m.get('modalities') or {'input': ['text'], 'output': ['text']},
+        'capabilities': m.get('capabilities') or [],
+        'recommendedFor': m.get('recommended_for') or [],
+        'contextWindow': m['context_window'],
+        'maxOutputTokens': m.get('max_output_tokens'),
+        'pricing': {
+            'currency': m.get('currency') or 'IRT',
+            'inputPerMillion': float(m.get('input_per_million') or 0),
+            'outputPerMillion': float(m.get('output_per_million') or 0),
+            'cachedInputPerMillion': float(m['cached_input_per_million']) if m.get('cached_input_per_million') is not None else None,
+            'reasoningPerMillion': float(m['reasoning_per_million']) if m.get('reasoning_per_million') is not None else None,
+            'priceVersion': m.get('price_version') or 'v1',
+            'effectiveFrom': m.get('effective_from'),
+        },
+        'availability': m.get('availability') or 'available',
+        'audience': m.get('audience') or ['consumer', 'developer'],
+        'rateLimit': m.get('rate_limit'),
+        'deprecatedAt': m.get('deprecated_at'),
+        'lastVerifiedAt': m.get('last_verified_at'),
+        'provenance': m.get('provenance') or 'admin-approved',
+    }
+
+async def _load_catalog_rows() -> list[dict[str, Any]]:
+    """Load approved catalog from DB; return [] if unavailable/empty."""
+    if async_session is None:
+        return []
+    try:
+        async with async_session() as session:
+            res = await session.execute(sqlalchemy.text('SELECT * FROM model_catalog ORDER BY provider, id'))
+            return [dict(r._mapping) for r in res.fetchall()]
+    except Exception:
+        return []
+
+async def _litellm_fallback_catalog() -> list[dict[str, Any]]:
+    """Build a minimal fallback catalog from litellm when DB has no entries."""
+    now = datetime.now(timezone.utc)
+    items: list[dict[str, Any]] = []
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            r = await client.get(f"{LITELLM_HOST}/v1/models")
+            if r.status_code == 200:
+                for entry in r.json().get('data', []):
+                    mid = str(entry.get('id') or '').strip()
+                    if not mid:
+                        continue
+                    provider = mid.split('/')[0] if '/' in mid else (entry.get('owned_by') or 'unknown')
+                    items.append({
+                        'id': mid.replace('/', '-').lower(),
+                        'providerModelId': mid,
+                        'provider': provider,
+                        'displayName': mid,
+                        'description': None,
+                        'modalities': {'input': ['text'], 'output': ['text']},
+                        'capabilities': ['chat'],
+                        'recommendedFor': [],
+                        'contextWindow': 8192,
+                        'maxOutputTokens': None,
+                        'pricing': {
+                            'currency': 'IRT',
+                            'inputPerMillion': 0,
+                            'outputPerMillion': 0,
+                            'cachedInputPerMillion': None,
+                            'reasoningPerMillion': None,
+                            'priceVersion': 'fallback',
+                            'effectiveFrom': now,
+                        },
+                        'availability': 'available',
+                        'audience': ['consumer', 'developer'],
+                        'rateLimit': None,
+                        'deprecatedAt': None,
+                        'lastVerifiedAt': now,
+                        'provenance': 'fallback',
+                    })
+    except Exception:
+        pass
+    return items
+
+@app.get('/catalog/models')
+async def catalog_models(request: Request) -> JSONResponse:
+    """Approved model catalog from DB, with litellm fallback when DB is empty."""
+    rows = await _load_catalog_rows()
+    if rows:
+        data = [_catalog_row_to_item(r) for r in rows]
+        source = 'approved-catalog'
+    else:
+        data = await _litellm_fallback_catalog()
+        source = 'fallback'
+    return JSONResponse(jsonable_encoder({
+        'data': data,
+        'generatedAt': datetime.now(timezone.utc),
+        'source': source,
+    }))
+
+@app.get('/catalog/pricing')
+async def catalog_pricing(request: Request) -> JSONResponse:
+    """Versioned pricing for catalog models (falls back to pricing table)."""
+    rows = await _load_catalog_rows()
+    pricing = []
+    for m in rows:
+        pricing.append({
+            'id': m['id'],
+            'currency': m.get('currency') or 'IRT',
+            'inputPerMillion': float(m.get('input_per_million') or 0),
+            'outputPerMillion': float(m.get('output_per_million') or 0),
+            'cachedInputPerMillion': float(m['cached_input_per_million']) if m.get('cached_input_per_million') is not None else None,
+            'reasoningPerMillion': float(m['reasoning_per_million']) if m.get('reasoning_per_million') is not None else None,
+            'priceVersion': m.get('price_version') or 'v1',
+            'effectiveFrom': m.get('effective_from'),
+        })
+    if not pricing and async_session is not None:
+        try:
+            async with async_session() as session:
+                res = await session.execute(Pricing.__table__.select())
+                for r in res.fetchall():
+                    d = dict(r._mapping)
+                    pricing.append({
+                        'id': d['model'],
+                        'currency': d.get('currency') or 'IRT',
+                        'inputPerMillion': d.get('input_per_million') or 0,
+                        'outputPerMillion': d.get('output_per_million') or 0,
+                        'cachedInputPerMillion': None,
+                        'reasoningPerMillion': None,
+                        'priceVersion': 'legacy',
+                        'effectiveFrom': d.get('updated_at'),
+                    })
+        except Exception:
+            pass
+    return JSONResponse(jsonable_encoder({
+        'data': pricing,
+        'generatedAt': datetime.now(timezone.utc),
+        'priceVersion': pricing[0]['priceVersion'] if pricing else 'v1',
+    }))
+
+
+async def _check_quota_pre(uid: int) -> JSONResponse | None:
+    """Pre-flight quota and balance check before calling LiteLLM.
+
+    Returns a JSONResponse with status 429 if the user has exceeded their
+    daily token quota or has insufficient wallet balance, or *None* if the
+    request is allowed to proceed.
+    """
+    if async_session is None:
+        return None  # can't check - allow through (degraded mode)
+    try:
+        async with async_session() as session:
+            # -- daily token quota --
+            res = await session.execute(
+                Quota.__table__.select().where(Quota.user_id == uid)
+            )
+            quota = res.fetchone()
+            if quota:
+                limit = quota.daily_limit
+                used = quota.used_today
+                reset_at = quota.reset_at
+                # Auto-reset if the reset window has passed
+                now = datetime.now(timezone.utc).replace(tzinfo=None)
+                if reset_at and now >= reset_at:
+                    await session.execute(
+                        Quota.__table__.update().where(Quota.user_id == uid),
+                        {'used_today': 0, 'updated_at': now},
+                    )
+                    await session.commit()
+                    used = 0
+                if limit > 0 and used >= limit:
+                    return JSONResponse(
+                        {
+                            'error': {
+                                'message': 'daily token quota exceeded',
+                                'type': 'quota_exceeded',
+                                'code': 'daily_limit',
+                            }
+                        },
+                        status_code=429,
+                    )
+
+            # -- wallet balance --
+            res = await session.execute(
+                sqlalchemy.text(
+                    'SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid'
+                ),
+                {'uid': uid},
+            )
+            row = res.fetchone()
+            balance = row.balance if row else 0
+            if balance <= 0:
+                return JSONResponse(
+                    {
+                        'error': {
+                            'message': 'insufficient wallet balance',
+                            'type': 'quota_exceeded',
+                            'code': 'balance',
+                        }
+                    },
+                    status_code=429,
+                )
+    except Exception:
+        # If the check itself fails, allow the request through (fail-open)
+        pass
+    return None
+
+
 @app.post('/v1/chat/completions')
 async def chat(request: Request, payload: dict[str, Any]) -> Response:
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+
+    # P0-2: Quota pre-check — reject before calling LiteLLM if user has
+    # exceeded their daily token limit or has zero wallet balance.
+    quota_err = await _check_quota_pre(uid)
+    if quota_err is not None:
+        return quota_err
+
     stream = payload.get('stream', False)
     if stream:
         return await _chat_stream(payload, request)
@@ -356,6 +746,27 @@ async def _track_usage(request: Request, payload: dict[str, Any], response_data:
                 entry = Ledger(user_id=uid, amount=-cost, balance_after=current - cost, reason=f'مصرف {model}')
                 session.add(entry)
             await session.commit()
+
+            # Best-effort immutable usage event (metering). Never blocks the
+            # response: any failure here is swallowed.
+            try:
+                from services.billing import SqlBillingRepo
+                from services.metering import record_usage
+                from services.money import Money
+
+                _repo = SqlBillingRepo(session)
+                await record_usage(
+                    _repo,
+                    request_id=secrets.token_hex(8),
+                    user_id=uid,
+                    model=model,
+                    charge=Money(cost),
+                    upstream_status='success',
+                    input_tokens=int(usage.get('prompt_tokens') or usage.get('input_tokens') or 0),
+                    output_tokens=int(usage.get('completion_tokens') or usage.get('output_tokens') or 0),
+                )
+            except Exception:
+                pass
     except Exception:
         pass
 
@@ -380,12 +791,33 @@ async def list_pricing(request: Request) -> JSONResponse:
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
-        res = await session.execute(Pricing.__table__.select())
+        res = await session.execute(
+            Pricing.__table__.select().order_by(Pricing.model, Pricing.price_version.desc())
+        )
         rows = [dict(r._mapping) for r in res.fetchall()]
     return JSONResponse(jsonable_encoder(rows))
 
+
+async def get_active_price(session, model_id: str) -> "Pricing | None":
+    """Return the currently-active pricing version for *model_id*.
+
+    Active == the version with the greatest ``effective_from`` whose
+    ``effective_to`` IS NULL.  Because prices are immutable (a new version is
+    always INSERTed, never UPDATEed), the active price is simply the latest
+    version for the model.
+    """
+    res = await session.execute(
+        select(Pricing)
+        .where(Pricing.model == model_id, Pricing.effective_to.is_(None))
+        .order_by(Pricing.effective_from.desc(), Pricing.price_version.desc())
+        .limit(1)
+    )
+    return res.scalar_one_or_none()
+
+
 @app.post('/admin/pricing')
 async def set_pricing(request: Request, payload: dict[str, Any]) -> JSONResponse:
+    """Insert a NEW versioned price row.  Historical rows are never updated."""
     if not admin_required(request):
         return JSONResponse({'detail': 'unauthorized'}, status_code=401)
     if async_session is None:
@@ -393,18 +825,35 @@ async def set_pricing(request: Request, payload: dict[str, Any]) -> JSONResponse
     model = payload.get('model')
     if not model:
         return JSONResponse({'detail': 'model required'}, status_code=400)
+    try:
+        input_pm = int(payload.get('input_per_million', 0))
+        output_pm = int(payload.get('output_per_million', 0))
+    except (TypeError, ValueError):
+        return JSONResponse({'detail': 'prices must be integers'}, status_code=400)
+    currency = payload.get('currency', 'IRT')
+    provider = payload.get('provider', 'unknown')
+    source = payload.get('source')
     async with async_session() as session:
-        row = await session.get(Pricing, model)
-        if row:
-            row.input_per_million = payload.get('input_per_million', row.input_per_million)
-            row.output_per_million = payload.get('output_per_million', row.output_per_million)
-            row.currency = payload.get('currency', row.currency)
-            row.updated_at = datetime.now(timezone.utc)
-        else:
-            row = Pricing(model=model, input_per_million=payload.get('input_per_million', 0), output_per_million=payload.get('output_per_million', 0), currency=payload.get('currency', 'IRT'))
-            session.add(row)
+        # Determine the next version number for this model (no UPDATE of history).
+        cur = await session.execute(
+            select(func.coalesce(func.max(Pricing.price_version), 0)).where(Pricing.model == model)
+        )
+        next_version = (cur.scalar_one() or 0) + 1
+        row = Pricing(
+            model=model,
+            provider=provider,
+            input_per_million=input_pm,
+            output_per_million=output_pm,
+            currency=currency,
+            source=source,
+            price_version=next_version,
+            effective_from=datetime.now(timezone.utc).replace(tzinfo=None),
+            effective_to=None,
+        )
+        session.add(row)
         await session.commit()
-    return JSONResponse({'status': 'updated', 'model': model})
+    await _write_audit_log('admin.pricing.set', target_type='pricing', target_id=model, details={'price_version': next_version})
+    return JSONResponse({'status': 'inserted', 'model': model, 'price_version': next_version})
 
 # ===== Features =====
 @app.get('/admin/features')
@@ -438,7 +887,8 @@ async def upsert_feature(request: Request, payload: dict[str, Any]) -> JSONRespo
         row.order_idx = payload.get('order_idx', row.order_idx)
         row.updated_at = datetime.now(timezone.utc)
         await session.commit()
-        return JSONResponse({'status': 'ok', 'id': row.id})
+    await _write_audit_log('admin.feature.upsert', target_type='feature', target_id=row.id)
+    return JSONResponse({'status': 'ok', 'id': row.id})
 
 @app.delete('/admin/features/{fid}')
 async def delete_feature(request: Request, fid: int) -> JSONResponse:
@@ -449,6 +899,7 @@ async def delete_feature(request: Request, fid: int) -> JSONResponse:
         if row:
             await session.delete(row)
             await session.commit()
+    await _write_audit_log('admin.feature.delete', target_type='feature', target_id=fid)
     return JSONResponse({'status': 'deleted'})
 
 # ===== Discounts =====
@@ -485,7 +936,8 @@ async def upsert_discount(request: Request, payload: dict[str, Any]) -> JSONResp
         row.expires_at = payload.get('expires_at')
         row.updated_at = datetime.now(timezone.utc)
         await session.commit()
-        return JSONResponse({'status': 'ok', 'id': row.id})
+    await _write_audit_log('admin.discount.upsert', target_type='discount', target_id=row.id)
+    return JSONResponse({'status': 'ok', 'id': row.id})
 
 @app.delete('/admin/discounts/{did}')
 async def delete_discount(request: Request, did: int) -> JSONResponse:
@@ -496,6 +948,7 @@ async def delete_discount(request: Request, did: int) -> JSONResponse:
         if row:
             await session.delete(row)
             await session.commit()
+    await _write_audit_log('admin.discount.delete', target_type='discount', target_id=did)
     return JSONResponse({'status': 'deleted'})
 
 # ===== About =====
@@ -526,6 +979,7 @@ async def set_about(request: Request, payload: dict[str, Any]) -> JSONResponse:
         row.body = payload.get('body', row.body)
         row.updated_at = datetime.now(timezone.utc)
         await session.commit()
+    await _write_audit_log('admin.about.set')
     return JSONResponse({'status': 'ok'})
 
 # ===== Proxy Config =====
@@ -559,6 +1013,7 @@ async def set_proxy(request: Request, payload: dict[str, Any]) -> JSONResponse:
         row.active = payload.get('active', row.active)
         row.updated_at = datetime.now(timezone.utc)
         await session.commit()
+    await _write_audit_log('admin.proxy.set')
     return JSONResponse({'status': 'ok', 'proxy_url': row.proxy_url})
 
 # ===== Public content (frontend) =====
@@ -586,6 +1041,149 @@ async def public_discounts() -> JSONResponse:
 
 SESSION_TTL = 86400 * 7
 
+# ── Session cookie configuration ──────────────────────────
+SESSION_COOKIE_NAME = 'session'
+SESSION_COOKIE_SECURE = (
+    os.getenv('ENV', 'production').lower() not in ('development', 'dev')
+    and not os.getenv('DEBUG')
+)
+ADMIN_COOKIE_NAME = 'admin_session'
+ADMIN_CSRF_COOKIE_NAME = 'admin_csrf'
+ADMIN_SESSION_TTL = 3600 * 8
+API_KEY_PEPPER = os.getenv('API_KEY_PEPPER', 'multiai-api-key-pepper-v1').encode()
+
+
+def _session_payload(user_id: int) -> dict:
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    return {
+        'user_id': user_id,
+        'created_at': now.isoformat(),
+        'expires_at': (now + timedelta(seconds=SESSION_TTL)).isoformat(),
+    }
+
+
+def _create_session(user_id: int) -> str:
+    """Create a server-side session and return its opaque token."""
+    token = _gen_token()
+    rds.setex(f'session:{token}', SESSION_TTL, json.dumps(_session_payload(user_id)))
+    rds.sadd(f'sessions:{user_id}', token)
+    rds.expire(f'sessions:{user_id}', SESSION_TTL)
+    return token
+
+
+def _get_session(token: str | None) -> dict | None:
+    if not token:
+        return None
+    raw = rds.get(f'session:{token}')
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        data = None
+    if not isinstance(data, dict):
+        # Legacy plain user-id sessions (e.g. telegram bridge)
+        try:
+            return {'user_id': int(raw), 'created_at': None, 'expires_at': None}
+        except (TypeError, ValueError):
+            return None
+    # Enforce server-side expiry
+    exp = data.get('expires_at')
+    if exp:
+        try:
+            if datetime.fromisoformat(exp) < datetime.now(timezone.utc).replace(tzinfo=None):
+                rds.delete(f'session:{token}')
+                return None
+        except ValueError:
+            pass
+    rds.expire(f'session:{token}', SESSION_TTL)
+    return data
+
+
+def _get_session_user_id(token: str | None) -> int | None:
+    data = _get_session(token)
+    return int(data['user_id']) if data else None
+
+
+def _set_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        SESSION_COOKIE_NAME, token,
+        httponly=True,
+        secure=SESSION_COOKIE_SECURE,
+        samesite='lax',
+        max_age=SESSION_TTL,
+        path='/',
+    )
+
+
+def _clear_session_cookie(response: Response) -> None:
+    response.delete_cookie(SESSION_COOKIE_NAME, path='/')
+
+
+def _rotate_session(request: Request, response: Response, user_id: int) -> str:
+    """Invalidate the current session and issue a fresh one (privilege change)."""
+    old = request.cookies.get(SESSION_COOKIE_NAME) or \
+        request.headers.get('Authorization', '').removeprefix('Bearer ')
+    if old:
+        rds.delete(f'session:{old}')
+        rds.srem(f'sessions:{user_id}', old)
+    new_token = _create_session(user_id)
+    _set_session_cookie(response, new_token)
+    return new_token
+
+
+def _hash_api_key(raw_key: str) -> str:
+    """Hash an API key at rest using sha256 with a server-side pepper (salt)."""
+    return hashlib.sha256(API_KEY_PEPPER + raw_key.encode()).hexdigest()
+
+
+async def _write_audit_log(action: str, target_type: str | None = None,
+                            target_id: Any = None, details: dict | None = None) -> None:
+    """Best-effort, fire-and-forget audit record of a privileged/admin action.
+
+    Audit logging must never break the primary action, so all failures are
+    swallowed. Uses a fresh session so the audit row is committed independently
+    of the caller's transaction.
+    """
+    if async_session is None:
+        return
+    try:
+        async with async_session() as s:
+            s.add(AuditLog(
+                action=action,
+                target_type=target_type,
+                target_id=str(target_id) if target_id is not None else None,
+                details=details,
+            ))
+            await s.commit()
+    except Exception:
+        # Audit failures must not break the action that triggered them.
+        pass
+
+
+# ── Admin session (server-side, isolated from user sessions) ──
+def _create_admin_session() -> tuple[str, str]:
+    sid = _gen_token()
+    csrf = secrets.token_urlsafe(32)
+    payload = {
+        'created_at': datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+        'csrf': csrf,
+    }
+    rds.setex(f'admin_session:{sid}', ADMIN_SESSION_TTL, json.dumps(payload))
+    return sid, csrf
+
+
+def _get_admin_session(sid: str | None) -> dict | None:
+    if not sid:
+        return None
+    raw = rds.get(f'admin_session:{sid}')
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+
 def _hash_password(password: str) -> str:
     salt = secrets.token_hex(16)
     dk = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000)
@@ -600,21 +1198,27 @@ def _gen_token() -> str:
     return secrets.token_urlsafe(32)
 
 async def _get_user_id(request: Request) -> int | None:
-    token = request.headers.get('Authorization', '').removeprefix('Bearer ')
+    # Primary: server-side session cookie
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    # Fallback: Authorization header (legacy / API access / websocket upgrade)
+    if not token:
+        token = request.headers.get('Authorization', '').removeprefix('Bearer ')
     if not token:
         return None
-    # Check session token first
-    uid = rds.get(f'session:{token}')
+    uid = _get_session_user_id(token)
     if uid:
-        rds.expire(f'session:{token}', SESSION_TTL)
-        return int(uid)
-    # Check API key
+        return uid
+    # API key authentication
     if token.startswith('sk-'):
-        key_hash = hashlib.sha256(token.encode()).hexdigest()
+        key_hash = _hash_api_key(token)
         if async_session is not None:
             async with async_session() as session:
                 res = await session.execute(
-                    ApiKey.__table__.select().where(ApiKey.key_hash == key_hash, ApiKey.active == True)
+                    ApiKey.__table__.select().where(
+                        ApiKey.key_hash == key_hash,
+                        ApiKey.active == True,
+                        ApiKey.revoked_at == None,
+                    )
                 )
                 key = res.fetchone()
                 if key:
@@ -681,9 +1285,10 @@ async def signup(payload: AuthSignup) -> JSONResponse:
         quota = Quota(user_id=user.id, daily_limit=200000, used_today=0, reset_at=(datetime.now(timezone.utc) + timedelta(days=1)).replace(tzinfo=None))
         session.add(quota)
         await session.commit()
-        token = _gen_token()
-        rds.setex(f'session:{token}', SESSION_TTL, str(user.id))
-        return JSONResponse({'token': token, 'user': {'id': user.id, 'email': user.email}})
+        token = _create_session(user.id)
+        response = JSONResponse({'token': token, 'user': {'id': user.id, 'email': user.email}})
+        _set_session_cookie(response, token)
+        return response
 
 @app.post('/auth/login')
 async def login(payload: AuthLogin) -> JSONResponse:
@@ -694,9 +1299,10 @@ async def login(payload: AuthLogin) -> JSONResponse:
         user = res.fetchone()
         if not user or not user.password_hash or not _verify_password(payload.password, user.password_hash):
             return JSONResponse({'detail': 'invalid email or password'}, status_code=401)
-        token = _gen_token()
-        rds.setex(f'session:{token}', SESSION_TTL, str(user.id))
-        return JSONResponse({'token': token, 'user': {'id': user.id, 'email': user.email}})
+        token = _create_session(user.id)
+        response = JSONResponse({'token': token, 'user': {'id': user.id, 'email': user.email}})
+        _set_session_cookie(response, token)
+        return response
 
 @app.get('/auth/me')
 async def me(request: Request) -> JSONResponse:
@@ -754,10 +1360,31 @@ async def referral_stats(request: Request) -> JSONResponse:
 
 @app.post('/auth/logout')
 async def logout(request: Request) -> JSONResponse:
-    token = request.headers.get('Authorization', '').removeprefix('Bearer ')
+    token = request.cookies.get(SESSION_COOKIE_NAME) or \
+        request.headers.get('Authorization', '').removeprefix('Bearer ')
     if token:
+        uid = _get_session_user_id(token)
         rds.delete(f'session:{token}')
-    return JSONResponse({'status': 'ok'})
+        if uid:
+            rds.srem(f'sessions:{uid}', token)
+    response = JSONResponse({'status': 'ok'})
+    _clear_session_cookie(response)
+    return response
+
+
+@app.post('/auth/logout-all')
+async def logout_all(request: Request) -> JSONResponse:
+    """Revoke every active session for the authenticated user."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    tokens = list(rds.smembers(f'sessions:{uid}') or [])
+    for tok in tokens:
+        rds.delete(f'session:{tok}')
+    rds.delete(f'sessions:{uid}')
+    response = JSONResponse({'status': 'ok', 'revoked_sessions': len(tokens)})
+    _clear_session_cookie(response)
+    return response
 
 # ── Profile management ─────────────────────────────────────
 
@@ -791,7 +1418,9 @@ async def change_password(request: Request, payload: ChangePasswordRequest) -> J
         )
         await session.commit()
 
-    return JSONResponse({'status': 'ok'})
+    response = JSONResponse({'status': 'ok'})
+    _rotate_session(request, response, uid)
+    return response
 
 
 @app.put('/auth/profile')
@@ -1146,7 +1775,8 @@ async def admin_ban_user(request: Request, uid: int) -> JSONResponse:
             {'telegram_id': -1 if user.telegram_id != -1 else None}
         )
         await session.commit()
-    return JSONResponse({'status': 'ok', 'banned': user.telegram_id != -1})
+        await _write_audit_log('admin.user.ban', target_type='user', target_id=uid, details={'banned': user.telegram_id != -1})
+        return JSONResponse({'status': 'ok', 'banned': user.telegram_id != -1})
 
 
 @app.put('/admin/users/{uid}')
@@ -1170,6 +1800,7 @@ async def admin_edit_user(request: Request, uid: int) -> JSONResponse:
                 {'phone': payload['phone']}
             )
         await session.commit()
+    await _write_audit_log('admin.user.edit', target_type='user', target_id=uid, details=dict(payload))
     return JSONResponse({'status': 'ok'})
 
 # ═══════════════════════════════════════
@@ -1196,6 +1827,7 @@ async def export_ledger(request: Request) -> Response:
     for r in rows:
         writer.writerow([r.id, r.user_id, r.amount, r.balance_after, r.reason, r.created_at])
 
+    await _write_audit_log('admin.export.ledger')
     return Response(
         content=output.getvalue(),
         media_type='text/csv',
@@ -1227,6 +1859,7 @@ async def export_users(request: Request) -> Response:
     for r in rows:
         writer.writerow([r.id, r.email, r.phone, r.balance, r.created_at])
 
+    await _write_audit_log('admin.export.users')
     return Response(
         content=output.getvalue(),
         media_type='text/csv',
@@ -1327,7 +1960,7 @@ async def admin_analytics(request: Request) -> JSONResponse:
 # Zarinpal Payment Gateway
 # ═══════════════════════════════════════
 
-from payment import create_payment, verify_payment, PaymentRequest
+from payment import create_payment, verify_payment, PaymentRequest, handle_payment_callback, CallbackResult
 
 @app.post('/payment/request')
 async def payment_request(request: Request, payload: PaymentRequest) -> JSONResponse:
@@ -1370,70 +2003,30 @@ async def payment_request(request: Request, payload: PaymentRequest) -> JSONResp
 
 @app.get('/payment/callback')
 async def payment_callback(request: Request) -> JSONResponse:
-    """Zarinpal redirects here after payment"""
+    """Zarinpal redirects here after payment.
+
+    Delegates all financial-correctness logic (order lock, amount/authority
+    verification, replay rejection, atomic wallet+ledger credit) to
+    :func:`payment.handle_payment_callback`.
+    """
     authority = request.query_params.get('Authority')
     status = request.query_params.get('Status', '')
-
-    if status != 'OK' or not authority:
-        return JSONResponse({'detail': 'payment cancelled or failed'}, status_code=400)
 
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
     async with async_session() as session:
-        # ATOMIC: lock the payment row to prevent double-credit race
-        res = await session.execute(
-            sqlalchemy.text(
-                'SELECT * FROM payments WHERE authority = :auth AND status = :st FOR UPDATE'
-            ),
-            {'auth': authority, 'st': 'pending'}
-        )
-        payment = res.fetchone()
-        if not payment:
-            return JSONResponse({'detail': 'payment not found or already processed'}, status_code=404)
+        repo = SqlBillingRepo(session)
+        result = await handle_payment_callback(repo, authority=authority or "", status=status)
 
-        # Verify with Zarinpal
-        result = await verify_payment(payment.amount, authority)
-
-        if result.get('status') != 'verified':
-            await session.execute(
-                sqlalchemy.text('UPDATE payments SET status = :st, verified_at = :now WHERE id = :id'),
-                {'st': 'failed', 'now': datetime.now(timezone.utc).replace(tzinfo=None), 'id': payment.id}
-            )
-            await session.commit()
-            return JSONResponse({'detail': result.get('error', 'verification failed')}, status_code=400)
-
-        # Mark as verified (within same transaction)
-        await session.execute(
-            sqlalchemy.text(
-                'UPDATE payments SET status = :st, ref_id = :ref, verified_at = :now WHERE id = :id'
-            ),
-            {'st': 'verified', 'ref': result['ref_id'], 'now': datetime.now(timezone.utc).replace(tzinfo=None), 'id': payment.id}
-        )
-
-        # Credit wallet — SAME transaction, atomic
-        balance_res = await session.execute(
-            sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid'),
-            {'uid': payment.user_id}
-        )
-        row = balance_res.fetchone()
-        current = row.balance if row else 0
-        new_balance = current + payment.amount
-
-        entry = Ledger(
-            user_id=payment.user_id,
-            amount=payment.amount,
-            balance_after=new_balance,
-            reason=f'شارژ حساب — Zarinpal ref: {result["ref_id"]}',
-        )
-        session.add(entry)
-        await session.commit()
+    if not result.ok:
+        return JSONResponse({'detail': result.detail}, status_code=result.code)
 
     # Redirect to frontend wallet page
     return JSONResponse({
         'status': 'ok',
-        'ref_id': result['ref_id'],
-        'amount': payment.amount,
+        'ref_id': result.ref_id,
+        'amount': result.amount,
         'redirect': f'{BASE_URL}/wallet?payment=success',
     })
 
@@ -1554,10 +2147,12 @@ async def mark_notification_read(request: Request, nid: int) -> JSONResponse:
 
 class ApiKeyCreate(BaseModel):
     name: str = 'Default'
+    scopes: str = 'read'
+    expires_at: str | None = None
 
 @app.post('/api-keys')
 async def create_api_key(request: Request, payload: ApiKeyCreate) -> JSONResponse:
-    """Generate a new API key"""
+    """Generate a new API key. The secret is shown only once."""
     uid = await _get_user_id(request)
     if not uid:
         return JSONResponse({'detail': 'unauthorized'}, status_code=401)
@@ -1565,10 +2160,21 @@ async def create_api_key(request: Request, payload: ApiKeyCreate) -> JSONRespons
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
     raw_key = f'sk-{secrets.token_urlsafe(32)}'
-    key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+    key_hash = _hash_api_key(raw_key)
+    key_prefix = raw_key[:12]
+
+    expires_at = None
+    if payload.expires_at:
+        try:
+            expires_at = datetime.fromisoformat(payload.expires_at)
+        except ValueError:
+            return JSONResponse({'detail': 'invalid expires_at (ISO8601 expected)'}, status_code=400)
 
     async with async_session() as session:
-        key = ApiKey(user_id=uid, name=payload.name, key_hash=key_hash, key_prefix='sk-')
+        key = ApiKey(
+            user_id=uid, name=payload.name, key_hash=key_hash,
+            key_prefix=key_prefix, scopes=payload.scopes, expires_at=expires_at,
+        )
         session.add(key)
         await session.commit()
         await session.refresh(key)
@@ -1577,7 +2183,10 @@ async def create_api_key(request: Request, payload: ApiKeyCreate) -> JSONRespons
         'id': key.id,
         'name': key.name,
         'key': raw_key,
-        'prefix': 'sk-',
+        'prefix': key_prefix,
+        'masked': f"{key_prefix}••••••••••••",
+        'scopes': key.scopes,
+        'expires_at': key.expires_at.isoformat() if key.expires_at else None,
         'created_at': key.created_at.isoformat() if key.created_at else None,
     })
 
@@ -1602,8 +2211,12 @@ async def list_api_keys(request: Request) -> JSONResponse:
                 'id': r.id,
                 'name': r.name,
                 'prefix': r.key_prefix,
+                'masked': f"{r.key_prefix}••••••••••••",
+                'scopes': r.scopes,
                 'active': r.active,
-                'last_used': r.last_used.isoformat() if r.last_used else None,
+                'revoked_at': r.revoked_at.isoformat() if r.revoked_at else None,
+                'expires_at': r.expires_at.isoformat() if r.expires_at else None,
+                'last_used_at': r.last_used.isoformat() if r.last_used else None,
                 'created_at': r.created_at.isoformat() if r.created_at else None,
             }
             for r in res.fetchall()
@@ -1624,7 +2237,7 @@ async def revoke_api_key(request: Request, key_id: int) -> JSONResponse:
         await session.execute(
             ApiKey.__table__.update()
             .where(ApiKey.id == key_id, ApiKey.user_id == uid),
-            {'active': False}
+            {'active': False, 'revoked_at': datetime.now(timezone.utc).replace(tzinfo=None)}
         )
         await session.commit()
     return JSONResponse({'status': 'revoked'})
@@ -1646,11 +2259,7 @@ async def websocket_endpoint(ws: WebSocket):
 
     # Authenticate via token query param
     token = ws.query_params.get('token', '')
-    uid = None
-    if token:
-        uid = rds.get(f'session:{token}')
-        if uid:
-            uid = int(uid)
+    uid = _get_session_user_id(token) if token else None
 
     if not uid:
         await ws.send_json({'type': 'error', 'message': 'unauthorized'})
@@ -1677,7 +2286,11 @@ async def websocket_endpoint(ws: WebSocket):
     except WebSocketDisconnect:
         pass
     finally:
-        _ws_clients.get(uid, []).remove(ws)
+        clients = _ws_clients.get(uid, [])
+        if ws in clients:
+            clients.remove(ws)
+        if not clients:
+            _ws_clients.pop(uid, None)
 
 
 async def notify_user(uid: int, message: dict):

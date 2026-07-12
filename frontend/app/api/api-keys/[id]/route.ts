@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const auth = request.headers.get('authorization') || ''
-    const r = await fetch(`${API}/api-keys/${params.id}`, {
+    const { id } = await params
+    const r = await fetch(`${API}/api-keys/${id}`, {
       method: 'DELETE',
       headers: { Authorization: auth },
     })

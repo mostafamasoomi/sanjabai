@@ -23,9 +23,10 @@ export async function POST(request: Request) {
       return new Response(res.body, {
         status: res.status,
         headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
+          'Content-Type': res.headers.get('content-type') || 'text/event-stream',
+          'Cache-Control': 'no-cache, no-transform',
           'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no',
         },
       })
     }

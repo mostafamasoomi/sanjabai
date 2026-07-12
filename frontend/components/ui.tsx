@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { Icon, type IconName } from '@/components/ui/Icon'
 
 /* ═══════════════════════════════
    Toast notification system
@@ -64,10 +65,12 @@ export function Skeleton({ className = '', width, height }: { className?: string
    Empty state
    ═══════════════════════════════ */
 
-export function EmptyState({ icon = '📭', title, description }: { icon?: string; title: string; description?: string }) {
+export function EmptyState({ icon = 'models', title, description }: { icon?: IconName; title: string; description?: string }) {
   return (
     <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div className="text-4xl mb-3">{icon}</div>
+      <div className="mb-3 text-[var(--text-muted)]">
+        <Icon name={icon} size={40} />
+      </div>
       <h3 className="text-lg font-semibold text-[var(--text-dim)]">{title}</h3>
       {description && <p className="text-sm text-[var(--text-muted)] mt-1 max-w-sm">{description}</p>}
     </div>
@@ -111,7 +114,9 @@ export function Modal({
         {title && (
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold">{title}</h2>
-            <button onClick={onClose} className="btn btn-ghost btn-icon text-lg">✕</button>
+            <button onClick={onClose} className="btn btn-ghost btn-icon" aria-label="بستن">
+              <Icon name="close" size={18} />
+            </button>
           </div>
         )}
         {children}

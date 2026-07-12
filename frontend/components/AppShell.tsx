@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { AuthProvider, useAuth } from '@/lib/auth'
 import { ToastContainer } from '@/components/ui'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { useCommandPalette } from '@/components/CommandPalette'
+import { isOnboarded } from '@/lib/onboarding'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Multiai Aurora — AppShell v2
@@ -40,14 +41,61 @@ const NAV: NavItem[] = [
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function AppShellInner({ children }: { children: React.ReactNode }) {
-  const { user, loading, logout } = useAuth()
+  const { user, loading, logout, token } = useAuth()
   const pathname = usePathname()
+  const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { CommandPalette, setOpen: openPalette } = useCommandPalette()
 
   useEffect(() => { setSidebarOpen(false) }, [pathname])
+  // Close user menu on outside click
+  useEffect(() => {
+    if (!userMenuOpen) return
+    const close = () => setUserMenuOpen(false)
+    document.addEventListener('click', close)
+    return () => document.removeEventListener('click', close)
+  }, [userMenuOpen])
+
+  // ── First-visit detection ────────────────────────────────────────────────
+  // Route authenticated users who have NOT completed onboarding and who have
+  // NO conversations yet to /onboarding. Fails open: if the conversations
+  // check can't confirm an empty list, we let the user into the app.
+  useEffect(() => {
+    if (loading || !user) return
+    if (pathname === '/onboarding') return
+    if (isOnboarded()) return
+
+    let cancelled = false
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+    fetch('/api/conversations', { headers })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data) => {
+        if (cancelled) return
+        const hasConversations = Array.isArray(data) ? data.length > 0 : true
+        if (!hasConversations) router.replace('/onboarding')
+      })
+      .catch(() => {
+        /* fail open — never trap a user in onboarding */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [loading, user, token, pathname, router])
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(href + '/')
+
+  const NavItemLink = ({ item }: { item: NavItem }) => (
+    <a
+      key={item.href}
+      href={item.href}
+      className={`sidebar-nav-item ${isActive(item.href) ? 'sidebar-nav-item--active' : ''}`}
+    >
+      {isActive(item.href) && <span className="sidebar-active-bar" />}
+      <Icon name={item.icon} size={18} />
+      <span>{item.label}</span>
+    </a>
+  )
 
   const sections = [
     { key: 'main', label: 'اصلی' },
@@ -56,9 +104,9 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   ]
 
   return (
-    <div className="layout-shell">
+    <div className="layout-shell" onClick={() => userMenuOpen && setUserMenuOpen(false)}>
       {/* ── Desktop Sidebar ─────────────────────────────────── */}
-      <aside className="layout-sidebar hidden md:flex">
+      <aside className="layout-sidebar hidden md:flex sidebar-glass">
         <div className="flex items-center gap-2 px-4 py-3.5">
           <div className="w-7 h-7 rounded-lg bg-[var(--accent)] flex items-center justify-center">
             <span className="text-white text-sm font-bold">M</span>
@@ -67,45 +115,53 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         </div>
         <div className="divider" />
 
-        <nav className="flex-1 px-2 overflow-y-auto">
+        <nav className="flex-1 px-3 overflow-y-auto sidebar-nav">
           {sections.map((section) => (
             <div key={section.key} className="mb-4">
-              <div className="px-3 py-1 text-xs text-[var(--text-muted)] font-medium">{section.label}</div>
+              <div className="sidebar-section-label">{section.label}</div>
               {NAV.filter((n) => n.section === section.key).map((item) => (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-[var(--radius-md)] text-sm transition-all ${
-                    isActive(item.href)
-                      ? 'bg-[var(--accent-dim)] text-[var(--accent)] font-medium'
-                      : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
-                  }`}
-                >
-                  <Icon name={item.icon} size={18} />
-                  <span>{item.label}</span>
-                </a>
+                <NavItemLink key={item.href} item={item} />
               ))}
             </div>
           ))}
         </nav>
 
-        <div className="p-3 border-t border-[var(--border)]">
+        <div className="sidebar-user-section">
           {loading ? (
             <div className="skeleton h-8 rounded-lg" />
           ) : user ? (
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-[var(--accent-dim)] flex items-center justify-center text-sm font-medium text-[var(--accent)]">
+            <div className="sidebar-user-wrapper">
+              <button
+                className="sidebar-user-btn"
+                onClick={(e) => { e.stopPropagation(); setUserMenuOpen(!userMenuOpen) }}
+              >
+              <div className="sidebar-user-avatar">
                 {user.email?.[0]?.toUpperCase() || '?'}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-medium truncate">{user.email}</div>
-                <button onClick={logout} className="text-xs text-[var(--text-muted)] hover:text-[var(--danger)] transition-colors">
-                  خروج
-                </button>
               </div>
+              </button>
+              {userMenuOpen && (
+                <div className="sidebar-user-menu fade-in">
+                  <a href="/profile" className="sidebar-user-menu-item">
+                    <Icon name="profile" size={14} />
+                    پروفایل
+                  </a>
+                  <a href="/dashboard" className="sidebar-user-menu-item">
+                    <Icon name="dashboard" size={14} />
+                    داشبورد
+                  </a>
+                  <div className="divider" style={{ margin: '4px 0' }} />
+                  <button onClick={logout} className="sidebar-user-menu-item sidebar-user-menu-item--danger">
+                    <Icon name="close" size={14} />
+                    خروج
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
-            <a href="/login" className="btn btn-primary w-full text-sm">ورود / ثبت‌نام</a>
+            <a href="/login" className="btn btn-primary w-full text-sm">ورود / ثبتنام</a>
           )}
         </div>
       </aside>
@@ -113,10 +169,10 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       {/* ── Main Area ──────────────────────────────────────── */}
       <div className="layout-main">
         {/* Top bar */}
-        <header className="flex items-center justify-between px-4 py-2.5 border-b border-[var(--border)] bg-[var(--bg-base)]/80 backdrop-blur sticky top-0 z-20">
+        <header className="topbar-glass">
           <div className="flex items-center gap-2">
             <button
-              className="md:hidden btn btn-ghost btn-icon"
+              className="md:hidden btn btn-ghost btn-icon topbar-menu-btn"
               onClick={() => setSidebarOpen(!sidebarOpen)}
               aria-label="منو"
             >
@@ -170,48 +226,43 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* ── Mobile sidebar overlay ─────────────────────────── */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-50 md:hidden" onClick={() => setSidebarOpen(false)}>
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div
-            className="absolute top-0 right-0 bottom-0 w-72 bg-[var(--bg-surface)] border-l border-[var(--border)] fade-in overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 py-3.5 border-b border-[var(--border)]">
+      <div className={`mobile-overlay ${sidebarOpen ? 'mobile-overlay--open' : ''}`} onClick={() => setSidebarOpen(false)}>
+        <div className="mobile-overlay-bg" />
+        <div
+          className="mobile-drawer"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between px-4 py-3.5 border-b border-[var(--border)]">
               <span className="font-bold text-gradient">Multiai</span>
-              <button onClick={() => setSidebarOpen(false)} className="btn btn-ghost btn-icon">
+              <button onClick={() => setSidebarOpen(false)} className="btn btn-ghost btn-icon topbar-menu-btn">
                 <Icon name="close" size={18} />
               </button>
-            </div>
-            <nav className="p-2">
-              {NAV.map((item) => (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-[var(--radius-md)] text-sm transition-all ${
-                    isActive(item.href)
-                      ? 'bg-[var(--accent-dim)] text-[var(--accent)]'
-                      : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)]'
-                  }`}
-                >
-                  <Icon name={item.icon} size={18} />
-                  <span>{item.label}</span>
-                </a>
-              ))}
-            </nav>
-            <div className="p-3 border-t border-[var(--border)]">
-              {user ? (
-                <div>
-                  <div className="text-xs text-[var(--text-muted)] mb-2">{user.email}</div>
-                  <button onClick={logout} className="btn btn-ghost btn-sm w-full text-[var(--danger)]">خروج</button>
-                </div>
-              ) : (
-                <a href="/login" className="btn btn-primary w-full">ورود / ثبت‌نام</a>
-              )}
-            </div>
+          </div>
+          <nav className="p-2">
+            {NAV.map((item) => (
+              <a
+                key={item.href}
+                href={item.href}
+                className={`sidebar-nav-item ${isActive(item.href) ? 'sidebar-nav-item--active' : ''}`}
+              >
+                {isActive(item.href) && <span className="sidebar-active-bar" />}
+                <Icon name={item.icon} size={18} />
+                <span>{item.label}</span>
+              </a>
+            ))}
+          </nav>
+          <div className="p-3 border-t border-[var(--border)]">
+            {user ? (
+              <div>
+                <div className="text-xs text-[var(--text-muted)] mb-2">{user.email}</div>
+                <button onClick={logout} className="btn btn-ghost btn-sm w-full text-[var(--danger)]">خروج</button>
+              </div>
+            ) : (
+              <a href="/login" className="btn btn-primary w-full">ورود / ثبتنام</a>
+            )}
           </div>
         </div>
-      )}
+      </div>
 
       {/* ── Command Palette ────────────────────────────────── */}
       {CommandPalette}

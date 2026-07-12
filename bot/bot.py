@@ -4,6 +4,8 @@ Uses python-telegram-bot (v20+ async).
 """
 import os
 import sys
+import signal
+import time
 import asyncio
 import httpx
 from dotenv import load_dotenv
@@ -14,8 +16,9 @@ BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
 API_URL = os.getenv('API_URL', 'http://multiai_api:8000')
 
 if not BOT_TOKEN:
-    print('TELEGRAM_BOT_TOKEN not set. Exiting.')
-    sys.exit(1)
+    print('TELEGRAM_BOT_TOKEN not set. Running in no-op mode.')
+    while True:
+        time.sleep(3600)
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters

@@ -34,6 +34,8 @@ const NAV: NavItem[] = [
   { href: '/search', label: 'جستجو', icon: 'search', section: 'tools' },
   { href: '/skills', label: 'اسکیل\u200cها', icon: 'sparkles', section: 'tools' },
   { href: '/memory', label: 'حافظه', icon: 'sparkles', section: 'tools' },
+  { href: '/tasks', label: 'تسک\u200cها', icon: 'calendar', section: 'tools' },
+  { href: '/developer', label: 'توسعه\u200cدهندگان', icon: 'code', section: 'tools' },
   { href: '/profile', label: 'پروفایل', icon: 'profile', section: 'account' },
   { href: '/referral', label: 'دعوت', icon: 'referral', section: 'account' },
   { href: '/admin', label: 'مدیریت', icon: 'settings', section: 'account', admin: true },

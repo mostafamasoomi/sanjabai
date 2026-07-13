@@ -31,6 +31,8 @@ const NAV: NavItem[] = [
   { href: '/wallet', label: 'کیف پول', icon: 'wallet', section: 'tools' },
   { href: '/pricing', label: 'تعرفه\u200cها', icon: 'pricing', section: 'tools' },
   { href: '/api-keys', label: 'کلید API', icon: 'key', section: 'tools' },
+  { href: '/search', label: 'جستجو', icon: 'search', section: 'tools' },
+  { href: '/memory', label: 'حافظه', icon: 'sparkles', section: 'tools' },
   { href: '/profile', label: 'پروفایل', icon: 'profile', section: 'account' },
   { href: '/referral', label: 'دعوت', icon: 'referral', section: 'account' },
   { href: '/admin', label: 'مدیریت', icon: 'settings', section: 'account', admin: true },

@@ -320,6 +320,20 @@ class UserBillingSetting(Base):
     updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
+class UserMemory(Base):
+    """Persistent user memory entries for memory-augmented chat."""
+    __tablename__ = 'user_memories'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(sqlalchemy.ForeignKey('users.id'), index=True)
+    content: Mapped[str] = mapped_column()
+    category: Mapped[str] = mapped_column(default='general')
+    source: Mapped[str] = mapped_column(default='manual')
+    tags: Mapped[list | None] = mapped_column(sqlalchemy.ARRAY(sqlalchemy.Text), default=list)
+    active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
 class HealthResponse(BaseModel):
     status: str
     uptime: float | None = None
@@ -745,6 +759,21 @@ async def chat(request: Request, payload: dict[str, Any]) -> Response:
     if quota_err is not None:
         return quota_err
 
+    # Memory injection: prepend user memories as system context
+    memories = await _get_user_memories(uid)
+    if memories:
+        memory_block = '\n'.join(f'- {m}' for m in memories)
+        memory_msg = {'role': 'system', 'content': f'[User Memories]\n{memory_block}'}
+        messages = payload.get('messages', [])
+        # Insert after any existing system message, otherwise prepend
+        insert_idx = 0
+        for i, msg in enumerate(messages):
+            if isinstance(msg, dict) and msg.get('role') == 'system':
+                insert_idx = i + 1
+                break
+        messages.insert(insert_idx, memory_msg)
+        payload['messages'] = messages
+
     stream = payload.get('stream', False)
     if stream:
         return await _chat_stream(payload, request)
@@ -762,6 +791,24 @@ async def chat(request: Request, payload: dict[str, Any]) -> Response:
 async def _chat_stream(payload: dict[str, Any], request: Request):
     """Stream chat completion via SSE, collecting usage for billing."""
     uid = await _get_user_id(request)
+
+    # Memory injection for streaming path (idempotent: skip if already injected)
+    if uid and not any(
+        isinstance(m, dict) and m.get('content', '').startswith('[User Memories]')
+        for m in payload.get('messages', [])
+    ):
+        memories = await _get_user_memories(uid)
+        if memories:
+            memory_block = '\n'.join(f'- {m}' for m in memories)
+            memory_msg = {'role': 'system', 'content': f'[User Memories]\n{memory_block}'}
+            messages = payload.get('messages', [])
+            insert_idx = 0
+            for i, msg in enumerate(messages):
+                if isinstance(msg, dict) and msg.get('role') == 'system':
+                    insert_idx = i + 1
+                    break
+            messages.insert(insert_idx, memory_msg)
+            payload['messages'] = messages
 
     async def event_stream():
         usage_data = None
@@ -1779,6 +1826,55 @@ async def create_conversation(request: Request, payload: ConvCreate) -> JSONResp
         await session.refresh(conv)
         return JSONResponse(jsonable_encoder({'id': conv.id, 'title': conv.title, 'model': conv.model, 'messages': conv.messages, 'created_at': conv.created_at}))
 
+@app.get('/conversations/search')
+async def search_conversations(request: Request, q: str = '') -> JSONResponse:
+    """Search conversations by title or message content for the current user."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+    async with async_session() as session:
+        if q:
+            res = await session.execute(
+                Conversation.__table__.select()
+                .where(
+                    Conversation.user_id == uid,
+                    Conversation.title.ilike(f'%{q}%')
+                )
+                .order_by(Conversation.updated_at.desc())
+                .limit(50)
+            )
+            rows = [dict(r._mapping) for r in res.fetchall()]
+            # Also search in message content (JSON column)
+            res2 = await session.execute(
+                Conversation.__table__.select()
+                .where(Conversation.user_id == uid)
+                .order_by(Conversation.updated_at.desc())
+                .limit(200)
+            )
+            all_rows = res2.fetchall()
+            seen_ids = {r.id for r in rows}
+            for r in all_rows:
+                if r.id in seen_ids:
+                    continue
+                msgs = r.messages or []
+                for msg in msgs:
+                    if isinstance(msg, dict) and q.lower() in (msg.get('content', '') or '').lower():
+                        rows.append(dict(r._mapping))
+                        seen_ids.add(r.id)
+                        break
+        else:
+            res = await session.execute(
+                Conversation.__table__.select()
+                .where(Conversation.user_id == uid)
+                .order_by(Conversation.updated_at.desc())
+                .limit(50)
+            )
+            rows = [dict(r._mapping) for r in res.fetchall()]
+    return JSONResponse(jsonable_encoder(rows))
+
+
 @app.get('/conversations/{conv_id}')
 async def get_conversation(request: Request, conv_id: int) -> JSONResponse:
     uid = await _get_user_id(request)
@@ -1834,6 +1930,176 @@ async def delete_conversation(request: Request, conv_id: int) -> JSONResponse:
         await session.execute(Conversation.__table__.delete().where(Conversation.id == conv_id))
         await session.commit()
     return JSONResponse({'status': 'deleted'})
+
+# ═══════════════════════════════════════
+# Memories
+# ═══════════════════════════════════════
+
+class MemoryCreate(BaseModel):
+    content: str
+    category: str = 'general'
+    source: str = 'manual'
+    tags: list[str] = []
+
+class MemoryUpdate(BaseModel):
+    content: str | None = None
+    category: str | None = None
+    tags: list[str] | None = None
+    active: bool | None = None
+
+
+@app.get('/memories')
+async def list_memories(request: Request, category: str | None = None) -> JSONResponse:
+    """List active memories for the current user, optionally filtered by category."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+    async with async_session() as session:
+        stmt = UserMemory.__table__.select().where(
+            UserMemory.user_id == uid,
+            UserMemory.active == True,
+        )
+        if category:
+            stmt = stmt.where(UserMemory.category == category)
+        stmt = stmt.order_by(UserMemory.created_at.desc())
+        res = await session.execute(stmt)
+        rows = [dict(r._mapping) for r in res.fetchall()]
+    return JSONResponse(jsonable_encoder(rows))
+
+
+@app.get('/memories/search')
+async def search_memories(request: Request, q: str = '') -> JSONResponse:
+    """Full-text search across memory content for the current user."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+    async with async_session() as session:
+        if q:
+            res = await session.execute(
+                UserMemory.__table__.select().where(
+                    UserMemory.user_id == uid,
+                    UserMemory.active == True,
+                    UserMemory.content.ilike(f'%{q}%'),
+                ).order_by(UserMemory.created_at.desc()).limit(50)
+            )
+        else:
+            res = await session.execute(
+                UserMemory.__table__.select().where(
+                    UserMemory.user_id == uid,
+                    UserMemory.active == True,
+                ).order_by(UserMemory.created_at.desc()).limit(50)
+            )
+        rows = [dict(r._mapping) for r in res.fetchall()]
+    return JSONResponse(jsonable_encoder(rows))
+
+
+@app.post('/memories')
+async def create_memory(request: Request, payload: MemoryCreate) -> JSONResponse:
+    """Create a new memory entry for the current user."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+    async with async_session() as session:
+        mem = UserMemory(
+            user_id=uid,
+            content=payload.content,
+            category=payload.category,
+            source=payload.source,
+            tags=payload.tags,
+        )
+        session.add(mem)
+        await session.commit()
+        await session.refresh(mem)
+        return JSONResponse(jsonable_encoder({
+            'id': mem.id, 'content': mem.content, 'category': mem.category,
+            'source': mem.source, 'tags': mem.tags, 'active': mem.active,
+            'created_at': mem.created_at,
+        }))
+
+
+@app.put('/memories/{memory_id}')
+async def update_memory(request: Request, memory_id: int, payload: MemoryUpdate) -> JSONResponse:
+    """Update an existing memory entry."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+    async with async_session() as session:
+        res = await session.execute(
+            UserMemory.__table__.select().where(
+                UserMemory.id == memory_id, UserMemory.user_id == uid
+            )
+        )
+        mem = res.fetchone()
+        if not mem:
+            return JSONResponse({'detail': 'not found'}, status_code=404)
+        update_data = {}
+        if payload.content is not None:
+            update_data['content'] = payload.content
+        if payload.category is not None:
+            update_data['category'] = payload.category
+        if payload.tags is not None:
+            update_data['tags'] = payload.tags
+        if payload.active is not None:
+            update_data['active'] = payload.active
+        if update_data:
+            update_data['updated_at'] = datetime.now(timezone.utc).replace(tzinfo=None)
+            await session.execute(
+                UserMemory.__table__.update().where(UserMemory.id == memory_id),
+                update_data,
+            )
+            await session.commit()
+    return JSONResponse({'status': 'ok'})
+
+
+@app.delete('/memories/{memory_id}')
+async def delete_memory(request: Request, memory_id: int) -> JSONResponse:
+    """Soft-delete a memory entry (set active=False)."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+    async with async_session() as session:
+        res = await session.execute(
+            UserMemory.__table__.select().where(
+                UserMemory.id == memory_id, UserMemory.user_id == uid
+            )
+        )
+        mem = res.fetchone()
+        if not mem:
+            return JSONResponse({'detail': 'not found'}, status_code=404)
+        await session.execute(
+            UserMemory.__table__.update().where(UserMemory.id == memory_id),
+            {'active': False, 'updated_at': datetime.now(timezone.utc).replace(tzinfo=None)},
+        )
+        await session.commit()
+    return JSONResponse({'status': 'deleted'})
+
+
+async def _get_user_memories(uid: int) -> list[str]:
+    """Fetch active user memory contents for injection into chat."""
+    if async_session is None:
+        return []
+    try:
+        async with async_session() as session:
+            res = await session.execute(
+                UserMemory.__table__.select().where(
+                    UserMemory.user_id == uid,
+                    UserMemory.active == True,
+                ).order_by(UserMemory.created_at.desc()).limit(20)
+            )
+            return [r.content for r in res.fetchall()]
+    except Exception:
+        return []
+
 
 # ═══════════════════════════════════════
 # Wallet

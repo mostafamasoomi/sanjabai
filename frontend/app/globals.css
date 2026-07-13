@@ -2508,3 +2508,116 @@ img, svg { display: block; max-width: 100%; }
     flex-direction: column !important;
   }
 }
+
+/* ── Smart Mode toggle ─────────────────────────────────────────────────── */
+
+.smart-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.smart-mode-switch {
+  position: relative;
+  display: inline-block;
+  width: 32px;
+  height: 18px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  transition: all var(--motion-fast);
+  flex-shrink: 0;
+}
+
+.smart-mode-switch.smart-mode-on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.smart-mode-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  transition: all var(--motion-fast);
+}
+
+.smart-mode-on .smart-mode-knob {
+  left: 16px;
+  background: white;
+}
+
+/* ── Export dropdown ────────────────────────────────────────────────────── */
+
+.export-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 50;
+  min-width: 150px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  padding: var(--space-1);
+  display: flex;
+  flex-direction: column;
+}
+
+.export-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--motion-fast);
+  white-space: nowrap;
+}
+
+.export-dropdown-item:hover {
+  background: var(--bg-hover);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+/* ── Usage badge ────────────────────────────────────────────────────────── */
+
+.usage-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-cost {
+  color: var(--accent);
+  margin-inline-start: 2px;
+}
+
+.chat-composer-footer {
+  gap: var(--space-2);
+}

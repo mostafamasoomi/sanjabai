@@ -10,6 +10,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 import csv
 import io
+import re as _re
 from pydantic import BaseModel
 import httpx
 import redis
@@ -1940,6 +1941,111 @@ async def search_conversations(request: Request, q: str = '') -> JSONResponse:
             )
             rows = [dict(r._mapping) for r in res.fetchall()]
     return JSONResponse(jsonable_encoder(rows))
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Conversation Analytics
+# ═══════════════════════════════════════════════════════════════════
+
+@app.get('/conversations/analytics')
+async def conversation_analytics(request: Request) -> JSONResponse:
+    """Return conversation usage analytics for the current user."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+
+    try:
+        async with async_session() as session:
+            # Total conversations
+            conv_count_res = await session.execute(
+                sqlalchemy.text(
+                    'SELECT COUNT(*) as c FROM conversations WHERE user_id = :uid'
+                ),
+                {'uid': uid},
+            )
+            total_conversations = conv_count_res.fetchone().c or 0
+
+            # Total messages across all conversations
+            msg_count_res = await session.execute(
+                sqlalchemy.text(
+                    "SELECT COALESCE(SUM(jsonb_array_length(CASE WHEN messages IS NOT NULL THEN messages ELSE '[]'::jsonb END)), 0) as c "
+                    "FROM conversations WHERE user_id = :uid"
+                ),
+                {'uid': uid},
+            )
+            total_messages = msg_count_res.fetchone().c or 0
+
+            # Usage stats from usage_events
+            usage_res = await session.execute(
+                sqlalchemy.text(
+                    """SELECT
+                        COALESCE(SUM(input_tokens + output_tokens), 0) as total_tokens,
+                        COALESCE(SUM(charged_amount), 0) as total_cost
+                    FROM usage_events WHERE user_id = :uid"""
+                ),
+                {'uid': uid},
+            )
+            usage_row = usage_res.fetchone()
+            total_tokens_used = usage_row.total_tokens if usage_row else 0
+            total_cost = usage_row.total_cost if usage_row else 0
+
+            # Models breakdown
+            models_res = await session.execute(
+                sqlalchemy.text(
+                    """SELECT model, COUNT(*) as calls,
+                        SUM(input_tokens + output_tokens) as tokens,
+                        SUM(charged_amount) as cost
+                    FROM usage_events WHERE user_id = :uid
+                    GROUP BY model ORDER BY calls DESC"""
+                ),
+                {'uid': uid},
+            )
+            models_used = {}
+            for r in models_res.fetchall():
+                models_used[r.model] = {
+                    'calls': r.calls,
+                    'tokens': r.tokens,
+                    'cost': r.cost,
+                }
+
+            # Daily usage (last 30 days)
+            daily_res = await session.execute(
+                sqlalchemy.text(
+                    """SELECT
+                        DATE(created_at) as day,
+                        COUNT(*) as calls,
+                        SUM(input_tokens + output_tokens) as tokens,
+                        SUM(charged_amount) as cost
+                    FROM usage_events
+                    WHERE user_id = :uid AND created_at >= NOW() - INTERVAL '30 days'
+                    GROUP BY DATE(created_at)
+                    ORDER BY day DESC"""
+                ),
+                {'uid': uid},
+            )
+            daily_usage = {}
+            for r in daily_res.fetchall():
+                day_str = r.day.isoformat() if hasattr(r.day, 'isoformat') else str(r.day)
+                daily_usage[day_str] = {
+                    'calls': r.calls,
+                    'tokens': r.tokens,
+                    'cost': r.cost,
+                }
+
+        return JSONResponse({
+            'total_conversations': total_conversations,
+            'total_messages': total_messages,
+            'total_tokens_used': total_tokens_used,
+            'total_cost': total_cost,
+            'models_used': models_used,
+            'daily_usage': daily_usage,
+        })
+    except Exception as e:
+        return JSONResponse(
+            {'detail': f'analytics error: {e}'}, status_code=500
+        )
 
 
 @app.get('/conversations/{conv_id}')
@@ -4187,6 +4293,446 @@ async def list_task_executions(request: Request, task_id: int) -> JSONResponse:
             'completed_at': e.completed_at.isoformat() if e.completed_at else None,
             'created_at': e.created_at.isoformat() if e.created_at else None,
         } for e in execs])
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Smart Mode — auto-selects the cheapest capable model
+# ═══════════════════════════════════════════════════════════════════
+
+# Regex patterns compiled once
+
+_GREETING_PATTERNS = _re.compile(
+    r'^[\s]*(hi|hello|hey|salam|سلام|سلامت|สวัสดี|hallo|ciao|bonjour|hola|'
+    r'good\s*(morning|afternoon|evening|night)|สวัสดี|merhaba|selam|hej|'
+    r'howdy|yo|how\s*are\s*you|what\'?s\s*up|sup|khubi|chetori|khobi)',
+    _re.IGNORECASE,
+)
+
+_CODE_KEYWORDS = _re.compile(
+    r'(```|def\s|class\s|function\s|import\s|from\s+\w+\s+import|'
+    r'async\s+def|const\s|let\s|var\s|=>|return\s|if\s*\(|for\s*\(|'
+    r'while\s*\(|try\s*{|except\s|raise\s|throw\s|new\s+\w+|'
+    r'print\(|console\.log|SELECT\s|INSERT\s|UPDATE\s|DELETE\s)',
+    _re.IGNORECASE,
+)
+
+_REASONING_KEYWORDS = _re.compile(
+    r'(analyze|analyse|explain|compare|contrast|evaluate|reason|prove|'
+    r'derive|derive|optimize|strategy|trade-?off|pros?\s*and\s*cons?|'
+    r'logic|argument|hypothesis|theorem|algorithm|proof|'
+    r'چرا|چگونه|تحلیل|مقایسه|ارزیابی|استراتژی)',
+    _re.IGNORECASE,
+)
+
+_Creative_KEYWORDS = _re.compile(
+    r'(write\s+a\s+(story|poem|essay|song|novel|article)|'
+    r'creative|imagine|fiction|creative\s+writing|'
+    r'داستان|شعر|خلاقیت)',
+    _re.IGNORECASE,
+)
+
+# Model tiers: (provider_model_id, provider)
+_FREE_MODELS = [
+    ('qwen3-coder-free', 'openrouter'),
+    ('hermes-3-405b-free', 'openrouter'),
+]
+
+_CODING_MODELS = [
+    ('qwen3-coder-free', 'openrouter'),
+    ('mimo-v2.5', 'bynara2'),
+]
+
+_REASONING_MODELS = [
+    ('mimo-v2.5', 'bynara2'),
+    ('mimo-v2.5-pro', 'bynara2'),
+]
+
+_CREATIVE_MODELS = [
+    ('mimo-v2.5', 'bynara2'),
+    ('mimo-v2.5-pro', 'bynara2'),
+]
+
+_DEFAULT_MODEL = ('mimo-v2.5', 'bynara2')
+_ADVANCED_MODEL = ('mimo-v2.5-pro', 'bynara2')
+_PREMIUM_MODEL = ('gpt-5.6-luna', 'bynara2')
+
+
+def _analyze_message(text: str) -> str:
+    """Classify a message into: greeting, code, reasoning, creative, simple, complex."""
+    if not text or not text.strip():
+        return 'simple'
+    if _GREETING_PATTERNS.search(text):
+        return 'greeting'
+    if _CODE_KEYWORDS.search(text):
+        return 'code'
+    if _REASONING_KEYWORDS.search(text):
+        return 'reasoning'
+    if _Creative_KEYWORDS.search(text):
+        return 'creative'
+    # Long messages with multiple sentences are likely complex
+    sentences = [s.strip() for s in text.split('.') if s.strip()]
+    if len(text) > 500 or len(sentences) > 4:
+        return 'complex'
+    if len(text) > 200:
+        return 'medium'
+    return 'simple'
+
+
+async def _get_user_balance(uid: int) -> int:
+    """Return the user's current wallet balance (IRT)."""
+    if async_session is None:
+        return 0
+    try:
+        async with async_session() as session:
+            res = await session.execute(
+                sqlalchemy.text(
+                    'SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid'
+                ),
+                {'uid': uid},
+            )
+            row = res.fetchone()
+            return int(row.balance) if row else 0
+    except Exception:
+        return 0
+
+
+async def _get_user_plan(uid: int) -> str:
+    """Return the user's active subscription plan, or 'free'."""
+    if async_session is None:
+        return 'free'
+    try:
+        async with async_session() as session:
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            res = await session.execute(
+                select(Subscription)
+                .where(
+                    Subscription.user_id == uid,
+                    Subscription.status == 'active',
+                    (Subscription.ends_at.is_(None)) | (Subscription.ends_at > now),
+                )
+                .order_by(Subscription.created_at.desc())
+                .limit(1)
+            )
+            sub = res.scalar_one_or_none()
+            return sub.plan if sub else 'free'
+    except Exception:
+        return 'free'
+
+
+def _select_smart_model(
+    category: str,
+    balance: int,
+    plan: str,
+) -> tuple[str, str]:
+    """Pick (provider_model_id, provider) based on message category, balance, and plan."""
+
+    # Low balance: force free model
+    if balance < 10000:
+        return _FREE_MODELS[0]
+
+    # Greeting / simple messages: free model
+    if category in ('greeting', 'simple'):
+        return _FREE_MODELS[0]
+
+    # Premium plans get advanced models for complex tasks
+    if plan in ('pro', 'enterprise', 'unlimited'):
+        if category == 'complex':
+            return _ADVANCED_MODEL
+        if category == 'reasoning':
+            return _REASONING_MODELS[1]  # mimo-v2.5-pro
+        if category == 'code':
+            return _CODING_MODELS[0]  # free code model
+        if category == 'creative':
+            return _CREATIVE_MODELS[1]  # mimo-v2.5-pro
+        return _DEFAULT_MODEL
+
+    # Free/standard plans
+    if category == 'complex':
+        return _REASONING_MODELS[0]  # mimo-v2.5
+    if category == 'reasoning':
+        return _REASONING_MODELS[0]  # mimo-v2.5
+    if category == 'code':
+        return _CODING_MODELS[0]  # qwen3-coder-free
+    if category == 'creative':
+        return _CREATIVE_MODELS[0]  # mimo-v2.5
+    if category == 'medium':
+        return _DEFAULT_MODEL  # mimo-v2.5
+
+    return _DEFAULT_MODEL
+
+
+@app.post('/v1/smart-chat')
+async def smart_chat(request: Request, payload: dict[str, Any]) -> Response:
+    """Smart Mode: auto-selects the cheapest model capable of handling the request."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+
+    # Quota pre-check
+    quota_err = await _check_quota_pre(uid)
+    if quota_err is not None:
+        return quota_err
+
+    # Extract last user message
+    messages = payload.get('messages', [])
+    last_user_msg = ''
+    for msg in reversed(messages):
+        if isinstance(msg, dict) and msg.get('role') == 'user':
+            last_user_msg = msg.get('content', '')
+            if isinstance(last_user_msg, list):
+                # Handle multimodal content (list of text/image parts)
+                parts = []
+                for part in last_user_msg:
+                    if isinstance(part, dict) and part.get('type') == 'text':
+                        parts.append(part.get('text', ''))
+                last_user_msg = ' '.join(parts)
+            break
+
+    # Analyze and select model
+    category = _analyze_message(last_user_msg)
+    balance = await _get_user_balance(uid)
+    plan = await _get_user_plan(uid)
+    selected_model, selected_provider = _select_smart_model(category, balance, plan)
+
+    # Override model in payload
+    original_model = payload.get('model', '')
+    payload['model'] = selected_model
+
+    # Memory injection (same as regular chat)
+    memories = await _get_user_memories(uid)
+    if memories:
+        memory_block = '\n'.join(f'- {m}' for m in memories)
+        memory_msg = {'role': 'system', 'content': f'[User Memories]\n{memory_block}'}
+        insert_idx = 0
+        for i, msg in enumerate(messages):
+            if isinstance(msg, dict) and msg.get('role') == 'system':
+                insert_idx = i + 1
+                break
+        messages.insert(insert_idx, memory_msg)
+        payload['messages'] = messages
+
+    stream = payload.get('stream', False)
+    if stream:
+        return await _smart_chat_stream(payload, request, selected_model, category)
+
+    try:
+        async with httpx.AsyncClient(timeout=90) as client:
+            r = await client.post(
+                f'{LITELLM_HOST}/v1/chat/completions',
+                json=payload,
+                headers={'Accept': 'application/json'},
+            )
+            if r.status_code == 200:
+                await _track_usage(request, payload, r.json())
+                response_data = r.json()
+                resp = Response(
+                    content=r.content, status_code=200, media_type='application/json'
+                )
+            else:
+                response_data = r.json() if r.headers.get('content-type', '').startswith('application/json') else {}
+                resp = Response(
+                    content=r.content, status_code=r.status_code, media_type='application/json'
+                )
+            # Add smart model info header
+            resp.headers['X-Smart-Model'] = selected_model
+            resp.headers['X-Smart-Category'] = category
+            resp.headers['X-Smart-Provider'] = selected_provider
+            if original_model and original_model != selected_model:
+                resp.headers['X-Smart-Original-Model'] = original_model
+            return resp
+    except Exception as e:
+        return JSONResponse(
+            {'error': {'message': f'upstream unavailable: {e}', 'type': 'gateway_error'}},
+            status_code=502,
+        )
+
+
+async def _smart_chat_stream(
+    payload: dict[str, Any],
+    request: Request,
+    selected_model: str,
+    category: str,
+):
+    """Stream smart chat completion via SSE, collecting usage for billing."""
+    uid = await _get_user_id(request)
+
+    # Memory injection for streaming (idempotent)
+    if uid and not any(
+        isinstance(m, dict) and m.get('content', '').startswith('[User Memories]')
+        for m in payload.get('messages', [])
+    ):
+        memories = await _get_user_memories(uid)
+        if memories:
+            memory_block = '\n'.join(f'- {m}' for m in memories)
+            memory_msg = {'role': 'system', 'content': f'[User Memories]\n{memory_block}'}
+            messages = payload.get('messages', [])
+            insert_idx = 0
+            for i, msg in enumerate(messages):
+                if isinstance(msg, dict) and msg.get('role') == 'system':
+                    insert_idx = i + 1
+                    break
+            messages.insert(insert_idx, memory_msg)
+            payload['messages'] = messages
+
+    async def event_stream():
+        usage_data = None
+        try:
+            async with httpx.AsyncClient(timeout=90) as client:
+                payload['stream'] = True
+                payload.setdefault('stream_options', {})
+                if isinstance(payload['stream_options'], dict):
+                    payload['stream_options']['include_usage'] = True
+                async with client.stream(
+                    'POST',
+                    f'{LITELLM_HOST}/v1/chat/completions',
+                    json=payload,
+                    headers={'Accept': 'text/event-stream'},
+                ) as r:
+                    # Send smart model info as first event
+                    yield f'data: {json.dumps({"type": "smart_info", "model": selected_model, "category": category})}\n\n'
+                    async for line in r.aiter_lines():
+                        if line:
+                            stripped = line.strip()
+                            if stripped.startswith('data:'):
+                                data_str = stripped[5:].strip()
+                                if data_str == '[DONE]':
+                                    break
+                                try:
+                                    chunk = json.loads(data_str)
+                                    if isinstance(chunk.get('usage'), dict) and chunk['usage']:
+                                        usage_data = chunk['usage']
+                                except (json.JSONDecodeError, ValueError):
+                                    pass
+                            yield f'{line}\n\n'
+        except Exception as e:
+            yield f'data: {{"error": "upstream unavailable: {e}"}}\n\n'
+        finally:
+            if uid and usage_data and async_session is not None:
+                try:
+                    await _bill_stream_usage(uid, payload, usage_data)
+                except Exception:
+                    pass
+
+    response = StreamingResponse(event_stream(), media_type='text/event-stream')
+    response.headers['X-Smart-Model'] = selected_model
+    response.headers['X-Smart-Category'] = category
+    return response
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Conversation Export
+# ═══════════════════════════════════════════════════════════════════
+
+@app.get('/conversations/{conv_id}/export')
+async def export_conversation(
+    request: Request, conv_id: int, format: str = 'json'
+) -> Response:
+    """Export a conversation in JSON, Markdown, or plain text format."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+
+    async with async_session() as session:
+        res = await session.execute(
+            Conversation.__table__.select().where(
+                Conversation.id == conv_id, Conversation.user_id == uid
+            )
+        )
+        conv = res.fetchone()
+        if not conv:
+            return JSONResponse({'detail': 'not found'}, status_code=404)
+
+    messages = conv.messages or []
+    title = conv.title or 'Conversation'
+    created = conv.created_at.isoformat() if conv.created_at else ''
+    model = conv.model or ''
+
+    if format == 'json':
+        data = {
+            'id': conv.id,
+            'title': title,
+            'model': model,
+            'created_at': created,
+            'messages': messages,
+        }
+        return JSONResponse(jsonable_encoder(data))
+
+    elif format == 'markdown':
+        lines = [f'# {title}', '']
+        if model:
+            lines.append(f'**Model:** {model}')
+        if created:
+            lines.append(f'**Created:** {created}')
+        lines.append('')
+        lines.append('---')
+        lines.append('')
+        for msg in messages:
+            role = msg.get('role', 'unknown') if isinstance(msg, dict) else 'unknown'
+            content = msg.get('content', '') if isinstance(msg, dict) else str(msg)
+            if isinstance(content, list):
+                # Multimodal: extract text parts
+                parts = []
+                for part in content:
+                    if isinstance(part, dict) and part.get('type') == 'text':
+                        parts.append(part.get('text', ''))
+                content = '\n'.join(parts)
+            role_label = {'user': '🧑 User', 'assistant': '🤖 Assistant', 'system': '⚙️ System'}.get(role, role.title())
+            lines.append(f'## {role_label}')
+            lines.append('')
+            # Check if content has code blocks
+            if '```' in content:
+                lines.append(content)
+            else:
+                lines.append(content)
+            lines.append('')
+            lines.append('---')
+            lines.append('')
+        md_content = '\n'.join(lines)
+        return Response(
+            content=md_content,
+            media_type='text/markdown; charset=utf-8',
+            headers={
+                'Content-Disposition': f'attachment; filename="conversation-{conv_id}.md"',
+            },
+        )
+
+    elif format == 'text':
+        lines = [f'Title: {title}', '']
+        if model:
+            lines.append(f'Model: {model}')
+        if created:
+            lines.append(f'Created: {created}')
+        lines.append('')
+        for msg in messages:
+            role = msg.get('role', 'unknown') if isinstance(msg, dict) else 'unknown'
+            content = msg.get('content', '') if isinstance(msg, dict) else str(msg)
+            if isinstance(content, list):
+                parts = []
+                for part in content:
+                    if isinstance(part, dict) and part.get('type') == 'text':
+                        parts.append(part.get('text', ''))
+                content = '\n'.join(parts)
+            role_label = {'user': 'User', 'assistant': 'Assistant', 'system': 'System'}.get(role, role.title())
+            lines.append(f'[{role_label}]')
+            lines.append(content)
+            lines.append('')
+        text_content = '\n'.join(lines)
+        return Response(
+            content=text_content,
+            media_type='text/plain; charset=utf-8',
+            headers={
+                'Content-Disposition': f'attachment; filename="conversation-{conv_id}.txt"',
+            },
+        )
+
+    else:
+        return JSONResponse(
+            {'detail': f'unsupported format: {format}. Use json, markdown, or text.'},
+            status_code=400,
+        )
+
 
 
 @app.websocket('/ws')

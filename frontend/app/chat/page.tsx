@@ -15,6 +15,8 @@ import { Skeleton, EmptyState, toast } from '@/components/ui'
 
 type Message = { role: 'user' | 'assistant' | 'system'; content: string; id: string }
 
+type UsageStats = { promptTokens: number; completionTokens: number; totalTokens: number; estimatedCost: number }
+
 type Conversation = {
   id: string
   title: string
@@ -98,6 +100,13 @@ export default function ChatPage() {
   const [showPresets, setShowPresets] = useState(true)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [smartMode, setSmartMode] = useState<boolean>(() => {
+    try { return localStorage.getItem('multiai_smart_mode') === 'true' } catch { return false }
+  })
+  const [smartModel, setSmartModel] = useState<string | null>(null)
+  const [exportMenuOpen, setExportMenuOpen] = useState(false)
+  const [usageStats, setUsageStats] = useState<UsageStats>({ promptTokens: 0, completionTokens: 0, totalTokens: 0, estimatedCost: 0 })
+  const exportMenuRef = useRef<HTMLDivElement>(null)
 
   /* ── Conversation sidebar state ──────────────────────────────────────── */
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -113,6 +122,18 @@ export default function ChatPage() {
   // Keep refs in sync
   useEffect(() => { activeConversationIdRef.current = activeConversationId }, [activeConversationId])
   useEffect(() => { messagesRef.current = messages }, [messages])
+  useEffect(() => {
+    try { localStorage.setItem('multiai_smart_mode', smartMode ? 'true' : 'false') } catch {}
+  }, [smartMode])
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setExportMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   /* ── Conversation API helpers ────────────────────────────────────────── */
   const authHeaders = useCallback((): Record<string, string> => {
@@ -227,7 +248,37 @@ export default function ChatPage() {
     setShowPresets(true)
     setError('')
     setMobileDrawerOpen(false)
+    setUsageStats({ promptTokens: 0, completionTokens: 0, totalTokens: 0, estimatedCost: 0 })
+    setSmartModel(null)
   }, [])
+
+  /* ── Export conversation ──────────────────────────────────────────────── */
+  const exportConversation = useCallback(async (format: 'json' | 'markdown' | 'text') => {
+    if (!token || !activeConversationId) {
+      toast('ابتدا یک مکالمه را انتخاب کنید', 'error')
+      return
+    }
+    setExportMenuOpen(false)
+    try {
+      const res = await fetch(`/api/conversations/${activeConversationId}/export?format=${format}`, {
+        headers: authHeaders(),
+      })
+      if (!res.ok) throw new Error('export failed')
+      const blob = await res.blob()
+      const ext = format === 'markdown' ? 'md' : format
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `conversation-${activeConversationId}.${ext}`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast('فایل دانلود شد', 'success')
+    } catch {
+      toast('خطا در خروجی گرفتن', 'error')
+    }
+  }, [token, activeConversationId, authHeaders])
 
   /* ── Detect mobile ───────────────────────────────────────────────────── */
   const [isMobile, setIsMobile] = useState(false)
@@ -314,11 +365,13 @@ export default function ChatPage() {
     }
 
     try {
-      const res = await fetch('/api/chat', {
+      const chatUrl = smartMode ? '/api/v1/smart-chat' : '/api/chat'
+      const res = await fetch(chatUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          ...(smartMode ? { 'X-Smart-Model': model.providerModelId || model.id } : {}),
         },
         body: JSON.stringify({
           model: model.providerModelId || model.id,
@@ -344,6 +397,7 @@ export default function ChatPage() {
       setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '' }])
 
       let acc = ''
+      let usageData: any = null
       while (true) {
         const { value, done } = await reader!.read()
         if (done) break
@@ -365,6 +419,8 @@ export default function ChatPage() {
                 return copy
               })
             }
+            if (obj.usage) usageData = obj.usage
+            if (obj.x_smart_model) setSmartModel(obj.x_smart_model)
           } catch { /* partial chunk */ }
         }
       }
@@ -373,6 +429,19 @@ export default function ChatPage() {
       if (convId) {
         const finalMsgs = [...updated, { id: assistantId, role: 'assistant' as const, content: acc }]
         saveMessages(convId, finalMsgs)
+      }
+      // Update usage stats
+      if (usageData) {
+        const promptTokens = usageData.prompt_tokens || 0
+        const completionTokens = usageData.completion_tokens || 0
+        const totalTokens = promptTokens + completionTokens
+        const estimatedCost = totalTokens * 0.000002 // rough estimate
+        setUsageStats(prev => ({
+          promptTokens: prev.promptTokens + promptTokens,
+          completionTokens: prev.completionTokens + completionTokens,
+          totalTokens: prev.totalTokens + totalTokens,
+          estimatedCost: prev.estimatedCost + estimatedCost,
+        }))
       }
     } catch (err: any) {
       if (err.name === 'AbortError') {
@@ -395,7 +464,7 @@ export default function ChatPage() {
       setStreaming(false)
       abortRef.current = null
     }
-  }, [messages, model, token, createConversation, saveMessages])
+  }, [messages, model, token, smartMode, createConversation, saveMessages])
 
   // Keep ref in sync so retry() can call sendMessage without circular deps
   useEffect(() => { sendMessageRef.current = sendMessage }, [sendMessage])
@@ -547,6 +616,51 @@ export default function ChatPage() {
               )}
             </div>
             <div className="flex items-center gap-2">
+              {/* Smart Mode toggle */}
+              <label className="smart-mode-toggle" title={smartMode ? 'حالت هوشمند فعال' : 'حالت هوشمند غیرفعال'}>
+                <input
+                  type="checkbox"
+                  checked={smartMode}
+                  onChange={() => setSmartMode(prev => !prev)}
+                  className="sr-only"
+                />
+                <span className={`smart-mode-switch ${smartMode ? 'smart-mode-on' : ''}`}>
+                  <span className="smart-mode-knob" />
+                </span>
+                <span className="text-xs text-[var(--text-secondary)] select-none">Smart Mode</span>
+              </label>
+              {smartMode && smartModel && (
+                <span className="badge badge-accent text-[9px]" dir="ltr" title="مدل انتخابی توسط Smart Mode">
+                  🧠 {smartModel}
+                </span>
+              )}
+
+              {/* Export dropdown */}
+              {activeConversationId && (
+                <div className="relative" ref={exportMenuRef}>
+                  <button
+                    onClick={() => setExportMenuOpen(prev => !prev)}
+                    className="conv-toggle-btn"
+                    title="خروجی گرفتن"
+                  >
+                    <Icon name="external" size={16} />
+                  </button>
+                  {exportMenuOpen && (
+                    <div className="export-dropdown">
+                      <button className="export-dropdown-item" onClick={() => exportConversation('json')}>
+                        <Icon name="code" size={14} /> JSON
+                      </button>
+                      <button className="export-dropdown-item" onClick={() => exportConversation('markdown')}>
+                        <Icon name="chat" size={14} /> Markdown
+                      </button>
+                      <button className="export-dropdown-item" onClick={() => exportConversation('text')}>
+                        <Icon name="info" size={14} /> Text
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {model && <span className="badge badge-accent text-[10px]" dir="ltr">{model.provider}</span>}
               {streaming && (
                 <button onClick={cancel} className="btn btn-ghost btn-sm text-[var(--danger)]">
@@ -710,9 +824,18 @@ export default function ChatPage() {
                 {streaming ? (
                   <span className="chat-streaming-dot">در حال تولید...</span>
                 ) : (
-                  `${model?.displayName ?? 'منتظر انتخاب مدل'} — آماده`
+                  `${model?.displayName ?? 'منتظر انتخاب مدل'} — ${smartMode ? '🧠 Smart Mode' : 'آماده'}`
                 )}
               </span>
+              {usageStats.totalTokens > 0 && (
+                <span className="usage-badge" title={`پرامپت: ${usageStats.promptTokens} | پاسخ: ${usageStats.completionTokens}`}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+                  </svg>
+                  <span dir="ltr">{usageStats.totalTokens.toLocaleString()} tokens</span>
+                  <span className="usage-cost" dir="ltr">~${usageStats.estimatedCost.toFixed(4)}</span>
+                </span>
+              )}
               <span className="text-[10px] text-[var(--text-muted)]">
                 {input.length > 0 && `${input.length} کاراکتر`}
               </span>

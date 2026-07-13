@@ -1,7 +1,17 @@
 /** @type {import('next').NextConfig} */
+const API_BACKEND = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8081'
+
 const nextConfig = {
   reactStrictMode: true,
   output: 'standalone',
+  async rewrites() {
+    return [
+      // Proxy /api/* to backend
+      { source: '/api/:path*', destination: `${API_BACKEND}/:path*` },
+      // Proxy /v1/* to backend (chat completions)
+      { source: '/v1/:path*', destination: `${API_BACKEND}/v1/:path*` },
+    ]
+  },
 }
 
 // Bundle analyzer (Phase 10). Enabled only when ANALYZE=true so the default

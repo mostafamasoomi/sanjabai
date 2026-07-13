@@ -1,0 +1,348 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Conversation History Sidebar — Aurora v2
+   Right-side sidebar (RTL), collapsible desktop, mobile drawer.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Layout wrappers ────────────────────────────────────────────────────── */
+
+.chat-page-with-sidebar {
+  flex-direction: row !important;
+  gap: 0;
+}
+
+.chat-main-area {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  position: relative;
+}
+
+/* ── Desktop sidebar ────────────────────────────────────────────────────── */
+
+.conv-sidebar {
+  width: 280px;
+  min-width: 280px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+  overflow: hidden;
+  animation: sidebarSlideIn 0.25s ease;
+}
+
+@keyframes sidebarSlideIn {
+  from {
+    opacity: 0;
+    width: 0;
+    min-width: 0;
+  }
+  to {
+    opacity: 1;
+    width: 280px;
+    min-width: 280px;
+  }
+}
+
+.conv-sidebar-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── New chat button ────────────────────────────────────────────────────── */
+
+.conv-new-chat-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px dashed rgba(124, 111, 247, 0.3);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all var(--motion-fast);
+}
+
+.conv-new-chat-btn:hover {
+  background: rgba(124, 111, 247, 0.2);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(124, 111, 247, 0.15);
+}
+
+/* ── Conversation list ──────────────────────────────────────────────────── */
+
+.conv-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 var(--space-2) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.conv-list::-webkit-scrollbar {
+  width: 4px;
+}
+.conv-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.conv-list::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+.conv-list::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+.conv-list-loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+}
+
+.conv-list-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-3);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+/* ── Conversation item ──────────────────────────────────────────────────── */
+
+.conv-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--motion-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.conv-item:hover {
+  background: var(--bg-elevated);
+}
+
+.conv-item:hover .conv-item-delete {
+  opacity: 1;
+}
+
+.conv-item-active {
+  background: var(--accent-dim);
+  border-right: 3px solid var(--accent);
+}
+
+.conv-item-active:hover {
+  background: rgba(124, 111, 247, 0.18);
+}
+
+.conv-item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.conv-item-title {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.conv-item-active .conv-item-title {
+  color: var(--accent);
+}
+
+.conv-item-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.conv-item-date {
+  white-space: nowrap;
+}
+
+.conv-item-model {
+  background: var(--bg-overlay);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 0.62rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
+  direction: ltr;
+  text-align: center;
+}
+
+/* ── Delete button ──────────────────────────────────────────────────────── */
+
+.conv-item-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: all var(--motion-fast);
+  flex-shrink: 0;
+}
+
+.conv-item-delete:hover {
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--danger);
+}
+
+.conv-item-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@keyframes deleteSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.conv-delete-spin {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--text-muted);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: deleteSpin 0.6s linear infinite;
+}
+
+/* ── Toggle button ──────────────────────────────────────────────────────── */
+
+.conv-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--motion-fast);
+  flex-shrink: 0;
+}
+
+.conv-toggle-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+/* ── Mobile drawer ──────────────────────────────────────────────────────── */
+
+.conv-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 998;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.conv-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 300px;
+  max-width: 85vw;
+  height: 100vh;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.3);
+}
+
+.conv-drawer-open {
+  transform: translateX(0);
+}
+
+.conv-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.conv-drawer-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.conv-drawer-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--motion-fast);
+}
+
+.conv-drawer-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* ── Responsive: force sidebar off on small screens ─────────────────────── */
+
+@media (max-width: 767px) {
+  .conv-sidebar {
+    display: none;
+  }
+  .chat-page-with-sidebar {
+    flex-direction: column !important;
+  }
+}

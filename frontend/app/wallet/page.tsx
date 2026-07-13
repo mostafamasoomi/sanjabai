@@ -21,6 +21,15 @@ type PaymentRecord = {
   created_at: string
 }
 
+type CreditPackage = {
+  id: string
+  name_fa: string
+  name_en: string
+  base_amount: number
+  bonus_percent: number
+  total_credits: number
+}
+
 type LedgerFilter = 'all' | 'credit' | 'debit'
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -94,6 +103,19 @@ function TableSkeleton() {
   )
 }
 
+function PackagesSkeleton() {
+  return (
+    <div className="card" style={{ marginBottom: 24 }}>
+      <div className="skeleton" style={{ width: 160, height: 18, borderRadius: 'var(--radius-sm)', marginBottom: 20 }} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="skeleton" style={{ height: 200, borderRadius: 'var(--radius-md)' }} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Empty State ────────────────────────────────────────────────────────────
 function EmptyStateIcon({ icon, title, desc }: { icon: string; title: string; desc: string }) {
   return (
@@ -115,6 +137,7 @@ export default function WalletPage() {
   const [balance, setBalance] = useState<number | null>(null)
   const [ledger, setLedger] = useState<LedgerEntry[]>([])
   const [payments, setPayments] = useState<PaymentRecord[]>([])
+  const [creditPackages, setCreditPackages] = useState<CreditPackage[]>([])
 
   // UI state
   const [loading, setLoading] = useState(true)
@@ -125,6 +148,7 @@ export default function WalletPage() {
   const [ledgerFilter, setLedgerFilter] = useState<LedgerFilter>('all')
   const [showConfirm, setShowConfirm] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [purchasingPkgId, setPurchasingPkgId] = useState<string | null>(null)
 
   // ── Data fetching ────────────────────────────────────────────────────────
   const fetchData = useCallback(
@@ -135,19 +159,22 @@ export default function WalletPage() {
 
       const headers = { Authorization: `Bearer ${token}` }
       try {
-        const [walletRes, ledgerRes, payRes] = await Promise.all([
+        const [walletRes, ledgerRes, payRes, pkgRes] = await Promise.all([
           fetch('/api/wallet', { headers }),
           fetch('/api/wallet/ledger', { headers }),
           fetch('/api/payment/history', { headers }),
+          fetch('/api/credit-packages', { headers }),
         ])
-        const [wallet, ledgerData, payData] = await Promise.all([
+        const [wallet, ledgerData, payData, pkgData] = await Promise.all([
           walletRes.ok ? walletRes.json() : null,
           ledgerRes.ok ? ledgerRes.json() : null,
           payRes.ok ? payRes.json() : null,
+          pkgRes.ok ? pkgRes.json() : null,
         ])
         if (wallet) setBalance(wallet.balance ?? 0)
         if (ledgerData) setLedger(Array.isArray(ledgerData) ? ledgerData : [])
         if (payData) setPayments(Array.isArray(payData) ? payData : [])
+        if (pkgData) setCreditPackages(Array.isArray(pkgData) ? pkgData : [])
       } catch {
         if (!silent) toast('خطا در دریافت اطلاعات', 'error')
       } finally {
@@ -233,6 +260,30 @@ export default function WalletPage() {
     })
   }
 
+  // ── Purchase credit package ────────────────────────────────────────
+  const handlePurchase = async (pkgId: string) => {
+    if (!token || purchasingPkgId) return
+    setPurchasingPkgId(pkgId)
+    try {
+      const res = await fetch('/api/credit-package/checkout', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ package_id: pkgId }),
+      })
+      const data = await res.json()
+      if (res.ok && data.url) {
+        toast('در حال انتقال به درگاه پرداخت...', 'info')
+        window.location.href = data.url
+      } else {
+        toast(data.detail || 'خطا در خرید بسته', 'error')
+      }
+    } catch {
+      toast('خطا در ارتباط با سرور', 'error')
+    } finally {
+      setPurchasingPkgId(null)
+    }
+  }
+
   // ── Filtered ledger ──────────────────────────────────────────────────────
   const filteredLedger = ledger.filter((l) => {
     if (ledgerFilter === 'credit') return l.amount > 0
@@ -275,6 +326,7 @@ export default function WalletPage() {
           <BalanceSkeleton />
           <TopupSkeleton />
         </div>
+        <PackagesSkeleton />
         <TableSkeleton />
       </div>
     )
@@ -414,6 +466,106 @@ export default function WalletPage() {
             {busy ? 'در حال پردازش...' : `شارژ ${effectiveAmount > 0 ? fmtIRR(effectiveAmount) + ' ریال' : 'حساب'}`}
           </button>
         </div>
+      </div>
+
+      {/* ── Credit Packages Section ────────────────────────────────── */}
+      <div className="card" style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
+          <Icon name="gift" size={16} style={{ color: 'var(--accent)' }} />
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>بسته‌های اعتباری</h2>
+          {creditPackages.length > 0 && (
+            <span className="badge badge-accent" style={{ marginLeft: 4 }}>{fmtIRR(creditPackages.length)}</span>
+          )}
+        </div>
+
+        {creditPackages.length === 0 ? (
+          <EmptyStateIcon icon="gift" title="بسته‌ای موجود نیست" desc="در حال حاضر بسته اعتباری برای خرید وجود ندارد." />
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
+            {creditPackages.map((pkg) => {
+              const isPurchasing = purchasingPkgId === pkg.id
+              const baseToman = (pkg.base_amount / 10).toLocaleString('fa-IR')
+              const bonusToman = pkg.bonus_percent > 0
+                ? ((pkg.total_credits - pkg.base_amount) / 10).toLocaleString('fa-IR')
+                : null
+              return (
+                <div
+                  key={pkg.id}
+                  className="card"
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    padding: 20,
+                    position: 'relative',
+                    overflow: 'hidden',
+                    borderColor: pkg.bonus_percent > 0 ? 'var(--accent)' : undefined,
+                    borderWidth: pkg.bonus_percent > 0 ? 1.5 : undefined,
+                  }}
+                >
+                  {pkg.bonus_percent > 0 && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: 12,
+                        left: 12,
+                        background: 'var(--accent)',
+                        color: '#fff',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: 'var(--radius-sm)',
+                      }}
+                    >
+                      +{pkg.bonus_percent}% بونوس
+                    </span>
+                  )}
+
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+                    {pkg.name_fa}
+                  </h3>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+                    {pkg.name_en}
+                  </p>
+
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 4, fontFeatureSettings: '"tnum"' }}>
+                      {fmtIRR(pkg.total_credits)} <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)' }}>ریال</span>
+                    </div>
+                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                      شما {baseToman} تومان پرداخت می‌کنید
+                    </p>
+                    {bonusToman && (
+                      <p style={{ fontSize: 12, color: 'var(--positive)', marginBottom: 8 }}>
+                        + {bonusToman} تومان بونوس
+                      </p>
+                    )}
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      معادل {fmtToman(pkg.total_credits)}
+                    </p>
+                  </div>
+
+                  <button
+                    className={`btn btn-primary`}
+                    onClick={() => handlePurchase(pkg.id)}
+                    disabled={isPurchasing || purchasingPkgId !== null}
+                    style={{
+                      marginTop: 16,
+                      width: '100%',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      opacity: (isPurchasing || (purchasingPkgId !== null && !isPurchasing)) ? 0.5 : 1,
+                    }}
+                  >
+                    <Icon name={isPurchasing ? 'refresh' : 'payment'} size={14} className={isPurchasing ? 'spin' : ''} />
+                    {isPurchasing ? 'در حال پردازش...' : 'خرید بسته'}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* ── Ledger Section ─────────────────────────────────────────── */}

@@ -334,6 +334,40 @@ class UserMemory(Base):
     updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 
+class SkillTemplate(Base):
+    """Skill template for the marketplace."""
+    __tablename__ = 'skill_templates'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(sqlalchemy.ForeignKey('users.id'), nullable=True)
+    title: Mapped[str]
+    title_fa: Mapped[str]
+    description: Mapped[str] = mapped_column(default='')
+    description_fa: Mapped[str] = mapped_column(default='')
+    category: Mapped[str] = mapped_column(default='general')
+    prompt_template: Mapped[str]
+    variables: Mapped[dict[str, Any] | None] = mapped_column(sqlalchemy.JSON, default=list)
+    default_model: Mapped[str] = mapped_column(default='')
+    is_public: Mapped[bool] = mapped_column(default=False)
+    is_featured: Mapped[bool] = mapped_column(default=False)
+    usage_count: Mapped[int] = mapped_column(default=0)
+    rating_sum: Mapped[int] = mapped_column(default=0)
+    rating_count: Mapped[int] = mapped_column(default=0)
+    tags: Mapped[list | None] = mapped_column(sqlalchemy.JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
+class SkillTemplateRating(Base):
+    """Rating for a skill template."""
+    __tablename__ = 'skill_template_ratings'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    template_id: Mapped[int] = mapped_column(sqlalchemy.ForeignKey('skill_templates.id'))
+    user_id: Mapped[int] = mapped_column(sqlalchemy.ForeignKey('users.id'))
+    rating: Mapped[int]
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
+
 class HealthResponse(BaseModel):
     status: str
     uptime: float | None = None
@@ -2099,6 +2133,308 @@ async def _get_user_memories(uid: int) -> list[str]:
             return [r.content for r in res.fetchall()]
     except Exception:
         return []
+
+
+
+# ═══════════════════════════════════════
+# Skills Marketplace
+# ═══════════════════════════════════════
+
+class SkillTemplateCreate(BaseModel):
+    title: str
+    title_fa: str
+    description: str = ''
+    description_fa: str = ''
+    category: str = 'general'
+    prompt_template: str
+    variables: list[dict[str, Any]] = []
+    default_model: str = ''
+    is_public: bool = False
+    tags: list[str] = []
+
+class SkillTemplateUpdate(BaseModel):
+    title: str | None = None
+    title_fa: str | None = None
+    description: str | None = None
+    description_fa: str | None = None
+    category: str | None = None
+    prompt_template: str | None = None
+    variables: list[dict[str, Any]] | None = None
+    default_model: str | None = None
+    is_public: bool | None = None
+    tags: list[str] | None = None
+
+class SkillUseRequest(BaseModel):
+    variables: dict[str, str] = {}
+    model: str = ''
+
+class SkillRatingRequest(BaseModel):
+    rating: int
+
+
+@app.get('/skills/my')
+async def list_my_skill_templates(request: Request) -> JSONResponse:
+    """List skill templates owned by the current user."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+    async with async_session() as session:
+        res = await session.execute(
+            SkillTemplate.__table__.select().where(
+                SkillTemplate.user_id == uid,
+            ).order_by(SkillTemplate.created_at.desc())
+        )
+        rows = [dict(r._mapping) for r in res.fetchall()]
+    return JSONResponse(jsonable_encoder(rows))
+
+
+@app.get('/skills')
+async def list_skill_templates(
+    request: Request,
+    category: str | None = None,
+    featured: bool | None = None,
+    sort: str = 'popular',
+    q: str | None = None,
+    skip: int = 0,
+    limit: int = 50,
+) -> JSONResponse:
+    """List public skill templates with optional filtering and sorting."""
+    if async_session is None:
+        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+    async with async_session() as session:
+        stmt = SkillTemplate.__table__.select().where(SkillTemplate.is_public == True)
+        if category:
+            stmt = stmt.where(SkillTemplate.category == category)
+        if featured is not None:
+            stmt = stmt.where(SkillTemplate.is_featured == featured)
+        if q:
+            stmt = stmt.where(
+                SkillTemplate.title.ilike(f'%{q}%') |
+                SkillTemplate.title_fa.ilike(f'%{q}%') |
+                SkillTemplate.description.ilike(f'%{q}%') |
+                SkillTemplate.description_fa.ilike(f'%{q}%')
+            )
+        if sort == 'newest':
+            stmt = stmt.order_by(SkillTemplate.created_at.desc())
+        elif sort == 'top_rated':
+            stmt = stmt.order_by(
+                SkillTemplate.rating_sum.desc().nullslast(),
+                SkillTemplate.rating_count.desc(),
+            )
+        else:  # popular (default)
+            stmt = stmt.order_by(SkillTemplate.usage_count.desc())
+        stmt = stmt.offset(skip).limit(min(limit, 100))
+        res = await session.execute(stmt)
+        rows = [dict(r._mapping) for r in res.fetchall()]
+    return JSONResponse(jsonable_encoder(rows))
+
+
+@app.get('/skills/{template_id}')
+async def get_skill_template(request: Request, template_id: int) -> JSONResponse:
+    """Get a single skill template by ID."""
+    if async_session is None:
+        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+    async with async_session() as session:
+        res = await session.execute(
+            SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
+        )
+        row = res.fetchone()
+        if not row:
+            return JSONResponse({'detail': 'not found'}, status_code=404)
+        data = dict(row._mapping)
+        # Non-public templates only visible to owner or admin
+        if not data.get('is_public'):
+            uid = await _get_user_id(request)
+            if not uid or (data.get('user_id') != uid and not admin_required(request)):
+                return JSONResponse({'detail': 'not found'}, status_code=404)
+    return JSONResponse(jsonable_encoder(data))
+
+
+@app.post('/skills')
+async def create_skill_template(request: Request, payload: SkillTemplateCreate) -> JSONResponse:
+    """Create a new skill template."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+    async with async_session() as session:
+        tmpl = SkillTemplate(
+            user_id=uid,
+            title=payload.title,
+            title_fa=payload.title_fa,
+            description=payload.description,
+            description_fa=payload.description_fa,
+            category=payload.category,
+            prompt_template=payload.prompt_template,
+            variables=payload.variables,
+            default_model=payload.default_model,
+            is_public=payload.is_public,
+            tags=payload.tags,
+        )
+        session.add(tmpl)
+        await session.commit()
+        await session.refresh(tmpl)
+        return JSONResponse(jsonable_encoder({
+            'id': tmpl.id, 'title': tmpl.title, 'title_fa': tmpl.title_fa,
+            'description': tmpl.description, 'description_fa': tmpl.description_fa,
+            'category': tmpl.category, 'prompt_template': tmpl.prompt_template,
+            'variables': tmpl.variables, 'default_model': tmpl.default_model,
+            'is_public': tmpl.is_public, 'is_featured': tmpl.is_featured,
+            'usage_count': tmpl.usage_count, 'rating_sum': tmpl.rating_sum,
+            'rating_count': tmpl.rating_count, 'tags': tmpl.tags,
+            'created_at': tmpl.created_at, 'updated_at': tmpl.updated_at,
+        }))
+
+
+@app.put('/skills/{template_id}')
+async def update_skill_template(request: Request, template_id: int, payload: SkillTemplateUpdate) -> JSONResponse:
+    """Update a skill template (owner only)."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+    async with async_session() as session:
+        res = await session.execute(
+            SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
+        )
+        row = res.fetchone()
+        if not row:
+            return JSONResponse({'detail': 'not found'}, status_code=404)
+        if row.user_id != uid:
+            return JSONResponse({'detail': 'forbidden'}, status_code=403)
+        update_data = {}
+        for field in ['title', 'title_fa', 'description', 'description_fa', 'category',
+                       'prompt_template', 'variables', 'default_model', 'is_public', 'tags']:
+            val = getattr(payload, field, None)
+            if val is not None:
+                update_data[field] = val
+        if update_data:
+            update_data['updated_at'] = datetime.now(timezone.utc).replace(tzinfo=None)
+            await session.execute(
+                SkillTemplate.__table__.update().where(SkillTemplate.id == template_id),
+                update_data,
+            )
+            await session.commit()
+    return JSONResponse({'status': 'ok'})
+
+
+@app.delete('/skills/{template_id}')
+async def delete_skill_template(request: Request, template_id: int) -> JSONResponse:
+    """Delete a skill template (owner only)."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+    async with async_session() as session:
+        res = await session.execute(
+            SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
+        )
+        row = res.fetchone()
+        if not row:
+            return JSONResponse({'detail': 'not found'}, status_code=404)
+        if row.user_id != uid:
+            return JSONResponse({'detail': 'forbidden'}, status_code=403)
+        await session.execute(
+            SkillTemplate.__table__.delete().where(SkillTemplate.id == template_id)
+        )
+        await session.commit()
+    return JSONResponse({'status': 'deleted'})
+
+
+@app.post('/skills/{template_id}/rate')
+async def rate_skill_template(request: Request, template_id: int, payload: SkillRatingRequest) -> JSONResponse:
+    """Rate a skill template (1-5)."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if payload.rating < 1 or payload.rating > 5:
+        return JSONResponse({'detail': 'rating must be between 1 and 5'}, status_code=400)
+    if async_session is None:
+        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+    async with async_session() as session:
+        # Check template exists
+        res = await session.execute(
+            SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
+        )
+        if not res.fetchone():
+            return JSONResponse({'detail': 'not found'}, status_code=404)
+        # Upsert rating
+        existing = await session.execute(
+            SkillTemplateRating.__table__.select().where(
+                SkillTemplateRating.template_id == template_id,
+                SkillTemplateRating.user_id == uid,
+            )
+        )
+        old_rating = existing.fetchone()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        if old_rating:
+            old_val = old_rating.rating
+            await session.execute(
+                SkillTemplateRating.__table__.update().where(
+                    SkillTemplateRating.template_id == template_id,
+                    SkillTemplateRating.user_id == uid,
+                ),
+                {'rating': payload.rating, 'created_at': now},
+            )
+            # Update aggregates: subtract old, add new
+            await session.execute(
+                SkillTemplate.__table__.update().where(SkillTemplate.id == template_id),
+                {
+                    'rating_sum': SkillTemplate.rating_sum - old_val + payload.rating,
+                    'updated_at': now,
+                },
+            )
+        else:
+            session.add(SkillTemplateRating(
+                template_id=template_id,
+                user_id=uid,
+                rating=payload.rating,
+            ))
+            await session.execute(
+                SkillTemplate.__table__.update().where(SkillTemplate.id == template_id),
+                {
+                    'rating_sum': SkillTemplate.rating_sum + payload.rating,
+                    'rating_count': SkillTemplate.rating_count + 1,
+                    'updated_at': now,
+                },
+            )
+        await session.commit()
+    return JSONResponse({'status': 'ok'})
+
+
+@app.post('/skills/{template_id}/use')
+async def use_skill_template(request: Request, template_id: int, payload: SkillUseRequest) -> JSONResponse:
+    """Use a skill template: increment usage count and return rendered prompt."""
+    if async_session is None:
+        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+    async with async_session() as session:
+        res = await session.execute(
+            SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
+        )
+        row = res.fetchone()
+        if not row:
+            return JSONResponse({'detail': 'not found'}, status_code=404)
+        # Increment usage count
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        await session.execute(
+            SkillTemplate.__table__.update().where(SkillTemplate.id == template_id),
+            {'usage_count': SkillTemplate.usage_count + 1, 'updated_at': now},
+        )
+        await session.commit()
+        # Render prompt template by replacing {var_name} placeholders
+        rendered = row.prompt_template
+        for var_name, var_value in payload.variables.items():
+            rendered = rendered.replace('{' + var_name + '}', var_value)
+        model = payload.model or row.default_model or ''
+    return JSONResponse(jsonable_encoder({
+        'rendered_prompt': rendered,
+        'model': model,
+    }))
 
 
 # ═══════════════════════════════════════

@@ -158,6 +158,21 @@ class ProxyConfig(Base):
     default_model: Mapped[str] = mapped_column(default='')  # org-wide default model
     updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
+
+class Assistant(Base):
+    __tablename__ = 'assistants'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(sqlalchemy.ForeignKey('users.id'), index=True)
+    name: Mapped[str] = mapped_column(default='New Assistant')
+    description: Mapped[str] = mapped_column(default='')
+    system_prompt: Mapped[str] = mapped_column(default='')
+    model_id: Mapped[str] = mapped_column(default='')  # empty = use org default
+    icon: Mapped[str] = mapped_column(default='chat')
+    is_public: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+
 class Conversation(Base):
     __tablename__ = 'conversations'
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -827,6 +842,27 @@ async def chat(request: Request, payload: dict[str, Any]) -> Response:
     quota_err = await _check_quota_pre(uid)
     if quota_err is not None:
         return quota_err
+
+    # Assistant injection: if assistant_id provided, prepend its system prompt
+    _assistant_id = payload.pop('assistant_id', None)
+    if _assistant_id and async_session is not None:
+        try:
+            async with async_session() as _asession:
+                _ares = await _asession.execute(
+                    Assistant.__table__.select().where(Assistant.id == int(_assistant_id))
+                )
+                _arow = _ares.fetchone()
+                if _arow and _arow.system_prompt:
+                    _sys_msg = {'role': 'system', 'content': _arow.system_prompt}
+                    _msgs = payload.get('messages', [])
+                    # Prepend assistant system prompt (before any existing system messages)
+                    _msgs.insert(0, _sys_msg)
+                    payload['messages'] = _msgs
+                    # Use assistant's model if specified and no model in payload
+                    if _arow.model_id and not payload.get('model'):
+                        payload['model'] = _arow.model_id
+        except Exception:
+            pass  # fail-open: don't block chat if assistant lookup fails
 
     # Memory injection: prepend user memories as system context
     memories = await _get_user_memories(uid)
@@ -1505,6 +1541,113 @@ async def set_org_default_model(request: Request, payload: dict[str, Any]) -> JS
         await session.commit()
     await _write_audit_log('admin.org_default_model.set', details={'model': model_id})
     return JSONResponse({'status': 'ok', 'default_model': model_id})
+
+
+# ===== Assistants CRUD =====
+
+class AssistantCreate(BaseModel):
+    name: str = 'New Assistant'
+    description: str = ''
+    system_prompt: str = ''
+    model_id: str = ''
+    icon: str = 'chat'
+    is_public: bool = False
+
+
+@app.get('/assistants')
+async def list_assistants(request: Request) -> JSONResponse:
+    """List user's assistants + public ones."""
+    uid = await _get_user_id(request)
+    if async_session is None:
+        return JSONResponse([])
+    async with async_session() as session:
+        if uid:
+            res = await session.execute(
+                Assistant.__table__.select().where(
+                    (Assistant.user_id == uid) | (Assistant.is_public == True)
+                ).order_by(Assistant.updated_at.desc())
+            )
+        else:
+            res = await session.execute(
+                Assistant.__table__.select().where(Assistant.is_public == True)
+                .order_by(Assistant.updated_at.desc())
+            )
+        rows = res.fetchall()
+        return JSONResponse(jsonable_encoder([dict(r._mapping) for r in rows]))
+
+
+@app.post('/assistants')
+async def create_assistant(request: Request, payload: AssistantCreate) -> JSONResponse:
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+    async with async_session() as session:
+        obj = Assistant(
+            user_id=uid, name=payload.name, description=payload.description,
+            system_prompt=payload.system_prompt, model_id=payload.model_id,
+            icon=payload.icon, is_public=payload.is_public,
+        )
+        session.add(obj)
+        await session.commit()
+        await session.refresh(obj)
+    return JSONResponse({'status': 'ok', 'id': obj.id})
+
+
+@app.get('/assistants/{assistant_id}')
+async def get_assistant(assistant_id: int, request: Request) -> JSONResponse:
+    if async_session is None:
+        return JSONResponse({'detail': 'not found'}, status_code=404)
+    async with async_session() as session:
+        res = await session.execute(
+            Assistant.__table__.select().where(Assistant.id == assistant_id)
+        )
+        row = res.fetchone()
+        if not row:
+            return JSONResponse({'detail': 'not found'}, status_code=404)
+        return JSONResponse(jsonable_encoder(dict(row._mapping)))
+
+
+@app.put('/assistants/{assistant_id}')
+async def update_assistant(assistant_id: int, request: Request, payload: dict[str, Any]) -> JSONResponse:
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+    async with async_session() as session:
+        res = await session.execute(
+            Assistant.__table__.select().where(Assistant.id == assistant_id, Assistant.user_id == uid)
+        )
+        row = res.fetchone()
+        if not row:
+            return JSONResponse({'detail': 'not found or not owned'}, status_code=404)
+        obj = await session.get(Assistant, assistant_id)
+        for field in ('name', 'description', 'system_prompt', 'model_id', 'icon', 'is_public'):
+            if field in payload:
+                setattr(obj, field, payload[field])
+        obj.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        await session.commit()
+    return JSONResponse({'status': 'ok'})
+
+
+@app.delete('/assistants/{assistant_id}')
+async def delete_assistant(assistant_id: int, request: Request) -> JSONResponse:
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+    async with async_session() as session:
+        res = await session.execute(
+            Assistant.__table__.select().where(Assistant.id == assistant_id, Assistant.user_id == uid)
+        )
+        if not res.fetchone():
+            return JSONResponse({'detail': 'not found'}, status_code=404)
+        await session.execute(Assistant.__table__.delete().where(Assistant.id == assistant_id))
+        await session.commit()
+    return JSONResponse({'status': 'ok'})
 
 
 # ===== Public content (frontend) =====

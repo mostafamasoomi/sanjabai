@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { useCatalog } from '@/lib/useCatalog'
 import { type ModelCatalogItem } from '@/types/catalog'
@@ -27,6 +28,17 @@ type Conversation = {
 
 type ConversationDetail = Conversation & {
   messages: { role: string; content: string }[]
+}
+
+type Assistant = {
+  id: number
+  name: string
+  description: string
+  system_prompt: string
+  model_id: string | null
+  icon: string | null
+  is_public: boolean
+  user_id: number
 }
 
 /* ── Icon helper (inline SVG for special cases) ──────────────────────── */
@@ -113,6 +125,12 @@ export default function ChatPage() {
   const [usageStats, setUsageStats] = useState<UsageStats>({ promptTokens: 0, completionTokens: 0, totalTokens: 0, estimatedCost: 0 })
   const exportMenuRef = useRef<HTMLDivElement>(null)
 
+  /* ── Assistant integration ──────────────────────────────────────────── */
+  const searchParams = useSearchParams()
+  const assistantParam = searchParams?.get('assistant')
+  const [activeAssistant, setActiveAssistant] = useState<Assistant | null>(null)
+  const [loadingAssistant, setLoadingAssistant] = useState(false)
+
   /* ── Conversation sidebar state ──────────────────────────────────────── */
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
@@ -142,6 +160,32 @@ export default function ChatPage() {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  /* ── Load assistant from URL param ────────────────────────────────── */
+  useEffect(() => {
+    if (!assistantParam || !token) {
+      setActiveAssistant(null)
+      return
+    }
+    let cancelled = false
+    setLoadingAssistant(true)
+    fetch(`/api/assistants/${assistantParam}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data: Assistant) => {
+        if (cancelled) return
+        setActiveAssistant(data)
+        // Set model from assistant if specified
+        if (data.model_id && models.length > 0) {
+          const found = models.find(m => m.providerModelId === data.model_id || m.id === data.model_id)
+          if (found) setModel(found)
+        }
+      })
+      .catch(() => { if (!cancelled) setActiveAssistant(null) })
+      .finally(() => { if (!cancelled) setLoadingAssistant(false) })
+    return () => { cancelled = true }
+  }, [assistantParam, token, models])
 
   /* ── Conversation API helpers ────────────────────────────────────────── */
   const authHeaders = useCallback((): Record<string, string> => {
@@ -408,6 +452,7 @@ export default function ChatPage() {
             messages: updated.map(m => ({ role: m.role, content: m.content })),
             stream: true,
             ...(webSearch ? { web_search: true } : {}),
+            ...(activeAssistant ? { assistant_id: activeAssistant.id } : {}),
           }),
           signal: controller.signal,
         })
@@ -709,6 +754,59 @@ export default function ChatPage() {
               title="مدلی در دسترس نیست"
               description="در حال حاضر فهرست مدلها خالی است. لطفاً اتصال را بررسی کرده و دوباره تلاش کنید."
             />
+          )}
+
+          {/* ── Assistant banner ─────────────────────────────────────── */}
+          {(activeAssistant || loadingAssistant) && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.75rem 1rem',
+                background: 'var(--bg-surface)',
+                borderBottom: '1px solid var(--border)',
+              }}
+            >
+              {loadingAssistant ? (
+                <div className="skeleton" style={{ width: '100%', height: '1.5rem', borderRadius: 'var(--radius-sm)' }} />
+              ) : activeAssistant ? (
+                <>
+                  <div
+                    style={{
+                      width: '2rem',
+                      height: '2rem',
+                      borderRadius: 'var(--radius-md)',
+                      background: 'var(--accent)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Icon name={(activeAssistant.icon as any) || 'sparkles'} size={16} className="text-white" />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                      {activeAssistant.name}
+                    </div>
+                    {activeAssistant.description && (
+                      <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {activeAssistant.description}
+                      </div>
+                    )}
+                  </div>
+                  <a
+                    href={`/assistants/${activeAssistant.id}`}
+                    className="btn btn-ghost btn-sm"
+                    style={{ fontSize: '0.6875rem', flexShrink: 0 }}
+                  >
+                    <Icon name="settings" size={12} />
+                    تنظیمات
+                  </a>
+                </>
+              ) : null}
+            </div>
           )}
 
           {/* ── Messages ────────────────────────────────────────────── */}

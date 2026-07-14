@@ -842,6 +842,26 @@ async def chat(request: Request, payload: dict[str, Any]) -> Response:
         messages.insert(insert_idx, memory_msg)
         payload['messages'] = messages
 
+    # Web search injection: if client requests web_search, search DuckDuckGo
+    # for the last user message and inject results as system context.
+    if payload.pop('web_search', False):
+        _msgs = payload.get('messages', [])
+        _query = ''
+        for _m in reversed(_msgs):
+            if isinstance(_m, dict) and _m.get('role') == 'user':
+                _query = _m.get('content', '')
+                break
+        if _query:
+            _results = await _web_search(_query)
+            if _results:
+                _search_msg = {'role': 'system', 'content': f'[Web Search Results for: {_query[:100]}]\n{_results}'}
+                _idx = 0
+                for _i, _m in enumerate(_msgs):
+                    if isinstance(_m, dict) and _m.get('role') == 'system':
+                        _idx = _i + 1
+                _msgs.insert(_idx, _search_msg)
+                payload['messages'] = _msgs
+
     stream = payload.get('stream', False)
     if stream:
         return await _chat_stream(payload, request)
@@ -889,6 +909,39 @@ async def _extract_file_text(upload: UploadFile) -> tuple[str, str]:
         except Exception as e:  # noqa: BLE001
             return '', f'pdf extract error: {e}'
     return '', f'unsupported file type: {name or "unknown"}'
+
+
+async def _web_search(query: str, max_results: int = 5) -> str:
+    """Search DuckDuckGo via httpx (respects system proxy). Returns formatted results."""
+    try:
+        import re as _re
+        from urllib.parse import unquote
+        async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
+            r = await client.post(
+                'https://html.duckduckgo.com/html/',
+                data={'q': query, 'b': ''},
+                headers={'User-Agent': 'Mozilla/5.0 (compatible; Multiai/1.0)'},
+            )
+            if r.status_code != 200:
+                return ''
+            html = r.text
+            links = _re.findall(r'class="result__a"\s+href="([^"]+)"[^>]*>(.+?)</a>', html)
+            snippets = _re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', html, _re.DOTALL)
+            if not links:
+                return ''
+            lines = []
+            for i, (href, title) in enumerate(links[:max_results]):
+                title = _re.sub(r'<[^>]+>', '', title).strip()
+                snippet = _re.sub(r'<[^>]+>', '', snippets[i]).strip() if i < len(snippets) else ''
+                actual_url = href
+                if 'uddg=' in href:
+                    m = _re.search(r'uddg=([^&]+)', href)
+                    if m:
+                        actual_url = unquote(m.group(1))
+                lines.append(f'• {title}\n  {snippet}\n  {actual_url}')
+            return '\n'.join(lines)
+    except Exception:
+        return ''
 
 
 @app.post('/v1/chat/with-file')

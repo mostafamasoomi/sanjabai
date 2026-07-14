@@ -98,6 +98,9 @@ export default function ChatPage() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [attachedFile, setAttachedFile] = useState<File | null>(null)
+  const [webSearch, setWebSearch] = useState<boolean>(() => {
+    try { return localStorage.getItem('multiai_web_search') === 'true' } catch { return false }
+  })
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [showPresets, setShowPresets] = useState(true)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
@@ -127,6 +130,9 @@ export default function ChatPage() {
   useEffect(() => {
     try { localStorage.setItem('multiai_smart_mode', smartMode ? 'true' : 'false') } catch {}
   }, [smartMode])
+  useEffect(() => {
+    try { localStorage.setItem('multiai_web_search', webSearch ? 'true' : 'false') } catch {}
+  }, [webSearch])
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
@@ -391,6 +397,7 @@ export default function ChatPage() {
             model: model.providerModelId || model.id,
             messages: updated.map(m => ({ role: m.role, content: m.content })),
             stream: true,
+            ...(webSearch ? { web_search: true } : {}),
           }),
           signal: controller.signal,
         })
@@ -479,7 +486,7 @@ export default function ChatPage() {
       setStreaming(false)
       abortRef.current = null
     }
-  }, [messages, model, token, smartMode, createConversation, saveMessages, attachedFile])
+  }, [messages, model, token, smartMode, webSearch, createConversation, saveMessages, attachedFile])
 
   // Keep ref in sync so retry() can call sendMessage without circular deps
   useEffect(() => { sendMessageRef.current = sendMessage }, [sendMessage])
@@ -830,6 +837,16 @@ export default function ChatPage() {
                 title="پیوست فایل (txt, md, csv, json, pdf)"
               >
                 <Icon name="paperclip" size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setWebSearch(!webSearch)}
+                className={"btn btn-ghost btn-icon rounded-xl shrink-0" + (webSearch ? " text-[var(--accent)]" : "")}
+                aria-label="جستجوی وب"
+                title="جستجوی وب"
+                style={webSearch ? { color: 'var(--accent, #3b82f6)' } : {}}
+              >
+                <Icon name="globe" size={18} />
               </button>
               <textarea
                 ref={inputRef}

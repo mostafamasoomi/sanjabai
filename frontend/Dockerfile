@@ -2,6 +2,8 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package.json ./
 RUN npm install --no-audit --no-fund
+ARG NEXT_PUBLIC_API_URL=http://127.0.0.1:8081
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 COPY . .
 RUN npm run build
 

@@ -190,18 +190,18 @@ export default function AdminPage() {
   const loadAll = useCallback(async () => {
     setLoading(true)
     const tasks = [
-      { fn: async () => { const r = await api('/admin/analytics'); setAnalytics(await r.json()) }, label: 'analytics' },
-      { fn: async () => { const r = await api('/admin/pricing'); setPrices(await r.json()) }, label: 'pricing' },
-      { fn: async () => { const r = await api('/admin/features'); setFeatures(await r.json()) }, label: 'features' },
-      { fn: async () => { const r = await api('/admin/discounts'); setDiscounts(await r.json()) }, label: 'discounts' },
+      { fn: async () => { const r = await api('/api/admin/analytics'); setAnalytics(await r.json()) }, label: 'analytics' },
+      { fn: async () => { const r = await api('/api/admin/pricing'); setPrices(await r.json()) }, label: 'pricing' },
+      { fn: async () => { const r = await api('/api/admin/features'); setFeatures(await r.json()) }, label: 'features' },
+      { fn: async () => { const r = await api('/api/admin/discounts'); setDiscounts(await r.json()) }, label: 'discounts' },
       { fn: async () => {
-        const r = await api('/admin/about')
+        const r = await api('/api/admin/about')
         const d = await r.json()
         setAbTitle(d.title || '')
         setAbBody(d.body || '')
       }, label: 'about' },
       { fn: async () => {
-        const r = await api('/admin/proxy')
+        const r = await api('/api/admin/proxy')
         const d = await r.json()
         setProxyConfig(d)
         setPxType(d.proxy_type || 'socks5')
@@ -213,7 +213,7 @@ export default function AdminPage() {
         const d = await r.json()
         setModels((d.data || []).map((m: { id: string }) => m.id))
       }, label: 'models' },
-      { fn: async () => { const r = await api('/admin/users'); setUsers(await r.json()) }, label: 'users' },
+      { fn: async () => { const r = await api('/api/admin/users'); setUsers(await r.json()) }, label: 'users' },
       { fn: async () => {
         try {
           const r = await fetch('/api/org/default-model')
@@ -238,7 +238,7 @@ export default function AdminPage() {
     if (!token) return
     setLoggingIn(true)
     try {
-      const res = await fetch('/admin/analytics', { headers: { Authorization: 'Bearer ' + token } })
+      const res = await fetch('/api/admin/analytics', { headers: { Authorization: 'Bearer ' + token } })
       if (res.ok) {
         TOKEN = token
         setAuthed(true)
@@ -258,7 +258,7 @@ export default function AdminPage() {
   const savePricing = async () => {
     if (!pzModel.trim()) return
     try {
-      await api('/admin/pricing', {
+      await api('/api/admin/pricing', {
         method: 'POST',
         body: JSON.stringify({ model: pzModel, input_per_million: +pzIn || 0, output_per_million: +pzOut || 0, currency: pzCur }),
       })
@@ -273,7 +273,7 @@ export default function AdminPage() {
   const saveFeature = async () => {
     if (!ftTitle.trim()) return
     try {
-      await api('/admin/features', {
+      await api('/api/admin/features', {
         method: 'POST',
         body: JSON.stringify({ id: ftId ? +ftId : undefined, title: ftTitle, description: ftDesc, icon: ftIcon, order_idx: +ftOrder || 0, active: ftActive }),
       })
@@ -290,7 +290,7 @@ export default function AdminPage() {
 
   const delFeature = async (id: number) => {
     try {
-      await api('/admin/features/' + id, { method: 'DELETE' })
+      await api('/api/admin/features/' + id, { method: 'DELETE' })
       toast('ویژگی حذف شد', 'success')
       loadAll()
     } catch { toast('خطا در حذف ویژگی', 'error') }
@@ -305,7 +305,7 @@ export default function AdminPage() {
   const saveDiscount = async () => {
     if (!dcCode.trim()) return
     try {
-      await api('/admin/discounts', {
+      await api('/api/admin/discounts', {
         method: 'POST',
         body: JSON.stringify({ id: dcId ? +dcId : undefined, code: dcCode, percent: +dcPercent || 0, active: dcActive }),
       })
@@ -321,7 +321,7 @@ export default function AdminPage() {
 
   const delDiscount = async (id: number) => {
     try {
-      await api('/admin/discounts/' + id, { method: 'DELETE' })
+      await api('/api/admin/discounts/' + id, { method: 'DELETE' })
       toast('تخفیف حذف شد', 'success')
       loadAll()
     } catch { toast('خطا در حذف تخفیف', 'error') }
@@ -335,7 +335,7 @@ export default function AdminPage() {
 
   const saveAbout = async () => {
     try {
-      await api('/admin/about', { method: 'POST', body: JSON.stringify({ title: abTitle, body: abBody }) })
+      await api('/api/admin/about', { method: 'POST', body: JSON.stringify({ title: abTitle, body: abBody }) })
       toast('درباره ما ذخیره شد', 'success')
     } catch { toast('خطا در ذخیره', 'error') }
   }
@@ -344,7 +344,7 @@ export default function AdminPage() {
 
   const saveProxy = async () => {
     try {
-      await api('/admin/proxy', { method: 'POST', body: JSON.stringify({ proxy_type: pxType, proxy_url: pxUrl, active: pxActive }) })
+      await api('/api/admin/proxy', { method: 'POST', body: JSON.stringify({ proxy_type: pxType, proxy_url: pxUrl, active: pxActive }) })
       toast('تنظیمات پروکسی ذخیره شد', 'success')
       loadAll()
     } catch { toast('خطا در ذخیره پروکسی', 'error') }
@@ -355,7 +355,7 @@ export default function AdminPage() {
   const saveOrgDefaultModel = async () => {
     setOrgDefaultSaving(true)
     try {
-      await api('/admin/org-default-model', {
+      await api('/api/admin/org-default-model', {
         method: 'POST',
         body: JSON.stringify({ default_model: orgDefaultModel || null }),
       })

@@ -23,6 +23,8 @@ const nextConfig = {
       { source: '/api/:path*', destination: `${API_BACKEND}/:path*` },
       // Proxy /v1/* to backend (chat completions)
       { source: '/v1/:path*', destination: `${API_BACKEND}/v1/:path*` },
+      // Proxy /admin/* API calls to backend
+      // { source: '/admin/:path+', destination: `${API_BACKEND}/admin/:path+` },
     ]
   },
 }

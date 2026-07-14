@@ -11,7 +11,14 @@ export async function POST(request: Request) {
       body: JSON.stringify(body),
     })
     const data = await res.json()
-    return NextResponse.json(data, { status: res.status })
+    const response = NextResponse.json(data, { status: res.status })
+    // Forward Set-Cookie from backend so the browser gets the session cookie
+    // as a fallback auth mechanism alongside the localStorage token.
+    const setCookie = res.headers.get('set-cookie')
+    if (setCookie) {
+      response.headers.set('Set-Cookie', setCookie)
+    }
+    return response
   } catch {
     return NextResponse.json({ detail: 'login failed' }, { status: 500 })
   }

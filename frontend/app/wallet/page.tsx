@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
@@ -303,10 +304,10 @@ export default function WalletPage() {
           </div>
           <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>کیف پول</h2>
           <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>برای مشاهده کیف پول، ابتدا وارد حساب خود شوید.</p>
-          <a href="/login" className="btn btn-lg btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <Link href="/login" className="btn btn-lg btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             ورود
             <Icon name="arrowLeft" size={16} />
-          </a>
+          </Link>
         </div>
       </div>
     )

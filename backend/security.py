@@ -153,6 +153,46 @@ MAX_PASSWORD_LENGTH = 128
 BANNED_EMAIL_DOMAINS = {'mailinator.com', 'guerrillamail.com', '10minutemail.com', 'tempmail.com'}
 
 
+# ── CSRF Defense-in-Depth ─────────────────────────────────
+
+# Paths that are cookie-authenticated user mutation endpoints.
+# Admin endpoints already have their own CSRF token system.
+_CSRF_PROTECTED_PREFIXES = ('/auth/', '/api-keys', '/referral/')
+_SAFE_METHODS = ('GET', 'HEAD', 'OPTIONS')
+
+
+class CsrfMiddleware(BaseHTTPMiddleware):
+    """Require a custom header on cookie-authenticated mutation requests.
+
+    Cross-origin forms cannot set custom headers, so requiring
+    X-Requested-With prevents CSRF even if SameSite is bypassed.
+    Only applies to paths that use session cookies for auth.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        if request.method in _SAFE_METHODS:
+            return await call_next(request)
+
+        path = request.url.path
+        if not any(path.startswith(p) for p in _CSRF_PROTECTED_PREFIXES):
+            return await call_next(request)
+
+        # If no session cookie present, skip (API key auth doesn't need CSRF)
+        session_cookie = request.cookies.get('session')
+        if not session_cookie:
+            return await call_next(request)
+
+        # Require custom header for cookie-authenticated mutations
+        xrw = request.headers.get('x-requested-with', '')
+        if not xrw:
+            return JSONResponse(
+                {'detail': 'missing X-Requested-With header (CSRF protection)'},
+                status_code=403,
+            )
+
+        return await call_next(request)
+
+
 def validate_email(email: str) -> tuple[bool, str]:
     """Validate email format and domain"""
     if not email or len(email) > MAX_EMAIL_LENGTH:

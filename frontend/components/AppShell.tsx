@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { AuthProvider, useAuth } from '@/lib/auth'
 import { ToastContainer } from '@/components/ui'
 import { ThemeToggle } from '@/components/ThemeToggle'
@@ -92,7 +93,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   const isActive = (href: string) => pathname === href || pathname?.startsWith(href + '/')
 
   const NavItemLink = ({ item }: { item: NavItem }) => (
-    <a
+    <Link
       key={item.href}
       href={item.href}
       className={`sidebar-nav-item ${isActive(item.href) ? 'sidebar-nav-item--active' : ''}`}
@@ -100,7 +101,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       {isActive(item.href) && <span className="sidebar-active-bar" />}
       <Icon name={item.icon} size={18} />
       <span>{item.label}</span>
-    </a>
+    </Link>
   )
 
   const sections = [
@@ -117,7 +118,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           <div className="w-7 h-7 rounded-lg bg-[var(--accent)] flex items-center justify-center">
             <span className="text-white text-sm font-bold">M</span>
           </div>
-          <a href="/" className="text-base font-bold text-gradient tracking-tight">Multiai</a>
+          <Link href="/" className="text-base font-bold text-gradient tracking-tight">Multiai</Link>
         </div>
         <div className="divider" />
 
@@ -150,14 +151,14 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               </button>
               {userMenuOpen && (
                 <div className="sidebar-user-menu fade-in">
-                  <a href="/profile" className="sidebar-user-menu-item">
+                  <Link href="/profile" className="sidebar-user-menu-item">
                     <Icon name="profile" size={14} />
                     پروفایل
-                  </a>
-                  <a href="/dashboard" className="sidebar-user-menu-item">
+                  </Link>
+                  <Link href="/dashboard" className="sidebar-user-menu-item">
                     <Icon name="dashboard" size={14} />
                     داشبورد
-                  </a>
+                  </Link>
                   <div className="divider" style={{ margin: '4px 0' }} />
                   <button onClick={logout} className="sidebar-user-menu-item sidebar-user-menu-item--danger">
                     <Icon name="close" size={14} />
@@ -167,7 +168,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               )}
             </div>
           ) : (
-            <a href="/login" className="btn btn-primary w-full text-sm">ورود / ثبتنام</a>
+            <Link href="/login" className="btn btn-primary w-full text-sm">ورود / ثبتنام</Link>
           )}
         </div>
       </aside>
@@ -184,7 +185,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
             >
               <Icon name={sidebarOpen ? 'close' : 'menu'} size={20} />
             </button>
-            <a href="/" className="md:hidden text-base font-bold text-gradient">Multiai</a>
+            <Link href="/" className="md:hidden text-base font-bold text-gradient">Multiai</Link>
           </div>
 
           <div className="flex items-center gap-2">
@@ -198,7 +199,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
             </button>
             <ThemeToggle />
             {!loading && !user && (
-              <a href="/login" className="btn btn-primary btn-sm">ورود</a>
+              <Link href="/login" className="btn btn-primary btn-sm">ورود</Link>
             )}
           </div>
         </header>
@@ -209,7 +210,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         {/* Mobile bottom nav */}
         <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[var(--bg-surface)]/95 backdrop-blur border-t border-[var(--border)] flex justify-around py-2 z-20 safe-bottom">
           {NAV.filter((n) => n.section === 'main').slice(0, 4).map((item) => (
-            <a
+            <Link
               key={item.href}
               href={item.href}
               className={`flex flex-col items-center gap-0.5 text-xs px-2 py-1 rounded-lg transition-colors min-w-0 ${
@@ -218,7 +219,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
             >
               <Icon name={item.icon} size={20} />
               <span className="truncate text-[10px]">{item.label}</span>
-            </a>
+            </Link>
           ))}
           <button
             onClick={() => openPalette(true)}
@@ -246,7 +247,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           </div>
           <nav className="p-2">
             {NAV.map((item) => (
-              <a
+              <Link
                 key={item.href}
                 href={item.href}
                 className={`sidebar-nav-item ${isActive(item.href) ? 'sidebar-nav-item--active' : ''}`}
@@ -254,7 +255,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
                 {isActive(item.href) && <span className="sidebar-active-bar" />}
                 <Icon name={item.icon} size={18} />
                 <span>{item.label}</span>
-              </a>
+              </Link>
             ))}
           </nav>
           <div className="p-3 border-t border-[var(--border)]">
@@ -264,7 +265,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
                 <button onClick={logout} className="btn btn-ghost btn-sm w-full text-[var(--danger)]">خروج</button>
               </div>
             ) : (
-              <a href="/login" className="btn btn-primary w-full">ورود / ثبتنام</a>
+              <Link href="/login" className="btn btn-primary w-full">ورود / ثبتنام</Link>
             )}
           </div>
         </div>

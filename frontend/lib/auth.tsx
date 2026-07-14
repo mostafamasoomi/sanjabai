@@ -29,9 +29,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (t) {
       setToken(t)
       fetch('/api/auth/me', { headers: { Authorization: `Bearer ${t}` } })
-        .then((r) => (r.ok ? r.json() : Promise.reject()))
-        .then((u) => setUser(u))
-        .catch(() => { localStorage.removeItem('auth_token'); setToken(null) })
+        .then((r) => {
+          if (r.ok) return r.json()
+          // Only clear token on definitive auth failures (401/403).
+          // Transient errors (500, 502, network) should NOT destroy a valid session.
+          if (r.status === 401 || r.status === 403) {
+            localStorage.removeItem('auth_token')
+            setToken(null)
+          }
+          return Promise.reject()
+        })
+        .then((u) => { if (u) setUser(u) })
+        .catch(() => { /* token kept on transient errors — will retry on next mount */ })
         .finally(() => setLoading(false))
     } else {
       setLoading(false)

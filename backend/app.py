@@ -445,13 +445,14 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv('CORS_ORIGINS', 'https://multiai.ir,http://localhost:3003').split(','),
     allow_credentials=False,
-    allow_methods=['*'],
-    allow_headers=['*'],
+    allow_methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allow_headers=['Authorization', 'Content-Type', 'X-Requested-With'],
 )
 
 # Security middleware
-from security import RateLimitMiddleware, SecurityHeadersMiddleware
+from security import RateLimitMiddleware, SecurityHeadersMiddleware, CsrfMiddleware
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(CsrfMiddleware)
 app.add_middleware(RateLimitMiddleware)
 
 async def get_db() -> AsyncIterator[AsyncSession]:
@@ -1828,7 +1829,7 @@ def _hash_password(password: str) -> str:
 def _verify_password(password: str, stored: str) -> bool:
     salt, h = stored.split('$')
     dk = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000)
-    return h == dk.hex()
+    return hmac.compare_digest(h, dk.hex())
 
 def _gen_token() -> str:
     return secrets.token_urlsafe(32)
@@ -1925,6 +1926,7 @@ async def signup(payload: AuthSignup) -> JSONResponse:
         token = _create_session(user.id)
         response = JSONResponse({'token': token, 'user': {'id': user.id, 'email': user.email}})
         _set_session_cookie(response, token)
+        await _write_audit_log('auth.signup', target_type='user', target_id=user.id, details={'email': user.email})
         return response
 
 @app.post('/auth/login')
@@ -1935,10 +1937,12 @@ async def login(payload: AuthLogin) -> JSONResponse:
         res = await session.execute(User.__table__.select().where(User.email == payload.email))
         user = res.fetchone()
         if not user or not user.password_hash or not _verify_password(payload.password, user.password_hash):
+            await _write_audit_log('auth.login_failed', details={'email': payload.email})
             return JSONResponse({'detail': 'invalid email or password'}, status_code=401)
         token = _create_session(user.id)
         response = JSONResponse({'token': token, 'user': {'id': user.id, 'email': user.email}})
         _set_session_cookie(response, token)
+        await _write_audit_log('auth.login', target_type='user', target_id=user.id, details={'email': user.email})
         return response
 
 @app.get('/auth/me')
@@ -2004,6 +2008,7 @@ async def logout(request: Request) -> JSONResponse:
         rds.delete(f'session:{token}')
         if uid:
             rds.srem(f'sessions:{uid}', token)
+            await _write_audit_log('auth.logout', target_type='user', target_id=uid)
     response = JSONResponse({'status': 'ok'})
     _clear_session_cookie(response)
     return response
@@ -2019,6 +2024,7 @@ async def logout_all(request: Request) -> JSONResponse:
     for tok in tokens:
         rds.delete(f'session:{tok}')
     rds.delete(f'sessions:{uid}')
+    await _write_audit_log('auth.logout_all', target_type='user', target_id=uid, details={'revoked_sessions': len(tokens)})
     response = JSONResponse({'status': 'ok', 'revoked_sessions': len(tokens)})
     _clear_session_cookie(response)
     return response
@@ -2057,6 +2063,7 @@ async def change_password(request: Request, payload: ChangePasswordRequest) -> J
 
     response = JSONResponse({'status': 'ok'})
     _rotate_session(request, response, uid)
+    await _write_audit_log('auth.change_password', target_type='user', target_id=uid)
     return response
 
 
@@ -3539,6 +3546,7 @@ async def create_api_key(request: Request, payload: ApiKeyCreate) -> JSONRespons
         'expires_at': key.expires_at.isoformat() if key.expires_at else None,
         'created_at': key.created_at.isoformat() if key.created_at else None,
     })
+    await _write_audit_log('api_key.create', target_type='api_key', target_id=key.id, details={'name': payload.name, 'prefix': key_prefix})
 
 
 @app.get('/api-keys')
@@ -3590,6 +3598,7 @@ async def revoke_api_key(request: Request, key_id: int) -> JSONResponse:
             {'active': False, 'revoked_at': datetime.now(timezone.utc).replace(tzinfo=None)}
         )
         await session.commit()
+    await _write_audit_log('api_key.revoke', target_type='api_key', target_id=key_id, details={'user_id': uid})
     return JSONResponse({'status': 'revoked'})
 
 # ═══════════════════════════════════════

@@ -223,7 +223,10 @@ def _call_as(user_id, method, path, json_body=None, store=None):
                  patch("app.rds.srem", return_value=True), \
                  patch("app.rds.delete", return_value=True):
                 fn = getattr(c, method)
-                kwargs = {"cookies": {"session": f"tok{user_id}"}}
+                kwargs: dict = {"cookies": {"session": f"tok{user_id}"}}
+                # CSRF middleware requires X-Requested-With for cookie mutations
+                if method in ("post", "put", "delete", "patch"):
+                    kwargs["headers"] = {"X-Requested-With": "XMLHttpRequest"}
                 if json_body is not None:
                     kwargs["json"] = json_body
                 resp = fn(path, **kwargs)
@@ -420,7 +423,7 @@ def test_revoke_api_key_is_scoped():
                  patch("app.rds.sadd", return_value=True), \
                  patch("app.rds.srem", return_value=True), \
                  patch("app.rds.delete", return_value=True):
-                c.delete("/api-keys/999", cookies={"session": "tokA"})
+                c.delete("/api-keys/999", cookies={"session": "tokA"}, headers={"X-Requested-With": "XMLHttpRequest"})
     ev = " ".join(_statement_evidence(s, p) for s, p in cap.executed)
     assert str(USER_A) in ev, f"revoke must be scoped to owner A; evidence={ev!r}"
     assert str(USER_B) not in ev

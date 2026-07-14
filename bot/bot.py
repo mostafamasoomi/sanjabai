@@ -15,10 +15,9 @@ load_dotenv()
 BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
 API_URL = os.getenv('API_URL', 'http://multiai_api:8000')
 
-if not BOT_TOKEN:
-    print('TELEGRAM_BOT_TOKEN not set. Running in no-op mode.')
-    while True:
-        time.sleep(3600)
+if not BOT_TOKEN or BOT_TOKEN == 'your-bot-token':
+    print('⚠️  TELEGRAM_BOT_TOKEN not set or placeholder. Exiting gracefully.')
+    sys.exit(0)
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters

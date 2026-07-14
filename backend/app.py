@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, UploadFile, File, Form
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
@@ -856,6 +856,108 @@ async def chat(request: Request, payload: dict[str, Any]) -> Response:
     except Exception as e:
         return JSONResponse({'error': {'message': f'upstream unavailable: {e}', 'type': 'gateway_error'}}, status_code=502)
 
+
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB hard cap
+
+async def _extract_file_text(upload: UploadFile) -> tuple[str, str]:
+    """Return (text, error). Supports txt/md/csv/json/pdf.
+    Returns '' on unsupported so callers can 400 with a clear reason."""
+    name = (upload.filename or '').lower()
+    # Size guard: read in chunks, abort at MAX_FILE_SIZE
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await upload.read(65536)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_FILE_SIZE:
+            return '', f'file too large (max {MAX_FILE_SIZE // (1024*1024)} MB)'
+        chunks.append(chunk)
+    data = b''.join(chunks)
+    if name.endswith(('.txt', '.md', '.csv', '.json', '.log', '.text')):
+        try:
+            return data.decode('utf-8', errors='replace'), ''
+        except Exception as e:  # noqa: BLE001
+            return '', f'read error: {e}'
+    if name.endswith('.pdf'):
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(data))
+            text = '\n'.join((p.extract_text() or '') for p in reader.pages)
+            return text, ''
+        except Exception as e:  # noqa: BLE001
+            return '', f'pdf extract error: {e}'
+    return '', f'unsupported file type: {name or "unknown"}'
+
+
+@app.post('/v1/chat/with-file')
+async def chat_with_file(
+    request: Request,
+    file: UploadFile = File(...),
+    model: str = Form(''),
+    messages: str = Form('[]'),
+    stream: bool = Form(False),
+):
+    """Chat with an attached file (txt/md/csv/json/pdf).
+
+    Extracts text client-side-free on the server, appends it as a user
+    message, then forwards to LiteLLM exactly like /v1/chat/completions.
+    Mirrors chatone's 'upload & analyze any file' enterprise feature.
+    """
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    quota_err = await _check_quota_pre(uid)
+    if quota_err is not None:
+        return quota_err
+    # Parse supplied messages (JSON string from multipart form)
+    try:
+        msgs = json.loads(messages) if messages else []
+    except Exception:  # noqa: BLE001
+        msgs = []
+    if not isinstance(msgs, list):
+        msgs = []
+    # Extract attached file text
+    text, err = await _extract_file_text(file)
+    if err:
+        return JSONResponse({'error': {'message': err, 'type': 'file_error'}}, status_code=400)
+    if text.strip():
+        file_block = f'[Attached file: {file.filename}]\n\n{text[:50000]}'
+        msgs.append({'role': 'user', 'content': file_block})
+    # Build payload
+    selected_model = model or 'mimo-v2.5'
+    payload = {'model': selected_model, 'messages': msgs, 'stream': stream}
+    # Memory injection (same path as regular chat)
+    memories = await _get_user_memories(uid)
+    if memories:
+        memory_block = '\n'.join(f'- {m}' for m in memories)
+        memory_msg = {'role': 'system', 'content': f'[User Memories]\n{memory_block}'}
+        insert_idx = 0
+        for i, msg in enumerate(msgs):
+            if isinstance(msg, dict) and msg.get('role') == 'system':
+                insert_idx = i + 1
+                break
+        msgs.insert(insert_idx, memory_msg)
+        payload['messages'] = msgs
+    if stream:
+        return await _chat_stream(payload, request)
+    try:
+        async with httpx.AsyncClient(timeout=90) as client:
+            r = await client.post(
+                f'{LITELLM_HOST}/v1/chat/completions', json=payload,
+                headers={'Accept': 'application/json'},
+            )
+            if r.status_code == 200:
+                await _track_usage(request, payload, r.json())
+                return Response(content=r.content, status_code=200, media_type='application/json')
+            return Response(content=r.content, status_code=r.status_code, media_type='application/json')
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse(
+            {'error': {'message': f'upstream unavailable: {e}', 'type': 'gateway_error'}},
+            status_code=502,
+        )
+
 async def _chat_stream(payload: dict[str, Any], request: Request):
     """Stream chat completion via SSE, collecting usage for billing."""
     uid = await _get_user_id(request)
@@ -1070,7 +1172,6 @@ async def _bill_stream_usage(uid: int, payload: dict[str, Any], usage: dict[str,
 
         await session.commit()
 
-@app.get('/me/usage')
 @app.get('/me/usage')
 async def me_usage(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
@@ -1351,7 +1452,9 @@ SESSION_COOKIE_SECURE = (
 ADMIN_COOKIE_NAME = 'admin_session'
 ADMIN_CSRF_COOKIE_NAME = 'admin_csrf'
 ADMIN_SESSION_TTL = 3600 * 8
-API_KEY_PEPPER = os.getenv('API_KEY_PEPPER', 'multiai-api-key-pepper-v1').encode()
+API_KEY_PEPPER=os.getenv('API_KEY_PEPPER', '').encode()
+if not API_KEY_PEPPER:
+    raise RuntimeError('API_KEY_PEPPER must be set in .env; refusing to start with insecure default')
 
 
 def _session_payload(user_id: int) -> dict:
@@ -1519,6 +1622,7 @@ async def _get_user_id(request: Request) -> int | None:
                         ApiKey.key_hash == key_hash,
                         ApiKey.active == True,
                         ApiKey.revoked_at == None,
+                        (ApiKey.expires_at == None) | (ApiKey.expires_at > func.now()),
                     )
                 )
                 key = res.fetchone()
@@ -1773,7 +1877,7 @@ async def forgot_password(payload: ForgotPasswordRequest) -> JSONResponse:
         rds.setex(f'reset:{reset_token}', 900, str(user.id))  # 15 min TTL
 
         # In production, send email here
-        print(f'[RESET] Password reset for {payload.email}: token={reset_token}')
+        # Token logged to DB/redis only — never to stdout (security)
 
         return JSONResponse({
             'status': 'ok',
@@ -4492,10 +4596,23 @@ async def smart_chat(request: Request, payload: dict[str, Any]) -> Response:
     category = _analyze_message(last_user_msg)
     balance = await _get_user_balance(uid)
     plan = await _get_user_plan(uid)
-    selected_model, selected_provider = _select_smart_model(category, balance, plan)
+
+    # Respect explicit user model choice sent via the X-Smart-Model header.
+    # The frontend always forwards the user's selected model there; if present
+    # (and not the literal 'auto'), honor it instead of auto-switching on the
+    # message category — otherwise the user sees a *different* model answer.
+    original_model = payload.get('model', '')
+    force_model = request.headers.get('X-Smart-Model', '').strip()
+    if force_model and force_model.lower() != 'auto':
+        if '/' in force_model:
+            selected_provider, selected_model = force_model.split('/', 1)
+        else:
+            selected_model = force_model
+            selected_provider = 'bynara2'
+    else:
+        selected_model, selected_provider = _select_smart_model(category, balance, plan)
 
     # Override model in payload
-    original_model = payload.get('model', '')
     payload['model'] = selected_model
 
     # Memory injection (same as regular chat)

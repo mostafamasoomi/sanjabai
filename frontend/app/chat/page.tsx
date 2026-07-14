@@ -96,6 +96,8 @@ export default function ChatPage() {
   const abortRef = useRef<AbortController | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [attachedFile, setAttachedFile] = useState<File | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [showPresets, setShowPresets] = useState(true)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
@@ -365,21 +367,34 @@ export default function ChatPage() {
     }
 
     try {
-      const chatUrl = smartMode ? '/api/v1/smart-chat' : '/api/chat'
-      const res = await fetch(chatUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-          ...(smartMode ? { 'X-Smart-Model': model.providerModelId || model.id } : {}),
-        },
-        body: JSON.stringify({
-          model: model.providerModelId || model.id,
-          messages: updated.map(m => ({ role: m.role, content: m.content })),
-          stream: true,
-        }),
-        signal: controller.signal,
-      })
+      const chatUrl = (smartMode && !attachedFile) ? '/api/v1/smart-chat' : '/api/chat'
+      let res: Response
+      if (attachedFile) {
+        const fd = new FormData()
+        fd.append('file', attachedFile)
+        fd.append('model', model.providerModelId || model.id)
+        fd.append('messages', JSON.stringify(updated.map(m => ({ role: m.role, content: m.content }))))
+        fd.append('stream', 'true')
+        const fh: Record<string, string> = {}
+        if (token) fh['Authorization'] = `Bearer ${token}`
+        res = await fetch('/api/chat/with-file', { method: 'POST', headers: fh, body: fd, signal: controller.signal })
+        setAttachedFile(null)
+      } else {
+        res = await fetch(chatUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            ...(smartMode ? { 'X-Smart-Model': model.providerModelId || model.id } : {}),
+          },
+          body: JSON.stringify({
+            model: model.providerModelId || model.id,
+            messages: updated.map(m => ({ role: m.role, content: m.content })),
+            stream: true,
+          }),
+          signal: controller.signal,
+        })
+      }
 
       if (!res.ok) {
         let errorBody: any = null
@@ -464,14 +479,14 @@ export default function ChatPage() {
       setStreaming(false)
       abortRef.current = null
     }
-  }, [messages, model, token, smartMode, createConversation, saveMessages])
+  }, [messages, model, token, smartMode, createConversation, saveMessages, attachedFile])
 
   // Keep ref in sync so retry() can call sendMessage without circular deps
   useEffect(() => { sendMessageRef.current = sendMessage }, [sendMessage])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!input.trim() || streaming || !model) return
+    if ((!input.trim() && !attachedFile) || streaming || !model) return
     sendMessage(input.trim())
   }
 
@@ -800,6 +815,22 @@ export default function ChatPage() {
           {/* ── Composer ────────────────────────────────────────────── */}
           <form onSubmit={handleSubmit} className="chat-composer">
             <div className="chat-composer-box">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".txt,.md,.csv,.json,.pdf,.text,.log"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) setAttachedFile(f); e.target.value = '' }}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="btn btn-ghost btn-icon rounded-xl shrink-0"
+                aria-label="پیوست فایل"
+                title="پیوست فایل (txt, md, csv, json, pdf)"
+              >
+                <Icon name="paperclip" size={18} />
+              </button>
               <textarea
                 ref={inputRef}
                 value={input}
@@ -812,13 +843,22 @@ export default function ChatPage() {
               />
               <button
                 type="submit"
-                disabled={!input.trim() || streaming || !model}
+                disabled={(!input.trim() && !attachedFile) || streaming || !model}
                 className="btn btn-primary btn-icon rounded-xl shrink-0"
                 aria-label="ارسال"
               >
                 <Icon name="send" size={18} />
               </button>
             </div>
+            {attachedFile && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', marginTop: '6px', background: 'var(--bg-secondary, rgba(255,255,255,0.05))', borderRadius: '10px', fontSize: '0.82rem' }}>
+                <Icon name="paperclip" size={14} />
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{attachedFile.name}</span>
+                <button type="button" onClick={() => setAttachedFile(null)} aria-label="حذف پیوست" style={{ display: 'inline-flex', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: '2px' }}>
+                  <Icon name="close" size={12} />
+                </button>
+              </div>
+            )}
             <div className="chat-composer-footer">
               <span className="chat-composer-status">
                 {streaming ? (

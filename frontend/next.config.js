@@ -3,7 +3,20 @@ const API_BACKEND = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8081'
 
 const nextConfig = {
   reactStrictMode: true,
+  poweredByHeader: false,
   output: 'standalone',
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+        ],
+      },
+    ]
+  },
   async rewrites() {
     return [
       // Proxy /api/* to backend

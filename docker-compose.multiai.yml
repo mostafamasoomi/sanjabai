@@ -79,13 +79,13 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: http://multiai-multiai_api-1:8000
+        NEXT_PUBLIC_API_URL: http://multiai_api:8000
     restart: unless-stopped
     mem_limit: 512m
     depends_on:
       - multiai_api
     environment:
-      NEXT_PUBLIC_API_URL: http://multiai-multiai_api-1:8000
+      NEXT_PUBLIC_API_URL: http://multiai_api:8000
       HOSTNAME: 0.0.0.0
     ports:
       - "0.0.0.0:3003:3000"
@@ -101,7 +101,7 @@ services:
       - multiai_api
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-      API_URL: http://multiai-multiai_api-1:8000
+      API_URL: http://multiai_api:8000
       HTTP_PROXY: http://10.10.11.2:8888
       HTTPS_PROXY: http://10.10.11.2:8888
     networks: [multiai_net]

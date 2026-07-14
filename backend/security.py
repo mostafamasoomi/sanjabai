@@ -45,8 +45,8 @@ class RateLimiter:
             remaining = max(0, self.max - count)
             return count <= self.max, remaining
         except Exception as e:
-            logger.warning("Rate limiter Redis unavailable, failing open: %s", e)
-            return True, self.max  # Fail open: allow traffic when Redis is down
+            logger.warning("Rate limiter Redis unavailable, failing closed: %s", e)
+            return False, 0  # Fail closed: deny traffic when Redis is down
 
 
 # Different rate limits for different endpoint types
@@ -166,11 +166,15 @@ def validate_email(email: str) -> tuple[bool, str]:
 
 
 def validate_password(password: str) -> tuple[bool, str]:
-    """Validate password strength"""
+    """Validate password strength with complexity requirements."""
     if len(password) < 8:
         return False, 'password must be at least 8 characters'
     if len(password) > MAX_PASSWORD_LENGTH:
         return False, 'password too long'
+    if not any(c.isdigit() for c in password):
+        return False, 'password must contain at least one digit'
+    if not any(c.isalpha() for c in password):
+        return False, 'password must contain at least one letter'
     return True, ''
 
 

@@ -307,13 +307,23 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!model && models.length > 0) {
-      // Prefer a favorite model from onboarding
+      // 1. Try favorite model from onboarding
       try {
         const favs: string[] = JSON.parse(localStorage.getItem('multiai_favorite_models') || '[]')
         const favModel = models.find(m => favs.includes(m.id))
         if (favModel) { setModel(favModel); return }
       } catch {}
-      setModel(models[0])
+      // 2. Try organisation default model
+      fetch('/api/org/default-model')
+        .then(r => r.json())
+        .then(data => {
+          if (data.default_model) {
+            const orgModel = models.find(m => m.providerModelId === data.default_model || m.id === data.default_model)
+            if (orgModel) { setModel(orgModel); return }
+          }
+          setModel(models[0])
+        })
+        .catch(() => setModel(models[0]))
     }
   }, [models, model])
 

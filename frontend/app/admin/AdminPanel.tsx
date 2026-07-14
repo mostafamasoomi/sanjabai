@@ -178,10 +178,14 @@ export default function AdminPage() {
   const [pxUrl, setPxUrl] = useState('')
   const [pxActive, setPxActive] = useState(true)
 
-  // ─── User Edit ───────────────────────────────────────────────────────────
+  // ─── User Edit ────────────────────────────────────────────────────
   const [editingUser, setEditingUser] = useState<UserRow | null>(null)
 
-  // ─── Load Data ───────────────────────────────────────────────────────────
+  // ─── Org Default Model ─────────────────────────────────────────────
+  const [orgDefaultModel, setOrgDefaultModel] = useState('')
+  const [orgDefaultSaving, setOrgDefaultSaving] = useState(false)
+
+  // ─── Load Data
 
   const loadAll = useCallback(async () => {
     setLoading(true)
@@ -210,6 +214,13 @@ export default function AdminPage() {
         setModels((d.data || []).map((m: { id: string }) => m.id))
       }, label: 'models' },
       { fn: async () => { const r = await api('/admin/users'); setUsers(await r.json()) }, label: 'users' },
+      { fn: async () => {
+        try {
+          const r = await fetch('/api/org/default-model')
+          const d = await r.json()
+          setOrgDefaultModel(d.default_model || '')
+        } catch {}
+      }, label: 'org-default-model' },
     ]
 
     await Promise.allSettled(tasks.map((t) => t.fn()))
@@ -337,6 +348,20 @@ export default function AdminPage() {
       toast('تنظیمات پروکسی ذخیره شد', 'success')
       loadAll()
     } catch { toast('خطا در ذخیره پروکسی', 'error') }
+  }
+
+  // ─── Org Default Model Actions ───────────────────────────────────────
+
+  const saveOrgDefaultModel = async () => {
+    setOrgDefaultSaving(true)
+    try {
+      await api('/admin/org-default-model', {
+        method: 'POST',
+        body: JSON.stringify({ default_model: orgDefaultModel || null }),
+      })
+      toast('مدل پیشفرض سازمان ذخیره شد', 'success')
+    } catch { toast('خطا در ذخیره مدل پیشفرض', 'error') }
+    finally { setOrgDefaultSaving(false) }
   }
 
   // ─── User Actions ────────────────────────────────────────────────────────
@@ -1005,7 +1030,37 @@ export default function AdminPage() {
              ───────────────────────────────────────────────────────────── */}
           {page === 'models' && (
             <div className="space-y-6">
-              <SectionHeader title="مدل‌های فعال" subtitle={`${models.length} مدل در دسترس`} />
+              <SectionHeader title="مدلهای فعال" subtitle={`${models.length} مدل در دسترس`} />
+
+              {/* Org Default Model */}
+              <div className="admin-card">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--accent-dim)' }}>
+                    <Icon name="models" size={16} style={{ color: 'var(--accent)' }} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>مدل پیشفرض سازمان</h3>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>مدلی که کاربران جدید به‌صورت پیشفرض استفاده می‌کنند</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <select
+                    className="input flex-1"
+                    value={orgDefaultModel}
+                    onChange={(e) => setOrgDefaultModel(e.target.value)}
+                  >
+                    <option value="">بدون مدل پیشفرض (اولین مدل لیست)</option>
+                    {models.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                  <button className="btn" onClick={saveOrgDefaultModel} disabled={orgDefaultSaving}>
+                    {orgDefaultSaving ? (
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
+                    ) : 'ذخیره'}
+                  </button>
+                </div>
+              </div>
 
               {models.length === 0 ? (
                 <div className="admin-card text-center py-12">

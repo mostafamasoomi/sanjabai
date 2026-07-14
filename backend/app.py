@@ -155,6 +155,7 @@ class ProxyConfig(Base):
     proxy_url: Mapped[str] = mapped_column(default='')
     proxy_type: Mapped[str] = mapped_column(default='socks5')
     active: Mapped[bool] = mapped_column(default=True)
+    default_model: Mapped[str] = mapped_column(default='')  # org-wide default model
     updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 class Conversation(Base):
@@ -1338,7 +1339,7 @@ async def upsert_feature(request: Request, payload: dict[str, Any]) -> JSONRespo
         row.icon = payload.get('icon', row.icon)
         row.active = payload.get('active', row.active)
         row.order_idx = payload.get('order_idx', row.order_idx)
-        row.updated_at = datetime.now(timezone.utc)
+        row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await session.commit()
     await _write_audit_log('admin.feature.upsert', target_type='feature', target_id=row.id)
     return JSONResponse({'status': 'ok', 'id': row.id})
@@ -1387,7 +1388,7 @@ async def upsert_discount(request: Request, payload: dict[str, Any]) -> JSONResp
         row.percent = payload.get('percent', row.percent)
         row.active = payload.get('active', row.active)
         row.expires_at = payload.get('expires_at')
-        row.updated_at = datetime.now(timezone.utc)
+        row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await session.commit()
     await _write_audit_log('admin.discount.upsert', target_type='discount', target_id=row.id)
     return JSONResponse({'status': 'ok', 'id': row.id})
@@ -1430,7 +1431,7 @@ async def set_about(request: Request, payload: dict[str, Any]) -> JSONResponse:
             row = await session.get(AboutContent, row.id)
         row.title = payload.get('title', row.title)
         row.body = payload.get('body', row.body)
-        row.updated_at = datetime.now(timezone.utc)
+        row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await session.commit()
     await _write_audit_log('admin.about.set')
     return JSONResponse({'status': 'ok'})
@@ -1464,10 +1465,47 @@ async def set_proxy(request: Request, payload: dict[str, Any]) -> JSONResponse:
         row.proxy_url = payload.get('proxy_url', row.proxy_url)
         row.proxy_type = payload.get('proxy_type', row.proxy_type)
         row.active = payload.get('active', row.active)
-        row.updated_at = datetime.now(timezone.utc)
+        row.default_model = payload.get('default_model', row.default_model)
+        row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await session.commit()
     await _write_audit_log('admin.proxy.set')
     return JSONResponse({'status': 'ok', 'proxy_url': row.proxy_url})
+
+
+@app.get('/org/default-model')
+async def get_org_default_model() -> JSONResponse:
+    """Public endpoint: get org-wide default model (for chat fallback)."""
+    if async_session is None:
+        return JSONResponse({'default_model': ''})
+    async with async_session() as session:
+        res = await session.execute(ProxyConfig.__table__.select())
+        row = res.fetchone()
+        dm = row.default_model if row and hasattr(row, 'default_model') else ''
+        return JSONResponse({'default_model': dm})
+
+
+@app.post('/admin/org-default-model')
+async def set_org_default_model(request: Request, payload: dict[str, Any]) -> JSONResponse:
+    """Admin: set org-wide default model."""
+    if not admin_required(request):
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    model_id = payload.get('default_model', '')
+    if async_session is None:
+        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+    async with async_session() as session:
+        res = await session.execute(ProxyConfig.__table__.select())
+        row = res.fetchone()
+        if not row:
+            row = ProxyConfig(default_model=model_id)
+            session.add(row)
+        else:
+            row = await session.get(ProxyConfig, row.id)
+            row.default_model = model_id
+        row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        await session.commit()
+    await _write_audit_log('admin.org_default_model.set', details={'model': model_id})
+    return JSONResponse({'status': 'ok', 'default_model': model_id})
+
 
 # ===== Public content (frontend) =====
 @app.get('/content/features')

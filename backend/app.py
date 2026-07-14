@@ -34,6 +34,7 @@ BASE_URL = os.getenv('BASE_URL', 'http://localhost:3003')
 engine: AsyncEngine | None = None
 async_session: sessionmaker[AsyncSession] | None = None
 rds = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+_http: httpx.AsyncClient | None = None  # shared connection pool
 
 class Base(DeclarativeBase):
     pass
@@ -412,13 +413,15 @@ _start: datetime | None = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    global engine, async_session, _start
+    global engine, async_session, _start, _http
     engine = create_async_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    _http = httpx.AsyncClient(timeout=httpx.Timeout(90, connect=10), limits=httpx.Limits(max_connections=20, max_keepalive_connections=10))
     from migrate import migrate
     await migrate(engine)
     _start = datetime.now(timezone.utc)
     yield
+    await _http.aclose()
     await engine.dispose()
 
 app = FastAPI(title='Persian AI Gateway', version='0.1.0', lifespan=lifespan)
@@ -565,10 +568,9 @@ async def health_detailed(request: Request) -> JSONResponse:
         redis_status = 'down'
 
     try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            r = await client.get(f'{LITELLM_HOST}/health')
-            if r.status_code != 200:
-                litellm_status = 'degraded'
+        r = await _http.get(f'{LITELLM_HOST}/health', timeout=5)
+        if r.status_code != 200:
+            litellm_status = 'degraded'
     except Exception:
         litellm_status = 'down'
 
@@ -598,10 +600,9 @@ async def root() -> dict[str, str]:
 async def list_models(request: Request) -> dict[str, Any]:
     models = []
     try:
-        async with httpx.AsyncClient(timeout=8) as client:
-            r = await client.get(f"{LITELLM_HOST}/v1/models")
-            if r.status_code == 200:
-                models = r.json().get('data', [])
+        r = await _http.get(f"{LITELLM_HOST}/v1/models", timeout=8)
+        if r.status_code == 200:
+            models = r.json().get('data', [])
     except Exception:
         pass
     return {'object': 'list', 'data': models}
@@ -652,10 +653,9 @@ async def _litellm_fallback_catalog() -> list[dict[str, Any]]:
     now = datetime.now(timezone.utc)
     items: list[dict[str, Any]] = []
     try:
-        async with httpx.AsyncClient(timeout=8) as client:
-            r = await client.get(f"{LITELLM_HOST}/v1/models")
-            if r.status_code == 200:
-                for entry in r.json().get('data', []):
+        r = await _http.get(f"{LITELLM_HOST}/v1/models", timeout=8)
+        if r.status_code == 200:
+            for entry in r.json().get('data', []):
                     mid = str(entry.get('id') or '').strip()
                     if not mid:
                         continue
@@ -866,13 +866,11 @@ async def chat(request: Request, payload: dict[str, Any]) -> Response:
     if stream:
         return await _chat_stream(payload, request)
     try:
-        async with httpx.AsyncClient(timeout=90) as client:
-            r = await client.post(f"{LITELLM_HOST}/v1/chat/completions", json=payload, headers={'Accept': 'application/json'})
-            if r.status_code == 200:
-                # Track usage
-                await _track_usage(request, payload, r.json())
-                return Response(content=r.content, status_code=200, media_type='application/json')
-            return Response(content=r.content, status_code=r.status_code, media_type='application/json')
+        r = await _http.post(f"{LITELLM_HOST}/v1/chat/completions", json=payload, headers={'Accept': 'application/json'})
+        if r.status_code == 200:
+            await _track_usage(request, payload, r.json())
+            return Response(content=r.content, status_code=200, media_type='application/json')
+        return Response(content=r.content, status_code=r.status_code, media_type='application/json')
     except Exception as e:
         return JSONResponse({'error': {'message': f'upstream unavailable: {e}', 'type': 'gateway_error'}}, status_code=502)
 
@@ -904,8 +902,10 @@ async def _extract_file_text(upload: UploadFile) -> tuple[str, str]:
         try:
             from pypdf import PdfReader
             reader = PdfReader(io.BytesIO(data))
-            text = '\n'.join((p.extract_text() or '') for p in reader.pages)
-            return text, ''
+            if len(reader.pages) > 100:
+                return '', 'PDF too many pages (max 100)'
+            text = '\n'.join((p.extract_text() or '') for p in reader.pages[:100])
+            return text[:200000], ''  # cap at ~200KB of text
         except Exception as e:  # noqa: BLE001
             return '', f'pdf extract error: {e}'
     return '', f'unsupported file type: {name or "unknown"}'
@@ -916,30 +916,30 @@ async def _web_search(query: str, max_results: int = 5) -> str:
     try:
         import re as _re
         from urllib.parse import unquote
-        async with httpx.AsyncClient(timeout=12, follow_redirects=True) as client:
-            r = await client.post(
-                'https://html.duckduckgo.com/html/',
-                data={'q': query, 'b': ''},
-                headers={'User-Agent': 'Mozilla/5.0 (compatible; Multiai/1.0)'},
-            )
-            if r.status_code != 200:
-                return ''
-            html = r.text
-            links = _re.findall(r'class="result__a"\s+href="([^"]+)"[^>]*>(.+?)</a>', html)
-            snippets = _re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', html, _re.DOTALL)
-            if not links:
-                return ''
-            lines = []
-            for i, (href, title) in enumerate(links[:max_results]):
-                title = _re.sub(r'<[^>]+>', '', title).strip()
-                snippet = _re.sub(r'<[^>]+>', '', snippets[i]).strip() if i < len(snippets) else ''
-                actual_url = href
-                if 'uddg=' in href:
-                    m = _re.search(r'uddg=([^&]+)', href)
-                    if m:
-                        actual_url = unquote(m.group(1))
-                lines.append(f'• {title}\n  {snippet}\n  {actual_url}')
-            return '\n'.join(lines)
+        r = await _http.post(
+            'https://html.duckduckgo.com/html/',
+            data={'q': query, 'b': ''},
+            headers={'User-Agent': 'Mozilla/5.0 (compatible; Multiai/1.0)'},
+            timeout=12, follow_redirects=True,
+        )
+        if r.status_code != 200:
+            return ''
+        html = r.text
+        links = _re.findall(r'class="result__a"\s+href="([^"]+)"[^>]*>(.+?)</a>', html)
+        snippets = _re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', html, _re.DOTALL)
+        if not links:
+            return ''
+        lines = []
+        for i, (href, title) in enumerate(links[:max_results]):
+            title = _re.sub(r'<[^>]+>', '', title).strip()
+            snippet = _re.sub(r'<[^>]+>', '', snippets[i]).strip() if i < len(snippets) else ''
+            actual_url = href
+            if 'uddg=' in href:
+                m = _re.search(r'uddg=([^&]+)', href)
+                if m:
+                    actual_url = unquote(m.group(1))
+            lines.append(f'• {title}\n  {snippet}\n  {actual_url}')
+        return '\n'.join(lines)
     except Exception:
         return ''
 
@@ -996,15 +996,14 @@ async def chat_with_file(
     if stream:
         return await _chat_stream(payload, request)
     try:
-        async with httpx.AsyncClient(timeout=90) as client:
-            r = await client.post(
-                f'{LITELLM_HOST}/v1/chat/completions', json=payload,
-                headers={'Accept': 'application/json'},
-            )
-            if r.status_code == 200:
-                await _track_usage(request, payload, r.json())
-                return Response(content=r.content, status_code=200, media_type='application/json')
-            return Response(content=r.content, status_code=r.status_code, media_type='application/json')
+        r = await _http.post(
+            f'{LITELLM_HOST}/v1/chat/completions', json=payload,
+            headers={'Accept': 'application/json'},
+        )
+        if r.status_code == 200:
+            await _track_usage(request, payload, r.json())
+            return Response(content=r.content, status_code=200, media_type='application/json')
+        return Response(content=r.content, status_code=r.status_code, media_type='application/json')
     except Exception as e:  # noqa: BLE001
         return JSONResponse(
             {'error': {'message': f'upstream unavailable: {e}', 'type': 'gateway_error'}},
@@ -1036,14 +1035,13 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
     async def event_stream():
         usage_data = None
         try:
-            async with httpx.AsyncClient(timeout=90) as client:
-                payload['stream'] = True
-                # Ask LiteLLM to include usage in the final SSE chunk
-                payload.setdefault('stream_options', {})
-                if isinstance(payload['stream_options'], dict):
-                    payload['stream_options']['include_usage'] = True
-                async with client.stream('POST', f"{LITELLM_HOST}/v1/chat/completions", json=payload, headers={'Accept': 'text/event-stream'}) as r:
-                    async for line in r.aiter_lines():
+            payload['stream'] = True
+            # Ask LiteLLM to include usage in the final SSE chunk
+            payload.setdefault('stream_options', {})
+            if isinstance(payload['stream_options'], dict):
+                payload['stream_options']['include_usage'] = True
+            async with _http.stream('POST', f"{LITELLM_HOST}/v1/chat/completions", json=payload, headers={'Accept': 'text/event-stream'}) as r:
+                async for line in r.aiter_lines():
                         if line:
                             # Parse SSE data lines to capture usage from the final chunk
                             stripped = line.strip()
@@ -4377,20 +4375,19 @@ async def run_task(request: Request, task_id: int) -> JSONResponse:
     tokens_used = 0
     status = 'completed'
     try:
-        async with httpx.AsyncClient(timeout=90) as client:
-            chat_payload = {
-                'model': task.model,
-                'messages': [{'role': 'user', 'content': task.prompt}],
-                'stream': False,
-            }
-            r = await client.post(f"{LITELLM_HOST}/v1/chat/completions", json=chat_payload, headers={'Accept': 'application/json'})
-            if r.status_code == 200:
-                data = r.json()
-                result_text = data.get('choices', [{}])[0].get('message', {}).get('content', '')
-                tokens_used = data.get('usage', {}).get('total_tokens', 0)
-            else:
-                status = 'failed'
-                error_text = f"HTTP {r.status_code}: {r.text[:500]}"
+        chat_payload = {
+            'model': task.model,
+            'messages': [{'role': 'user', 'content': task.prompt}],
+            'stream': False,
+        }
+        r = await _http.post(f"{LITELLM_HOST}/v1/chat/completions", json=chat_payload, headers={'Accept': 'application/json'})
+        if r.status_code == 200:
+            data = r.json()
+            result_text = data.get('choices', [{}])[0].get('message', {}).get('content', '')
+            tokens_used = data.get('usage', {}).get('total_tokens', 0)
+        else:
+            status = 'failed'
+            error_text = f"HTTP {r.status_code}: {r.text[:500]}"
     except Exception as e:
         status = 'failed'
         error_text = str(e)[:500]
@@ -4686,23 +4683,22 @@ async def smart_chat(request: Request, payload: dict[str, Any]) -> Response:
         return await _smart_chat_stream(payload, request, selected_model, category)
 
     try:
-        async with httpx.AsyncClient(timeout=90) as client:
-            r = await client.post(
+        r = await _http.post(
                 f'{LITELLM_HOST}/v1/chat/completions',
                 json=payload,
                 headers={'Accept': 'application/json'},
             )
-            if r.status_code == 200:
-                await _track_usage(request, payload, r.json())
-                response_data = r.json()
-                resp = Response(
-                    content=r.content, status_code=200, media_type='application/json'
-                )
-            else:
-                response_data = r.json() if r.headers.get('content-type', '').startswith('application/json') else {}
-                resp = Response(
-                    content=r.content, status_code=r.status_code, media_type='application/json'
-                )
+        if r.status_code == 200:
+            await _track_usage(request, payload, r.json())
+            response_data = r.json()
+            resp = Response(
+                content=r.content, status_code=200, media_type='application/json'
+            )
+        else:
+            response_data = r.json() if r.headers.get('content-type', '').startswith('application/json') else {}
+            resp = Response(
+                content=r.content, status_code=r.status_code, media_type='application/json'
+            )
             # Add smart model info header
             resp.headers['X-Smart-Model'] = selected_model
             resp.headers['X-Smart-Category'] = category
@@ -4747,33 +4743,32 @@ async def _smart_chat_stream(
     async def event_stream():
         usage_data = None
         try:
-            async with httpx.AsyncClient(timeout=90) as client:
-                payload['stream'] = True
-                payload.setdefault('stream_options', {})
-                if isinstance(payload['stream_options'], dict):
-                    payload['stream_options']['include_usage'] = True
-                async with client.stream(
-                    'POST',
-                    f'{LITELLM_HOST}/v1/chat/completions',
-                    json=payload,
-                    headers={'Accept': 'text/event-stream'},
-                ) as r:
-                    # Send smart model info as first event
-                    yield f'data: {json.dumps({"type": "smart_info", "model": selected_model, "category": category})}\n\n'
-                    async for line in r.aiter_lines():
-                        if line:
-                            stripped = line.strip()
-                            if stripped.startswith('data:'):
-                                data_str = stripped[5:].strip()
-                                if data_str == '[DONE]':
-                                    break
-                                try:
-                                    chunk = json.loads(data_str)
-                                    if isinstance(chunk.get('usage'), dict) and chunk['usage']:
-                                        usage_data = chunk['usage']
-                                except (json.JSONDecodeError, ValueError):
-                                    pass
-                            yield f'{line}\n\n'
+            payload['stream'] = True
+            payload.setdefault('stream_options', {})
+            if isinstance(payload['stream_options'], dict):
+                payload['stream_options']['include_usage'] = True
+            async with _http.stream(
+                'POST',
+                f'{LITELLM_HOST}/v1/chat/completions',
+                json=payload,
+                headers={'Accept': 'text/event-stream'},
+            ) as r:
+                # Send smart model info as first event
+                yield f'data: {json.dumps({"type": "smart_info", "model": selected_model, "category": category})}\n\n'
+                async for line in r.aiter_lines():
+                    if line:
+                        stripped = line.strip()
+                        if stripped.startswith('data:'):
+                            data_str = stripped[5:].strip()
+                            if data_str == '[DONE]':
+                                break
+                            try:
+                                chunk = json.loads(data_str)
+                                if isinstance(chunk.get('usage'), dict) and chunk['usage']:
+                                    usage_data = chunk['usage']
+                            except (json.JSONDecodeError, ValueError):
+                                pass
+                        yield f'{line}\n\n'
         except Exception as e:
             yield f'data: {{"error": "upstream unavailable: {e}"}}\n\n'
         finally:

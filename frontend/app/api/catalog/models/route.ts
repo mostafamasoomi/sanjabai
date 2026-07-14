@@ -13,7 +13,7 @@ import { NextResponse } from 'next/server'
  * Mirrors the existing proxy convention in app/api/models/route.ts — always responds
  * 200 so the client can degrade to an empty/error state gracefully.
  */
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://multiai-multiai_api-1:8000'
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
 export const runtime = 'nodejs'
 
 export async function GET() {

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://multiai-multiai_api-1:8000'
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
 
 async function proxy(request: Request, method: string, path: string, body?: any) {
   const auth = request.headers.get('Authorization') || ''

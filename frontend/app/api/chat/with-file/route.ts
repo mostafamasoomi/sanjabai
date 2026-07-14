@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     const messages = (form.get('messages') as string) || '[]'
     const stream = (form.get('stream') as string) === 'true'
     const auth = request.headers.get('Authorization') || ''
-    const upstream = process.env.NEXT_PUBLIC_API_URL || 'http://multiai-multiai_api-1:8000'
+    const upstream = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
 
     const fd = new FormData()
     if (file) fd.append('file', file)

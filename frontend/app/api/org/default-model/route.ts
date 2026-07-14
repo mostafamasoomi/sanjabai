@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
  * Proxy for the organisation default model endpoint.
  * Public — no auth required.
  */
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://multiai-multiai_api-1:8000'
+const API = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
 export const runtime = 'nodejs'
 
 export async function GET() {

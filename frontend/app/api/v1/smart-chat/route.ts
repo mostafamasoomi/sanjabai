@@ -5,14 +5,16 @@ export async function POST(request: Request) {
     const body = await request.json()
     const upstream = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
     const auth = request.headers.get('Authorization') || ''
+    const smartModel = request.headers.get('X-Smart-Model') || ''
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept': body.stream ? 'text/event-stream' : 'application/json',
     }
     if (auth) headers['Authorization'] = auth
+    if (smartModel) headers['X-Smart-Model'] = smartModel
 
-    const res = await fetch(`${upstream}/v1/chat/completions`, {
+    const res = await fetch(`${upstream}/v1/smart-chat`, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
@@ -31,14 +33,13 @@ export async function POST(request: Request) {
       })
     }
 
-    // For errors or non-streaming, read the body and forward it
     const data = await res.json()
     return new Response(JSON.stringify(data), {
       status: res.status,
       headers: { 'Content-Type': 'application/json' },
     })
   } catch (e) {
-    return new Response(JSON.stringify({ detail: 'chat proxy failed' }), {
+    return new Response(JSON.stringify({ detail: 'smart-chat proxy failed' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     })

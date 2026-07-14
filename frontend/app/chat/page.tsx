@@ -128,6 +128,7 @@ export default function ChatPage() {
   /* ── Assistant integration ──────────────────────────────────────────── */
   const searchParams = useSearchParams()
   const assistantParam = searchParams?.get('assistant')
+  const modelParam = searchParams?.get('model')
   const [activeAssistant, setActiveAssistant] = useState<Assistant | null>(null)
   const [loadingAssistant, setLoadingAssistant] = useState(false)
 
@@ -348,6 +349,14 @@ export default function ChatPage() {
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
     setShowScrollBtn(distFromBottom > 120)
   }, [])
+
+  /* ── Model from URL parameter (from /models page) ─────────────────── */
+  useEffect(() => {
+    if (modelParam && models.length > 0 && !model) {
+      const found = models.find(m => m.id === modelParam || m.providerModelId === modelParam)
+      if (found) setModel(found)
+    }
+  }, [modelParam, models, model])
 
   useEffect(() => {
     if (!model && models.length > 0) {

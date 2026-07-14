@@ -213,7 +213,7 @@ export default function AdminPage() {
         const d = await r.json()
         setModels((d.data || []).map((m: { id: string }) => m.id))
       }, label: 'models' },
-      { fn: async () => { const r = await api('/api/admin/users'); setUsers(await r.json()) }, label: 'users' },
+      { fn: async () => { const r = await api('/api/admin/users'); const d = await r.json(); setUsers(d.users || d) }, label: 'users' },
       { fn: async () => {
         try {
           const r = await fetch('/api/org/default-model')
@@ -368,7 +368,7 @@ export default function AdminPage() {
 
   const banUser = async (uid: number) => {
     try {
-      await api(`/admin/users/${uid}/ban`, { method: 'POST' })
+      await api(`/api/admin/users/${uid}/ban`, { method: 'POST' })
       toast('کاربر مسدود شد', 'success')
       loadAll()
     } catch { toast('خطا در مسدودسازی', 'error') }
@@ -377,7 +377,7 @@ export default function AdminPage() {
   const saveUserEdit = async () => {
     if (!editingUser) return
     try {
-      await api(`/admin/users/${editingUser.id}`, {
+      await api(`/api/admin/users/${editingUser.id}`, {
         method: 'PUT',
         body: JSON.stringify(editingUser),
       })

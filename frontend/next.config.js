@@ -1,10 +1,10 @@
 /** @type {import('next').NextConfig} */
-const API_BACKEND = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8081'
+const API_BACKEND = process.env.NEXT_PUBLIC_API_URL || 'http://multiai-multiai_api-1:8000'
 
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  output: 'standalone',
+  
   async headers() {
     return [
       {

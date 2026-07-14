@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
@@ -16,7 +17,8 @@ type ApiKeyInfo = {
 }
 
 export default function ApiKeysPage() {
-  const { user } = useAuth()
+  const { user, token } = useAuth()
+  const router = useRouter()
   const [keys, setKeys] = useState<ApiKeyInfo[]>([])
   const [newKey, setNewKey] = useState<string | null>(null)
   const [name, setName] = useState('Default')
@@ -25,13 +27,13 @@ export default function ApiKeysPage() {
   const [copiedId, setCopiedId] = useState<number | null>(null)
 
   useEffect(() => {
-    if (user) fetchKeys()
-  }, [user])
+    if (user && token) fetchKeys()
+  }, [user, token])
 
   const fetchKeys = async () => {
     try {
-      const token = localStorage.getItem('auth_token')
       const r = await fetch('/api/api-keys', { headers: { Authorization: `Bearer ${token}` } })
+      if (r.status === 401) { router.push('/login'); return }
       if (r.ok) setKeys(await r.json())
     } catch {}
   }
@@ -39,7 +41,6 @@ export default function ApiKeysPage() {
   const generateKey = async () => {
     setLoading(true)
     try {
-      const token = localStorage.getItem('auth_token')
       const r = await fetch('/api/api-keys', {
         method: 'POST',
         headers: {
@@ -48,6 +49,7 @@ export default function ApiKeysPage() {
         },
         body: JSON.stringify({ name }),
       })
+      if (r.status === 401) { router.push('/login'); return }
       const data = await r.json()
       if (r.ok) {
         setNewKey(data.key)
@@ -64,11 +66,11 @@ export default function ApiKeysPage() {
 
   const revokeKey = async (id: number) => {
     try {
-      const token = localStorage.getItem('auth_token')
       const r = await fetch(`/api/api-keys/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })
+      if (r.status === 401) { router.push('/login'); return }
       if (r.ok) {
         toast('کلید غیرفعال شد', 'success')
         fetchKeys()

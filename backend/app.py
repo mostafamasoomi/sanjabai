@@ -1241,7 +1241,7 @@ async def _bill_stream_usage(uid: int, payload: dict[str, Any], usage: dict[str,
             cost = max(1, total_tokens // 1000)
 
         res = await session.execute(
-            sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid'),
+            sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid FOR UPDATE'),
             {'uid': uid},
         )
         row = res.fetchone()
@@ -3570,6 +3570,7 @@ async def create_api_key(request: Request, payload: ApiKeyCreate) -> JSONRespons
         await session.commit()
         await session.refresh(key)
 
+    await _write_audit_log('api_key.create', target_type='api_key', target_id=key.id, details={'name': payload.name, 'prefix': key_prefix})
     return JSONResponse({
         'id': key.id,
         'name': key.name,
@@ -3580,7 +3581,6 @@ async def create_api_key(request: Request, payload: ApiKeyCreate) -> JSONRespons
         'expires_at': key.expires_at.isoformat() if key.expires_at else None,
         'created_at': key.created_at.isoformat() if key.created_at else None,
     })
-    await _write_audit_log('api_key.create', target_type='api_key', target_id=key.id, details={'name': payload.name, 'prefix': key_prefix})
 
 
 @app.get('/api-keys')

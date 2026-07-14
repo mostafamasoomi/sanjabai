@@ -26,6 +26,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       LITELLM_HOST: http://litellm:4000
       INTERNAL_TOKEN: ${INTERNAL_TOKEN:-change-me}
+    volumes:
+      - ./.env:/app/.env:ro
     depends_on:
       - db
       - redis

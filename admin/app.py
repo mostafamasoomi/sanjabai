@@ -17,10 +17,14 @@ DATABASE_URL = os.getenv(
     'DATABASE_URL',
     'postgresql+asyncpg://multiai:multiai@multiai_pg:5432/multiai'
 )
-SECRET_KEY = os.getenv('ADMIN_SECRET_KEY', 'multiai-admin-secret')
+SECRET_KEY = os.getenv('ADMIN_SECRET_KEY', '')
+if not SECRET_KEY:
+    raise RuntimeError('ADMIN_SECRET_KEY must be set in environment; refusing to start with insecure default')
 SESSION_COOKIE = 'admin_session'
-ADMIN_USER = os.getenv('ADMIN_USER', 'admin')
-ADMIN_PASS = os.getenv('ADMIN_PASS', 'admin')
+ADMIN_USER = os.getenv('ADMIN_USER', '')
+ADMIN_PASS = os.getenv('ADMIN_PASS', '')
+if not ADMIN_USER or not ADMIN_PASS:
+    raise RuntimeError('ADMIN_USER and ADMIN_PASS must be set in environment; refusing to start with defaults')
 
 FAKE_USERS = {}
 if ADMIN_PASS:

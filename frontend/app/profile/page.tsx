@@ -22,10 +22,10 @@ export default function ProfilePage() {
   const [usage, setUsage] = useState<any>(null)
   const [balance, setBalance] = useState<number | null>(null)
 
-  // Settings toggles
-  const [emailNotif, setEmailNotif] = useState(true)
-  const [telegramNotif, setTelegramNotif] = useState(false)
-  const [darkMode, setDarkMode] = useState(true)
+  // Settings toggles — persisted to localStorage
+  const [emailNotif, setEmailNotif] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('pref_email_notif') === 'true' : true)
+  const [telegramNotif, setTelegramNotif] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('pref_telegram_notif') === 'true' : false)
+  const [darkMode, setDarkMode] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('pref_dark_mode') !== 'false' : true)
 
   useEffect(() => {
     if (user) {
@@ -187,7 +187,12 @@ export default function ProfilePage() {
             </div>
             <button
               className={`profile-toggle ${emailNotif ? 'active' : ''}`}
-              onClick={() => setEmailNotif(!emailNotif)}
+              onClick={() => {
+                const next = !emailNotif
+                setEmailNotif(next)
+                localStorage.setItem('pref_email_notif', String(next))
+                toast(next ? 'اعلان ایمیلی فعال شد' : 'اعلان ایمیلی غیرفعال شد', 'success')
+              }}
               role="switch"
               aria-checked={emailNotif}
             >
@@ -205,7 +210,12 @@ export default function ProfilePage() {
             </div>
             <button
               className={`profile-toggle ${telegramNotif ? 'active' : ''}`}
-              onClick={() => setTelegramNotif(!telegramNotif)}
+              onClick={() => {
+                const next = !telegramNotif
+                setTelegramNotif(next)
+                localStorage.setItem('pref_telegram_notif', String(next))
+                toast(next ? 'اعلان تلگرامی فعال شد' : 'اعلان تلگرامی غیرفعال شد', 'success')
+              }}
               role="switch"
               aria-checked={telegramNotif}
             >
@@ -223,7 +233,17 @@ export default function ProfilePage() {
             </div>
             <button
               className={`profile-toggle ${darkMode ? 'active' : ''}`}
-              onClick={() => setDarkMode(!darkMode)}
+              onClick={() => {
+                const next = !darkMode
+                setDarkMode(next)
+                localStorage.setItem('pref_dark_mode', String(next))
+                if (next) {
+                  document.documentElement.classList.add('dark')
+                } else {
+                  document.documentElement.classList.remove('dark')
+                }
+                toast(next ? 'حالت تاریک فعال شد' : 'حالت روشن فعال شد', 'success')
+              }}
               role="switch"
               aria-checked={darkMode}
             >

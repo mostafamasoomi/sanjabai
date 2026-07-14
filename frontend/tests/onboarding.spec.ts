@@ -54,7 +54,7 @@ test.describe('onboarding', () => {
 
     // 2) welcome -> goal selection
     await page.getByRole('button', { name: 'بیا شروع کنیم' }).click()
-    await expect(page.getByText('قصد دارید چه کاریم؟')).toBeVisible()
+    await expect(page.getByText('قصد دارید چه کاری کنید؟')).toBeVisible()
 
     const goal = page.getByRole('button', { name: 'کدنویسی' })
     await goal.click()

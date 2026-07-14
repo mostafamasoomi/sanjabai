@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
-import { Icon } from '@/components/ui/Icon'
+import { Icon, type IconName } from '@/components/ui/Icon'
 
 /* ═══════════════════════════════════════════════════════════════
    Types
@@ -77,7 +77,7 @@ function AssistantCard({ assistant, onClick }: { assistant: Assistant; onClick: 
             flexShrink: 0,
           }}
         >
-          <Icon name={(assistant.icon as any) || 'sparkles'} size={20} className="text-white" />
+          <Icon name={(assistant.icon as IconName) || 'sparkles'} size={20} className="text-white" />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <h3 style={{

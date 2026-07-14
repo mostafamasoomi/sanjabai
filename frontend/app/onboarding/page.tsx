@@ -331,7 +331,7 @@ export default function OnboardingPage() {
             {/* STEP 1 — Goal selection */}
             {step === 1 && (
               <div className="fade-in slide-up">
-                <h2 className="text-2xl sm:text-3xl font-bold text-center mb-2">قصد دارید چه کاریم؟</h2>
+                <h2 className="text-2xl sm:text-3xl font-bold text-center mb-2">قصد دارید چه کاری کنید؟</h2>
                 <p className="text-center text-[var(--text-secondary)] mb-6">
                   بر اساس انتخاب شما، بهترین مدل را پیشنهاد میدهیم.
                 </p>

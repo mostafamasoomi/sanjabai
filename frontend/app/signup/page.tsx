@@ -30,8 +30,8 @@ export default function SignupPage() {
     try {
       await signup(email.trim(), password)
       router.push('/onboarding')
-    } catch (err: any) {
-      setError(err.message || 'خطا در ثبتنام')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'خطا در ثبتنام')
     } finally {
       setBusy(false)
     }

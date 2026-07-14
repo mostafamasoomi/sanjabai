@@ -36,7 +36,7 @@ export default function PlaygroundPage() {
     setResponse('')
     try {
       const token = localStorage.getItem('auth_token')
-      const messages: any[] = []
+      const messages: { role: string; content: string }[] = []
       if (systemPrompt.trim()) messages.push({ role: 'system', content: systemPrompt })
       messages.push({ role: 'user', content: userPrompt })
 

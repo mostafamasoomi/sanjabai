@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, memo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { useCatalog } from '@/lib/useCatalog'
 import { type ModelCatalogItem } from '@/types/catalog'
-import { Icon } from '@/components/ui/Icon'
+import { Icon, type IconName } from '@/components/ui/Icon'
 import { Skeleton, EmptyState, toast } from '@/components/ui'
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -94,6 +94,70 @@ function formatDate(dateStr: string): string {
     return ''
   }
 }
+
+/* ── Memoized chat message item ─────────────────────────────────────── */
+type ChatMessageItemProps = {
+  msg: Message
+  index: number
+  isLast: boolean
+  streaming: boolean
+  userAvatar: string
+  copiedId: string | null
+  onCopy: (id: string, content: string) => void
+  onRetry: (index: number) => void
+}
+
+const ChatMessageItem = memo(function ChatMessageItem({
+  msg,
+  index,
+  isLast,
+  streaming,
+  userAvatar,
+  copiedId,
+  onCopy,
+  onRetry,
+}: ChatMessageItemProps) {
+  return (
+    <div className={`chat-row ${msg.role === 'user' ? 'chat-row-user' : 'chat-row-assistant'}`}>
+      {msg.role === 'assistant' && (
+        <div className="chat-avatar chat-avatar-ai">
+          <Icon name="models" size={16} />
+        </div>
+      )}
+      <div className={`chat-bubble ${msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}`}>
+        {msg.role === 'assistant' && streaming && isLast && !msg.content && (
+          <div className="chat-typing">
+            <span /><span /><span />
+          </div>
+        )}
+        <div className="chat-bubble-content">{msg.content}</div>
+        {msg.role === 'assistant' && msg.content && !streaming && (
+          <div className="chat-actions">
+            <button
+              onClick={() => onCopy(msg.id, msg.content)}
+              className="chat-action-btn"
+              title="کپی"
+            >
+              {copiedId === msg.id ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
+              {copiedId === msg.id ? 'کپی شد' : 'کپی'}
+            </button>
+            {index > 0 && (
+              <button onClick={() => onRetry(index)} className="chat-action-btn" title="تلاش مجدد">
+                <Icon name="refresh" size={13} />
+                تلاش مجدد
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      {msg.role === 'user' && userAvatar && (
+        <div className="chat-avatar chat-avatar-user">
+          {userAvatar}
+        </div>
+      )}
+    </div>
+  )
+})
 
 export default function ChatPage() {
   const { user, token } = useAuth()
@@ -468,7 +532,7 @@ export default function ChatPage() {
       }
 
       if (!res.ok) {
-        let errorBody: any = null
+        let errorBody: { error?: { code?: string; message?: string }; code?: string; detail?: string } | null = null
         try { errorBody = await res.json() } catch {}
         const code = errorBody?.error?.code || errorBody?.code || ''
         if (code === 'balance' || res.status === 429) {
@@ -483,7 +547,7 @@ export default function ChatPage() {
       setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '' }])
 
       let acc = ''
-      let usageData: any = null
+      let usageData: { prompt_tokens?: number; completion_tokens?: number } | null = null
       while (true) {
         const { value, done } = await reader!.read()
         if (done) break
@@ -529,8 +593,9 @@ export default function ChatPage() {
           estimatedCost: prev.estimatedCost + estimatedCost,
         }))
       }
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : 'خطا در ارتباط'
+      if (err instanceof Error && err.name === 'AbortError') {
         setMessages(prev => {
           const copy = [...prev]
           const last = copy[copy.length - 1]
@@ -540,7 +605,7 @@ export default function ChatPage() {
           return copy
         })
       } else {
-        setError(err.message || 'خطا در ارتباط')
+        setError(errMsg)
       }
       // Save partial progress even on error
       if (convId) {
@@ -793,7 +858,7 @@ export default function ChatPage() {
                       flexShrink: 0,
                     }}
                   >
-                    <Icon name={(activeAssistant.icon as any) || 'sparkles'} size={16} className="text-white" />
+                    <Icon name={(activeAssistant.icon as IconName) || 'sparkles'} size={16} className="text-white" />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>
@@ -844,44 +909,17 @@ export default function ChatPage() {
             )}
 
             {messages.map((msg, i) => (
-              <div key={msg.id} className={`chat-row ${msg.role === 'user' ? 'chat-row-user' : 'chat-row-assistant'}`}>
-                {msg.role === 'assistant' && (
-                  <div className="chat-avatar chat-avatar-ai">
-                    <Icon name="models" size={16} />
-                  </div>
-                )}
-                <div className={`chat-bubble ${msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}`}>
-                  {msg.role === 'assistant' && streaming && i === messages.length - 1 && !msg.content && (
-                    <div className="chat-typing">
-                      <span /><span /><span />
-                    </div>
-                  )}
-                  <div className="chat-bubble-content">{msg.content}</div>
-                  {msg.role === 'assistant' && msg.content && !streaming && (
-                    <div className="chat-actions">
-                      <button
-                        onClick={() => copyToClipboard(msg.id, msg.content)}
-                        className="chat-action-btn"
-                        title="کپی"
-                      >
-                        {copiedId === msg.id ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
-                        {copiedId === msg.id ? 'کپی شد' : 'کپی'}
-                      </button>
-                      {i > 0 && (
-                        <button onClick={() => retry(i)} className="chat-action-btn" title="تلاش مجدد">
-                          <Icon name="refresh" size={13} />
-                          تلاش مجدد
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-                {msg.role === 'user' && user && (
-                  <div className="chat-avatar chat-avatar-user">
-                    {user.email?.[0]?.toUpperCase() || '?'}
-                  </div>
-                )}
-              </div>
+              <ChatMessageItem
+                key={msg.id}
+                msg={msg}
+                index={i}
+                isLast={i === messages.length - 1}
+                streaming={streaming}
+                userAvatar={user?.email?.[0]?.toUpperCase() || ''}
+                copiedId={copiedId}
+                onCopy={copyToClipboard}
+                onRetry={retry}
+              />
             ))}
 
             {error && (
@@ -973,7 +1011,7 @@ export default function ChatPage() {
                 placeholder="پیام خود را بنویسید... (Shift+Enter برای خط جدید)"
                 rows={1}
                 className="chat-composer-input"
-                style={{ fieldSizing: 'content' } as any}
+                style={{ fieldSizing: 'content' } as React.CSSProperties}
               />
               <button
                 type="submit"

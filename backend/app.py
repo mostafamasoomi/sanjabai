@@ -1,5 +1,5 @@
 from __future__ import annotations
-import os, hashlib, secrets, base64, hmac, json
+import os, hashlib, secrets, base64, hmac, json, asyncio
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, UploadFile
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 import csv
 import io
 import re as _re
@@ -49,6 +50,7 @@ class User(Base):
     phone: Mapped[str | None] = mapped_column(unique=True)
     referral_code: Mapped[str | None] = mapped_column(unique=True, nullable=True)
     referred_by: Mapped[int | None] = mapped_column(nullable=True)
+    banned: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 class Subscription(Base):
@@ -431,7 +433,8 @@ _start: datetime | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global engine, async_session, _start, _http
-    engine = create_async_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
+    engine = create_async_engine(DATABASE_URL, echo=False, pool_pre_ping=True,
+                                  pool_size=10, max_overflow=20, pool_recycle=300, pool_timeout=30)
     async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     _http = httpx.AsyncClient(timeout=httpx.Timeout(90, connect=10), limits=httpx.Limits(max_connections=20, max_keepalive_connections=10))
     from migrate import migrate
@@ -457,6 +460,7 @@ app.add_middleware(
     allow_methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allow_headers=['Authorization', 'Content-Type', 'X-Requested-With'],
 )
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # Security middleware
 from security import RateLimitMiddleware, SecurityHeadersMiddleware, CsrfMiddleware
@@ -486,6 +490,16 @@ async def admin_required(request: Request) -> bool:
     return bool(ADMIN_TOKEN) and bool(token) and hmac.compare_digest(token, ADMIN_TOKEN)
 
 
+# ═══════════════════════════════════════════════════════════════════
+# API ROUTE CONVENTION:
+#   /v1/ prefix   – public-facing OpenAI-compatible API (models, chat)
+#   /admin/*       – internal/admin management endpoints (no /v1/)
+#   /auth/*        – authentication & user profile endpoints
+#   /health/*      – service health probes
+#   All other paths – app-level endpoints (conversations, wallet, etc.)
+# ═══════════════════════════════════════════════════════════════════
+
+
 class AdminLogin(BaseModel):
     token: str
 
@@ -494,7 +508,7 @@ class AdminLogin(BaseModel):
 async def admin_login(payload: AdminLogin) -> JSONResponse:
     """Validate admin token and establish an isolated server-side session."""
     if not ADMIN_TOKEN or not hmac.compare_digest(payload.token, ADMIN_TOKEN):
-        return JSONResponse({'detail': 'invalid admin token'}, status_code=401)
+        return JSONResponse({'detail': 'توکن ادمین نامعتبر است'}, status_code=401)
     sid, csrf = await _create_admin_session()
     await _write_audit_log('admin.login')
     response = JSONResponse({'status': 'ok', 'csrf': csrf})
@@ -571,7 +585,7 @@ async def health(request: Request) -> HealthResponse:
 async def health_detailed(request: Request) -> JSONResponse:
     """Detailed health check with metrics"""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
 
     import psutil
     mem = psutil.virtual_memory()
@@ -669,7 +683,14 @@ async def _load_catalog_rows() -> list[dict[str, Any]]:
         return []
     try:
         async with async_session() as session:
-            res = await session.execute(sqlalchemy.text('SELECT * FROM model_catalog ORDER BY provider, id'))
+            res = await session.execute(sqlalchemy.text(
+                'SELECT id, provider_model_id, provider, display_name, description, '
+                'modalities, capabilities, recommended_for, context_window, max_output_tokens, '
+                'currency, input_per_million, output_per_million, cached_input_per_million, '
+                'reasoning_per_million, price_version, effective_from, availability, audience, '
+                'rate_limit, deprecated_at, last_verified_at, provenance '
+                'FROM model_catalog ORDER BY provider, id'
+            ))
             return [dict(r._mapping) for r in res.fetchall()]
     except Exception:
         return []
@@ -720,6 +741,9 @@ async def _litellm_fallback_catalog() -> list[dict[str, Any]]:
 @app.get('/catalog/models')
 async def catalog_models(request: Request) -> JSONResponse:
     """Approved model catalog from DB, with litellm fallback when DB is empty."""
+    cached = await rds.get('cache:catalog:models')
+    if cached:
+        return JSONResponse(json.loads(cached))
     rows = await _load_catalog_rows()
     if rows:
         data = [_catalog_row_to_item(r) for r in rows]
@@ -727,15 +751,20 @@ async def catalog_models(request: Request) -> JSONResponse:
     else:
         data = await _litellm_fallback_catalog()
         source = 'fallback'
-    return JSONResponse(jsonable_encoder({
+    result = jsonable_encoder({
         'data': data,
         'generatedAt': datetime.now(timezone.utc),
         'source': source,
-    }))
+    })
+    await rds.setex('cache:catalog:models', 120, json.dumps(result))
+    return JSONResponse(result)
 
 @app.get('/catalog/pricing')
 async def catalog_pricing(request: Request) -> JSONResponse:
     """Versioned pricing for catalog models (falls back to pricing table)."""
+    cached = await rds.get('cache:catalog:pricing')
+    if cached:
+        return JSONResponse(json.loads(cached))
     rows = await _load_catalog_rows()
     pricing = []
     for m in rows:
@@ -767,11 +796,13 @@ async def catalog_pricing(request: Request) -> JSONResponse:
                     })
         except Exception:
             pass
-    return JSONResponse(jsonable_encoder({
+    result = jsonable_encoder({
         'data': pricing,
         'generatedAt': datetime.now(timezone.utc),
         'priceVersion': pricing[0]['priceVersion'] if pricing else 'v1',
-    }))
+    })
+    await rds.setex('cache:catalog:pricing', 120, json.dumps(result))
+    return JSONResponse(result)
 
 
 async def _check_quota_pre(uid: int) -> JSONResponse | None:
@@ -841,11 +872,29 @@ async def _check_quota_pre(uid: int) -> JSONResponse | None:
     return None
 
 
+def _escape_like(s: str) -> str:
+    """Escape LIKE/ILIKE wildcards in user input to prevent pattern injection."""
+    return s.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+
+
+class ChatRequest(BaseModel):
+    model: str = ''
+    messages: list = []
+    stream: bool = False
+    temperature: float | None = None
+    max_tokens: int | None = None
+    web_search: bool = False
+    assistant_id: int | None = None
+
+
 @app.post('/v1/chat/completions')
-async def chat(request: Request, payload: dict[str, Any]) -> Response:
+async def chat(request: Request, payload: ChatRequest) -> Response:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+
+    # Convert Pydantic model to dict for downstream processing
+    payload = payload.model_dump(exclude_none=True)
 
     # P0-2: Quota pre-check — reject before calling LiteLLM if user has
     # exceeded their daily token limit or has zero wallet balance.
@@ -919,7 +968,7 @@ async def chat(request: Request, payload: dict[str, Any]) -> Response:
             return Response(content=r.content, status_code=200, media_type='application/json')
         return Response(content=r.content, status_code=r.status_code, media_type='application/json')
     except Exception as e:
-        return JSONResponse({'error': {'message': f'upstream unavailable: {e}', 'type': 'gateway_error'}}, status_code=502)
+        return JSONResponse({'detail': 'سرویس موقتاً در دسترس نیست', 'code': 'gateway_error'}, status_code=502)
 
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB hard cap
@@ -937,7 +986,7 @@ async def _extract_file_text(upload: UploadFile) -> tuple[str, str]:
             break
         total += len(chunk)
         if total > MAX_FILE_SIZE:
-            return '', f'file too large | فایل بیش از حد بزرگ است (max {MAX_FILE_SIZE // (1024*1024)} MB)'
+            return '', f'file too large | فایل بیش از حد بزرگ است (حداکثر {_to_fa(MAX_FILE_SIZE // (1024*1024))} مگابایت)'
         chunks.append(chunk)
     data = b''.join(chunks)
     if name.endswith(('.txt', '.md', '.csv', '.json', '.log', '.text')):
@@ -950,7 +999,7 @@ async def _extract_file_text(upload: UploadFile) -> tuple[str, str]:
             from pypdf import PdfReader
             reader = PdfReader(io.BytesIO(data))
             if len(reader.pages) > 100:
-                return '', 'PDF too many pages (max 100)'
+                return '', 'PDF too many pages | تعداد صفحات PDF بیش از حد مجاز است (حداکثر ۱۰۰)'
             text = '\n'.join((p.extract_text() or '') for p in reader.pages[:100])
             return text[:200000], ''  # cap at ~200KB of text
         except Exception as e:  # noqa: BLE001
@@ -1007,7 +1056,7 @@ async def chat_with_file(
     """
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     quota_err = await _check_quota_pre(uid)
     if quota_err is not None:
         return quota_err
@@ -1053,7 +1102,7 @@ async def chat_with_file(
         return Response(content=r.content, status_code=r.status_code, media_type='application/json')
     except Exception as e:  # noqa: BLE001
         return JSONResponse(
-            {'error': {'message': f'upstream unavailable: {e}', 'type': 'gateway_error'}},
+            {'detail': 'سرویس موقتاً در دسترس نیست', 'code': 'gateway_error'},
             status_code=502,
         )
 
@@ -1105,7 +1154,7 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
                                     pass
                             yield f"{line}\n\n"
         except Exception as e:
-            yield f'data: {{"error": "upstream unavailable: {e}"}}\n\n'
+            yield f'data: {{"error": "سرویس موقتاً در دسترس نیست", "code": "gateway_error"}}\n\n'
         finally:
             # Bill the user after the stream completes
             if uid and usage_data and async_session is not None:
@@ -1116,82 +1165,93 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
 
     return StreamingResponse(event_stream(), media_type='text/event-stream')
 
+async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any], usage: dict[str, Any]) -> None:
+    """Shared billing logic used by both ``_track_usage`` and ``_bill_stream_usage``.
+
+    Updates the user's quota, calculates cost from model_catalog pricing,
+    deducts from the ledger, and persists an immutable metering event.
+    Must be called inside an open session; the caller is responsible for
+    committing the transaction.
+    """
+    total_tokens = usage.get('total_tokens', 0)
+    if total_tokens <= 0:
+        return
+    model = payload.get('model', '')
+    input_tokens = int(usage.get('prompt_tokens') or usage.get('input_tokens') or 0)
+    output_tokens = int(usage.get('completion_tokens') or usage.get('output_tokens') or 0)
+
+    # Update quota
+    res = await session.execute(Quota.__table__.select().where(Quota.user_id == uid))
+    quota = res.fetchone()
+    if quota:
+        await session.execute(
+            Quota.__table__.update().where(Quota.user_id == uid),
+            {'used_today': quota.used_today + total_tokens, 'updated_at': datetime.now(timezone.utc).replace(tzinfo=None)},
+        )
+
+    # Look up price from model_catalog by provider_model_id
+    price_row = None
+    try:
+        price_res = await session.execute(
+            sqlalchemy.text(
+                'SELECT input_per_million, output_per_million FROM model_catalog '
+                'WHERE provider_model_id = :mid AND availability = :avail LIMIT 1'
+            ),
+            {'mid': model, 'avail': 'available'},
+        )
+        price_row = price_res.fetchone()
+    except Exception:
+        pass
+
+    if price_row:
+        inp_rate = float(price_row.input_per_million or 0)
+        out_rate = float(price_row.output_per_million or 0)
+        cost = max(1, int((input_tokens * inp_rate + output_tokens * out_rate + 500_000) // 1_000_000))
+    else:
+        # Fallback: 1 toman per 1000 tokens (old flat rate)
+        cost = max(1, total_tokens // 1000)
+
+    # Deduct from wallet/ledger
+    res = await session.execute(
+        sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid FOR UPDATE'),
+        {'uid': uid},
+    )
+    row = res.fetchone()
+    current = row.balance if row else 0
+    if current >= cost:
+        entry = Ledger(user_id=uid, amount=-cost, balance_after=current - cost, reason=f'مصرف {model}')
+        session.add(entry)
+
+    # Metering: persist immutable usage event in the same transaction
+    try:
+        _repo = SqlBillingRepo(session)
+        from services.metering import record_usage
+        from services.money import Money
+        await record_usage(
+            _repo,
+            request_id=secrets.token_hex(8),
+            user_id=uid,
+            model=model,
+            charge=Money(cost),
+            upstream_status='success',
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+        )
+    except Exception:
+        pass
+
+
 async def _track_usage(request: Request, payload: dict[str, Any], response_data: dict[str, Any]):
-    """Record token usage"""
+    """Record token usage for non-streaming requests."""
     uid = await _get_user_id(request)
     if not uid or async_session is None:
         return
     usage = response_data.get('usage', {})
-    total_tokens = usage.get('total_tokens', 0)
-    if total_tokens <= 0:
+    if usage.get('total_tokens', 0) <= 0:
         return
     try:
         async with async_session() as session:
-            # Update quota
-            res = await session.execute(Quota.__table__.select().where(Quota.user_id == uid))
-            quota = res.fetchone()
-            if quota:
-                await session.execute(
-                    Quota.__table__.update().where(Quota.user_id == uid),
-                    {'used_today': quota.used_today + total_tokens, 'updated_at': datetime.now(timezone.utc).replace(tzinfo=None)}
-                )
-            # Deduct from wallet using model_catalog prices
-            model = payload.get('model', '')
-            input_tokens = int(usage.get('prompt_tokens') or usage.get('input_tokens') or 0)
-            output_tokens = int(usage.get('completion_tokens') or usage.get('output_tokens') or 0)
-
-            # Look up price from model_catalog by provider_model_id
-            price_row = None
-            try:
-                price_res = await session.execute(
-                    sqlalchemy.text(
-                        'SELECT input_per_million, output_per_million FROM model_catalog '
-                        'WHERE provider_model_id = :mid AND availability = :avail LIMIT 1'
-                    ),
-                    {'mid': model, 'avail': 'available'}
-                )
-                price_row = price_res.fetchone()
-            except Exception:
-                pass
-
-            if price_row:
-                inp_rate = float(price_row.input_per_million or 0)
-                out_rate = float(price_row.output_per_million or 0)
-                cost = max(1, int((input_tokens * inp_rate + output_tokens * out_rate + 500_000) // 1_000_000))
-            else:
-                # Fallback: 1 toman per 1000 tokens (old flat rate)
-                cost = max(1, total_tokens // 1000)
-            res = await session.execute(
-                sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid FOR UPDATE'),
-                {'uid': uid}
-            )
-            row = res.fetchone()
-            current = row.balance if row else 0
-            if current >= cost:
-                entry = Ledger(user_id=uid, amount=-cost, balance_after=current - cost, reason=f'مصرف {model}')
-                session.add(entry)
-
-            # Metering: persist immutable usage event in the SAME transaction
-            # as the ledger deduction (before commit), so it's not lost.
-            try:
-                from services.billing import SqlBillingRepo
-                from services.metering import record_usage
-                from services.money import Money
-
-                _repo = SqlBillingRepo(session)
-                await record_usage(
-                    _repo,
-                    request_id=secrets.token_hex(8),
-                    user_id=uid,
-                    model=model,
-                    charge=Money(cost),
-                    upstream_status='success',
-                    input_tokens=int(usage.get('prompt_tokens') or usage.get('input_tokens') or 0),
-                    output_tokens=int(usage.get('completion_tokens') or usage.get('output_tokens') or 0),
-                )
-            except Exception:
-                pass
-
+            await _record_usage(session, uid, payload, usage)
             await session.commit()
     except Exception:
         pass
@@ -1202,81 +1262,22 @@ async def _bill_stream_usage(uid: int, payload: dict[str, Any], usage: dict[str,
     Uses the same pricing logic as ``_track_usage`` but takes the uid and
     usage dict directly (no request/response objects needed).
     """
-    total_tokens = usage.get('total_tokens', 0)
-    if total_tokens <= 0:
+    if usage.get('total_tokens', 0) <= 0:
         return
-    async with async_session() as session:
-        # Update quota
-        res = await session.execute(Quota.__table__.select().where(Quota.user_id == uid))
-        quota = res.fetchone()
-        if quota:
-            await session.execute(
-                Quota.__table__.update().where(Quota.user_id == uid),
-                {'used_today': quota.used_today + total_tokens, 'updated_at': datetime.now(timezone.utc).replace(tzinfo=None)},
-            )
-
-        model = payload.get('model', '')
-        input_tokens = int(usage.get('prompt_tokens') or usage.get('input_tokens') or 0)
-        output_tokens = int(usage.get('completion_tokens') or usage.get('output_tokens') or 0)
-
-        # Look up price from model_catalog
-        price_row = None
-        try:
-            price_res = await session.execute(
-                sqlalchemy.text(
-                    'SELECT input_per_million, output_per_million FROM model_catalog '
-                    'WHERE provider_model_id = :mid AND availability = :avail LIMIT 1'
-                ),
-                {'mid': model, 'avail': 'available'},
-            )
-            price_row = price_res.fetchone()
-        except Exception:
-            pass
-
-        if price_row:
-            inp_rate = float(price_row.input_per_million or 0)
-            out_rate = float(price_row.output_per_million or 0)
-            cost = max(1, int((input_tokens * inp_rate + output_tokens * out_rate + 500_000) // 1_000_000))
-        else:
-            cost = max(1, total_tokens // 1000)
-
-        res = await session.execute(
-            sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid FOR UPDATE'),
-            {'uid': uid},
-        )
-        row = res.fetchone()
-        current = row.balance if row else 0
-        if current >= cost:
-            entry = Ledger(user_id=uid, amount=-cost, balance_after=current - cost, reason=f'مصرف {model}')
-            session.add(entry)
-
-        # Metering: persist immutable usage event in the same transaction
-        try:
-            _repo = SqlBillingRepo(session)
-            from services.metering import record_usage
-            from services.money import Money
-            await record_usage(
-                _repo,
-                request_id=secrets.token_hex(8),
-                user_id=uid,
-                model=model,
-                charge=Money(cost),
-                upstream_status='success',
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-            )
-        except Exception:
-            pass
-
-        await session.commit()
+    try:
+        async with async_session() as session:
+            await _record_usage(session, uid, payload, usage)
+            await session.commit()
+    except Exception:
+        pass
 
 @app.get('/me/usage')
 async def me_usage(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         q = await session.execute(Quota.__table__.select().where(Quota.user_id == uid))
         row = q.fetchone()
@@ -1287,9 +1288,9 @@ async def me_usage(request: Request) -> JSONResponse:
 @app.get('/admin/pricing')
 async def list_pricing(request: Request) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(
             Pricing.__table__.select().order_by(Pricing.model, Pricing.price_version.desc())
@@ -1319,17 +1320,17 @@ async def get_active_price(session, model_id: str) -> "Pricing | None":
 async def set_pricing(request: Request, payload: dict[str, Any]) -> JSONResponse:
     """Insert a NEW versioned price row.  Historical rows are never updated."""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     model = payload.get('model')
     if not model:
-        return JSONResponse({'detail': 'model required'}, status_code=400)
+        return JSONResponse({'detail': 'مدل الزامی است'}, status_code=400)
     try:
         input_pm = int(payload.get('input_per_million', 0))
         output_pm = int(payload.get('output_per_million', 0))
     except (TypeError, ValueError):
-        return JSONResponse({'detail': 'prices must be integers'}, status_code=400)
+        return JSONResponse({'detail': 'قیمت‌ها باید عدد صحیح باشند'}, status_code=400)
     currency = payload.get('currency', 'IRT')
     provider = payload.get('provider', 'unknown')
     source = payload.get('source')
@@ -1353,15 +1354,16 @@ async def set_pricing(request: Request, payload: dict[str, Any]) -> JSONResponse
         session.add(row)
         await session.commit()
     await _write_audit_log('admin.pricing.set', target_type='pricing', target_id=model, details={'price_version': next_version})
+    await rds.delete('cache:catalog:models', 'cache:catalog:pricing')
     return JSONResponse({'status': 'inserted', 'model': model, 'price_version': next_version})
 
 # ===== Features =====
 @app.get('/admin/features')
 async def list_features(request: Request) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(Feature.__table__.select().order_by(Feature.order_idx))
         rows = [dict(r._mapping) for r in res.fetchall()]
@@ -1370,13 +1372,13 @@ async def list_features(request: Request) -> JSONResponse:
 @app.post('/admin/features')
 async def upsert_feature(request: Request, payload: dict[str, Any]) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     fid = payload.get('id')
     async with async_session() as session:
         if fid:
             row = await session.get(Feature, fid)
             if not row:
-                return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
+                return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
         else:
             row = Feature()
             session.add(row)
@@ -1388,27 +1390,29 @@ async def upsert_feature(request: Request, payload: dict[str, Any]) -> JSONRespo
         row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await session.commit()
     await _write_audit_log('admin.feature.upsert', target_type='feature', target_id=row.id)
+    await rds.delete('cache:content:features')
     return JSONResponse({'status': 'ok', 'id': row.id})
 
 @app.delete('/admin/features/{fid}')
 async def delete_feature(request: Request, fid: int) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         row = await session.get(Feature, fid)
         if row:
             await session.delete(row)
             await session.commit()
     await _write_audit_log('admin.feature.delete', target_type='feature', target_id=fid)
+    await rds.delete('cache:content:features')
     return JSONResponse({'status': 'deleted'})
 
 # ===== Discounts =====
 @app.get('/admin/discounts')
 async def list_discounts(request: Request) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(Discount.__table__.select())
         rows = [dict(r._mapping) for r in res.fetchall()]
@@ -1417,16 +1421,16 @@ async def list_discounts(request: Request) -> JSONResponse:
 @app.post('/admin/discounts')
 async def upsert_discount(request: Request, payload: dict[str, Any]) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     did = payload.get('id')
     code = payload.get('code')
     if not code:
-        return JSONResponse({'detail': 'code required'}, status_code=400)
+        return JSONResponse({'detail': 'کد الزامی است'}, status_code=400)
     async with async_session() as session:
         if did:
             row = await session.get(Discount, did)
             if not row:
-                return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
+                return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
         else:
             row = Discount()
             session.add(row)
@@ -1437,23 +1441,28 @@ async def upsert_discount(request: Request, payload: dict[str, Any]) -> JSONResp
         row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await session.commit()
     await _write_audit_log('admin.discount.upsert', target_type='discount', target_id=row.id)
+    await rds.delete('cache:content:discounts')
     return JSONResponse({'status': 'ok', 'id': row.id})
 
 @app.delete('/admin/discounts/{did}')
 async def delete_discount(request: Request, did: int) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         row = await session.get(Discount, did)
         if row:
             await session.delete(row)
             await session.commit()
     await _write_audit_log('admin.discount.delete', target_type='discount', target_id=did)
+    await rds.delete('cache:content:discounts')
     return JSONResponse({'status': 'deleted'})
 
 # ===== About =====
 @app.get('/about')
 async def get_about() -> JSONResponse:
+    cached = await rds.get('cache:about')
+    if cached:
+        return JSONResponse(json.loads(cached))
     if async_session is None:
         return JSONResponse({'title': 'درباره ما', 'body': ''})
     async with async_session() as session:
@@ -1461,12 +1470,14 @@ async def get_about() -> JSONResponse:
         row = res.fetchone()
         if not row:
             return JSONResponse({'title': 'درباره ما', 'body': ''})
-        return JSONResponse(jsonable_encoder(dict(row._mapping)))
+        result = jsonable_encoder(dict(row._mapping))
+    await rds.setex('cache:about', 120, json.dumps(result))
+    return JSONResponse(result)
 
 @app.post('/admin/about')
 async def set_about(request: Request, payload: dict[str, Any]) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         res = await session.execute(AboutContent.__table__.select())
         row = res.fetchone()
@@ -1480,13 +1491,14 @@ async def set_about(request: Request, payload: dict[str, Any]) -> JSONResponse:
         row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await session.commit()
     await _write_audit_log('admin.about.set')
+    await rds.delete('cache:about')
     return JSONResponse({'status': 'ok'})
 
 # ===== Proxy Config =====
 @app.get('/admin/proxy')
 async def get_proxy(request: Request) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'proxy_url': '', 'proxy_type': 'socks5', 'active': False})
     async with async_session() as session:
@@ -1499,7 +1511,29 @@ async def get_proxy(request: Request) -> JSONResponse:
 @app.post('/admin/proxy')
 async def set_proxy(request: Request, payload: dict[str, Any]) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+
+    # N18: Allowlist validation for proxy URLs
+    proxy_url = payload.get('proxy_url', '')
+    if proxy_url:
+        from urllib.parse import urlparse
+        parsed = urlparse(proxy_url)
+        _ALLOWED_PROXY_SCHEMES = {'socks5', 'socks5h', 'http', 'https'}
+        if parsed.scheme not in _ALLOWED_PROXY_SCHEMES:
+            return JSONResponse(
+                {'detail': 'نوع پروکسی مجاز نیست', 'code': 'invalid_proxy_scheme'},
+                status_code=400,
+            )
+        # Block obviously internal/private addresses
+        hostname = parsed.hostname or ''
+        if hostname in ('localhost', '127.0.0.1', '0.0.0.0', '::1') or \
+           hostname.startswith('10.') or hostname.startswith('192.168.') or \
+           hostname.startswith('172.'):
+            return JSONResponse(
+                {'detail': 'آدرس پروکسی داخلی مجاز نیست', 'code': 'internal_proxy_blocked'},
+                status_code=400,
+            )
+
     async with async_session() as session:
         res = await session.execute(ProxyConfig.__table__.select())
         row = res.fetchone()
@@ -1515,29 +1549,35 @@ async def set_proxy(request: Request, payload: dict[str, Any]) -> JSONResponse:
         row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await session.commit()
     await _write_audit_log('admin.proxy.set')
+    await rds.delete('cache:org:default-model')
     return JSONResponse({'status': 'ok', 'proxy_url': row.proxy_url})
 
 
 @app.get('/org/default-model')
 async def get_org_default_model() -> JSONResponse:
     """Public endpoint: get org-wide default model (for chat fallback)."""
+    cached = await rds.get('cache:org:default-model')
+    if cached:
+        return JSONResponse(json.loads(cached))
     if async_session is None:
         return JSONResponse({'default_model': ''})
     async with async_session() as session:
         res = await session.execute(ProxyConfig.__table__.select())
         row = res.fetchone()
         dm = row.default_model if row and hasattr(row, 'default_model') else ''
-        return JSONResponse({'default_model': dm})
+        result = {'default_model': dm}
+    await rds.setex('cache:org:default-model', 120, json.dumps(result))
+    return JSONResponse(result)
 
 
 @app.post('/admin/org-default-model')
 async def set_org_default_model(request: Request, payload: dict[str, Any]) -> JSONResponse:
     """Admin: set org-wide default model."""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     model_id = payload.get('default_model', '')
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(ProxyConfig.__table__.select())
         row = res.fetchone()
@@ -1550,6 +1590,7 @@ async def set_org_default_model(request: Request, payload: dict[str, Any]) -> JS
         row.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await session.commit()
     await _write_audit_log('admin.org_default_model.set', details={'model': model_id})
+    await rds.delete('cache:org:default-model')
     return JSONResponse({'status': 'ok', 'default_model': model_id})
 
 
@@ -1590,9 +1631,9 @@ async def list_assistants(request: Request) -> JSONResponse:
 async def create_assistant(request: Request, payload: AssistantCreate) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         obj = Assistant(
             user_id=uid, name=payload.name, description=payload.description,
@@ -1608,14 +1649,14 @@ async def create_assistant(request: Request, payload: AssistantCreate) -> JSONRe
 @app.get('/assistants/{assistant_id}')
 async def get_assistant(assistant_id: int, request: Request) -> JSONResponse:
     if async_session is None:
-        return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
+        return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
     async with async_session() as session:
         res = await session.execute(
             Assistant.__table__.select().where(Assistant.id == assistant_id)
         )
         row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
+            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
         return JSONResponse(jsonable_encoder(dict(row._mapping)))
 
 
@@ -1623,9 +1664,9 @@ async def get_assistant(assistant_id: int, request: Request) -> JSONResponse:
 async def update_assistant(assistant_id: int, request: Request, payload: dict[str, Any]) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(
             Assistant.__table__.select().where(Assistant.id == assistant_id, Assistant.user_id == uid)
@@ -1646,15 +1687,15 @@ async def update_assistant(assistant_id: int, request: Request, payload: dict[st
 async def delete_assistant(assistant_id: int, request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(
             Assistant.__table__.select().where(Assistant.id == assistant_id, Assistant.user_id == uid)
         )
         if not res.fetchone():
-            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
+            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
         await session.execute(Assistant.__table__.delete().where(Assistant.id == assistant_id))
         await session.commit()
     return JSONResponse({'status': 'ok'})
@@ -1663,21 +1704,31 @@ async def delete_assistant(assistant_id: int, request: Request) -> JSONResponse:
 # ===== Public content (frontend) =====
 @app.get('/content/features')
 async def public_features() -> JSONResponse:
+    cached = await rds.get('cache:content:features')
+    if cached:
+        return JSONResponse(json.loads(cached))
     if async_session is None:
         return JSONResponse([])
     async with async_session() as session:
         res = await session.execute(Feature.__table__.select().where(Feature.active == True).order_by(Feature.order_idx))
         rows = [dict(r._mapping) for r in res.fetchall()]
-    return JSONResponse(jsonable_encoder(rows))
+    result = jsonable_encoder(rows)
+    await rds.setex('cache:content:features', 120, json.dumps(result))
+    return JSONResponse(result)
 
 @app.get('/content/discounts')
 async def public_discounts() -> JSONResponse:
+    cached = await rds.get('cache:content:discounts')
+    if cached:
+        return JSONResponse(json.loads(cached))
     if async_session is None:
         return JSONResponse([])
     async with async_session() as session:
         res = await session.execute(Discount.__table__.select().where(Discount.active == True))
         rows = [{'code': r.code, 'percent': r.percent} for r in res.fetchall()]
-    return JSONResponse(jsonable_encoder(rows))
+    result = jsonable_encoder(rows)
+    await rds.setex('cache:content:discounts', 120, json.dumps(result))
+    return JSONResponse(result)
 
 # ═══════════════════════════════════════
 # Auth
@@ -1843,6 +1894,12 @@ def _verify_password(password: str, stored: str) -> bool:
 def _gen_token() -> str:
     return secrets.token_urlsafe(32)
 
+_PERSIAN_DIGITS = '۰۱۲۳۴۵۶۷۸۹'
+
+def _to_fa(value: str | int | float) -> str:
+    """Convert Western digits (0-9) to Persian digits (۰-۹) in a string."""
+    return ''.join(_PERSIAN_DIGITS[int(ch)] if ch.isdigit() else ch for ch in str(value))
+
 async def _get_user_id(request: Request) -> int | None:
     # Primary: server-side session cookie
     token = request.cookies.get(SESSION_COOKIE_NAME)
@@ -1869,13 +1926,31 @@ async def _get_user_id(request: Request) -> int | None:
                 )
                 key = res.fetchone()
                 if key:
-                    await session.execute(
-                        ApiKey.__table__.update().where(ApiKey.id == key.id),
-                        {'last_used': datetime.now(timezone.utc).replace(tzinfo=None)}
-                    )
-                    await session.commit()
-                    return key.user_id
+                    key_id = key.id
+                    user_id = key.user_id
+                    # Fire-and-forget: update last_used timestamp (N45)
+                    asyncio.create_task(_update_api_key_last_used(key_id))
+                    # Check if user is banned
+                    user_res = await session.execute(User.__table__.select().where(User.id == user_id))
+                    user_row = user_res.fetchone()
+                    if user_row and user_row.banned:
+                        return None
+                    return user_id
     return None
+
+
+async def _update_api_key_last_used(key_id: int) -> None:
+    """Background task: update api_keys.last_used without blocking the response."""
+    try:
+        if async_session is not None:
+            async with async_session() as session:
+                await session.execute(
+                    ApiKey.__table__.update().where(ApiKey.id == key_id),
+                    {'last_used': datetime.now(timezone.utc).replace(tzinfo=None)}
+                )
+                await session.commit()
+    except Exception:
+        pass  # best-effort; don't crash the auth flow
 
 class AuthSignup(BaseModel):
     email: str
@@ -1897,7 +1972,7 @@ async def signup(payload: AuthSignup) -> JSONResponse:
         return JSONResponse({'detail': err}, status_code=400)
 
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         existing = await session.execute(User.__table__.select().where(User.email == payload.email))
         if existing.fetchone():
@@ -1941,13 +2016,15 @@ async def signup(payload: AuthSignup) -> JSONResponse:
 @app.post('/auth/login')
 async def login(payload: AuthLogin) -> JSONResponse:
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(User.__table__.select().where(User.email == payload.email))
         user = res.fetchone()
         if not user or not user.password_hash or not _verify_password(payload.password, user.password_hash):
             await _write_audit_log('auth.login_failed', details={'email': payload.email})
-            return JSONResponse({'detail': 'invalid email or password | ایمیل یا رمز عبور نادرست است'}, status_code=401)
+            return JSONResponse({'detail': 'ایمیل یا رمز عبور اشتباه است'}, status_code=401)
+        if user.banned:
+            return JSONResponse({'detail': 'حساب شما مسدود شده است'}, status_code=403)
         token = await _create_session(user.id)
         response = JSONResponse({'token': token, 'user': {'id': user.id, 'email': user.email}})
         _set_session_cookie(response, token)
@@ -1958,9 +2035,9 @@ async def login(payload: AuthLogin) -> JSONResponse:
 async def me(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(User.__table__.select().where(User.id == uid))
         user = res.fetchone()
@@ -1978,9 +2055,9 @@ async def referral_stats(request: Request) -> JSONResponse:
     """Get user's referral stats"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         # Get referral code
@@ -2028,7 +2105,7 @@ async def logout_all(request: Request) -> JSONResponse:
     """Revoke every active session for the authenticated user."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     raw_members = await rds.smembers(f'sessions:{uid}')
     tokens = list(raw_members or [])
     for tok in tokens:
@@ -2050,13 +2127,13 @@ async def change_password(request: Request, payload: ChangePasswordRequest) -> J
     """Change user password"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     from security import validate_password
     valid, err = validate_password(payload.new_password)
     if not valid:
         return JSONResponse({'detail': err}, status_code=400)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         res = await session.execute(User.__table__.select().where(User.id == uid))
@@ -2082,14 +2159,14 @@ async def update_profile(request: Request, payload: dict[str, Any]) -> JSONRespo
     """Update user profile fields"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     allowed = {'phone'}
     update_data = {k: v for k, v in payload.items() if k in allowed and v is not None}
     if not update_data:
-        return JSONResponse({'detail': 'no valid fields to update'}, status_code=400)
+        return JSONResponse({'detail': 'فیلد معتبری برای بروزرسانی وجود ندارد'}, status_code=400)
 
     async with async_session() as session:
         await session.execute(
@@ -2113,14 +2190,14 @@ class ResetPasswordRequest(BaseModel):
 async def forgot_password(payload: ForgotPasswordRequest) -> JSONResponse:
     """Send password reset token (stored in Redis for 15 min)"""
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         res = await session.execute(User.__table__.select().where(User.email == payload.email))
         user = res.fetchone()
         if not user:
             # Don't reveal if email exists
-            return JSONResponse({'status': 'ok', 'message': 'if email exists, reset link sent'})
+            return JSONResponse({'status': 'ok', 'message': 'در صورت وجود ایمیل، لینک بازیابی ارسال شد'})
 
         reset_token = secrets.token_urlsafe(32)
         await rds.setex(f'reset:{reset_token}', 900, str(user.id))  # 15 min TTL
@@ -2133,7 +2210,7 @@ async def forgot_password(payload: ForgotPasswordRequest) -> JSONResponse:
         _logging.getLogger(__name__).warning('Password reset token generated for user %s (email delivery not configured)', user.id)
         return JSONResponse({
             'status': 'ok',
-            'message': 'reset link sent to your email',
+            'message': 'لینک بازیابی به ایمیل شما ارسال شد',
         })
 
 
@@ -2147,10 +2224,10 @@ async def reset_password(payload: ResetPasswordRequest) -> JSONResponse:
 
     uid = await rds.get(f'reset:{payload.token}')
     if not uid:
-        return JSONResponse({'detail': 'invalid or expired reset token'}, status_code=400)
+        return JSONResponse({'detail': 'توکن بازیابی نامعتبر یا منقضی شده است'}, status_code=400)
 
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     new_hash = _hash_password(payload.new_password)
     async with async_session() as session:
@@ -2161,7 +2238,7 @@ async def reset_password(payload: ResetPasswordRequest) -> JSONResponse:
         await session.commit()
 
     await rds.delete(f'reset:{payload.token}')
-    return JSONResponse({'status': 'ok', 'message': 'password reset successfully'})
+    return JSONResponse({'status': 'ok', 'message': 'رمز عبور با موفقیت تغییر کرد'})
 
 # ── Telegram account linking ──────────────────────────────
 
@@ -2173,9 +2250,9 @@ async def telegram_link(request: Request, payload: TelegramLink) -> JSONResponse
     """Link a Telegram account to existing user"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         await session.execute(
             User.__table__.update().where(User.id == uid),
@@ -2194,17 +2271,17 @@ async def get_telegram_token(request: Request, payload: TelegramTokenRequest) ->
     """Exchange a Telegram ID for a session token. Requires internal service auth."""
     internal_token = request.headers.get('x-internal-token', '')
     if not INTERNAL_TOKEN or not internal_token or not hmac.compare_digest(internal_token, INTERNAL_TOKEN):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         res = await session.execute(User.__table__.select().where(User.telegram_id == payload.telegram_id))
         user = res.fetchone()
         if not user:
-            return JSONResponse({'detail': 'not linked'}, status_code=404)
+            return JSONResponse({'detail': 'متصل نشده'}, status_code=404)
         if user.telegram_id != payload.telegram_id:
-            return JSONResponse({'detail': 'telegram_id mismatch'}, status_code=403)
+            return JSONResponse({'detail': 'عدم تطابق شناسه تلگرام'}, status_code=403)
         token = _gen_token()
         rds.setex(f'session:{token}', SESSION_TTL, str(user.id))
         await _write_audit_log('auth.telegram_token', target_type='user', target_id=user.id)
@@ -2227,25 +2304,35 @@ class ConvUpdate(BaseModel):
 async def list_conversations(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+    page = int(request.query_params.get('page', 1))
+    limit = min(int(request.query_params.get('limit', 20)), 100)
+    offset = (page - 1) * limit
     async with async_session() as session:
+        count_res = await session.execute(
+            sqlalchemy.text('SELECT COUNT(*) as c FROM conversations WHERE user_id = :uid'),
+            {'uid': uid}
+        )
+        total = count_res.fetchone().c
         res = await session.execute(
-            Conversation.__table__.select()
-            .where(Conversation.user_id == uid)
-            .order_by(Conversation.updated_at.desc())
+            sqlalchemy.text(
+                'SELECT id, title, model, created_at, updated_at FROM conversations '
+                'WHERE user_id = :uid ORDER BY updated_at DESC OFFSET :off LIMIT :lim'
+            ),
+            {'uid': uid, 'off': offset, 'lim': limit},
         )
         rows = [{'id': r.id, 'title': r.title, 'model': r.model, 'created_at': r.created_at, 'updated_at': r.updated_at} for r in res.fetchall()]
-    return JSONResponse(jsonable_encoder(rows))
+    return JSONResponse(jsonable_encoder({'items': rows, 'total': total, 'page': page, 'limit': limit}))
 
 @app.post('/conversations')
 async def create_conversation(request: Request, payload: ConvCreate) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         conv = Conversation(user_id=uid, title=payload.title, model=payload.model, messages=payload.messages)
         session.add(conv)
@@ -2258,45 +2345,37 @@ async def search_conversations(request: Request, q: str = '') -> JSONResponse:
     """Search conversations by title or message content for the current user."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         if q:
-            res = await session.execute(
-                Conversation.__table__.select()
-                .where(
-                    Conversation.user_id == uid,
-                    Conversation.title.ilike(f'%{q}%')
-                )
-                .order_by(Conversation.updated_at.desc())
-                .limit(50)
+            # Use PostgreSQL JSONB search to find conversations with matching message content in SQL
+            search_sql = sqlalchemy.text(
+                """
+                SELECT DISTINCT c.id, c.user_id, c.title, c.model, c.created_at, c.updated_at
+                FROM conversations c
+                WHERE c.user_id = :uid
+                  AND (
+                    c.title ILIKE :pat
+                    OR EXISTS (
+                      SELECT 1 FROM jsonb_array_elements(c.messages) AS msg
+                      WHERE msg->>'content' ILIKE :pat
+                    )
+                  )
+                ORDER BY c.updated_at DESC
+                LIMIT 50
+                """
             )
+            res = await session.execute(search_sql, {'uid': uid, 'pat': f'%{q}%'})
             rows = [dict(r._mapping) for r in res.fetchall()]
-            # Also search in message content (JSON column)
-            res2 = await session.execute(
-                Conversation.__table__.select()
-                .where(Conversation.user_id == uid)
-                .order_by(Conversation.updated_at.desc())
-                .limit(200)
-            )
-            all_rows = res2.fetchall()
-            seen_ids = {r.id for r in rows}
-            for r in all_rows:
-                if r.id in seen_ids:
-                    continue
-                msgs = r.messages or []
-                for msg in msgs:
-                    if isinstance(msg, dict) and q.lower() in (msg.get('content', '') or '').lower():
-                        rows.append(dict(r._mapping))
-                        seen_ids.add(r.id)
-                        break
         else:
             res = await session.execute(
-                Conversation.__table__.select()
-                .where(Conversation.user_id == uid)
-                .order_by(Conversation.updated_at.desc())
-                .limit(50)
+                sqlalchemy.text(
+                    'SELECT id, title, model, created_at, updated_at FROM conversations '
+                    'WHERE user_id = :uid ORDER BY updated_at DESC LIMIT 50'
+                ),
+                {'uid': uid},
             )
             rows = [dict(r._mapping) for r in res.fetchall()]
     return JSONResponse(jsonable_encoder(rows))
@@ -2311,9 +2390,9 @@ async def conversation_analytics(request: Request) -> JSONResponse:
     """Return conversation usage analytics for the current user."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     try:
         async with async_session() as session:
@@ -2411,28 +2490,28 @@ async def conversation_analytics(request: Request) -> JSONResponse:
 async def get_conversation(request: Request, conv_id: int) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(Conversation.__table__.select().where(Conversation.id == conv_id, Conversation.user_id == uid))
         conv = res.fetchone()
         if not conv:
-            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
+            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
         return JSONResponse(jsonable_encoder({'id': conv.id, 'title': conv.title, 'model': conv.model, 'messages': conv.messages, 'created_at': conv.created_at}))
 
 @app.put('/conversations/{conv_id}')
 async def update_conversation(request: Request, conv_id: int, payload: ConvUpdate) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(Conversation.__table__.select().where(Conversation.id == conv_id, Conversation.user_id == uid))
         conv = res.fetchone()
         if not conv:
-            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
+            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
         update_data = {}
         if payload.title is not None:
             update_data['title'] = payload.title
@@ -2451,14 +2530,14 @@ async def update_conversation(request: Request, conv_id: int, payload: ConvUpdat
 async def delete_conversation(request: Request, conv_id: int) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(Conversation.__table__.select().where(Conversation.id == conv_id, Conversation.user_id == uid))
         conv = res.fetchone()
         if not conv:
-            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
+            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
         await session.execute(Conversation.__table__.delete().where(Conversation.id == conv_id))
         await session.commit()
     return JSONResponse({'status': 'deleted'})
@@ -2485,9 +2564,9 @@ async def list_memories(request: Request, category: str | None = None) -> JSONRe
     """List active memories for the current user, optionally filtered by category."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         stmt = UserMemory.__table__.select().where(
             UserMemory.user_id == uid,
@@ -2506,16 +2585,16 @@ async def search_memories(request: Request, q: str = '') -> JSONResponse:
     """Full-text search across memory content for the current user."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         if q:
             res = await session.execute(
                 UserMemory.__table__.select().where(
                     UserMemory.user_id == uid,
                     UserMemory.active == True,
-                    UserMemory.content.ilike(f'%{q}%'),
+                    UserMemory.content.ilike(f'%{_escape_like(q)}%'),
                 ).order_by(UserMemory.created_at.desc()).limit(50)
             )
         else:
@@ -2534,9 +2613,9 @@ async def create_memory(request: Request, payload: MemoryCreate) -> JSONResponse
     """Create a new memory entry for the current user."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         mem = UserMemory(
             user_id=uid,
@@ -2560,9 +2639,9 @@ async def update_memory(request: Request, memory_id: int, payload: MemoryUpdate)
     """Update an existing memory entry."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(
             UserMemory.__table__.select().where(
@@ -2571,7 +2650,7 @@ async def update_memory(request: Request, memory_id: int, payload: MemoryUpdate)
         )
         mem = res.fetchone()
         if not mem:
-            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
+            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
         update_data = {}
         if payload.content is not None:
             update_data['content'] = payload.content
@@ -2596,9 +2675,9 @@ async def delete_memory(request: Request, memory_id: int) -> JSONResponse:
     """Soft-delete a memory entry (set active=False)."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(
             UserMemory.__table__.select().where(
@@ -2607,7 +2686,7 @@ async def delete_memory(request: Request, memory_id: int) -> JSONResponse:
         )
         mem = res.fetchone()
         if not mem:
-            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
+            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
         await session.execute(
             UserMemory.__table__.update().where(UserMemory.id == memory_id),
             {'active': False, 'updated_at': datetime.now(timezone.utc).replace(tzinfo=None)},
@@ -2675,9 +2754,9 @@ async def list_my_skill_templates(request: Request) -> JSONResponse:
     """List skill templates owned by the current user."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(
             SkillTemplate.__table__.select().where(
@@ -2700,7 +2779,7 @@ async def list_skill_templates(
 ) -> JSONResponse:
     """List public skill templates with optional filtering and sorting."""
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         stmt = SkillTemplate.__table__.select().where(SkillTemplate.is_public == True)
         if category:
@@ -2709,10 +2788,10 @@ async def list_skill_templates(
             stmt = stmt.where(SkillTemplate.is_featured == featured)
         if q:
             stmt = stmt.where(
-                SkillTemplate.title.ilike(f'%{q}%') |
-                SkillTemplate.title_fa.ilike(f'%{q}%') |
-                SkillTemplate.description.ilike(f'%{q}%') |
-                SkillTemplate.description_fa.ilike(f'%{q}%')
+                SkillTemplate.title.ilike(f'%{_escape_like(q)}%') |
+                SkillTemplate.title_fa.ilike(f'%{_escape_like(q)}%') |
+                SkillTemplate.description.ilike(f'%{_escape_like(q)}%') |
+                SkillTemplate.description_fa.ilike(f'%{_escape_like(q)}%')
             )
         if sort == 'newest':
             stmt = stmt.order_by(SkillTemplate.created_at.desc())
@@ -2733,20 +2812,20 @@ async def list_skill_templates(
 async def get_skill_template(request: Request, template_id: int) -> JSONResponse:
     """Get a single skill template by ID."""
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(
             SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
         )
         row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
+            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
         data = dict(row._mapping)
         # Non-public templates only visible to owner or admin
         if not data.get('is_public'):
             uid = await _get_user_id(request)
             if not uid or (data.get('user_id') != uid and not admin_required(request)):
-                return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
+                return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
     return JSONResponse(jsonable_encoder(data))
 
 
@@ -2755,9 +2834,9 @@ async def create_skill_template(request: Request, payload: SkillTemplateCreate) 
     """Create a new skill template."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         tmpl = SkillTemplate(
             user_id=uid,
@@ -2792,18 +2871,18 @@ async def update_skill_template(request: Request, template_id: int, payload: Ski
     """Update a skill template (owner only)."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(
             SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
         )
         row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
+            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
         if row.user_id != uid:
-            return JSONResponse({'detail': 'forbidden'}, status_code=403)
+            return JSONResponse({'detail': 'دسترسی غیرمجاز'}, status_code=403)
         update_data = {}
         for field in ['title', 'title_fa', 'description', 'description_fa', 'category',
                        'prompt_template', 'variables', 'default_model', 'is_public', 'tags']:
@@ -2825,18 +2904,18 @@ async def delete_skill_template(request: Request, template_id: int) -> JSONRespo
     """Delete a skill template (owner only)."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(
             SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
         )
         row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
+            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
         if row.user_id != uid:
-            return JSONResponse({'detail': 'forbidden'}, status_code=403)
+            return JSONResponse({'detail': 'دسترسی غیرمجاز'}, status_code=403)
         await session.execute(
             SkillTemplate.__table__.delete().where(SkillTemplate.id == template_id)
         )
@@ -2849,18 +2928,18 @@ async def rate_skill_template(request: Request, template_id: int, payload: Skill
     """Rate a skill template (1-5)."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if payload.rating < 1 or payload.rating > 5:
-        return JSONResponse({'detail': 'rating must be between 1 and 5'}, status_code=400)
+        return JSONResponse({'detail': 'امتیاز باید بین ۱ تا ۵ باشد'}, status_code=400)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         # Check template exists
         res = await session.execute(
             SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
         )
         if not res.fetchone():
-            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
+            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
         # Upsert rating
         existing = await session.execute(
             SkillTemplateRating.__table__.select().where(
@@ -2909,14 +2988,14 @@ async def rate_skill_template(request: Request, template_id: int, payload: Skill
 async def use_skill_template(request: Request, template_id: int, payload: SkillUseRequest) -> JSONResponse:
     """Use a skill template: increment usage count and return rendered prompt."""
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(
             SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
         )
         row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
+            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
         # Increment usage count
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         await session.execute(
@@ -2947,9 +3026,9 @@ class TopupRequest(BaseModel):
 async def get_wallet(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(
             sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid'),
@@ -2963,25 +3042,34 @@ async def get_wallet(request: Request) -> JSONResponse:
 async def get_ledger(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+    page = int(request.query_params.get('page', 1))
+    limit = min(int(request.query_params.get('limit', 20)), 100)
+    offset = (page - 1) * limit
     async with async_session() as session:
+        count_res = await session.execute(
+            sqlalchemy.text('SELECT COUNT(*) as c FROM ledger WHERE user_id = :uid'),
+            {'uid': uid}
+        )
+        total = count_res.fetchone().c
         res = await session.execute(
-            Ledger.__table__.select().where(Ledger.user_id == uid).order_by(Ledger.created_at.desc()).limit(50)
+            Ledger.__table__.select().where(Ledger.user_id == uid).order_by(Ledger.created_at.desc())
+            .offset(offset).limit(limit)
         )
         rows = [{'id': r.id, 'amount': r.amount, 'balance_after': r.balance_after, 'reason': r.reason, 'created_at': r.created_at} for r in res.fetchall()]
-    return JSONResponse(jsonable_encoder(rows))
+    return JSONResponse(jsonable_encoder({'items': rows, 'total': total, 'page': page, 'limit': limit}))
 
 @app.post('/wallet/topup')
 async def topup(request: Request, payload: TopupRequest) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if payload.amount <= 0:
-        return JSONResponse({'detail': 'amount must be positive'}, status_code=400)
+        return JSONResponse({'detail': 'مبلغ باید مثبت باشد'}, status_code=400)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         # Verify payment order exists and is completed
         pay_res = await session.execute(
@@ -2990,16 +3078,16 @@ async def topup(request: Request, payload: TopupRequest) -> JSONResponse:
         )
         pay_row = pay_res.fetchone()
         if not pay_row:
-            return JSONResponse({'detail': 'payment order not found'}, status_code=404)
+            return JSONResponse({'detail': 'سفارش پرداخت یافت نشد'}, status_code=404)
         if pay_row.status != 'completed':
-            return JSONResponse({'detail': 'payment not completed'}, status_code=400)
+            return JSONResponse({'detail': 'پرداخت تکمیل نشده است'}, status_code=400)
         # Prevent double-crediting
         dup = await session.execute(
             sqlalchemy.text("SELECT id FROM ledger WHERE reason = :reason LIMIT 1"),
             {'reason': f'topup:{payload.payment_order_id}'}
         )
         if dup.fetchone():
-            return JSONResponse({'detail': 'payment already credited'}, status_code=409)
+            return JSONResponse({'detail': 'پرداخت قبلاً ثبت شده است'}, status_code=409)
         # Get current balance
         res = await session.execute(
             sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid'),
@@ -3021,9 +3109,9 @@ async def topup(request: Request, payload: TopupRequest) -> JSONResponse:
 async def admin_users(request: Request) -> JSONResponse:
     """List all users (admin only)"""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     page = int(request.query_params.get('page', 1))
     limit = min(int(request.query_params.get('limit', 50)), 200)
@@ -3034,14 +3122,16 @@ async def admin_users(request: Request) -> JSONResponse:
         count_res = await session.execute(sqlalchemy.text('SELECT COUNT(*) as c FROM users'))
         total = count_res.fetchone().c
 
-        # Users with balance
+        # Users with balance (JOINs instead of correlated subqueries)
         res = await session.execute(
             sqlalchemy.text('''
                 SELECT u.id, u.email, u.phone, u.telegram_id, u.referral_code,
                        u.referred_by, u.created_at,
-                       COALESCE((SELECT SUM(amount) FROM ledger WHERE user_id = u.id), 0) as balance,
-                       COALESCE((SELECT used_today FROM quota WHERE user_id = u.id), 0) as used_today
+                       COALESCE(l.balance, 0) as balance,
+                       COALESCE(q.used_today, 0) as used_today
                 FROM users u
+                LEFT JOIN (SELECT user_id, SUM(amount) as balance FROM ledger GROUP BY user_id) l ON l.user_id = u.id
+                LEFT JOIN quota q ON q.user_id = u.id
                 ORDER BY u.created_at DESC
                 LIMIT :limit OFFSET :offset
             '''),
@@ -3061,50 +3151,83 @@ async def admin_users(request: Request) -> JSONResponse:
 async def admin_ban_user(request: Request, uid: int) -> JSONResponse:
     """Ban/unban a user"""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         user = await session.get(User, uid)
         if not user:
-            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
-        # Toggle: set quota to 0 = ban
-        await session.execute(
-            Quota.__table__.update().where(Quota.user_id == uid),
-            {'daily_limit': 0 if user.telegram_id != -1 else 200000}
-        )
+            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+        new_banned = not user.banned
+        # Toggle ban status
         await session.execute(
             User.__table__.update().where(User.id == uid),
-            {'telegram_id': -1 if user.telegram_id != -1 else None}
+            {'banned': new_banned}
+        )
+        # Set quota to 0 when banning, restore when unbanning
+        await session.execute(
+            Quota.__table__.update().where(Quota.user_id == uid),
+            {'daily_limit': 0 if new_banned else 200000}
         )
         await session.commit()
-        await _write_audit_log('admin.user.ban', target_type='user', target_id=uid, details={'banned': user.telegram_id != -1})
-        return JSONResponse({'status': 'ok', 'banned': user.telegram_id != -1})
+        # Invalidate all sessions for banned user
+        if new_banned:
+            try:
+                keys = await rds.keys('session:*')
+                for key in keys:
+                    val = await rds.get(key)
+                    if val and str(uid) in val:
+                        await rds.delete(key)
+            except Exception:
+                pass
+        await _write_audit_log('admin.user.ban', target_type='user', target_id=uid, details={'banned': new_banned})
+        return JSONResponse({'status': 'ok', 'banned': new_banned})
+
+
+class AdminUserEdit(BaseModel):
+    daily_limit: int | None = None
+    phone: str | None = None
+    email: str | None = None
+    balance: int | None = None
+    status: str | None = None
 
 
 @app.put('/admin/users/{uid}')
-async def admin_edit_user(request: Request, uid: int) -> JSONResponse:
+async def admin_edit_user(request: Request, uid: int, payload: AdminUserEdit) -> JSONResponse:
     """Edit user details (admin)"""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
-    payload = await request.json()
+    data = payload.model_dump(exclude_none=True)
     async with async_session() as session:
-        if 'daily_limit' in payload:
+        if 'daily_limit' in data:
             await session.execute(
                 Quota.__table__.update().where(Quota.user_id == uid),
-                {'daily_limit': int(payload['daily_limit'])}
+                {'daily_limit': int(data['daily_limit'])}
             )
-        if 'phone' in payload:
+        if 'phone' in data:
             await session.execute(
                 User.__table__.update().where(User.id == uid),
-                {'phone': payload['phone']}
+                {'phone': data['phone']}
+            )
+        if 'email' in data:
+            await session.execute(
+                User.__table__.update().where(User.id == uid),
+                {'email': data['email']}
+            )
+        if 'balance' in data:
+            await session.execute(
+                Ledger.__table__.insert().values(
+                    user_id=uid, amount=int(data['balance']),
+                    balance_after=int(data['balance']),
+                    reason='admin.adjustment',
+                )
             )
         await session.commit()
-    await _write_audit_log('admin.user.edit', target_type='user', target_id=uid, details=dict(payload))
+    await _write_audit_log('admin.user.edit', target_type='user', target_id=uid, details=data)
     return JSONResponse({'status': 'ok'})
 
 # ═══════════════════════════════════════
@@ -3115,9 +3238,9 @@ async def admin_edit_user(request: Request, uid: int) -> JSONResponse:
 async def export_ledger(request: Request) -> Response:
     """Export all ledger entries as CSV"""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         res = await session.execute(
@@ -3143,9 +3266,9 @@ async def export_ledger(request: Request) -> Response:
 async def export_users(request: Request) -> Response:
     """Export all users as CSV"""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         res = await session.execute(
@@ -3191,11 +3314,13 @@ async def send_email(to: str, subject: str, body: str) -> bool:
     msg['From'] = SMTP_FROM
     msg['To'] = to
     try:
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
-            server.starttls()
-            if SMTP_USER:
-                server.login(SMTP_USER, SMTP_PASS)
-            server.send_message(msg)
+        def _send_sync():
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+                server.starttls()
+                if SMTP_USER:
+                    server.login(SMTP_USER, SMTP_PASS)
+                server.send_message(msg)
+        await asyncio.to_thread(_send_sync)
         return True
     except Exception as e:
         print(f'[EMAIL] Failed: {e}')
@@ -3206,14 +3331,14 @@ async def send_email(to: str, subject: str, body: str) -> bool:
 async def send_welcome_email(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(User.__table__.select().where(User.id == uid))
         user = res.fetchone()
         if not user or not user.email:
-            return JSONResponse({'detail': 'no email'}, status_code=400)
+            return JSONResponse({'detail': 'ایمیلی ثبت نشده است'}, status_code=400)
     body = f'<div dir="rtl" style="font-family:Tahoma;max-width:600px;margin:auto;padding:20px;"><h1 style="color:#6c5cf5;">به Multiai خوش آمدید! 🎉</h1><p>سلام {user.email}،</p><p>حساب شما با موفقیت ساخته شد.</p><p><a href="{BASE_URL}/chat" style="background:#6c5cf5;color:white;padding:10px 20px;text-decoration:none;border-radius:8px;">شروع چت</a></p></div>'
     ok = await send_email(user.email, 'به Multiai خوش آمدید!', body)
     return JSONResponse({'status': 'sent' if ok else 'queued'})
@@ -3221,9 +3346,9 @@ async def send_welcome_email(request: Request) -> JSONResponse:
 @app.get('/admin/analytics')
 async def admin_analytics(request: Request) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         # User count
         r = await session.execute(sqlalchemy.text('SELECT COUNT(*) as c FROM users'))
@@ -3271,9 +3396,9 @@ async def payment_request(request: Request, payload: PaymentRequest) -> JSONResp
     """Create a Zarinpal payment and return redirect URL"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if payload.amount < 1000:
-        return JSONResponse({'detail': 'minimum amount is 1000 Tomans'}, status_code=400)
+        return JSONResponse({'detail': 'حداقل مبلغ ۱۰۰۰ تومان است'}, status_code=400)
 
     callback_url = f"{BASE_URL}/api/payment/callback"
 
@@ -3317,7 +3442,7 @@ async def payment_callback(request: Request) -> JSONResponse:
     status = request.query_params.get('Status', '')
 
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     # First: look up the payment row to determine its type
     payment_type = 'wallet_topup'
@@ -3427,9 +3552,9 @@ async def payment_history(request: Request) -> JSONResponse:
     """Get user's payment history"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         res = await session.execute(
@@ -3461,9 +3586,9 @@ async def list_notifications(request: Request) -> JSONResponse:
     """Get user notifications"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         # Auto-create usage alert if approaching limit
@@ -3488,7 +3613,7 @@ async def list_notifications(request: Request) -> JSONResponse:
                         user_id=uid,
                         type='alert',
                         title='هشدار مصرف',
-                        body=f'شما {usage_pct:.0f}٪ از سقف مصرف روزانه خود را استفاده کرده‌اید. ({quota.used_today:,} از {quota.daily_limit:,} توکن)',
+                        body=f'شما {_to_fa(f"{usage_pct:.0f}")}٪ از سقف مصرف روزانه خود را استفاده کردهاید. ({_to_fa(f"{quota.used_today:,}")} از {_to_fa(f"{quota.daily_limit:,}")} توکن)',
                     )
                     session.add(alert)
                     await session.commit()
@@ -3519,9 +3644,9 @@ async def mark_notification_read(request: Request, nid: int) -> JSONResponse:
     """Mark notification as read"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         await session.execute(
@@ -3546,9 +3671,9 @@ async def create_api_key(request: Request, payload: ApiKeyCreate) -> JSONRespons
     """Generate a new API key. The secret is shown only once."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     raw_key = f'sk-{secrets.token_urlsafe(32)}'
     key_hash = _hash_api_key(raw_key)
@@ -3559,7 +3684,7 @@ async def create_api_key(request: Request, payload: ApiKeyCreate) -> JSONRespons
         try:
             expires_at = datetime.fromisoformat(payload.expires_at)
         except ValueError:
-            return JSONResponse({'detail': 'invalid expires_at (ISO8601 expected)'}, status_code=400)
+            return JSONResponse({'detail': 'تاریخ انقضا نامعتبر است (فرمت ISO8601 مورد انتظار)'}, status_code=400)
 
     async with async_session() as session:
         key = ApiKey(
@@ -3588,9 +3713,9 @@ async def list_api_keys(request: Request) -> JSONResponse:
     """List user's API keys (never expose raw key)"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         res = await session.execute(
@@ -3621,9 +3746,9 @@ async def revoke_api_key(request: Request, key_id: int) -> JSONResponse:
     """Revoke (deactivate) an API key"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         await session.execute(
@@ -3643,7 +3768,7 @@ async def revoke_api_key(request: Request, key_id: int) -> JSONResponse:
 async def list_plans() -> JSONResponse:
     """List all active subscription plans + credit packages (public)"""
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         plans_result = await session.execute(
             select(Plan).where(Plan.active == True).order_by(Plan.sort_order)
@@ -3677,7 +3802,7 @@ async def list_plans() -> JSONResponse:
 async def get_plan(plan_id: str) -> JSONResponse:
     """Get a single plan by ID (public)"""
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(
             sqlalchemy.text('SELECT * FROM plans WHERE id = :pid AND active = true'),
@@ -3685,7 +3810,7 @@ async def get_plan(plan_id: str) -> JSONResponse:
         )
         row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'plan not found | طرح یافت نشد'}, status_code=404)
+            return JSONResponse({'detail': 'طرح یافت نشد'}, status_code=404)
     return JSONResponse(jsonable_encoder(dict(row._mapping)))
 
 
@@ -3693,7 +3818,7 @@ async def get_plan(plan_id: str) -> JSONResponse:
 async def list_credit_packages() -> JSONResponse:
     """List all active credit packages (public)"""
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(
             sqlalchemy.text('SELECT * FROM credit_packages WHERE active = true ORDER BY sort_order')
@@ -3706,7 +3831,7 @@ async def list_credit_packages() -> JSONResponse:
 async def get_credit_package(pkg_id: str) -> JSONResponse:
     """Get a single credit package by ID (public)"""
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(
             sqlalchemy.text('SELECT * FROM credit_packages WHERE id = :pid AND active = true'),
@@ -3714,7 +3839,7 @@ async def get_credit_package(pkg_id: str) -> JSONResponse:
         )
         row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'package not found | بسته یافت نشد'}, status_code=404)
+            return JSONResponse({'detail': 'بسته یافت نشد'}, status_code=404)
     return JSONResponse(jsonable_encoder(dict(row._mapping)))
 
 
@@ -3727,9 +3852,9 @@ async def subscribe_to_plan(request: Request, payload: SubscribeRequest) -> JSON
     """Subscribe the current user to a plan. Cancels any existing active subscription."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         # Validate plan exists
@@ -3739,7 +3864,7 @@ async def subscribe_to_plan(request: Request, payload: SubscribeRequest) -> JSON
         )
         plan = plan_res.fetchone()
         if not plan:
-            return JSONResponse({'detail': 'plan not found | طرح یافت نشد'}, status_code=404)
+            return JSONResponse({'detail': 'طرح یافت نشد'}, status_code=404)
 
         plan_data = dict(plan._mapping)
         now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -3795,9 +3920,9 @@ async def get_subscription(request: Request) -> JSONResponse:
     """Get the user's current active subscription"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         res = await session.execute(
@@ -3832,9 +3957,9 @@ async def cancel_subscription(request: Request) -> JSONResponse:
     """Cancel the user's active subscription"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     async with async_session() as session:
@@ -3860,9 +3985,9 @@ async def renew_subscription(request: Request) -> JSONResponse:
     """Renew the user's subscription (extend by 30 days, reset token usage)"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     async with async_session() as session:
@@ -3915,9 +4040,9 @@ async def get_billing_settings(request: Request) -> JSONResponse:
     """Get user's billing settings (auto-creates defaults if missing)"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         res = await session.execute(
@@ -3949,9 +4074,9 @@ async def update_billing_settings(request: Request, payload: BillingSettingsUpda
     """Update user's billing settings"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     update_data = {'updated_at': now}
@@ -3994,9 +4119,9 @@ async def update_billing_settings(request: Request, payload: BillingSettingsUpda
 async def admin_list_plans(request: Request) -> JSONResponse:
     """List all plans (admin, including inactive)"""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(sqlalchemy.text('SELECT * FROM plans ORDER BY sort_order'))
         rows = [dict(r._mapping) for r in res.fetchall()]
@@ -4007,14 +4132,14 @@ async def admin_list_plans(request: Request) -> JSONResponse:
 async def admin_create_plan(request: Request) -> JSONResponse:
     """Create or update a plan (admin)"""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     payload = await request.json()
     plan_id = payload.get('id')
     if not plan_id:
-        return JSONResponse({'detail': 'id is required'}, status_code=400)
+        return JSONResponse({'detail': 'شناسه الزامی است'}, status_code=400)
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     async with async_session() as session:
@@ -4074,9 +4199,9 @@ async def admin_create_plan(request: Request) -> JSONResponse:
 async def admin_list_credit_packages(request: Request) -> JSONResponse:
     """List all credit packages (admin, including inactive)"""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(sqlalchemy.text('SELECT * FROM credit_packages ORDER BY sort_order'))
         rows = [dict(r._mapping) for r in res.fetchall()]
@@ -4087,14 +4212,14 @@ async def admin_list_credit_packages(request: Request) -> JSONResponse:
 async def admin_create_credit_package(request: Request) -> JSONResponse:
     """Create or update a credit package (admin)"""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     payload = await request.json()
     pkg_id = payload.get('id')
     if not pkg_id:
-        return JSONResponse({'detail': 'id is required'}, status_code=400)
+        return JSONResponse({'detail': 'شناسه الزامی است'}, status_code=400)
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     async with async_session() as session:
@@ -4146,9 +4271,9 @@ async def admin_create_credit_package(request: Request) -> JSONResponse:
 async def admin_list_subscriptions(request: Request) -> JSONResponse:
     """List all subscriptions (admin)"""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     page = int(request.query_params.get('page', 1))
     limit = min(int(request.query_params.get('limit', 50)), 200)
@@ -4185,9 +4310,9 @@ async def get_my_subscription(request: Request) -> JSONResponse:
     """Auth required: return current subscription, PAYG status, and usage summary."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         # Active subscription
@@ -4261,9 +4386,9 @@ async def get_my_billing(request: Request) -> JSONResponse:
     """Auth required: return billing settings (PAYG toggle, limits)."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         res = await session.execute(
@@ -4292,9 +4417,9 @@ async def update_my_billing(request: Request, payload: BillingUpdate) -> JSONRes
     """Auth required: update billing settings (toggle PAYG, set hard limit)."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         res = await session.execute(
@@ -4329,17 +4454,17 @@ async def subscription_checkout(request: Request, payload: SubscriptionCheckout)
     """Auth required: create ZarinPal payment for a subscription plan."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         plan_res = await session.execute(select(Plan).where(Plan.id == payload.plan_id, Plan.active == True))
         plan = plan_res.scalar_one_or_none()
         if not plan:
-            return JSONResponse({'detail': 'plan not found | طرح یافت نشد'}, status_code=404)
+            return JSONResponse({'detail': 'طرح یافت نشد'}, status_code=404)
         if plan.price_monthly <= 0:
-            return JSONResponse({'detail': 'this plan is free, no payment needed'}, status_code=400)
+            return JSONResponse({'detail': 'این طرح رایگان است، نیازی به پرداخت نیست'}, status_code=400)
 
         callback_url = f"{BASE_URL}/api/payment/callback"
         result = await create_payment(
@@ -4380,9 +4505,9 @@ async def credit_package_checkout(request: Request, payload: CreditPackageChecko
     """Auth required: create ZarinPal payment for a credit package."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         pkg_res = await session.execute(
@@ -4390,7 +4515,7 @@ async def credit_package_checkout(request: Request, payload: CreditPackageChecko
         )
         pkg = pkg_res.scalar_one_or_none()
         if not pkg:
-            return JSONResponse({'detail': 'package not found | بسته یافت نشد'}, status_code=404)
+            return JSONResponse({'detail': 'بسته یافت نشد'}, status_code=404)
 
         price = pkg.total_credits  # total_credits = price in Toman
         if price <= 0:
@@ -4463,7 +4588,7 @@ class ScheduledTaskUpdate(BaseModel):
 async def list_tasks(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         res = await session.execute(
             select(ScheduledTask).where(ScheduledTask.user_id == uid).order_by(ScheduledTask.created_at.desc())
@@ -4485,7 +4610,7 @@ async def list_tasks(request: Request) -> JSONResponse:
 async def create_task(request: Request, payload: ScheduledTaskCreate) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         task = ScheduledTask(
             user_id=uid,
@@ -4512,7 +4637,7 @@ async def create_task(request: Request, payload: ScheduledTaskCreate) -> JSONRes
 async def update_task(request: Request, task_id: int, payload: ScheduledTaskUpdate) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         res = await session.execute(
             select(ScheduledTask).where(ScheduledTask.id == task_id, ScheduledTask.user_id == uid)
@@ -4538,7 +4663,7 @@ async def update_task(request: Request, task_id: int, payload: ScheduledTaskUpda
 async def delete_task(request: Request, task_id: int) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         res = await session.execute(
             select(ScheduledTask).where(ScheduledTask.id == task_id, ScheduledTask.user_id == uid)
@@ -4555,7 +4680,7 @@ async def delete_task(request: Request, task_id: int) -> JSONResponse:
 async def toggle_task(request: Request, task_id: int) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         res = await session.execute(
             select(ScheduledTask).where(ScheduledTask.id == task_id, ScheduledTask.user_id == uid)
@@ -4573,7 +4698,7 @@ async def toggle_task(request: Request, task_id: int) -> JSONResponse:
 async def run_task(request: Request, task_id: int) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         res = await session.execute(
             select(ScheduledTask).where(ScheduledTask.id == task_id, ScheduledTask.user_id == uid)
@@ -4650,7 +4775,7 @@ async def run_task(request: Request, task_id: int) -> JSONResponse:
 async def list_task_executions(request: Request, task_id: int) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         # Verify task belongs to user
         res = await session.execute(
@@ -4840,11 +4965,14 @@ def _select_smart_model(
 
 
 @app.post('/v1/smart-chat')
-async def smart_chat(request: Request, payload: dict[str, Any]) -> Response:
+async def smart_chat(request: Request, payload: ChatRequest) -> Response:
     """Smart Mode: auto-selects the cheapest model capable of handling the request."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+
+    # Convert Pydantic model to dict for downstream processing
+    payload = payload.model_dump(exclude_none=True)
 
     # Quota pre-check
     quota_err = await _check_quota_pre(uid)
@@ -4932,7 +5060,7 @@ async def smart_chat(request: Request, payload: dict[str, Any]) -> Response:
             return resp
     except Exception as e:
         return JSONResponse(
-            {'error': {'message': f'upstream unavailable: {e}', 'type': 'gateway_error'}},
+            {'detail': 'سرویس موقتاً در دسترس نیست', 'code': 'gateway_error'},
             status_code=502,
         )
 
@@ -5019,9 +5147,9 @@ async def export_conversation(
     """Export a conversation in JSON, Markdown, or plain text format."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
-        return JSONResponse({'detail': 'db not initialized'}, status_code=500)
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
     async with async_session() as session:
         res = await session.execute(
@@ -5031,7 +5159,7 @@ async def export_conversation(
         )
         conv = res.fetchone()
         if not conv:
-            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
+            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
 
     messages = conv.messages or []
     title = conv.title or 'Conversation'
@@ -5129,12 +5257,35 @@ async def websocket_endpoint(ws: WebSocket):
     """Real-time connection for notifications and usage updates"""
     await ws.accept()
 
-    # Authenticate via token query param
-    token = ws.query_params.get('token', '')
+    # N19: Try header-based auth first, fall back to first message, then query param
+    # WebSocket JS API doesn't support custom headers, so we accept from first message
+    token = ''
+    # 1) Try Authorization header (works with some clients)
+    auth_header = ws.headers.get('authorization', '')
+    if auth_header.startswith('Bearer '):
+        token = auth_header[7:]
+    # 2) Try query param (legacy, with warning)
+    if not token:
+        token = ws.query_params.get('token', '')
+        if token:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                'WebSocket auth via query param is deprecated and insecure. '
+                'Clients should send token as first message after connect.'
+            )
+    # 3) If still no token, wait for first message with token
+    if not token:
+        try:
+            first_msg = await aio.wait_for(ws.receive_text(), timeout=10)
+            if first_msg.startswith('auth:'):
+                token = first_msg[5:]
+        except (aio.TimeoutError, Exception):
+            pass
+
     uid = _get_session_user_id(token) if token else None
 
     if not uid:
-        await ws.send_json({'type': 'error', 'message': 'unauthorized'})
+        await ws.send_json({'type': 'error', 'message': 'unauthorized | لطفا وارد حساب خود شوید'})
         await ws.close()
         return
 

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
-import { Icon } from '@/components/ui/Icon'
+import { Icon, type IconName } from '@/components/ui/Icon'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type LedgerEntry = {
@@ -122,7 +122,7 @@ function EmptyStateIcon({ icon, title, desc }: { icon: string; title: string; de
   return (
     <div className="wallet-empty-state">
       <div className="wallet-empty-icon-wrap">
-        <Icon name={icon as any} size={28} style={{ color: 'var(--accent)' }} />
+        <Icon name={icon as IconName} size={28} style={{ color: 'var(--accent)' }} />
       </div>
       <p style={{ color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 4, fontSize: 15 }}>{title}</p>
       <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>{desc}</p>
@@ -226,7 +226,7 @@ export default function WalletPage() {
       })
       const data = await res.json()
       if (res.ok && data.payment_url) {
-        toast('در حال انتزار به درگاه پرداخت...', 'info')
+        toast('در حال انتقال به درگاه پرداخت...', 'info')
         window.location.href = data.payment_url
       } else if (res.ok) {
         setBalance(data.balance_after ?? balance)

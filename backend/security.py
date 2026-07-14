@@ -51,7 +51,10 @@ class RateLimiter:
 
 # Different rate limits for different endpoint types
 general_limiter = RateLimiter(window_seconds=60, max_requests=60)     # 60 req/min
-auth_limiter = RateLimiter(window_seconds=60, max_requests=10)       # 10 req/min
+login_limiter = RateLimiter(window_seconds=60, max_requests=30)       # 30 req/min
+signup_limiter = RateLimiter(window_seconds=60, max_requests=5)        # 5 req/min
+forgot_password_limiter = RateLimiter(window_seconds=60, max_requests=20)  # 20 req/min
+auth_limiter = RateLimiter(window_seconds=60, max_requests=60)        # 60 req/min (general auth)
 chat_limiter = RateLimiter(window_seconds=60, max_requests=120)      # 120 req/min (streaming needs headroom)
 admin_limiter = RateLimiter(window_seconds=60, max_requests=30)      # 30 req/min
 
@@ -81,6 +84,12 @@ def get_client_identifier(request: Request) -> str:
 
 def select_limiter(path: str) -> RateLimiter:
     """Choose appropriate rate limiter based on path"""
+    if path == '/auth/login':
+        return login_limiter
+    if path == '/auth/signup':
+        return signup_limiter
+    if path == '/auth/forgot-password':
+        return forgot_password_limiter
     if path.startswith('/auth/'):
         return auth_limiter
     if path.startswith('/v1/chat/'):
@@ -104,7 +113,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         if not allowed:
             return JSONResponse(
-                {'detail': 'rate limit exceeded. try again later.', 'retry_after': limiter.window},
+                {'detail': 'محدودیت نرخ درخواست. لطفاً بعداً تلاش کنید.', 'retry_after': limiter.window},
                 status_code=429,
                 headers={
                     'Retry-After': str(limiter.window),
@@ -135,6 +144,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
             'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
             'X-DNS-Prefetch-Control': 'off',
+            'Content-Security-Policy': (
+                "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                "style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; "
+                "connect-src 'self' wss: https:;"
+            ),
         }
 
         for key, value in headers.items():
@@ -186,7 +200,7 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         xrw = request.headers.get('x-requested-with', '')
         if not xrw:
             return JSONResponse(
-                {'detail': 'missing X-Requested-With header (CSRF protection)'},
+                {'detail': 'هدر X-Requested-With ارسال نشده (محافظت CSRF)'},
                 status_code=403,
             )
 
@@ -196,25 +210,25 @@ class CsrfMiddleware(BaseHTTPMiddleware):
 def validate_email(email: str) -> tuple[bool, str]:
     """Validate email format and domain"""
     if not email or len(email) > MAX_EMAIL_LENGTH:
-        return False, 'email too long'
+        return False, 'ایمیل بیش از حد طولانی است'
     if '@' not in email or '.' not in email.split('@')[-1]:
-        return False, 'invalid email format'
+        return False, 'فرمت ایمیل نامعتبر است'
     domain = email.split('@')[-1].lower()
     if domain in BANNED_EMAIL_DOMAINS:
-        return False, 'disposable email not allowed'
+        return False, 'استفاده از ایمیل موقت مجاز نیست'
     return True, ''
 
 
 def validate_password(password: str) -> tuple[bool, str]:
     """Validate password strength with complexity requirements."""
     if len(password) < 8:
-        return False, 'password must be at least 8 characters'
+        return False, 'رمز عبور باید حداقل ۸ کاراکتر باشد'
     if len(password) > MAX_PASSWORD_LENGTH:
-        return False, 'password too long'
+        return False, 'رمز عبور بیش از حد طولانی است'
     if not any(c.isdigit() for c in password):
-        return False, 'password must contain at least one digit'
+        return False, 'رمز عبور باید حداقل شامل یک عدد باشد'
     if not any(c.isalpha() for c in password):
-        return False, 'password must contain at least one letter'
+        return False, 'رمز عبور باید حداقل شامل یک حرف باشد'
     return True, ''
 
 

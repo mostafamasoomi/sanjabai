@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { useCatalog } from '@/lib/useCatalog'
 import { toast } from '@/components/ui'
-import { Icon } from '@/components/ui/Icon'
+import { Icon, type IconName } from '@/components/ui/Icon'
 
 /* ═══════════════════════════════════════════════════════════════
    Types
@@ -239,7 +239,7 @@ export default function AssistantDetailPage() {
             flexShrink: 0,
           }}
         >
-          <Icon name={(assistant.icon as any) || 'sparkles'} size={20} className="text-white" />
+          <Icon name={(assistant.icon as IconName) || 'sparkles'} size={20} className="text-white" />
         </div>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.4 }}>

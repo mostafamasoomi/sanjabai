@@ -7,7 +7,7 @@ export async function GET() {
     if (!res.ok) return NextResponse.json({ error: `upstream ${res.status}` }, { status: 200 });
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
-  } catch (e: any) {
-    return NextResponse.json({ object: 'list', data: [], err: String(e?.message || e) }, { status: 200 });
+  } catch (e: unknown) {
+    return NextResponse.json({ object: 'list', data: [], err: String(e instanceof Error ? e.message : e) }, { status: 200 });
   }
 }

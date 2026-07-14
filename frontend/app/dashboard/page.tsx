@@ -137,28 +137,21 @@ function StatCard({
   accentColor?: string
 }) {
   return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>{label}</span>
+    <div className="card flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-[var(--text-secondary)] font-medium">{label}</span>
         <div
-          style={{
-            width: '2rem',
-            height: '2rem',
-            borderRadius: 'var(--radius-sm)',
-            background: accentColor ? `${accentColor}15` : 'var(--accent-dim)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
+          className="w-8 h-8 rounded-[var(--radius-sm)] flex items-center justify-center"
+          style={{ background: accentColor ? `${accentColor}15` : 'var(--accent-dim)' }}
         >
           <Icon name={icon} size={16} className="text-[var(--accent)]" />
         </div>
       </div>
-      <div style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+      <div className="text-[1.75rem] font-bold text-[var(--text-primary)] tracking-tight">
         {value}
       </div>
       {sub && (
-        <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>{sub}</div>
+        <div className="text-[11px] text-[var(--text-muted)]">{sub}</div>
       )}
     </div>
   )
@@ -229,26 +222,12 @@ function QuickAction({
 function LedgerRow({ entry }: { entry: LedgerEntry }) {
   const isCredit = entry.amount > 0
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0.75rem 0',
-        borderBottom: '1px solid var(--border)',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
+    <div className="flex items-center justify-between py-3 border-b border-[var(--border)]">
+      <div className="flex items-center gap-3 min-w-0">
         <div
+          className="w-8 h-8 rounded-[var(--radius-sm)] flex items-center justify-center shrink-0"
           style={{
-            width: '2rem',
-            height: '2rem',
-            borderRadius: 'var(--radius-sm)',
             background: isCredit ? 'color-mix(in srgb, var(--positive) 12%, transparent)' : 'color-mix(in srgb, var(--danger) 12%, transparent)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
           }}
         >
           <Icon
@@ -257,35 +236,23 @@ function LedgerRow({ entry }: { entry: LedgerEntry }) {
             className={isCredit ? 'text-[var(--positive)]' : 'text-[var(--danger)]'}
           />
         </div>
-        <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: '0.8125rem',
-              fontWeight: 500,
-              color: 'var(--text-primary)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
+        <div className="min-w-0">
+          <div className="text-[13px] font-medium text-[var(--text-primary)] overflow-hidden text-ellipsis whitespace-nowrap">
             {entry.reason}
           </div>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>
+          <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
             {faDate(entry.created_at)} — {faTime(entry.created_at)}
           </div>
         </div>
       </div>
-      <div style={{ textAlign: 'left', flexShrink: 0, marginLeft: '1rem' }}>
+      <div className="text-left shrink-0 ml-4">
         <div
-          style={{
-            fontSize: '0.875rem',
-            fontWeight: 600,
-            color: isCredit ? 'var(--positive)' : 'var(--danger)',
-          }}
+          className="text-sm font-semibold"
+          style={{ color: isCredit ? 'var(--positive)' : 'var(--danger)' }}
         >
-          {isCredit ? '+' : ''}{faNum(entry.amount)} <span style={{ fontSize: '0.625rem', fontWeight: 400 }}>تومان</span>
+          {isCredit ? '+' : ''}{faNum(entry.amount)} <span className="text-[10px] font-normal">تومان</span>
         </div>
-        <div style={{ fontSize: '0.625rem', color: 'var(--text-muted)', textAlign: 'left' }}>
+        <div className="text-[10px] text-[var(--text-muted)] text-left">
           موجودی: {faNum(entry.balance_after)}
         </div>
       </div>
@@ -299,24 +266,14 @@ function LedgerRow({ entry }: { entry: LedgerEntry }) {
 
 function InfoRow({ icon, label, value }: { icon: IconName; label: string; value: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center gap-2 min-w-0">
         <span className="shrink-0 text-[var(--text-muted)]">
           <Icon name={icon} size={14} />
         </span>
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{label}</span>
+        <span className="text-xs text-[var(--text-secondary)]">{label}</span>
       </div>
-      <span
-        style={{
-          fontSize: '0.8125rem',
-          fontWeight: 500,
-          color: 'var(--text-primary)',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          textAlign: 'left',
-        }}
-      >
+      <span className="text-[13px] font-medium text-[var(--text-primary)] overflow-hidden text-ellipsis whitespace-nowrap text-left">
         {value}
       </span>
     </div>

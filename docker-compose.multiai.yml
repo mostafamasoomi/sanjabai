@@ -24,6 +24,11 @@ services:
     volumes:
       - multiai_redis_data:/data
     networks: [multiai_net]
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   multiai_litellm:
     build:
@@ -40,6 +45,11 @@ services:
       HTTP_PROXY: http://10.10.11.2:8888
       HTTPS_PROXY: http://10.10.11.2:8888
     networks: [multiai_net]
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:4000/health']
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
   multiai_tunnel:
     build:
@@ -73,7 +83,7 @@ services:
     volumes:
       - ./.env:/app/.env:ro
     ports:
-      - "0.0.0.0:8081:8000"
+      - "127.0.0.1:8081:8000"
     networks: [multiai_net]
 
   multiai_frontend:
@@ -90,14 +100,14 @@ services:
       NEXT_PUBLIC_API_URL: http://multiai_api:8000
       HOSTNAME: 0.0.0.0
     ports:
-      - "0.0.0.0:3003:3000"
+      - "127.0.0.1:3003:3000"
     networks: [multiai_net]
 
   multiai_bot:
     build:
       context: ./bot
       dockerfile: Dockerfile
-    restart: on-failure:3
+    restart: unless-stopped
     mem_limit: 256m
     depends_on:
       - multiai_api

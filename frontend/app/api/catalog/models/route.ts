@@ -24,9 +24,9 @@ export async function GET() {
     }
     const data = await res.json()
     return NextResponse.json(data, { status: res.status })
-  } catch (e: any) {
+  } catch (e: unknown) {
     return NextResponse.json(
-      { data: [], source: 'unavailable', err: String(e?.message || e) },
+      { data: [], source: 'unavailable', err: String(e instanceof Error ? e.message : e) },
       { status: 200 },
     )
   }

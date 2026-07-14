@@ -20,8 +20,8 @@ export default function LoginPage() {
     try {
       await login(email.trim(), password)
       router.push('/chat')
-    } catch (err: any) {
-      setError(err.message || 'خطا در ورود')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'خطا در ورود')
     } finally {
       setBusy(false)
     }
@@ -62,8 +62,11 @@ export default function LoginPage() {
           </button>
         </form>
         <p className="text-center text-sm text-[var(--text-dim)] mt-4">
+          <a href="/forgot-password" className="text-[var(--accent)] hover:underline">رمز عبور را فراموش کرده‌اید؟</a>
+        </p>
+        <p className="text-center text-sm text-[var(--text-dim)] mt-2">
           حساب کاربری ندارید؟{' '}
-          <a href="/signup" className="text-[var(--accent)] hover:underline">ثبت‌نام</a>
+          <a href="/signup" className="text-[var(--accent)] hover:underline">ثبتنام</a>
         </p>
       </div>
     </div>

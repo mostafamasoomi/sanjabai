@@ -14,6 +14,7 @@ import re as _re
 from pydantic import BaseModel
 import httpx
 import redis
+import redis.asyncio as aioredis
 import sqlalchemy
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
@@ -33,7 +34,7 @@ BASE_URL = os.getenv('BASE_URL', 'http://localhost:3003')
 
 engine: AsyncEngine | None = None
 async_session: sessionmaker[AsyncSession] | None = None
-rds = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+rds = aioredis.from_url(REDIS_URL, decode_responses=True)
 _http: httpx.AsyncClient | None = None  # shared connection pool
 
 class Base(DeclarativeBase):
@@ -440,7 +441,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await _http.aclose()
     await engine.dispose()
 
-app = FastAPI(title='Persian AI Gateway', version='0.1.0', lifespan=lifespan)
+_is_production = os.getenv('ENV', 'production').lower() not in ('development', 'dev') and not os.getenv('DEBUG')
+app = FastAPI(
+    title='Persian AI Gateway',
+    version='0.1.0',
+    lifespan=lifespan,
+    docs_url=None if _is_production else '/docs',
+    redoc_url=None if _is_production else '/redoc',
+    openapi_url=None if _is_production else '/openapi.json',
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv('CORS_ORIGINS', 'https://multiai.ir,http://localhost:3003').split(','),
@@ -461,11 +470,11 @@ async def get_db() -> AsyncIterator[AsyncSession]:
     async with async_session() as session:
         yield session
 
-def admin_required(request: Request) -> bool:
+async def admin_required(request: Request) -> bool:
     # Primary: isolated server-side admin session cookie (CSRF-protected mutations)
     sid = request.cookies.get(ADMIN_COOKIE_NAME)
     if sid:
-        sess = _get_admin_session(sid)
+        sess = await _get_admin_session(sid)
         if sess:
             if request.method in ('POST', 'PUT', 'DELETE', 'PATCH'):
                 csrf = request.headers.get('x-csrf-token') or request.headers.get('x-csrf')
@@ -486,7 +495,7 @@ async def admin_login(payload: AdminLogin) -> JSONResponse:
     """Validate admin token and establish an isolated server-side session."""
     if not ADMIN_TOKEN or not hmac.compare_digest(payload.token, ADMIN_TOKEN):
         return JSONResponse({'detail': 'invalid admin token'}, status_code=401)
-    sid, csrf = _create_admin_session()
+    sid, csrf = await _create_admin_session()
     await _write_audit_log('admin.login')
     response = JSONResponse({'status': 'ok', 'csrf': csrf})
     response.set_cookie(
@@ -507,7 +516,7 @@ async def admin_logout(request: Request) -> JSONResponse:
     """Clear the server-side admin session."""
     sid = request.cookies.get(ADMIN_COOKIE_NAME)
     if sid:
-        rds.delete(f'admin_session:{sid}')
+        await rds.delete(f'admin_session:{sid}')
     await _write_audit_log('admin.logout')
     response = JSONResponse({'status': 'ok'})
     response.delete_cookie(ADMIN_COOKIE_NAME, path='/')
@@ -533,7 +542,7 @@ async def health_ready() -> Response:
     except Exception:
         db_ok = False
     try:
-        rds.ping()
+        await rds.ping()
     except Exception:
         redis_ok = False
     if db_ok and redis_ok:
@@ -553,7 +562,7 @@ async def health(request: Request) -> HealthResponse:
     except Exception:
         db_status = 'down'
     try:
-        rds.ping()
+        await rds.ping()
     except Exception:
         redis_status = 'down'
     return HealthResponse(status='ok', uptime=(datetime.now(timezone.utc) - _start).total_seconds() if _start else 0, db=db_status, redis=redis_status)
@@ -561,8 +570,8 @@ async def health(request: Request) -> HealthResponse:
 @app.get('/health/detailed')
 async def health_detailed(request: Request) -> JSONResponse:
     """Detailed health check with metrics"""
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
 
     import psutil
     mem = psutil.virtual_memory()
@@ -580,7 +589,7 @@ async def health_detailed(request: Request) -> JSONResponse:
         db_status = 'down'
 
     try:
-        rds.ping()
+        await rds.ping()
     except Exception:
         redis_status = 'down'
 
@@ -819,7 +828,7 @@ async def _check_quota_pre(uid: int) -> JSONResponse | None:
                 return JSONResponse(
                     {
                         'error': {
-                            'message': 'insufficient wallet balance',
+                            'message': 'insufficient wallet balance | موجودی کیف پول کافی نیست',
                             'type': 'quota_exceeded',
                             'code': 'balance',
                         }
@@ -836,7 +845,7 @@ async def _check_quota_pre(uid: int) -> JSONResponse | None:
 async def chat(request: Request, payload: dict[str, Any]) -> Response:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
 
     # P0-2: Quota pre-check — reject before calling LiteLLM if user has
     # exceeded their daily token limit or has zero wallet balance.
@@ -928,7 +937,7 @@ async def _extract_file_text(upload: UploadFile) -> tuple[str, str]:
             break
         total += len(chunk)
         if total > MAX_FILE_SIZE:
-            return '', f'file too large (max {MAX_FILE_SIZE // (1024*1024)} MB)'
+            return '', f'file too large | فایل بیش از حد بزرگ است (max {MAX_FILE_SIZE // (1024*1024)} MB)'
         chunks.append(chunk)
     data = b''.join(chunks)
     if name.endswith(('.txt', '.md', '.csv', '.json', '.log', '.text')):
@@ -998,7 +1007,7 @@ async def chat_with_file(
     """
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     quota_err = await _check_quota_pre(uid)
     if quota_err is not None:
         return quota_err
@@ -1153,7 +1162,7 @@ async def _track_usage(request: Request, payload: dict[str, Any], response_data:
                 # Fallback: 1 toman per 1000 tokens (old flat rate)
                 cost = max(1, total_tokens // 1000)
             res = await session.execute(
-                sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid'),
+                sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid FOR UPDATE'),
                 {'uid': uid}
             )
             row = res.fetchone()
@@ -1265,7 +1274,7 @@ async def _bill_stream_usage(uid: int, payload: dict[str, Any], usage: dict[str,
 async def me_usage(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -1277,8 +1286,8 @@ async def me_usage(request: Request) -> JSONResponse:
 
 @app.get('/admin/pricing')
 async def list_pricing(request: Request) -> JSONResponse:
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -1309,8 +1318,8 @@ async def get_active_price(session, model_id: str) -> "Pricing | None":
 @app.post('/admin/pricing')
 async def set_pricing(request: Request, payload: dict[str, Any]) -> JSONResponse:
     """Insert a NEW versioned price row.  Historical rows are never updated."""
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     model = payload.get('model')
@@ -1349,8 +1358,8 @@ async def set_pricing(request: Request, payload: dict[str, Any]) -> JSONResponse
 # ===== Features =====
 @app.get('/admin/features')
 async def list_features(request: Request) -> JSONResponse:
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -1360,14 +1369,14 @@ async def list_features(request: Request) -> JSONResponse:
 
 @app.post('/admin/features')
 async def upsert_feature(request: Request, payload: dict[str, Any]) -> JSONResponse:
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     fid = payload.get('id')
     async with async_session() as session:
         if fid:
             row = await session.get(Feature, fid)
             if not row:
-                return JSONResponse({'detail': 'not found'}, status_code=404)
+                return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
         else:
             row = Feature()
             session.add(row)
@@ -1383,8 +1392,8 @@ async def upsert_feature(request: Request, payload: dict[str, Any]) -> JSONRespo
 
 @app.delete('/admin/features/{fid}')
 async def delete_feature(request: Request, fid: int) -> JSONResponse:
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         row = await session.get(Feature, fid)
         if row:
@@ -1396,8 +1405,8 @@ async def delete_feature(request: Request, fid: int) -> JSONResponse:
 # ===== Discounts =====
 @app.get('/admin/discounts')
 async def list_discounts(request: Request) -> JSONResponse:
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -1407,8 +1416,8 @@ async def list_discounts(request: Request) -> JSONResponse:
 
 @app.post('/admin/discounts')
 async def upsert_discount(request: Request, payload: dict[str, Any]) -> JSONResponse:
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     did = payload.get('id')
     code = payload.get('code')
     if not code:
@@ -1417,7 +1426,7 @@ async def upsert_discount(request: Request, payload: dict[str, Any]) -> JSONResp
         if did:
             row = await session.get(Discount, did)
             if not row:
-                return JSONResponse({'detail': 'not found'}, status_code=404)
+                return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
         else:
             row = Discount()
             session.add(row)
@@ -1432,8 +1441,8 @@ async def upsert_discount(request: Request, payload: dict[str, Any]) -> JSONResp
 
 @app.delete('/admin/discounts/{did}')
 async def delete_discount(request: Request, did: int) -> JSONResponse:
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         row = await session.get(Discount, did)
         if row:
@@ -1456,8 +1465,8 @@ async def get_about() -> JSONResponse:
 
 @app.post('/admin/about')
 async def set_about(request: Request, payload: dict[str, Any]) -> JSONResponse:
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         res = await session.execute(AboutContent.__table__.select())
         row = res.fetchone()
@@ -1476,8 +1485,8 @@ async def set_about(request: Request, payload: dict[str, Any]) -> JSONResponse:
 # ===== Proxy Config =====
 @app.get('/admin/proxy')
 async def get_proxy(request: Request) -> JSONResponse:
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'proxy_url': '', 'proxy_type': 'socks5', 'active': False})
     async with async_session() as session:
@@ -1489,8 +1498,8 @@ async def get_proxy(request: Request) -> JSONResponse:
 
 @app.post('/admin/proxy')
 async def set_proxy(request: Request, payload: dict[str, Any]) -> JSONResponse:
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         res = await session.execute(ProxyConfig.__table__.select())
         row = res.fetchone()
@@ -1524,8 +1533,8 @@ async def get_org_default_model() -> JSONResponse:
 @app.post('/admin/org-default-model')
 async def set_org_default_model(request: Request, payload: dict[str, Any]) -> JSONResponse:
     """Admin: set org-wide default model."""
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     model_id = payload.get('default_model', '')
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
@@ -1581,7 +1590,7 @@ async def list_assistants(request: Request) -> JSONResponse:
 async def create_assistant(request: Request, payload: AssistantCreate) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -1599,14 +1608,14 @@ async def create_assistant(request: Request, payload: AssistantCreate) -> JSONRe
 @app.get('/assistants/{assistant_id}')
 async def get_assistant(assistant_id: int, request: Request) -> JSONResponse:
     if async_session is None:
-        return JSONResponse({'detail': 'not found'}, status_code=404)
+        return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
     async with async_session() as session:
         res = await session.execute(
             Assistant.__table__.select().where(Assistant.id == assistant_id)
         )
         row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'not found'}, status_code=404)
+            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
         return JSONResponse(jsonable_encoder(dict(row._mapping)))
 
 
@@ -1614,7 +1623,7 @@ async def get_assistant(assistant_id: int, request: Request) -> JSONResponse:
 async def update_assistant(assistant_id: int, request: Request, payload: dict[str, Any]) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -1623,7 +1632,7 @@ async def update_assistant(assistant_id: int, request: Request, payload: dict[st
         )
         row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'not found or not owned'}, status_code=404)
+            return JSONResponse({'detail': 'not found or not owned | یافت نشد یا متعلق به شما نیست'}, status_code=404)
         obj = await session.get(Assistant, assistant_id)
         for field in ('name', 'description', 'system_prompt', 'model_id', 'icon', 'is_public'):
             if field in payload:
@@ -1637,7 +1646,7 @@ async def update_assistant(assistant_id: int, request: Request, payload: dict[st
 async def delete_assistant(assistant_id: int, request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -1645,7 +1654,7 @@ async def delete_assistant(assistant_id: int, request: Request) -> JSONResponse:
             Assistant.__table__.select().where(Assistant.id == assistant_id, Assistant.user_id == uid)
         )
         if not res.fetchone():
-            return JSONResponse({'detail': 'not found'}, status_code=404)
+            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
         await session.execute(Assistant.__table__.delete().where(Assistant.id == assistant_id))
         await session.commit()
     return JSONResponse({'status': 'ok'})
@@ -1699,19 +1708,19 @@ def _session_payload(user_id: int) -> dict:
     }
 
 
-def _create_session(user_id: int) -> str:
+async def _create_session(user_id: int) -> str:
     """Create a server-side session and return its opaque token."""
     token = _gen_token()
-    rds.setex(f'session:{token}', SESSION_TTL, json.dumps(_session_payload(user_id)))
-    rds.sadd(f'sessions:{user_id}', token)
-    rds.expire(f'sessions:{user_id}', SESSION_TTL)
+    await rds.setex(f'session:{token}', SESSION_TTL, json.dumps(_session_payload(user_id)))
+    await rds.sadd(f'sessions:{user_id}', token)
+    await rds.expire(f'sessions:{user_id}', SESSION_TTL)
     return token
 
 
-def _get_session(token: str | None) -> dict | None:
+async def _get_session(token: str | None) -> dict | None:
     if not token:
         return None
-    raw = rds.get(f'session:{token}')
+    raw = await rds.get(f'session:{token}')
     if not raw:
         return None
     try:
@@ -1729,16 +1738,16 @@ def _get_session(token: str | None) -> dict | None:
     if exp:
         try:
             if datetime.fromisoformat(exp) < datetime.now(timezone.utc).replace(tzinfo=None):
-                rds.delete(f'session:{token}')
+                await rds.delete(f'session:{token}')
                 return None
         except ValueError:
             pass
-    rds.expire(f'session:{token}', SESSION_TTL)
+    await rds.expire(f'session:{token}', SESSION_TTL)
     return data
 
 
-def _get_session_user_id(token: str | None) -> int | None:
-    data = _get_session(token)
+async def _get_session_user_id(token: str | None) -> int | None:
+    data = await _get_session(token)
     return int(data['user_id']) if data else None
 
 
@@ -1757,14 +1766,14 @@ def _clear_session_cookie(response: Response) -> None:
     response.delete_cookie(SESSION_COOKIE_NAME, path='/')
 
 
-def _rotate_session(request: Request, response: Response, user_id: int) -> str:
+async def _rotate_session(request: Request, response: Response, user_id: int) -> str:
     """Invalidate the current session and issue a fresh one (privilege change)."""
     old = request.cookies.get(SESSION_COOKIE_NAME) or \
         request.headers.get('Authorization', '').removeprefix('Bearer ')
     if old:
-        rds.delete(f'session:{old}')
-        rds.srem(f'sessions:{user_id}', old)
-    new_token = _create_session(user_id)
+        await rds.delete(f'session:{old}')
+        await rds.srem(f'sessions:{user_id}', old)
+    new_token = await _create_session(user_id)
     _set_session_cookie(response, new_token)
     return new_token
 
@@ -1799,21 +1808,21 @@ async def _write_audit_log(action: str, target_type: str | None = None,
 
 
 # ── Admin session (server-side, isolated from user sessions) ──
-def _create_admin_session() -> tuple[str, str]:
+async def _create_admin_session() -> tuple[str, str]:
     sid = _gen_token()
     csrf = secrets.token_urlsafe(32)
     payload = {
         'created_at': datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         'csrf': csrf,
     }
-    rds.setex(f'admin_session:{sid}', ADMIN_SESSION_TTL, json.dumps(payload))
+    await rds.setex(f'admin_session:{sid}', ADMIN_SESSION_TTL, json.dumps(payload))
     return sid, csrf
 
 
-def _get_admin_session(sid: str | None) -> dict | None:
+async def _get_admin_session(sid: str | None) -> dict | None:
     if not sid:
         return None
-    raw = rds.get(f'admin_session:{sid}')
+    raw = await rds.get(f'admin_session:{sid}')
     if not raw:
         return None
     try:
@@ -1842,7 +1851,7 @@ async def _get_user_id(request: Request) -> int | None:
         token = request.headers.get('Authorization', '').removeprefix('Bearer ')
     if not token:
         return None
-    uid = _get_session_user_id(token)
+    uid = await _get_session_user_id(token)
     if uid:
         return uid
     # API key authentication
@@ -1892,7 +1901,7 @@ async def signup(payload: AuthSignup) -> JSONResponse:
     async with async_session() as session:
         existing = await session.execute(User.__table__.select().where(User.email == payload.email))
         if existing.fetchone():
-            return JSONResponse({'detail': 'email already registered'}, status_code=409)
+            return JSONResponse({'detail': 'email already registered | ایمیل قبلا ثبت شده است'}, status_code=409)
         user = User(email=payload.email, password_hash=_hash_password(payload.password), referral_code=secrets.token_hex(4))
         session.add(user)
         await session.commit()
@@ -1923,7 +1932,7 @@ async def signup(payload: AuthSignup) -> JSONResponse:
         quota = Quota(user_id=user.id, daily_limit=200000, used_today=0, reset_at=(datetime.now(timezone.utc) + timedelta(days=1)).replace(tzinfo=None))
         session.add(quota)
         await session.commit()
-        token = _create_session(user.id)
+        token = await _create_session(user.id)
         response = JSONResponse({'token': token, 'user': {'id': user.id, 'email': user.email}})
         _set_session_cookie(response, token)
         await _write_audit_log('auth.signup', target_type='user', target_id=user.id, details={'email': user.email})
@@ -1938,8 +1947,8 @@ async def login(payload: AuthLogin) -> JSONResponse:
         user = res.fetchone()
         if not user or not user.password_hash or not _verify_password(payload.password, user.password_hash):
             await _write_audit_log('auth.login_failed', details={'email': payload.email})
-            return JSONResponse({'detail': 'invalid email or password'}, status_code=401)
-        token = _create_session(user.id)
+            return JSONResponse({'detail': 'invalid email or password | ایمیل یا رمز عبور نادرست است'}, status_code=401)
+        token = await _create_session(user.id)
         response = JSONResponse({'token': token, 'user': {'id': user.id, 'email': user.email}})
         _set_session_cookie(response, token)
         await _write_audit_log('auth.login', target_type='user', target_id=user.id, details={'email': user.email})
@@ -1949,14 +1958,14 @@ async def login(payload: AuthLogin) -> JSONResponse:
 async def me(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(User.__table__.select().where(User.id == uid))
         user = res.fetchone()
         if not user:
-            return JSONResponse({'detail': 'user not found'}, status_code=404)
+            return JSONResponse({'detail': 'user not found | کاربر یافت نشد'}, status_code=404)
         return JSONResponse(jsonable_encoder({
             'id': user.id, 'email': user.email, 'created_at': user.created_at,
             'referral_code': user.referral_code,
@@ -1969,7 +1978,7 @@ async def referral_stats(request: Request) -> JSONResponse:
     """Get user's referral stats"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -2004,10 +2013,10 @@ async def logout(request: Request) -> JSONResponse:
     token = request.cookies.get(SESSION_COOKIE_NAME) or \
         request.headers.get('Authorization', '').removeprefix('Bearer ')
     if token:
-        uid = _get_session_user_id(token)
-        rds.delete(f'session:{token}')
+        uid = await _get_session_user_id(token)
+        await rds.delete(f'session:{token}')
         if uid:
-            rds.srem(f'sessions:{uid}', token)
+            await rds.srem(f'sessions:{uid}', token)
             await _write_audit_log('auth.logout', target_type='user', target_id=uid)
     response = JSONResponse({'status': 'ok'})
     _clear_session_cookie(response)
@@ -2019,11 +2028,12 @@ async def logout_all(request: Request) -> JSONResponse:
     """Revoke every active session for the authenticated user."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
-    tokens = list(rds.smembers(f'sessions:{uid}') or [])
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
+    raw_members = await rds.smembers(f'sessions:{uid}')
+    tokens = list(raw_members or [])
     for tok in tokens:
-        rds.delete(f'session:{tok}')
-    rds.delete(f'sessions:{uid}')
+        await rds.delete(f'session:{tok}')
+    await rds.delete(f'sessions:{uid}')
     await _write_audit_log('auth.logout_all', target_type='user', target_id=uid, details={'revoked_sessions': len(tokens)})
     response = JSONResponse({'status': 'ok', 'revoked_sessions': len(tokens)})
     _clear_session_cookie(response)
@@ -2040,7 +2050,7 @@ async def change_password(request: Request, payload: ChangePasswordRequest) -> J
     """Change user password"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     from security import validate_password
     valid, err = validate_password(payload.new_password)
     if not valid:
@@ -2052,7 +2062,7 @@ async def change_password(request: Request, payload: ChangePasswordRequest) -> J
         res = await session.execute(User.__table__.select().where(User.id == uid))
         user = res.fetchone()
         if not user or not _verify_password(payload.current_password, user.password_hash):
-            return JSONResponse({'detail': 'current password is incorrect'}, status_code=401)
+            return JSONResponse({'detail': 'current password is incorrect | رمز عبور فعلی نادرست است'}, status_code=401)
 
         new_hash = _hash_password(payload.new_password)
         await session.execute(
@@ -2062,7 +2072,7 @@ async def change_password(request: Request, payload: ChangePasswordRequest) -> J
         await session.commit()
 
     response = JSONResponse({'status': 'ok'})
-    _rotate_session(request, response, uid)
+    await _rotate_session(request, response, uid)
     await _write_audit_log('auth.change_password', target_type='user', target_id=uid)
     return response
 
@@ -2072,7 +2082,7 @@ async def update_profile(request: Request, payload: dict[str, Any]) -> JSONRespo
     """Update user profile fields"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -2113,15 +2123,17 @@ async def forgot_password(payload: ForgotPasswordRequest) -> JSONResponse:
             return JSONResponse({'status': 'ok', 'message': 'if email exists, reset link sent'})
 
         reset_token = secrets.token_urlsafe(32)
-        rds.setex(f'reset:{reset_token}', 900, str(user.id))  # 15 min TTL
+        await rds.setex(f'reset:{reset_token}', 900, str(user.id))  # 15 min TTL
 
         # In production, send email here
         # Token logged to DB/redis only — never to stdout (security)
 
+        # Token stored in Redis only — NEVER returned in response
+        import logging as _logging
+        _logging.getLogger(__name__).warning('Password reset token generated for user %s (email delivery not configured)', user.id)
         return JSONResponse({
             'status': 'ok',
             'message': 'reset link sent to your email',
-            'token': reset_token if os.getenv('DEBUG') else None,  # Only show in debug
         })
 
 
@@ -2133,7 +2145,7 @@ async def reset_password(payload: ResetPasswordRequest) -> JSONResponse:
     if not valid:
         return JSONResponse({'detail': err}, status_code=400)
 
-    uid = rds.get(f'reset:{payload.token}')
+    uid = await rds.get(f'reset:{payload.token}')
     if not uid:
         return JSONResponse({'detail': 'invalid or expired reset token'}, status_code=400)
 
@@ -2148,7 +2160,7 @@ async def reset_password(payload: ResetPasswordRequest) -> JSONResponse:
         )
         await session.commit()
 
-    rds.delete(f'reset:{payload.token}')
+    await rds.delete(f'reset:{payload.token}')
     return JSONResponse({'status': 'ok', 'message': 'password reset successfully'})
 
 # ── Telegram account linking ──────────────────────────────
@@ -2161,7 +2173,7 @@ async def telegram_link(request: Request, payload: TelegramLink) -> JSONResponse
     """Link a Telegram account to existing user"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -2172,26 +2184,30 @@ async def telegram_link(request: Request, payload: TelegramLink) -> JSONResponse
         await session.commit()
     return JSONResponse({'status': 'ok', 'telegram_id': payload.telegram_id})
 
-@app.get('/auth/telegram-link')
-async def get_telegram_token(request: Request) -> JSONResponse:
-    """Get auth token for a linked Telegram user (used by bot)"""
-    tg_id = request.query_params.get('tg_id')
-    if not tg_id:
-        return JSONResponse({'detail': 'tg_id required'}, status_code=400)
+INTERNAL_TOKEN = os.getenv('INTERNAL_TOKEN', '')
+
+class TelegramTokenRequest(BaseModel):
+    telegram_id: int
+
+@app.post('/auth/telegram-token')
+async def get_telegram_token(request: Request, payload: TelegramTokenRequest) -> JSONResponse:
+    """Exchange a Telegram ID for a session token. Requires internal service auth."""
+    internal_token = request.headers.get('x-internal-token', '')
+    if not INTERNAL_TOKEN or not internal_token or not hmac.compare_digest(internal_token, INTERNAL_TOKEN):
+        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
-    try:
-        tg_id_int = int(tg_id)
-    except ValueError:
-        return JSONResponse({'detail': 'invalid tg_id'}, status_code=400)
 
     async with async_session() as session:
-        res = await session.execute(User.__table__.select().where(User.telegram_id == tg_id_int))
+        res = await session.execute(User.__table__.select().where(User.telegram_id == payload.telegram_id))
         user = res.fetchone()
         if not user:
             return JSONResponse({'detail': 'not linked'}, status_code=404)
+        if user.telegram_id != payload.telegram_id:
+            return JSONResponse({'detail': 'telegram_id mismatch'}, status_code=403)
         token = _gen_token()
         rds.setex(f'session:{token}', SESSION_TTL, str(user.id))
+        await _write_audit_log('auth.telegram_token', target_type='user', target_id=user.id)
         return JSONResponse({'token': token, 'user': {'id': user.id, 'email': user.email}})
 
 # ═══════════════════════════════════════
@@ -2211,7 +2227,7 @@ class ConvUpdate(BaseModel):
 async def list_conversations(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -2227,7 +2243,7 @@ async def list_conversations(request: Request) -> JSONResponse:
 async def create_conversation(request: Request, payload: ConvCreate) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -2242,7 +2258,7 @@ async def search_conversations(request: Request, q: str = '') -> JSONResponse:
     """Search conversations by title or message content for the current user."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -2295,7 +2311,7 @@ async def conversation_analytics(request: Request) -> JSONResponse:
     """Return conversation usage analytics for the current user."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -2395,28 +2411,28 @@ async def conversation_analytics(request: Request) -> JSONResponse:
 async def get_conversation(request: Request, conv_id: int) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(Conversation.__table__.select().where(Conversation.id == conv_id, Conversation.user_id == uid))
         conv = res.fetchone()
         if not conv:
-            return JSONResponse({'detail': 'not found'}, status_code=404)
+            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
         return JSONResponse(jsonable_encoder({'id': conv.id, 'title': conv.title, 'model': conv.model, 'messages': conv.messages, 'created_at': conv.created_at}))
 
 @app.put('/conversations/{conv_id}')
 async def update_conversation(request: Request, conv_id: int, payload: ConvUpdate) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(Conversation.__table__.select().where(Conversation.id == conv_id, Conversation.user_id == uid))
         conv = res.fetchone()
         if not conv:
-            return JSONResponse({'detail': 'not found'}, status_code=404)
+            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
         update_data = {}
         if payload.title is not None:
             update_data['title'] = payload.title
@@ -2435,14 +2451,14 @@ async def update_conversation(request: Request, conv_id: int, payload: ConvUpdat
 async def delete_conversation(request: Request, conv_id: int) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(Conversation.__table__.select().where(Conversation.id == conv_id, Conversation.user_id == uid))
         conv = res.fetchone()
         if not conv:
-            return JSONResponse({'detail': 'not found'}, status_code=404)
+            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
         await session.execute(Conversation.__table__.delete().where(Conversation.id == conv_id))
         await session.commit()
     return JSONResponse({'status': 'deleted'})
@@ -2469,7 +2485,7 @@ async def list_memories(request: Request, category: str | None = None) -> JSONRe
     """List active memories for the current user, optionally filtered by category."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -2490,7 +2506,7 @@ async def search_memories(request: Request, q: str = '') -> JSONResponse:
     """Full-text search across memory content for the current user."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -2518,7 +2534,7 @@ async def create_memory(request: Request, payload: MemoryCreate) -> JSONResponse
     """Create a new memory entry for the current user."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -2544,7 +2560,7 @@ async def update_memory(request: Request, memory_id: int, payload: MemoryUpdate)
     """Update an existing memory entry."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -2555,7 +2571,7 @@ async def update_memory(request: Request, memory_id: int, payload: MemoryUpdate)
         )
         mem = res.fetchone()
         if not mem:
-            return JSONResponse({'detail': 'not found'}, status_code=404)
+            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
         update_data = {}
         if payload.content is not None:
             update_data['content'] = payload.content
@@ -2580,7 +2596,7 @@ async def delete_memory(request: Request, memory_id: int) -> JSONResponse:
     """Soft-delete a memory entry (set active=False)."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -2591,7 +2607,7 @@ async def delete_memory(request: Request, memory_id: int) -> JSONResponse:
         )
         mem = res.fetchone()
         if not mem:
-            return JSONResponse({'detail': 'not found'}, status_code=404)
+            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
         await session.execute(
             UserMemory.__table__.update().where(UserMemory.id == memory_id),
             {'active': False, 'updated_at': datetime.now(timezone.utc).replace(tzinfo=None)},
@@ -2659,7 +2675,7 @@ async def list_my_skill_templates(request: Request) -> JSONResponse:
     """List skill templates owned by the current user."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -2724,13 +2740,13 @@ async def get_skill_template(request: Request, template_id: int) -> JSONResponse
         )
         row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'not found'}, status_code=404)
+            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
         data = dict(row._mapping)
         # Non-public templates only visible to owner or admin
         if not data.get('is_public'):
             uid = await _get_user_id(request)
             if not uid or (data.get('user_id') != uid and not admin_required(request)):
-                return JSONResponse({'detail': 'not found'}, status_code=404)
+                return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
     return JSONResponse(jsonable_encoder(data))
 
 
@@ -2739,7 +2755,7 @@ async def create_skill_template(request: Request, payload: SkillTemplateCreate) 
     """Create a new skill template."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -2776,7 +2792,7 @@ async def update_skill_template(request: Request, template_id: int, payload: Ski
     """Update a skill template (owner only)."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -2785,7 +2801,7 @@ async def update_skill_template(request: Request, template_id: int, payload: Ski
         )
         row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'not found'}, status_code=404)
+            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
         if row.user_id != uid:
             return JSONResponse({'detail': 'forbidden'}, status_code=403)
         update_data = {}
@@ -2809,7 +2825,7 @@ async def delete_skill_template(request: Request, template_id: int) -> JSONRespo
     """Delete a skill template (owner only)."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -2818,7 +2834,7 @@ async def delete_skill_template(request: Request, template_id: int) -> JSONRespo
         )
         row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'not found'}, status_code=404)
+            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
         if row.user_id != uid:
             return JSONResponse({'detail': 'forbidden'}, status_code=403)
         await session.execute(
@@ -2833,7 +2849,7 @@ async def rate_skill_template(request: Request, template_id: int, payload: Skill
     """Rate a skill template (1-5)."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if payload.rating < 1 or payload.rating > 5:
         return JSONResponse({'detail': 'rating must be between 1 and 5'}, status_code=400)
     if async_session is None:
@@ -2844,7 +2860,7 @@ async def rate_skill_template(request: Request, template_id: int, payload: Skill
             SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
         )
         if not res.fetchone():
-            return JSONResponse({'detail': 'not found'}, status_code=404)
+            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
         # Upsert rating
         existing = await session.execute(
             SkillTemplateRating.__table__.select().where(
@@ -2900,7 +2916,7 @@ async def use_skill_template(request: Request, template_id: int, payload: SkillU
         )
         row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'not found'}, status_code=404)
+            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
         # Increment usage count
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         await session.execute(
@@ -2925,12 +2941,13 @@ async def use_skill_template(request: Request, template_id: int, payload: SkillU
 
 class TopupRequest(BaseModel):
     amount: int
+    payment_order_id: str
 
 @app.get('/wallet')
 async def get_wallet(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -2946,7 +2963,7 @@ async def get_wallet(request: Request) -> JSONResponse:
 async def get_ledger(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -2966,6 +2983,23 @@ async def topup(request: Request, payload: TopupRequest) -> JSONResponse:
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
+        # Verify payment order exists and is completed
+        pay_res = await session.execute(
+            sqlalchemy.text("SELECT id, status, amount FROM payment_orders WHERE id = :pid AND user_id = :uid"),
+            {'pid': payload.payment_order_id, 'uid': uid}
+        )
+        pay_row = pay_res.fetchone()
+        if not pay_row:
+            return JSONResponse({'detail': 'payment order not found'}, status_code=404)
+        if pay_row.status != 'completed':
+            return JSONResponse({'detail': 'payment not completed'}, status_code=400)
+        # Prevent double-crediting
+        dup = await session.execute(
+            sqlalchemy.text("SELECT id FROM ledger WHERE reason = :reason LIMIT 1"),
+            {'reason': f'topup:{payload.payment_order_id}'}
+        )
+        if dup.fetchone():
+            return JSONResponse({'detail': 'payment already credited'}, status_code=409)
         # Get current balance
         res = await session.execute(
             sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid'),
@@ -2973,8 +3007,8 @@ async def topup(request: Request, payload: TopupRequest) -> JSONResponse:
         )
         row = res.fetchone()
         current = row.balance if row else 0
-        new_balance = current + payload.amount
-        entry = Ledger(user_id=uid, amount=payload.amount, balance_after=new_balance, reason='شارژ حساب')
+        new_balance = current + pay_row.amount
+        entry = Ledger(user_id=uid, amount=pay_row.amount, balance_after=new_balance, reason=f'topup:{payload.payment_order_id}')
         session.add(entry)
         await session.commit()
     return JSONResponse({'status': 'ok', 'balance_after': new_balance})
@@ -2986,8 +3020,8 @@ async def topup(request: Request, payload: TopupRequest) -> JSONResponse:
 @app.get('/admin/users')
 async def admin_users(request: Request) -> JSONResponse:
     """List all users (admin only)"""
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -3026,15 +3060,15 @@ async def admin_users(request: Request) -> JSONResponse:
 @app.post('/admin/users/{uid}/ban')
 async def admin_ban_user(request: Request, uid: int) -> JSONResponse:
     """Ban/unban a user"""
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
     async with async_session() as session:
         user = await session.get(User, uid)
         if not user:
-            return JSONResponse({'detail': 'not found'}, status_code=404)
+            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
         # Toggle: set quota to 0 = ban
         await session.execute(
             Quota.__table__.update().where(Quota.user_id == uid),
@@ -3052,8 +3086,8 @@ async def admin_ban_user(request: Request, uid: int) -> JSONResponse:
 @app.put('/admin/users/{uid}')
 async def admin_edit_user(request: Request, uid: int) -> JSONResponse:
     """Edit user details (admin)"""
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -3080,8 +3114,8 @@ async def admin_edit_user(request: Request, uid: int) -> JSONResponse:
 @app.get('/admin/export/ledger')
 async def export_ledger(request: Request) -> Response:
     """Export all ledger entries as CSV"""
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -3108,8 +3142,8 @@ async def export_ledger(request: Request) -> Response:
 @app.get('/admin/export/users')
 async def export_users(request: Request) -> Response:
     """Export all users as CSV"""
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -3172,7 +3206,7 @@ async def send_email(to: str, subject: str, body: str) -> bool:
 async def send_welcome_email(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -3186,8 +3220,8 @@ async def send_welcome_email(request: Request) -> JSONResponse:
 
 @app.get('/admin/analytics')
 async def admin_analytics(request: Request) -> JSONResponse:
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -3237,7 +3271,7 @@ async def payment_request(request: Request, payload: PaymentRequest) -> JSONResp
     """Create a Zarinpal payment and return redirect URL"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if payload.amount < 1000:
         return JSONResponse({'detail': 'minimum amount is 1000 Tomans'}, status_code=400)
 
@@ -3393,7 +3427,7 @@ async def payment_history(request: Request) -> JSONResponse:
     """Get user's payment history"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -3427,7 +3461,7 @@ async def list_notifications(request: Request) -> JSONResponse:
     """Get user notifications"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -3485,7 +3519,7 @@ async def mark_notification_read(request: Request, nid: int) -> JSONResponse:
     """Mark notification as read"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -3512,7 +3546,7 @@ async def create_api_key(request: Request, payload: ApiKeyCreate) -> JSONRespons
     """Generate a new API key. The secret is shown only once."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -3554,7 +3588,7 @@ async def list_api_keys(request: Request) -> JSONResponse:
     """List user's API keys (never expose raw key)"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -3587,7 +3621,7 @@ async def revoke_api_key(request: Request, key_id: int) -> JSONResponse:
     """Revoke (deactivate) an API key"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -3651,7 +3685,7 @@ async def get_plan(plan_id: str) -> JSONResponse:
         )
         row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'plan not found'}, status_code=404)
+            return JSONResponse({'detail': 'plan not found | طرح یافت نشد'}, status_code=404)
     return JSONResponse(jsonable_encoder(dict(row._mapping)))
 
 
@@ -3680,7 +3714,7 @@ async def get_credit_package(pkg_id: str) -> JSONResponse:
         )
         row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'package not found'}, status_code=404)
+            return JSONResponse({'detail': 'package not found | بسته یافت نشد'}, status_code=404)
     return JSONResponse(jsonable_encoder(dict(row._mapping)))
 
 
@@ -3693,7 +3727,7 @@ async def subscribe_to_plan(request: Request, payload: SubscribeRequest) -> JSON
     """Subscribe the current user to a plan. Cancels any existing active subscription."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -3705,7 +3739,7 @@ async def subscribe_to_plan(request: Request, payload: SubscribeRequest) -> JSON
         )
         plan = plan_res.fetchone()
         if not plan:
-            return JSONResponse({'detail': 'plan not found'}, status_code=404)
+            return JSONResponse({'detail': 'plan not found | طرح یافت نشد'}, status_code=404)
 
         plan_data = dict(plan._mapping)
         now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -3761,7 +3795,7 @@ async def get_subscription(request: Request) -> JSONResponse:
     """Get the user's current active subscription"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -3798,7 +3832,7 @@ async def cancel_subscription(request: Request) -> JSONResponse:
     """Cancel the user's active subscription"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -3826,7 +3860,7 @@ async def renew_subscription(request: Request) -> JSONResponse:
     """Renew the user's subscription (extend by 30 days, reset token usage)"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -3881,7 +3915,7 @@ async def get_billing_settings(request: Request) -> JSONResponse:
     """Get user's billing settings (auto-creates defaults if missing)"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -3915,7 +3949,7 @@ async def update_billing_settings(request: Request, payload: BillingSettingsUpda
     """Update user's billing settings"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -3959,8 +3993,8 @@ async def update_billing_settings(request: Request, payload: BillingSettingsUpda
 @app.get('/admin/plans')
 async def admin_list_plans(request: Request) -> JSONResponse:
     """List all plans (admin, including inactive)"""
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -3972,8 +4006,8 @@ async def admin_list_plans(request: Request) -> JSONResponse:
 @app.post('/admin/plans')
 async def admin_create_plan(request: Request) -> JSONResponse:
     """Create or update a plan (admin)"""
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -4039,8 +4073,8 @@ async def admin_create_plan(request: Request) -> JSONResponse:
 @app.get('/admin/credit-packages')
 async def admin_list_credit_packages(request: Request) -> JSONResponse:
     """List all credit packages (admin, including inactive)"""
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
     async with async_session() as session:
@@ -4052,8 +4086,8 @@ async def admin_list_credit_packages(request: Request) -> JSONResponse:
 @app.post('/admin/credit-packages')
 async def admin_create_credit_package(request: Request) -> JSONResponse:
     """Create or update a credit package (admin)"""
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -4111,8 +4145,8 @@ async def admin_create_credit_package(request: Request) -> JSONResponse:
 @app.get('/admin/subscriptions')
 async def admin_list_subscriptions(request: Request) -> JSONResponse:
     """List all subscriptions (admin)"""
-    if not admin_required(request):
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -4151,7 +4185,7 @@ async def get_my_subscription(request: Request) -> JSONResponse:
     """Auth required: return current subscription, PAYG status, and usage summary."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -4227,7 +4261,7 @@ async def get_my_billing(request: Request) -> JSONResponse:
     """Auth required: return billing settings (PAYG toggle, limits)."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -4258,7 +4292,7 @@ async def update_my_billing(request: Request, payload: BillingUpdate) -> JSONRes
     """Auth required: update billing settings (toggle PAYG, set hard limit)."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -4295,7 +4329,7 @@ async def subscription_checkout(request: Request, payload: SubscriptionCheckout)
     """Auth required: create ZarinPal payment for a subscription plan."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -4303,7 +4337,7 @@ async def subscription_checkout(request: Request, payload: SubscriptionCheckout)
         plan_res = await session.execute(select(Plan).where(Plan.id == payload.plan_id, Plan.active == True))
         plan = plan_res.scalar_one_or_none()
         if not plan:
-            return JSONResponse({'detail': 'plan not found'}, status_code=404)
+            return JSONResponse({'detail': 'plan not found | طرح یافت نشد'}, status_code=404)
         if plan.price_monthly <= 0:
             return JSONResponse({'detail': 'this plan is free, no payment needed'}, status_code=400)
 
@@ -4346,7 +4380,7 @@ async def credit_package_checkout(request: Request, payload: CreditPackageChecko
     """Auth required: create ZarinPal payment for a credit package."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -4356,7 +4390,7 @@ async def credit_package_checkout(request: Request, payload: CreditPackageChecko
         )
         pkg = pkg_res.scalar_one_or_none()
         if not pkg:
-            return JSONResponse({'detail': 'package not found'}, status_code=404)
+            return JSONResponse({'detail': 'package not found | بسته یافت نشد'}, status_code=404)
 
         price = pkg.total_credits  # total_credits = price in Toman
         if price <= 0:
@@ -4429,7 +4463,7 @@ class ScheduledTaskUpdate(BaseModel):
 async def list_tasks(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         res = await session.execute(
             select(ScheduledTask).where(ScheduledTask.user_id == uid).order_by(ScheduledTask.created_at.desc())
@@ -4451,7 +4485,7 @@ async def list_tasks(request: Request) -> JSONResponse:
 async def create_task(request: Request, payload: ScheduledTaskCreate) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         task = ScheduledTask(
             user_id=uid,
@@ -4478,14 +4512,14 @@ async def create_task(request: Request, payload: ScheduledTaskCreate) -> JSONRes
 async def update_task(request: Request, task_id: int, payload: ScheduledTaskUpdate) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         res = await session.execute(
             select(ScheduledTask).where(ScheduledTask.id == task_id, ScheduledTask.user_id == uid)
         )
         task = res.scalar_one_or_none()
         if not task:
-            return JSONResponse({'detail': 'task not found'}, status_code=404)
+            return JSONResponse({'detail': 'task not found | وظیفه یافت نشد'}, status_code=404)
         update_data = payload.model_dump(exclude_unset=True)
         for key, val in update_data.items():
             setattr(task, key, val)
@@ -4504,14 +4538,14 @@ async def update_task(request: Request, task_id: int, payload: ScheduledTaskUpda
 async def delete_task(request: Request, task_id: int) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         res = await session.execute(
             select(ScheduledTask).where(ScheduledTask.id == task_id, ScheduledTask.user_id == uid)
         )
         task = res.scalar_one_or_none()
         if not task:
-            return JSONResponse({'detail': 'task not found'}, status_code=404)
+            return JSONResponse({'detail': 'task not found | وظیفه یافت نشد'}, status_code=404)
         await session.delete(task)
         await session.commit()
         return JSONResponse({'status': 'deleted'})
@@ -4521,14 +4555,14 @@ async def delete_task(request: Request, task_id: int) -> JSONResponse:
 async def toggle_task(request: Request, task_id: int) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         res = await session.execute(
             select(ScheduledTask).where(ScheduledTask.id == task_id, ScheduledTask.user_id == uid)
         )
         task = res.scalar_one_or_none()
         if not task:
-            return JSONResponse({'detail': 'task not found'}, status_code=404)
+            return JSONResponse({'detail': 'task not found | وظیفه یافت نشد'}, status_code=404)
         task.is_active = not task.is_active
         task.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await session.commit()
@@ -4539,14 +4573,14 @@ async def toggle_task(request: Request, task_id: int) -> JSONResponse:
 async def run_task(request: Request, task_id: int) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         res = await session.execute(
             select(ScheduledTask).where(ScheduledTask.id == task_id, ScheduledTask.user_id == uid)
         )
         task = res.scalar_one_or_none()
         if not task:
-            return JSONResponse({'detail': 'task not found'}, status_code=404)
+            return JSONResponse({'detail': 'task not found | وظیفه یافت نشد'}, status_code=404)
 
         # Create execution record
         execution = TaskExecution(
@@ -4616,7 +4650,7 @@ async def run_task(request: Request, task_id: int) -> JSONResponse:
 async def list_task_executions(request: Request, task_id: int) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     async with async_session() as session:
         # Verify task belongs to user
         res = await session.execute(
@@ -4624,7 +4658,7 @@ async def list_task_executions(request: Request, task_id: int) -> JSONResponse:
         )
         task = res.scalar_one_or_none()
         if not task:
-            return JSONResponse({'detail': 'task not found'}, status_code=404)
+            return JSONResponse({'detail': 'task not found | وظیفه یافت نشد'}, status_code=404)
         res2 = await session.execute(
             select(TaskExecution).where(TaskExecution.task_id == task_id).order_by(TaskExecution.created_at.desc())
         )
@@ -4810,7 +4844,7 @@ async def smart_chat(request: Request, payload: dict[str, Any]) -> Response:
     """Smart Mode: auto-selects the cheapest model capable of handling the request."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
 
     # Quota pre-check
     quota_err = await _check_quota_pre(uid)
@@ -4985,7 +5019,7 @@ async def export_conversation(
     """Export a conversation in JSON, Markdown, or plain text format."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'unauthorized'}, status_code=401)
+        return JSONResponse({'detail': 'unauthorized | لطفا وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'db not initialized'}, status_code=500)
 
@@ -4997,7 +5031,7 @@ async def export_conversation(
         )
         conv = res.fetchone()
         if not conv:
-            return JSONResponse({'detail': 'not found'}, status_code=404)
+            return JSONResponse({'detail': 'not found | یافت نشد'}, status_code=404)
 
     messages = conv.messages or []
     title = conv.title or 'Conversation'

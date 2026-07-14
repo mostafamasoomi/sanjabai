@@ -16,7 +16,7 @@ export default function SignupPage() {
   const router = useRouter()
 
   const emailValid = !emailTouched || !email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-  const passwordValid = !passwordTouched || !password || password.length >= 6
+  const passwordValid = !passwordTouched || !password || password.length >= 8
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -24,7 +24,7 @@ export default function SignupPage() {
     setPasswordTouched(true)
     if (!email.trim() || !password) return setError('ایمیل و رمز عبور را وارد کنید')
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError('ایمیل معتبر وارد کنید')
-    if (password.length < 6) return setError('رمز عبور حداقل ۶ کاراکتر باشد')
+    if (password.length < 8) return setError('رمز عبور حداقل ۸ کاراکتر باشد')
     setBusy(true)
     setError('')
     try {
@@ -80,7 +80,7 @@ export default function SignupPage() {
             <input
               className={`input ${passwordTouched && !passwordValid ? 'aurora-input-error' : ''}`}
               type="password"
-              placeholder="حداقل ۶ کاراکتر"
+              placeholder="حداقل ۸ کاراکتر"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onBlur={() => setPasswordTouched(true)}
@@ -89,10 +89,10 @@ export default function SignupPage() {
             {passwordTouched && !passwordValid && (
               <p className="text-xs text-[var(--danger)] mt-1 flex items-center gap-1">
                 <Icon name="close" size={10} />
-                رمز عبور حداقل ۶ کاراکتر باشد
+                رمز عبور حداقل ۸ کاراکتر باشد
               </p>
             )}
-            {passwordTouched && passwordValid && password.length >= 6 && (
+            {passwordTouched && passwordValid && password.length >= 8 && (
               <p className="text-xs text-[var(--positive)] mt-1 flex items-center gap-1">
                 <Icon name="check" size={10} />
                 رمز عبور مناسب است

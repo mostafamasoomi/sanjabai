@@ -47,6 +47,8 @@ services:
       dockerfile: Dockerfile.tunnel
     restart: unless-stopped
     mem_limit: 128m
+    volumes:
+      - ./infra/ssh_key:/root/.ssh/id_ed25519:ro
     networks: [multiai_net]
 
   multiai_api:

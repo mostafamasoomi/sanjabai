@@ -646,11 +646,29 @@ async def root() -> dict[str, str]:
 async def list_models(request: Request) -> dict[str, Any]:
     models = []
     try:
-        r = await _http.get(f"{LITELLM_HOST}/v1/models", timeout=8)
+        r = await _http.get(f"{LITELLM_HOST}/v1/models", timeout=5)
         if r.status_code == 200:
             models = r.json().get('data', [])
     except Exception:
         pass
+    # Fallback: if litellm returns no models, use the catalog table
+    if not models and async_session is not None:
+        try:
+            async with async_session() as session:
+                res = await session.execute(
+                    sqlalchemy.text("SELECT id, provider_model_id, display_name, context_window, availability FROM model_catalog WHERE availability = 'available' ORDER BY id")
+                )
+                for row in res.fetchall():
+                    models.append({
+                        'id': row.provider_model_id,
+                        'object': 'model',
+                        'created': 0,
+                        'owned_by': 'multiai',
+                        'display_name': row.display_name,
+                        'context_window': row.context_window,
+                    })
+        except Exception:
+            pass
     return {'object': 'list', 'data': models}
 
 def _catalog_row_to_item(m: dict[str, Any]) -> dict[str, Any]:
@@ -3618,6 +3636,42 @@ async def admin_analytics(request: Request) -> JSONResponse:
         'conv_count': conv_count,
         'recent_ledger': recent,
     }))
+
+# ═══════════════════════════════════════
+# Admin Stats (summary dashboard)
+# ═══════════════════════════════════════
+
+@app.get('/admin/stats')
+async def admin_stats(request: Request) -> JSONResponse:
+    """Quick stats summary for admin dashboard."""
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+    async with async_session() as session:
+        r = await session.execute(sqlalchemy.text('SELECT COUNT(*) as c FROM users'))
+        total_users = r.fetchone().c
+        r = await session.execute(sqlalchemy.text('SELECT COUNT(*) as c FROM users WHERE banned = false'))
+        active_users = r.fetchone().c
+        r = await session.execute(sqlalchemy.text('SELECT COUNT(*) as c FROM conversations'))
+        total_conversations = r.fetchone().c
+        r = await session.execute(sqlalchemy.text('SELECT COUNT(*) as c FROM api_keys'))
+        total_api_keys = r.fetchone().c
+        r = await session.execute(sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as t FROM ledger WHERE amount > 0'))
+        total_revenue = float(r.scalar() or 0)
+        r = await session.execute(sqlalchemy.text('SELECT COUNT(*) as c FROM usage_events'))
+        total_usage_events = r.fetchone().c
+        r = await session.execute(sqlalchemy.text('SELECT COUNT(*) as c FROM model_catalog WHERE availability = \'available\''))
+        total_models = r.fetchone().c
+    return JSONResponse({
+        'total_users': total_users,
+        'active_users': active_users,
+        'total_conversations': total_conversations,
+        'total_api_keys': total_api_keys,
+        'total_revenue': total_revenue,
+        'total_usage_events': total_usage_events,
+        'total_models': total_models,
+    })
 
 # ═══════════════════════════════════════
 # Zarinpal Payment Gateway

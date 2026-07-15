@@ -63,28 +63,26 @@ from security import RateLimitMiddleware, SecurityHeadersMiddleware, CsrfMiddlew
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     global engine, async_session, _start, _http
-    # Update database module globals
-    _db.engine = create_async_engine(
+    # Update database module globals via proxy-aware setters
+    _eng = create_async_engine(
         DATABASE_URL, echo=False, pool_pre_ping=True,
         pool_size=10, max_overflow=20, pool_recycle=300, pool_timeout=30,
     )
-    _db.async_session = sessionmaker(_db.engine, class_=AsyncSession, expire_on_commit=False)
-    _db._http = httpx.AsyncClient(
+    _db.set_engine(_eng)
+    _db.set_async_session(sessionmaker(_eng, class_=AsyncSession, expire_on_commit=False))
+    _db.set_http(httpx.AsyncClient(
         timeout=httpx.Timeout(90, connect=10),
         limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
-    )
+        trust_env=False,
+    ))
     _db._start = datetime.now(timezone.utc)
 
-    # Update module-level references in dependencies
-    import dependencies as _deps
-    _deps.async_session = _db.async_session
-    _deps.rds = _db.rds
-
     from migrate import migrate
-    await migrate(_db.engine)
+    await migrate(_eng)
     yield
-    await _db._http.aclose()
-    await _db.engine.dispose()
+    if _db._real_http:
+        await _db._real_http.aclose()
+    await _eng.dispose()
 
 
 # ═══════════════════════════════════════════════════════════════════

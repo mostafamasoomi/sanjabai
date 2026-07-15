@@ -716,8 +716,51 @@ async def me_usage(request: Request) -> JSONResponse:
     if async_session is None:
         return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
-        q = await session.execute(Quota.__table__.select().where(Quota.user_id == uid))
-        row = q.fetchone()
-        if not row:
-            return JSONResponse({'user_id': uid, 'daily_limit': 0, 'used_today': 0, 'reset_at': None})
-        return JSONResponse({'user_id': uid, 'daily_limit': row.daily_limit, 'used_today': row.used_today, 'reset_at': row.reset_at.isoformat() if row.reset_at else None})
+        import sqlalchemy
+        # Current balance from ledger
+        res = await session.execute(sqlalchemy.text(
+            "SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid"
+        ), {'uid': uid})
+        balance = res.fetchone().balance
+
+        # Monthly usage from usage_events
+        res2 = await session.execute(sqlalchemy.text(
+            "SELECT COALESCE(SUM(input_tokens), 0) as inp, COALESCE(SUM(output_tokens), 0) as out, "
+            "COALESCE(SUM(charged_amount), 0) as spent, COUNT(*) as cnt "
+            "FROM usage_events WHERE user_id = :uid AND created_at >= date_trunc('month', now())"
+        ), {'uid': uid})
+        monthly = res2.fetchone()
+
+        # Per-model breakdown
+        res3 = await session.execute(sqlalchemy.text(
+            "SELECT model, SUM(input_tokens) as inp, SUM(output_tokens) as out, "
+            "SUM(charged_amount) as cost, COUNT(*) as calls "
+            "FROM usage_events WHERE user_id = :uid AND created_at >= date_trunc('month', now()) "
+            "GROUP BY model ORDER BY cost DESC"
+        ), {'uid': uid})
+        breakdown = [{'model': r.model, 'input_tokens': r.inp, 'output_tokens': r.out,
+                       'cost': r.cost, 'calls': r.calls} for r in res3.fetchall()]
+
+        # Recent events
+        res4 = await session.execute(sqlalchemy.text(
+            "SELECT id, model, input_tokens, output_tokens, charged_amount, created_at "
+            "FROM usage_events WHERE user_id = :uid ORDER BY id DESC LIMIT 20"
+        ), {'uid': uid})
+        events = [{'id': r.id, 'model': r.model, 'input_tokens': r.input_tokens,
+                    'output_tokens': r.output_tokens, 'cost': r.charged_amount,
+                    'created_at': r.created_at.isoformat() if r.created_at else None}
+                   for r in res4.fetchall()]
+
+        return JSONResponse({
+            'current_balance': float(balance),
+            'total_spent_this_month': float(monthly.spent),
+            'total_input_tokens_this_month': int(monthly.inp),
+            'total_output_tokens_this_month': int(monthly.out),
+            'event_count_this_month': int(monthly.cnt),
+            'per_model_breakdown': [{'model': r.model, 'input_tokens': int(r.inp), 'output_tokens': int(r.out),
+                       'cost': float(r.cost), 'calls': int(r.calls)} for r in res3.fetchall()],
+            'recent_events': [{'id': r.id, 'model': r.model, 'input_tokens': int(r.input_tokens),
+                    'output_tokens': int(r.output_tokens), 'cost': float(r.charged_amount),
+                    'created_at': r.created_at.isoformat() if r.created_at else None}
+                   for r in res4.fetchall()],
+        })

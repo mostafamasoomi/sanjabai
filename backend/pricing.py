@@ -579,3 +579,98 @@ async def credit_package_checkout(request: Request, payload: CreditPackageChecko
         'authority': result['authority'], 'url': result['url'],
         'amount': price, 'package': pkg.name_en, 'total_credits': pkg.total_credits,
     })
+
+
+# ── Usage endpoint ──────────────────────────────────────────────
+
+@router.get('/me/usage')
+async def get_my_usage(request: Request) -> JSONResponse:
+    """Auth required: return current balance, monthly usage summary, per-model breakdown, and recent events."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+
+    async with async_session() as session:
+        # Current balance from ledger
+        bal_res = await session.execute(
+            sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid'),
+            {'uid': uid},
+        )
+        bal_row = bal_res.fetchone()
+        current_balance = int(bal_row.balance) if bal_row else 0
+
+        # Month boundaries
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        # Total spent this month from usage_events
+        total_res = await session.execute(
+            sqlalchemy.text(
+                "SELECT COALESCE(SUM(charged_amount), 0) as total_spent, "
+                "COALESCE(SUM(input_tokens), 0) as total_input, "
+                "COALESCE(SUM(output_tokens), 0) as total_output, "
+                "COUNT(*) as event_count "
+                "FROM usage_events WHERE user_id = :uid AND created_at >= :month_start"
+            ),
+            {'uid': uid, 'month_start': month_start},
+        )
+        total_row = total_res.fetchone()
+        total_spent = int(total_row.total_spent) if total_row else 0
+        total_input = int(total_row.total_input) if total_row else 0
+        total_output = int(total_row.total_output) if total_row else 0
+        event_count = int(total_row.event_count) if total_row else 0
+
+        # Per-model breakdown this month
+        breakdown_res = await session.execute(
+            sqlalchemy.text(
+                "SELECT model, "
+                "COALESCE(SUM(input_tokens), 0) as input_tokens, "
+                "COALESCE(SUM(output_tokens), 0) as output_tokens, "
+                "COALESCE(SUM(charged_amount), 0) as cost, "
+                "COUNT(*) as calls "
+                "FROM usage_events WHERE user_id = :uid AND created_at >= :month_start "
+                "GROUP BY model ORDER BY cost DESC"
+            ),
+            {'uid': uid, 'month_start': month_start},
+        )
+        per_model = []
+        for row in breakdown_res.fetchall():
+            per_model.append({
+                'model': row.model,
+                'input_tokens': int(row.input_tokens),
+                'output_tokens': int(row.output_tokens),
+                'cost': int(row.cost),
+                'calls': int(row.calls),
+            })
+
+        # Recent events (last 50)
+        events_res = await session.execute(
+            sqlalchemy.text(
+                "SELECT id, model, input_tokens, output_tokens, charged_amount, created_at "
+                "FROM usage_events WHERE user_id = :uid "
+                "ORDER BY created_at DESC LIMIT 50"
+            ),
+            {'uid': uid},
+        )
+        recent_events = []
+        for row in events_res.fetchall():
+            recent_events.append({
+                'id': row.id,
+                'model': row.model,
+                'input_tokens': int(row.input_tokens),
+                'output_tokens': int(row.output_tokens),
+                'cost': int(row.charged_amount),
+                'created_at': row.created_at.isoformat() if row.created_at else None,
+            })
+
+    return JSONResponse(jsonable_encoder({
+        'current_balance': current_balance,
+        'total_spent_this_month': total_spent,
+        'total_input_tokens_this_month': total_input,
+        'total_output_tokens_this_month': total_output,
+        'event_count_this_month': event_count,
+        'per_model_breakdown': per_model,
+        'recent_events': recent_events,
+    }))

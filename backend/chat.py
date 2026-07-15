@@ -145,14 +145,18 @@ async def _web_search(query: str, max_results: int = 5) -> str:
         return ''
 
 
-async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any], usage: dict[str, Any]) -> None:
-    """Shared billing logic for tracking and billing usage."""
+async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any], usage: dict[str, Any]) -> dict[str, Any]:
+    """Shared billing logic for tracking and billing usage. Returns cost info dict."""
+    result = {'input_tokens': 0, 'output_tokens': 0, 'cost': 0, 'balance_after': 0}
     total_tokens = usage.get('total_tokens', 0)
     if total_tokens <= 0:
-        return
+        return result
     model = payload.get('model', '')
     input_tokens = int(usage.get('prompt_tokens') or usage.get('input_tokens') or 0)
     output_tokens = int(usage.get('completion_tokens') or usage.get('output_tokens') or 0)
+
+    result['input_tokens'] = input_tokens
+    result['output_tokens'] = output_tokens
 
     res = await session.execute(Quota.__table__.select().where(Quota.user_id == uid))
     quota = res.fetchone()
@@ -182,15 +186,19 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
     else:
         cost = max(1, total_tokens // 1000)
 
+    result['cost'] = cost
+
     res = await session.execute(
-        sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid FOR UPDATE'),
+        sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid'),
         {'uid': uid},
     )
     row = res.fetchone()
     current = row.balance if row else 0
+    new_balance = current - cost if current >= cost else current
     if current >= cost:
-        entry = Ledger(user_id=uid, amount=-cost, balance_after=current - cost, reason=f'مصرف {model}')
+        entry = Ledger(user_id=uid, amount=-cost, balance_after=new_balance, reason=f'مصرف {model}')
         session.add(entry)
+    result['balance_after'] = new_balance
 
     try:
         from services.billing import SqlBillingRepo
@@ -210,33 +218,37 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
     except Exception:
         pass
 
+    return result
 
-async def _track_usage(request: Request, payload: dict[str, Any], response_data: dict[str, Any]):
-    """Record token usage for non-streaming requests."""
+
+async def _track_usage(request: Request, payload: dict[str, Any], response_data: dict[str, Any]) -> dict[str, Any]:
+    """Record token usage for non-streaming requests. Returns cost info."""
     uid = await _get_user_id(request)
     if not uid or async_session is None:
-        return
+        return {}
     usage = response_data.get('usage', {})
     if usage.get('total_tokens', 0) <= 0:
-        return
+        return {}
     try:
         async with async_session() as session:
-            await _record_usage(session, uid, payload, usage)
+            cost_info = await _record_usage(session, uid, payload, usage)
             await session.commit()
+            return cost_info
     except Exception:
-        pass
+        return {}
 
 
-async def _bill_stream_usage(uid: int, payload: dict[str, Any], usage: dict[str, Any]):
-    """Bill the user after a streaming chat completes."""
+async def _bill_stream_usage(uid: int, payload: dict[str, Any], usage: dict[str, Any]) -> dict[str, Any]:
+    """Bill the user after a streaming chat completes. Returns cost info."""
     if usage.get('total_tokens', 0) <= 0:
-        return
+        return {}
     try:
         async with async_session() as session:
-            await _record_usage(session, uid, payload, usage)
+            cost_info = await _record_usage(session, uid, payload, usage)
             await session.commit()
+            return cost_info
     except Exception:
-        pass
+        return {}
 
 
 async def _chat_stream(payload: dict[str, Any], request: Request):
@@ -283,11 +295,21 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
                                 pass
                         yield f"{line}\n\n"
         except Exception as e:
-            yield f'data: {{"error": "سرویس موقتاً در دسترس نیست", "code": "gateway_error"}}\n\n'
+            yield f'data: {json.dumps({"error": "سرویس موقتاً در دسترس نیست", "code": "gateway_error"})}\n\n'
         finally:
             if uid and usage_data and async_session is not None:
                 try:
-                    await _bill_stream_usage(uid, payload, usage_data)
+                    cost_info = await _bill_stream_usage(uid, payload, usage_data)
+                    if cost_info and cost_info.get('cost', 0) > 0:
+                        billing_event = json.dumps({
+                            'type': 'billing',
+                            'cost': cost_info.get('cost', 0),
+                            'input_tokens': cost_info.get('input_tokens', 0),
+                            'output_tokens': cost_info.get('output_tokens', 0),
+                            'balance_after': cost_info.get('balance_after', 0),
+                            'currency': 'IRT',
+                        })
+                        yield f'data: {billing_event}\n\n'
                 except Exception:
                     pass
 
@@ -366,8 +388,18 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
     try:
         r = await _http.post(f"{LITELLM_HOST}/v1/chat/completions", json=payload, headers={'Accept': 'application/json'})
         if r.status_code == 200:
-            await _track_usage(request, payload, r.json())
-            return Response(content=r.content, status_code=200, media_type='application/json')
+            cost_info = await _track_usage(request, payload, r.json())
+            # Inject billing info into response
+            resp_data = r.json()
+            if cost_info and cost_info.get('cost', 0) > 0:
+                resp_data['billing'] = {
+                    'cost': cost_info.get('cost', 0),
+                    'input_tokens': cost_info.get('input_tokens', 0),
+                    'output_tokens': cost_info.get('output_tokens', 0),
+                    'balance_after': cost_info.get('balance_after', 0),
+                    'currency': 'IRT',
+                }
+            return Response(content=json.dumps(resp_data), status_code=200, media_type='application/json')
         return Response(content=r.content, status_code=r.status_code, media_type='application/json')
     except Exception as e:
         return JSONResponse({'detail': 'سرویس موقتاً در دسترس نیست', 'code': 'gateway_error'}, status_code=502)
@@ -421,8 +453,17 @@ async def chat_with_file(
             headers={'Accept': 'application/json'},
         )
         if r.status_code == 200:
-            await _track_usage(request, payload, r.json())
-            return Response(content=r.content, status_code=200, media_type='application/json')
+            cost_info = await _track_usage(request, payload, r.json())
+            resp_data = r.json()
+            if cost_info and cost_info.get('cost', 0) > 0:
+                resp_data['billing'] = {
+                    'cost': cost_info.get('cost', 0),
+                    'input_tokens': cost_info.get('input_tokens', 0),
+                    'output_tokens': cost_info.get('output_tokens', 0),
+                    'balance_after': cost_info.get('balance_after', 0),
+                    'currency': 'IRT',
+                }
+            return Response(content=json.dumps(resp_data), status_code=200, media_type='application/json')
         return Response(content=r.content, status_code=r.status_code, media_type='application/json')
     except Exception as e:
         return JSONResponse(
@@ -622,16 +663,25 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
             headers={'Accept': 'application/json'},
         )
         if r.status_code == 200:
-            await _track_usage(request, payload, r.json())
-            resp = Response(content=r.content, status_code=200, media_type='application/json')
+            cost_info = await _track_usage(request, payload, r.json())
+            resp_data = r.json()
+            if cost_info and cost_info.get('cost', 0) > 0:
+                resp_data['billing'] = {
+                    'cost': cost_info.get('cost', 0),
+                    'input_tokens': cost_info.get('input_tokens', 0),
+                    'output_tokens': cost_info.get('output_tokens', 0),
+                    'balance_after': cost_info.get('balance_after', 0),
+                    'currency': 'IRT',
+                }
+            resp = Response(content=json.dumps(resp_data), status_code=200, media_type='application/json')
         else:
             resp = Response(content=r.content, status_code=r.status_code, media_type='application/json')
-            resp.headers['X-Smart-Model'] = selected_model
-            resp.headers['X-Smart-Category'] = category
-            resp.headers['X-Smart-Provider'] = selected_provider
-            if original_model and original_model != selected_model:
-                resp.headers['X-Smart-Original-Model'] = original_model
-            return resp
+        resp.headers['X-Smart-Model'] = selected_model
+        resp.headers['X-Smart-Category'] = category
+        resp.headers['X-Smart-Provider'] = selected_provider
+        if original_model and original_model != selected_model:
+            resp.headers['X-Smart-Original-Model'] = original_model
+        return resp
     except Exception as e:
         return JSONResponse(
             {'detail': 'سرویس موقتاً در دسترس نیست', 'code': 'gateway_error'},
@@ -694,11 +744,21 @@ async def _smart_chat_stream(
                                 pass
                         yield f'{line}\n\n'
         except Exception as e:
-            yield f'data: {{"error": "upstream unavailable: {e}"}}\n\n'
+            yield f'data: {json.dumps({"error": f"upstream unavailable: {e}"})}\n\n'
         finally:
             if uid and usage_data and async_session is not None:
                 try:
-                    await _bill_stream_usage(uid, payload, usage_data)
+                    cost_info = await _bill_stream_usage(uid, payload, usage_data)
+                    if cost_info and cost_info.get('cost', 0) > 0:
+                        billing_event = json.dumps({
+                            'type': 'billing',
+                            'cost': cost_info.get('cost', 0),
+                            'input_tokens': cost_info.get('input_tokens', 0),
+                            'output_tokens': cost_info.get('output_tokens', 0),
+                            'balance_after': cost_info.get('balance_after', 0),
+                            'currency': 'IRT',
+                        })
+                        yield f'data: {billing_event}\n\n'
                 except Exception:
                     pass
 

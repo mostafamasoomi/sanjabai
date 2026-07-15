@@ -30,6 +30,7 @@ const NAV: NavItem[] = [
   { href: '/dashboard', label: 'داشبورد', icon: 'dashboard', section: 'tools' },
   { href: '/wallet', label: 'کیف پول', icon: 'wallet', section: 'tools' },
   { href: '/pricing', label: 'تعرفه\u200cها', icon: 'pricing', section: 'tools' },
+  { href: '/usage', label: 'مصرف', icon: 'chart', section: 'tools' },
   { href: '/api-keys', label: 'کلید API', icon: 'key', section: 'tools' },
   { href: '/search', label: 'جستجو', icon: 'search', section: 'tools' },
   { href: '/skills', label: 'اسکیل\u200cها', icon: 'sparkles', section: 'tools' },

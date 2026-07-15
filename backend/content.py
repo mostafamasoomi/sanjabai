@@ -118,13 +118,22 @@ async def list_models(request: Request) -> dict[str, Any]:
         try:
             async with async_session() as session:
                 res = await session.execute(
-                    sqlalchemy.text("SELECT id, provider_model_id, display_name, context_window, availability FROM model_catalog WHERE availability = 'available' ORDER BY id")
+                    sqlalchemy.text(
+                        "SELECT id, provider_model_id, display_name, context_window, availability, "
+                        "input_per_million, output_per_million, currency "
+                        "FROM model_catalog WHERE availability = 'available' ORDER BY id"
+                    )
                 )
                 for row in res.fetchall():
                     models.append({
                         'id': row.provider_model_id, 'object': 'model', 'created': 0,
                         'owned_by': 'multiai', 'display_name': row.display_name,
                         'context_window': row.context_window,
+                        'pricing': {
+                            'currency': row.currency or 'IRT',
+                            'inputPerMillion': float(row.input_per_million or 0),
+                            'outputPerMillion': float(row.output_per_million or 0),
+                        },
                     })
         except Exception:
             pass

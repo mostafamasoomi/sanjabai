@@ -79,7 +79,9 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((data) => {
         if (cancelled) return
-        const hasConversations = Array.isArray(data) ? data.length > 0 : true
+        // Backend may return array or paginated {items: [...]} format
+        const list = Array.isArray(data) ? data : (data?.items ?? [])
+        const hasConversations = list.length > 0
         if (!hasConversations) router.replace('/onboarding')
       })
       .catch(() => {

@@ -178,7 +178,8 @@ export default function SearchPage() {
       })
       if (res.ok) {
         const data = await res.json()
-        const list: Conversation[] = Array.isArray(data) ? data : []
+        // Backend may return array or paginated {items: [...]} format
+        const list: Conversation[] = Array.isArray(data) ? data : (data?.items ?? [])
         setRecent(list.slice(0, 20))
       }
     } catch {

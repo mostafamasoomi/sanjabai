@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { Icon } from '@/components/ui/Icon'
+import Link from 'next/link'
 
 export default function SignupPage() {
   const [email, setEmail] = useState('')
@@ -111,7 +112,7 @@ export default function SignupPage() {
 
         <p className="text-center text-sm text-[var(--text-dim)] mt-5">
           قبلاً ثبتنام کردهاید؟{' '}
-          <a href="/login" className="text-[var(--accent)] hover:underline">ورود</a>
+          <Link href="/login" className="text-[var(--accent)] hover:underline">ورود</Link>
         </p>
 
         {/* Trust signals */}

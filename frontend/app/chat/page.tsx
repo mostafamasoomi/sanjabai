@@ -284,7 +284,9 @@ export default function ChatPage() {
       const res = await fetch('/api/conversations', { headers: authHeaders() })
       if (res.ok) {
         const data = await res.json()
-        setConversations(Array.isArray(data) ? data : [])
+        // Backend may return array or paginated {items: [...]} format
+        const list = Array.isArray(data) ? data : (data?.items ?? [])
+        setConversations(list)
       }
     } catch { /* silent */ }
     finally { setLoadingConversations(false) }
@@ -512,7 +514,6 @@ export default function ChatPage() {
     }
 
     try {
-      console.error('DEBUG: About to make chat fetch call');
       const chatUrl = (smartMode && !attachedFile) ? '/api/v1/smart-chat' : '/api/chat'
       let res: Response
       if (attachedFile) {

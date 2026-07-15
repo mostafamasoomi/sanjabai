@@ -841,7 +841,8 @@ export default function SkillsPage() {
       })
       if (res.ok) {
         const data = await res.json()
-        setSkills(Array.isArray(data) ? data : [])
+        // Backend may return array or paginated {items: [...]} format
+        setSkills(Array.isArray(data) ? data : (data?.items ?? []))
       } else {
         toast('خطا در دریافت اسکیل‌ها', 'error')
       }

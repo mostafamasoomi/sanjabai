@@ -35,7 +35,7 @@ export default function PlaygroundPage() {
     setLoading(true)
     setResponse('')
     try {
-      const token = localStorage.getItem('auth_token')
+      const token = localStorage.getItem('multiai_auth_token')
       const messages: { role: string; content: string }[] = []
       if (systemPrompt.trim()) messages.push({ role: 'system', content: systemPrompt })
       messages.push({ role: 'user', content: userPrompt })

@@ -129,7 +129,8 @@ export default function DeveloperPage() {
       const r = await fetch('/api/api-keys', { headers: headers() })
       if (r.ok) {
         const data = await r.json()
-        setKeys(Array.isArray(data) ? data : [])
+        // Backend may return array or paginated {items: [...]} format
+        setKeys(Array.isArray(data) ? data : (data?.items ?? []))
       }
     } catch {}
   }, [token, headers])

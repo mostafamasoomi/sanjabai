@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
+import Link from 'next/link'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -62,11 +63,11 @@ export default function LoginPage() {
           </button>
         </form>
         <p className="text-center text-sm text-[var(--text-dim)] mt-4">
-          <a href="/forgot-password" className="text-[var(--accent)] hover:underline">رمز عبور را فراموش کرده‌اید؟</a>
+          <Link href="/forgot-password" className="text-[var(--accent)] hover:underline">رمز عبور را فراموش کردهاید؟</Link>
         </p>
         <p className="text-center text-sm text-[var(--text-dim)] mt-2">
           حساب کاربری ندارید؟{' '}
-          <a href="/signup" className="text-[var(--accent)] hover:underline">ثبتنام</a>
+          <Link href="/signup" className="text-[var(--accent)] hover:underline">ثبتنام</Link>
         </p>
       </div>
     </div>

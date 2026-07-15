@@ -36,7 +36,7 @@ export default function ProfilePage() {
 
   const fetchUsage = async () => {
     try {
-      const token = localStorage.getItem('auth_token')
+      const token = localStorage.getItem('multiai_auth_token')
       const r = await fetch('/api/usage', { headers: { Authorization: `Bearer ${token}` } })
       if (r.ok) setUsage(await r.json())
     } catch {}
@@ -44,7 +44,7 @@ export default function ProfilePage() {
 
   const fetchBalance = async () => {
     try {
-      const token = localStorage.getItem('auth_token')
+      const token = localStorage.getItem('multiai_auth_token')
       const r = await fetch('/api/wallet', { headers: { Authorization: `Bearer ${token}` } })
       if (r.ok) setBalance((await r.json()).balance)
     } catch {}
@@ -61,7 +61,7 @@ export default function ProfilePage() {
     }
     setChangingPassword(true)
     try {
-      const token = localStorage.getItem('auth_token')
+      const token = localStorage.getItem('multiai_auth_token')
       const r = await fetch('/api/auth/change-password', {
         method: 'POST',
         headers: {
@@ -93,7 +93,7 @@ export default function ProfilePage() {
     }
     setLinkingTelegram(true)
     try {
-      const token = localStorage.getItem('auth_token')
+      const token = localStorage.getItem('multiai_auth_token')
       const r = await fetch('/api/auth/telegram-link', {
         method: 'POST',
         headers: {

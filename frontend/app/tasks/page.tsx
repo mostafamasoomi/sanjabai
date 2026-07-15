@@ -129,7 +129,8 @@ export default function TasksPage() {
       const r = await fetch('/api/tasks', { headers: headers() })
       if (r.ok) {
         const data = await r.json()
-        setTasks(Array.isArray(data) ? data : [])
+        // Backend may return array or paginated {items: [...]} format
+        setTasks(Array.isArray(data) ? data : (data?.items ?? []))
       }
     } catch {
       toast('خطا در دریافت تسک‌ها', 'error')
@@ -251,7 +252,8 @@ export default function TasksPage() {
       const r = await fetch(`/api/tasks/${task.id}/executions`, { headers: headers() })
       if (r.ok) {
         const data = await r.json()
-        setExecutions(Array.isArray(data) ? data : [])
+        // Backend may return array or paginated {items: [...]} format
+        setExecutions(Array.isArray(data) ? data : (data?.items ?? []))
       }
     } catch {
       toast('خطا در دریافت تاریخچه', 'error')

@@ -156,7 +156,8 @@ export default function AssistantsPage() {
       })
       if (res.ok) {
         const data = await res.json()
-        setAssistants(Array.isArray(data) ? data : [])
+        // Backend may return array or paginated {items: [...]} format
+        setAssistants(Array.isArray(data) ? data : (data?.items ?? []))
       } else {
         toast('خطا در دریافت دستیارها', 'error')
       }

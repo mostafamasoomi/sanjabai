@@ -83,7 +83,7 @@ services:
     volumes:
       - ./.env:/app/.env:ro
     ports:
-      - "127.0.0.1:8081:8000"
+      - "0.0.0.0:8081:8000"
     networks: [multiai_net]
 
   multiai_frontend:
@@ -100,7 +100,7 @@ services:
       NEXT_PUBLIC_API_URL: http://multiai_api:8000
       HOSTNAME: 0.0.0.0
     ports:
-      - "127.0.0.1:3003:3000"
+      - "0.0.0.0:3003:3000"
     networks: [multiai_net]
 
   multiai_bot:

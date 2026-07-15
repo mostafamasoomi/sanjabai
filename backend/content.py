@@ -419,6 +419,9 @@ OPENROUTER_PRICES: dict[str, dict[str, float]] = {
     'agnes-2.0-flash': {'input': 0.028, 'output': 0.111},
     'agnes-2.5-flash': {'input': 0.055, 'output': 0.277},
     'mimo-v2.5-pro-ultraspeed': {'input': 0.130, 'output': 0.260},
+    'grok-4.5': {'input': 2.00, 'output': 6.00},
+    'glm-5.2-free': {'input': 0.0, 'output': 0.0},
+    'kimi-k2.7-code-free': {'input': 0.0, 'output': 0.0},
 }
 
 

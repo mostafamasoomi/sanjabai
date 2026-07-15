@@ -79,7 +79,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     from migrate import migrate
     await migrate(_eng)
+
+    # Start background pricing refresh task (every 15 minutes)
+    import asyncio
+    async def _pricing_refresh_loop():
+        await asyncio.sleep(30)  # initial delay for startup
+        while True:
+            try:
+                from content import refresh_pricing
+                result = await refresh_pricing()
+                print(f"[pricing-refresh] {result}")
+            except Exception as e:
+                print(f"[pricing-refresh] error: {e}")
+            await asyncio.sleep(900)  # 15 minutes
+
+    _pricing_task = asyncio.create_task(_pricing_refresh_loop())
+
     yield
+
+    _pricing_task.cancel()
     if _db._real_http:
         await _db._real_http.aclose()
     await _eng.dispose()

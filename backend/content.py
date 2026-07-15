@@ -13,7 +13,7 @@ from fastapi import APIRouter, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
-from database import async_session, rds, _http, LITELLM_HOST
+from database import async_session, rds, _http, LITELLM_HOST, ADMIN_TOKEN
 from models import AboutContent, Feature, Discount, ProxyConfig, Pricing
 from dependencies import admin_required
 
@@ -24,7 +24,7 @@ EXCHANGE_RATE_CACHE_TTL = 3600  # 1 hour
 
 # ── Catalog helpers ─────────────────────────────────────────────
 
-def _catalog_row_to_item(m: dict[str, Any]) -> dict[str, Any]:
+def _catalog_row_to_item(m: dict[str, Any], rate_irt: float = 126488, markup_pct: int = 20) -> dict[str, Any]:
     """Map a model_catalog DB row to the camelCase catalog contract."""
     return {
         'id': m['id'],
@@ -45,6 +45,12 @@ def _catalog_row_to_item(m: dict[str, Any]) -> dict[str, Any]:
             'reasoningPerMillion': float(m['reasoning_per_million']) if m.get('reasoning_per_million') is not None else None,
             'priceVersion': m.get('price_version') or 'v1',
             'effectiveFrom': m.get('effective_from'),
+            'usd': {
+                'inputPerMillion': float(m.get('usd_input_per_million') or 0),
+                'outputPerMillion': float(m.get('usd_output_per_million') or 0),
+            },
+            'exchangeRate': rate_irt,
+            'markupPct': markup_pct,
         },
         'availability': m.get('availability') or 'available',
         'audience': m.get('audience') or ['consumer', 'developer'],
@@ -66,8 +72,9 @@ async def _load_catalog_rows() -> list[dict[str, Any]]:
                 'modalities, capabilities, recommended_for, context_window, max_output_tokens, '
                 'currency, input_per_million, output_per_million, cached_input_per_million, '
                 'reasoning_per_million, price_version, effective_from, availability, audience, '
-                'rate_limit, deprecated_at, last_verified_at, provenance '
-                'FROM model_catalog WHERE availability = \'available\' ORDER BY provider, id'
+                'rate_limit, deprecated_at, last_verified_at, provenance, '
+                'usd_input_per_million, usd_output_per_million '
+                "FROM model_catalog WHERE availability = 'available' ORDER BY provider, id"
             ))
             return [dict(r._mapping) for r in res.fetchall()]
     except Exception:
@@ -116,15 +123,19 @@ async def list_models(request: Request) -> dict[str, Any]:
     models = []
     if async_session is not None:
         try:
+            rate_irt, markup_pct = await _get_exchange_rate()
             async with async_session() as session:
                 res = await session.execute(
                     sqlalchemy.text(
                         "SELECT id, provider_model_id, display_name, context_window, availability, "
-                        "input_per_million, output_per_million, currency "
+                        "input_per_million, output_per_million, currency, "
+                        "usd_input_per_million, usd_output_per_million "
                         "FROM model_catalog WHERE availability = 'available' ORDER BY id"
                     )
                 )
                 for row in res.fetchall():
+                    usd_in = float(row.usd_input_per_million or 0)
+                    usd_out = float(row.usd_output_per_million or 0)
                     models.append({
                         'id': row.provider_model_id, 'object': 'model', 'created': 0,
                         'owned_by': 'multiai', 'display_name': row.display_name,
@@ -133,6 +144,12 @@ async def list_models(request: Request) -> dict[str, Any]:
                             'currency': row.currency or 'IRT',
                             'inputPerMillion': float(row.input_per_million or 0),
                             'outputPerMillion': float(row.output_per_million or 0),
+                            'usd': {
+                                'inputPerMillion': usd_in,
+                                'outputPerMillion': usd_out,
+                            },
+                            'exchangeRate': rate_irt,
+                            'markupPct': markup_pct,
                         },
                     })
         except Exception:
@@ -154,9 +171,10 @@ async def catalog_models(request: Request) -> JSONResponse:
     cached = await rds.get('cache:catalog:models')
     if cached:
         return JSONResponse(json.loads(cached))
+    rate_irt, markup_pct = await _get_exchange_rate()
     rows = await _load_catalog_rows()
     if rows:
-        data = [_catalog_row_to_item(r) for r in rows]
+        data = [_catalog_row_to_item(r, rate_irt, markup_pct) for r in rows]
         source = 'approved-catalog'
     else:
         data = await _litellm_fallback_catalog()
@@ -165,6 +183,8 @@ async def catalog_models(request: Request) -> JSONResponse:
         'data': data,
         'generatedAt': datetime.now(timezone.utc),
         'source': source,
+        'exchangeRate': rate_irt,
+        'markupPct': markup_pct,
     })
     await rds.setex('cache:catalog:models', 120, json.dumps(result))
     return JSONResponse(result)
@@ -217,31 +237,49 @@ async def catalog_pricing(request: Request) -> JSONResponse:
 
 @router.get('/api/exchange-rate')
 async def api_exchange_rate() -> JSONResponse:
-    """Return the current USD→IRR exchange rate."""
-    cached = await rds.get('cache:exchange_rate')
+    """Return the current USD→IRT exchange rate with markup."""
+    cached = await rds.get('exchange_rate:usd_irt')
     if cached:
         return JSONResponse(json.loads(cached))
 
-    rate = None
+    rate_irr = None
+    source = 'fallback'
     try:
-        resp = await _http.get('https://api.exchangerate-api.com/v4/latest/USD', follow_redirects=True)
+        resp = await _http.get('https://open.er-api.com/v6/latest/USD', follow_redirects=True)
         resp.raise_for_status()
         data = resp.json()
-        rate = float(data['rates']['IRR'])
+        rate_irr = float(data['rates']['IRR'])
+        source = 'open.er-api.com'
     except Exception:
         pass
 
-    if rate is None:
-        rate = 850_000 * 10
+    if rate_irr is None:
+        rate_irr = 1_264_884  # fallback ~1,264,884 IRR per USD
+
+    rate_irt = rate_irr / 10  # IRR → IRT (Toman)
+    markup_pct = 20
 
     result = jsonable_encoder({
-        'USD_IRR': rate,
-        'USD_TOMAN': rate / 10,
-        'source': 'exchangerate-api.com' if rate != 8_500_000 else 'fallback',
-        'fetchedAt': datetime.now(timezone.utc).isoformat(),
+        'usd_to_irt': round(rate_irt),
+        'usd_to_irr': round(rate_irr),
+        'markup_pct': markup_pct,
+        'source': source,
+        'cached_at': datetime.now(timezone.utc).isoformat(),
     })
-    await rds.setex('cache:exchange_rate', EXCHANGE_RATE_CACHE_TTL, json.dumps(result))
+    await rds.setex('exchange_rate:usd_irt', EXCHANGE_RATE_CACHE_TTL, json.dumps(result))
     return JSONResponse(result)
+
+
+async def _get_exchange_rate() -> tuple[float, int]:
+    """Helper to get current USD→IRT rate and markup. Returns (rate_irt, markup_pct)."""
+    cached = await rds.get('exchange_rate:usd_irt')
+    if cached:
+        data = json.loads(cached)
+        return float(data.get('usd_to_irt', 126_488)), int(data.get('markup_pct', 20))
+    # Trigger fetch
+    resp = await api_exchange_rate()
+    data = json.loads(resp.body)
+    return float(data.get('usd_to_irt', 126_488)), int(data.get('markup_pct', 20))
 
 
 @router.get('/api/pricing')
@@ -251,10 +289,7 @@ async def api_pricing(request: Request) -> JSONResponse:
     if cached:
         return JSONResponse(json.loads(cached))
 
-    rate_resp = await api_exchange_rate()
-    rate_data = json.loads(rate_resp.body) if hasattr(rate_resp, 'body') else {}
-    toman_rate = rate_data.get('USD_TOMAN', 85_000)
-
+    rate_irt, markup_pct = await _get_exchange_rate()
     if async_session is None:
         return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
@@ -281,7 +316,7 @@ async def api_pricing(request: Request) -> JSONResponse:
         })
 
     result = jsonable_encoder({
-        'data': models_out, 'exchangeRate': toman_rate, 'margin': 0.20,
+        'data': models_out, 'exchangeRate': rate_irt, 'margin': markup_pct / 100,
         'generatedAt': datetime.now(timezone.utc).isoformat(),
     })
     await rds.setex('cache:api:pricing', 120, json.dumps(result))
@@ -350,3 +385,78 @@ async def public_discounts() -> JSONResponse:
     result = jsonable_encoder(rows)
     await rds.setex('cache:content:discounts', 120, json.dumps(result))
     return JSONResponse(result)
+
+
+# ── Pricing refresh (admin or cron) ────────────────────────────
+
+# OpenRouter USD pricing per 1M tokens (source of truth)
+OPENROUTER_PRICES: dict[str, dict[str, float]] = {
+    'mimo-v2.5': {'input': 0.14, 'output': 0.28},
+    'mimo-v2.5-pro': {'input': 0.435, 'output': 0.87},
+    'gemini-3.5-flash': {'input': 1.50, 'output': 9.00},
+    'mistral-large': {'input': 2.00, 'output': 6.00},
+    'mistral-medium-3-5': {'input': 1.50, 'output': 7.50},
+    'tencent-hy3': {'input': 0.20, 'output': 0.80},
+    'agnes-2.0-flash': {'input': 0.028, 'output': 0.111},
+    'agnes-2.5-flash': {'input': 0.055, 'output': 0.277},
+    'mimo-v2.5-pro-ultraspeed': {'input': 0.130, 'output': 0.260},
+}
+
+
+async def refresh_pricing() -> dict[str, Any]:
+    """Refresh exchange rate and recalculate IRT prices for all models."""
+    # 1. Fetch fresh exchange rate
+    await rds.delete('exchange_rate:usd_irt')  # force refresh
+    rate_irt, markup_pct = await _get_exchange_rate()
+    multiplier = rate_irt * (1 + markup_pct / 100)
+
+    # 2. Update model_catalog with new IRT prices
+    updated = 0
+    if async_session is not None:
+        try:
+            async with async_session() as session:
+                for model_id, prices in OPENROUTER_PRICES.items():
+                    irt_input = round(prices['input'] * multiplier)
+                    irt_output = round(prices['output'] * multiplier)
+                    await session.execute(
+                        sqlalchemy.text(
+                            'UPDATE model_catalog SET '
+                            'input_per_million = :inp, output_per_million = :out, '
+                            'usd_input_per_million = :usd_in, usd_output_per_million = :usd_out '
+                            'WHERE provider_model_id = :mid'
+                        ),
+                        {
+                            'inp': irt_input, 'out': irt_output,
+                            'usd_in': prices['input'], 'usd_out': prices['output'],
+                            'mid': model_id,
+                        },
+                    )
+                    updated += 1
+                await session.commit()
+        except Exception as e:
+            return {'status': 'error', 'detail': str(e)}
+
+    # 3. Invalidate caches
+    for key in ['cache:catalog:models', 'cache:catalog:pricing', 'cache:api:pricing']:
+        await rds.delete(key)
+
+    return {
+        'status': 'ok',
+        'exchange_rate': rate_irt,
+        'markup_pct': markup_pct,
+        'models_updated': updated,
+        'refreshed_at': datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.post('/admin/refresh-pricing')
+async def admin_refresh_pricing(request: Request) -> JSONResponse:
+    """Admin endpoint to trigger a pricing refresh."""
+    from dependencies import _get_user_id
+    uid = await _get_user_id(request)
+    # Allow if admin token in header
+    admin_tok = request.headers.get('X-Admin-Token', '')
+    if not uid and admin_tok != ADMIN_TOKEN:
+        return JSONResponse({'detail': 'admin access required'}, status_code=403)
+    result = await refresh_pricing()
+    return JSONResponse(jsonable_encoder(result))

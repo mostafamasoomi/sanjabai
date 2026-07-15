@@ -67,7 +67,7 @@ async def _load_catalog_rows() -> list[dict[str, Any]]:
                 'currency, input_per_million, output_per_million, cached_input_per_million, '
                 'reasoning_per_million, price_version, effective_from, availability, audience, '
                 'rate_limit, deprecated_at, last_verified_at, provenance '
-                'FROM model_catalog ORDER BY provider, id'
+                'FROM model_catalog WHERE availability = \'available\' ORDER BY provider, id'
             ))
             return [dict(r._mapping) for r in res.fetchall()]
     except Exception:
@@ -112,14 +112,9 @@ async def _litellm_fallback_catalog() -> list[dict[str, Any]]:
 
 @router.get('/v1/models')
 async def list_models(request: Request) -> dict[str, Any]:
+    """Return only models that are available in the catalog and actually working."""
     models = []
-    try:
-        r = await _http.get(f"{LITELLM_HOST}/v1/models", timeout=5)
-        if r.status_code == 200:
-            models = r.json().get('data', [])
-    except Exception:
-        pass
-    if not models and async_session is not None:
+    if async_session is not None:
         try:
             async with async_session() as session:
                 res = await session.execute(
@@ -131,6 +126,14 @@ async def list_models(request: Request) -> dict[str, Any]:
                         'owned_by': 'multiai', 'display_name': row.display_name,
                         'context_window': row.context_window,
                     })
+        except Exception:
+            pass
+    # Fallback to LiteLLM if DB has no models
+    if not models:
+        try:
+            r = await _http.get(f"{LITELLM_HOST}/v1/models", timeout=5)
+            if r.status_code == 200:
+                models = r.json().get('data', [])
         except Exception:
             pass
     return {'object': 'list', 'data': models}

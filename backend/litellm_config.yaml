@@ -1,15 +1,11 @@
 model_list:
-  # ── Bynara proxy models (11) ──────────────────────────────────────────
+  # ── Bynara proxy models (9 working) ──────────────────────────────
   - model_name: agnes-2.0-flash
     litellm_params: {model: openai/agnes-2.0-flash, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
   - model_name: agnes-2.5-flash
     litellm_params: {model: openai/agnes-2.5-flash, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
   - model_name: gemini-3.5-flash
     litellm_params: {model: openai/gemini-3.5-flash, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
-  - model_name: glm-5.2-free
-    litellm_params: {model: openai/glm-5.2-free, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
-  - model_name: kimi-k2.7-code-free
-    litellm_params: {model: openai/kimi-k2.7-code-free, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
   - model_name: mimo-v2.5
     litellm_params: {model: openai/mimo-v2.5, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
   - model_name: mimo-v2.5-pro
@@ -22,48 +18,6 @@ model_list:
     litellm_params: {model: openai/mistral-medium-3-5, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
   - model_name: tencent-hy3
     litellm_params: {model: openai/tencent-hy3, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
-
-  # ── OpenRouter free models (20) ───────────────────────────────────────
-  - model_name: cohere-north-mini-code-free
-    litellm_params: {model: openrouter/cohere/north-mini-code:free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: dolphin-mistral-24b-venice-free
-    litellm_params: {model: openrouter/cognitivecomputations/dolphin-mistral-24b-venice-edition:free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: gemma-4-26b-a4b-free
-    litellm_params: {model: openrouter/google/gemma-4-26b-a4b-it:free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: gemma-4-31b-free
-    litellm_params: {model: openrouter/google/gemma-4-31b-it:free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: gpt-oss-20b-free
-    litellm_params: {model: openrouter/openai/gpt-oss-20b:free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: hermes-3-405b-free
-    litellm_params: {model: openrouter/nousresearch/hermes-3-llama-3.1-405b:free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: laguna-m.1-free
-    litellm_params: {model: openrouter/poolside/laguna-m.1:free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: laguna-xs-2.1-free
-    litellm_params: {model: openrouter/poolside/laguna-xs-2.1:free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: llama-3.2-3b-free
-    litellm_params: {model: openrouter/meta-llama/llama-3.2-3b-instruct:free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: llama-3.3-70b-free
-    litellm_params: {model: openrouter/meta-llama/llama-3.3-70b-instruct:free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: nemotron-3-nano-30b-free
-    litellm_params: {model: openrouter/nvidia/nemotron-3-nano-30b-a3b:free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: nemotron-3-nano-omni-free
-    litellm_params: {model: openrouter/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: nemotron-3-super-120b-free
-    litellm_params: {model: openrouter/nvidia/nemotron-3-super-120b-a12b:free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: nemotron-3-ultra-550b-free
-    litellm_params: {model: openrouter/nvidia/nemotron-3-ultra-550b-a55b:free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: nemotron-3.5-content-safety-free
-    litellm_params: {model: openrouter/nvidia/nemotron-3.5-content-safety:free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: nemotron-nano-9b-v2-free
-    litellm_params: {model: openrouter/nvidia/nemotron-nano-9b-v2:free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: nemotron-nano-12b-v2-vl-free
-    litellm_params: {model: openrouter/nvidia/nemotron-nano-12b-v2-vl:free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: qwen3-coder-free
-    litellm_params: {model: openrouter/qwen/qwen3-coder:free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: qwen3-next-80b-free
-    litellm_params: {model: openrouter/qwen/qwen3-next-80b-a3b-instruct:free, api_key: os.environ/OPENROUTER_API_KEY}
-  - model_name: tencent-hy3-free
-    litellm_params: {model: openrouter/tencent/hy3:free, api_key: os.environ/OPENROUTER_API_KEY}
 
 litellm_settings:
   drop_params: true

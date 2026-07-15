@@ -52,6 +52,12 @@ class User(Base):
     referred_by: Mapped[int | None] = mapped_column(nullable=True)
     banned: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    display_name: Mapped[str | None] = mapped_column(nullable=True)
+    avatar_url: Mapped[str | None] = mapped_column(nullable=True)
+    bio: Mapped[str | None] = mapped_column(nullable=True)
+    preferences: Mapped[dict | None] = mapped_column(sqlalchemy.JSON, default=dict)
+    timezone: Mapped[str | None] = mapped_column(default='Asia/Tehran')
+    language: Mapped[str | None] = mapped_column(default='fa')
 
 class Subscription(Base):
     __tablename__ = 'subscriptions'
@@ -802,6 +808,94 @@ async def catalog_pricing(request: Request) -> JSONResponse:
         'priceVersion': pricing[0]['priceVersion'] if pricing else 'v1',
     })
     await rds.setex('cache:catalog:pricing', 120, json.dumps(result))
+    return JSONResponse(result)
+
+
+# ── Public pricing & exchange-rate API ─────────────────────────────────────
+EXCHANGE_RATE_CACHE_TTL = 3600  # 1 hour
+
+
+@app.get('/api/exchange-rate')
+async def api_exchange_rate() -> JSONResponse:
+    """Return the current USD→IRR exchange rate."""
+    cached = await rds.get('cache:exchange_rate')
+    if cached:
+        return JSONResponse(json.loads(cached))
+
+    rate = None
+    try:
+        resp = await _http.get('https://api.exchangerate-api.com/v4/latest/USD', follow_redirects=True)
+        resp.raise_for_status()
+        data = resp.json()
+        rate = float(data['rates']['IRR'])
+    except Exception:
+        pass
+
+    if rate is None:
+        # fallback
+        rate = 850_000 * 10  # ~8,500,000 IRR per USD
+
+    result = jsonable_encoder({
+        'USD_IRR': rate,
+        'USD_TOMAN': rate / 10,
+        'source': 'exchangerate-api.com' if rate != 8_500_000 else 'fallback',
+        'fetchedAt': datetime.now(timezone.utc).isoformat(),
+    })
+    await rds.setex('cache:exchange_rate', EXCHANGE_RATE_CACHE_TTL, json.dumps(result))
+    return JSONResponse(result)
+
+
+@app.get('/api/pricing')
+async def api_pricing(request: Request) -> JSONResponse:
+    """Return all active model pricing in Toman (IRR / 10).
+
+    Pricing = OpenRouter USD price × exchange_rate × 1.20 margin.
+    Free models show 0 for both input and output.
+    """
+    cached = await rds.get('cache:api:pricing')
+    if cached:
+        return JSONResponse(json.loads(cached))
+
+    # Fetch exchange rate (uses cache if available)
+    rate_resp = await api_exchange_rate()
+    rate_data = json.loads(rate_resp.body) if hasattr(rate_resp, 'body') else {}
+    toman_rate = rate_data.get('USD_TOMAN', 85_000)
+
+    if async_session is None:
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+
+    models_out = []
+    async with async_session() as session:
+        # Get all active prices (effective_to IS NULL), latest version per model
+        from sqlalchemy import text as sql_text
+        res = await session.execute(sql_text("""
+            SELECT DISTINCT ON (model)
+                model, provider, input_per_million, output_per_million, currency, source, price_version, effective_from
+            FROM pricing
+            WHERE effective_to IS NULL
+            ORDER BY model, effective_from DESC, price_version DESC
+        """))
+        rows = [dict(r._mapping) for r in res.fetchall()]
+
+    for r in rows:
+        models_out.append({
+            'model': r['model'],
+            'provider': r['provider'],
+            'inputPerMillion': r['input_per_million'],
+            'outputPerMillion': r['output_per_million'],
+            'currency': r['currency'] or 'IRT',
+            'source': r['source'],
+            'priceVersion': r['price_version'],
+            'effectiveFrom': r['effective_from'].isoformat() if r['effective_from'] else None,
+        })
+
+    result = jsonable_encoder({
+        'data': models_out,
+        'exchangeRate': toman_rate,
+        'margin': 0.20,
+        'generatedAt': datetime.now(timezone.utc).isoformat(),
+    })
+    await rds.setex('cache:api:pricing', 120, json.dumps(result))
     return JSONResponse(result)
 
 
@@ -2046,6 +2140,12 @@ async def me(request: Request) -> JSONResponse:
         return JSONResponse(jsonable_encoder({
             'id': user.id, 'email': user.email, 'created_at': user.created_at,
             'referral_code': user.referral_code,
+            'display_name': user.display_name,
+            'avatar_url': user.avatar_url,
+            'bio': user.bio,
+            'preferences': user.preferences or {},
+            'timezone': user.timezone or 'Asia/Tehran',
+            'language': user.language or 'fa',
         }))
 
 # ── Referral ───────────────────────────────────────────────
@@ -2154,17 +2254,93 @@ async def change_password(request: Request, payload: ChangePasswordRequest) -> J
     return response
 
 
-@app.put('/auth/profile')
-async def update_profile(request: Request, payload: dict[str, Any]) -> JSONResponse:
-    """Update user profile fields"""
+class UpdateProfileRequest(BaseModel):
+    display_name: str | None = None
+    bio: str | None = None
+    timezone: str | None = None
+    language: str | None = None
+    preferences: dict | None = None
+
+@app.get('/auth/profile')
+async def get_profile(request: Request) -> JSONResponse:
+    """Get full user profile including preferences and autonomy settings"""
     uid = await _get_user_id(request)
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
-    allowed = {'phone'}
-    update_data = {k: v for k, v in payload.items() if k in allowed and v is not None}
+    async with async_session() as session:
+        res = await session.execute(User.__table__.select().where(User.id == uid))
+        user = res.fetchone()
+        if not user:
+            return JSONResponse({'detail': 'user not found | کاربر یافت نشد'}, status_code=404)
+
+        prefs = user.preferences or {}
+        return JSONResponse(jsonable_encoder({
+            'id': user.id,
+            'email': user.email,
+            'display_name': user.display_name,
+            'avatar_url': user.avatar_url,
+            'bio': user.bio,
+            'timezone': user.timezone or 'Asia/Tehran',
+            'language': user.language or 'fa',
+            'preferences': {
+                'default_model': prefs.get('default_model', ''),
+                'theme': prefs.get('theme', 'dark'),
+                'ai_personality': prefs.get('ai_personality', ''),
+                'autonomy_level': prefs.get('autonomy_level', 'medium'),
+                'notification_settings': prefs.get('notification_settings', {
+                    'email': True,
+                    'telegram': False,
+                }),
+            },
+            'created_at': user.created_at,
+            'referral_code': user.referral_code,
+        }))
+
+@app.put('/auth/profile')
+async def update_profile(request: Request, payload: UpdateProfileRequest) -> JSONResponse:
+    """Update user profile fields including preferences"""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+
+    update_data: dict[str, Any] = {}
+    if payload.display_name is not None:
+        # Validate length
+        if len(payload.display_name) > 100:
+            return JSONResponse({'detail': 'نام نمایشی نباید بیشتر از ۱۰۰ کاراکتر باشد'}, status_code=400)
+        update_data['display_name'] = payload.display_name.strip() or None
+    if payload.bio is not None:
+        if len(payload.bio) > 500:
+            return JSONResponse({'detail': 'بیوگرافی نباید بیشتر از ۵۰۰ کاراکتر باشد'}, status_code=400)
+        update_data['bio'] = payload.bio.strip() or None
+    if payload.timezone is not None:
+        update_data['timezone'] = payload.timezone
+    if payload.language is not None:
+        if payload.language not in ('fa', 'en'):
+            return JSONResponse({'detail': 'زبان باید fa یا en باشد'}, status_code=400)
+        update_data['language'] = payload.language
+
+    # Preferences merge: merge new values into existing preferences
+    if payload.preferences is not None:
+        async with async_session() as session:
+            res = await session.execute(User.__table__.select().where(User.id == uid))
+            user = res.fetchone()
+            existing_prefs = (user.preferences or {}) if user else {}
+
+        # Validate autonomy_level
+        if 'autonomy_level' in payload.preferences:
+            level = payload.preferences['autonomy_level']
+            if level not in ('low', 'medium', 'high'):
+                return JSONResponse({'detail': 'سطح خودمختاری باید low، medium یا high باشد'}, status_code=400)
+
+        existing_prefs.update(payload.preferences)
+        update_data['preferences'] = existing_prefs
+
     if not update_data:
         return JSONResponse({'detail': 'فیلد معتبری برای بروزرسانی وجود ندارد'}, status_code=400)
 
@@ -2175,7 +2351,65 @@ async def update_profile(request: Request, payload: dict[str, Any]) -> JSONRespo
         )
         await session.commit()
 
+    await _write_audit_log('auth.update_profile', target_type='user', target_id=uid,
+                           details={'fields': list(update_data.keys())})
     return JSONResponse({'status': 'ok', 'updated': list(update_data.keys())})
+
+class AvatarUploadRequest(BaseModel):
+    avatar_url: str | None = None
+    avatar_base64: str | None = None
+
+@app.post('/auth/avatar')
+async def upload_avatar(request: Request, payload: AvatarUploadRequest) -> JSONResponse:
+    """Upload or set user avatar (URL or base64 image)"""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+
+    avatar_url = None
+
+    if payload.avatar_url:
+        # Validate URL format
+        if not payload.avatar_url.startswith(('http://', 'https://')):
+            return JSONResponse({'detail': 'آدرس تصویر نامعتبر است'}, status_code=400)
+        if len(payload.avatar_url) > 2000:
+            return JSONResponse({'detail': 'آدرس تصویر بیش از حد طولانی است'}, status_code=400)
+        avatar_url = payload.avatar_url
+    elif payload.avatar_base64:
+        # Validate base64 and store as data URI
+        raw = payload.avatar_base64
+        # Strip existing data URI prefix if present
+        if ',' in raw and raw.startswith('data:'):
+            raw = raw.split(',', 1)[1]
+        try:
+            decoded = base64.b64decode(raw)
+        except Exception:
+            return JSONResponse({'detail': 'تصویر نامعتبر است (base64 نادرست)'}, status_code=400)
+        if len(decoded) > 2 * 1024 * 1024:  # 2MB limit
+            return JSONResponse({'detail': 'حجم تصویر نباید بیشتر از ۲ مگابایت باشد'}, status_code=400)
+        # Detect mime type from magic bytes
+        mime = 'image/jpeg'
+        if decoded[:8] == b'\x89PNG\r\n\x1a\n':
+            mime = 'image/png'
+        elif decoded[:4] == b'RIFF' and decoded[8:12] == b'WEBP':
+            mime = 'image/webp'
+        elif decoded[:4] == b'GIF8':
+            mime = 'image/gif'
+        avatar_url = f'data:{mime};base64,{raw}'
+    else:
+        return JSONResponse({'detail': 'آدرس تصویر یا داده base64 ارسال کنید'}, status_code=400)
+
+    async with async_session() as session:
+        await session.execute(
+            User.__table__.update().where(User.id == uid),
+            {'avatar_url': avatar_url}
+        )
+        await session.commit()
+
+    await _write_audit_log('auth.upload_avatar', target_type='user', target_id=uid)
+    return JSONResponse({'status': 'ok', 'avatar_url': avatar_url})
 
 # ── Password reset ─────────────────────────────────────────
 

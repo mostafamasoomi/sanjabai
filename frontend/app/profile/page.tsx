@@ -1,12 +1,66 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
 
+const AUTONOMY_LEVELS = [
+  {
+    value: 'low',
+    label_fa: 'پایین — تأیید قبل از هر عمل',
+    label_en: 'Low — Confirm before actions',
+    desc_fa: 'هوش مصنوعی قبل از انجام هر عملیاتی از شما تأیید می‌گیرد. مناسب برای کاربرانی که کنترل کامل می‌خواهند.',
+    desc_en: 'AI asks for your confirmation before performing any action. Suitable for users who want full control.',
+    icon: 'lock',
+  },
+  {
+    value: 'medium',
+    label_fa: 'متوسط — اجرای خودکار وظایف رایج',
+    label_en: 'Medium — Auto-execute common tasks',
+    desc_fa: 'وظایف رایج و امن به صورت خودکار اجرا می‌شوند. اعمال حساس همچنان نیاز به تأیید دارند.',
+    desc_en: 'Common and safe tasks execute automatically. Sensitive actions still require confirmation.',
+    icon: 'settings',
+  },
+  {
+    value: 'high',
+    label_fa: 'بالا — خودمختاری کامل با محدودیت‌های امنیتی',
+    label_en: 'High — Full autonomy with safety limits',
+    desc_fa: 'هوش مصنوعی با بیشترین آزادی عمل می‌کند. فقط اعمال غیرقابل‌برگشت نیاز به تأیید دارند.',
+    desc_en: 'AI operates with maximum freedom. Only irreversible actions require confirmation.',
+    icon: 'rocket',
+  },
+]
+
+const TIMEZONES = [
+  { value: 'Asia/Tehran', label: 'تهران (IRST)' },
+  { value: 'Asia/Dubai', label: 'دوبی (GST)' },
+  { value: 'Europe/London', label: 'لندن (GMT)' },
+  { value: 'America/New_York', label: 'نیویورک (EST)' },
+  { value: 'Asia/Tokyo', label: 'توکیو (JST)' },
+  { value: 'UTC', label: 'UTC' },
+]
+
 export default function ProfilePage() {
-  const { user } = useAuth()
+  const { user, token } = useAuth()
+
+  // Profile fields
+  const [displayName, setDisplayName] = useState('')
+  const [bio, setBio] = useState('')
+  const [avatarUrl, setAvatarUrl] = useState('')
+  const [timezone, setTimezone] = useState('Asia/Tehran')
+  const [language, setLanguage] = useState('fa')
+
+  // Preferences
+  const [defaultModel, setDefaultModel] = useState('')
+  const [aiPersonality, setAiPersonality] = useState('')
+  const [autonomyLevel, setAutonomyLevel] = useState('medium')
+  const [theme, setTheme] = useState('dark')
+  const [emailNotif, setEmailNotif] = useState(true)
+  const [telegramNotif, setTelegramNotif] = useState(false)
+
+  // Available models
+  const [models, setModels] = useState<string[]>([])
 
   // Change password
   const [currentPassword, setCurrentPassword] = useState('')
@@ -22,65 +76,215 @@ export default function ProfilePage() {
   const [usage, setUsage] = useState<any>(null)
   const [balance, setBalance] = useState<number | null>(null)
 
-  // Settings toggles — persisted to localStorage
-  const [emailNotif, setEmailNotif] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('pref_email_notif') === 'true' : true)
-  const [telegramNotif, setTelegramNotif] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('pref_telegram_notif') === 'true' : false)
-  const [darkMode, setDarkMode] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('pref_dark_mode') !== 'false' : true)
+  // Loading/saving states
+  const [loadingProfile, setLoadingProfile] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+
+  // Refs
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Track original values for dirty checking
+  const [originalValues, setOriginalValues] = useState<any>({})
 
   useEffect(() => {
     if (user) {
+      fetchProfile()
       fetchUsage()
       fetchBalance()
+      fetchModels()
     }
   }, [user])
 
+  const fetchProfile = async () => {
+    try {
+      const t = token || localStorage.getItem('multiai_auth_token')
+      const r = await fetch('/api/auth/profile', {
+        headers: { Authorization: `Bearer ${t}` },
+      })
+      if (r.ok) {
+        const data = await r.json()
+        setDisplayName(data.display_name || '')
+        setBio(data.bio || '')
+        setAvatarUrl(data.avatar_url || '')
+        setTimezone(data.timezone || 'Asia/Tehran')
+        setLanguage(data.language || 'fa')
+        const prefs = data.preferences || {}
+        setDefaultModel(prefs.default_model || '')
+        setAiPersonality(prefs.ai_personality || '')
+        setAutonomyLevel(prefs.autonomy_level || 'medium')
+        setTheme(prefs.theme || 'dark')
+        setEmailNotif(prefs.notification_settings?.email !== false)
+        setTelegramNotif(prefs.notification_settings?.telegram === true)
+        setOriginalValues({
+          display_name: data.display_name || '',
+          bio: data.bio || '',
+          timezone: data.timezone || 'Asia/Tehran',
+          language: data.language || 'fa',
+          default_model: prefs.default_model || '',
+          ai_personality: prefs.ai_personality || '',
+          autonomy_level: prefs.autonomy_level || 'medium',
+          theme: prefs.theme || 'dark',
+          email_notif: prefs.notification_settings?.email !== false,
+          telegram_notif: prefs.notification_settings?.telegram === true,
+        })
+      }
+    } catch {} finally {
+      setLoadingProfile(false)
+    }
+  }
+
+  const fetchModels = async () => {
+    try {
+      const r = await fetch('/api/models')
+      if (r.ok) {
+        const data = await r.json()
+        setModels((data.data || []).map((m: { id: string }) => m.id))
+      }
+    } catch {}
+  }
+
   const fetchUsage = async () => {
     try {
-      const token = localStorage.getItem('multiai_auth_token')
-      const r = await fetch('/api/usage', { headers: { Authorization: `Bearer ${token}` } })
+      const t = token || localStorage.getItem('multiai_auth_token')
+      const r = await fetch('/api/usage', { headers: { Authorization: `Bearer ${t}` } })
       if (r.ok) setUsage(await r.json())
     } catch {}
   }
 
   const fetchBalance = async () => {
     try {
-      const token = localStorage.getItem('multiai_auth_token')
-      const r = await fetch('/api/wallet', { headers: { Authorization: `Bearer ${token}` } })
+      const t = token || localStorage.getItem('multiai_auth_token')
+      const r = await fetch('/api/wallet', { headers: { Authorization: `Bearer ${t}` } })
       if (r.ok) setBalance((await r.json()).balance)
     } catch {}
   }
 
+  const handleSaveProfile = async () => {
+    setSaving(true)
+    try {
+      const t = token || localStorage.getItem('multiai_auth_token')
+      const r = await fetch('/api/auth/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${t}`,
+        },
+        body: JSON.stringify({
+          display_name: displayName,
+          bio,
+          timezone,
+          language,
+          preferences: {
+            default_model: defaultModel,
+            ai_personality: aiPersonality,
+            autonomy_level: autonomyLevel,
+            theme,
+            notification_settings: {
+              email: emailNotif,
+              telegram: telegramNotif,
+            },
+          },
+        }),
+      })
+      const data = await r.json()
+      if (r.ok) {
+        toast(language === 'fa' ? 'پروفایل با موفقیت ذخیره شد' : 'Profile saved successfully', 'success')
+        // Sync theme with document
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark')
+        } else {
+          document.documentElement.classList.remove('dark')
+        }
+        // Update localStorage for backward compat
+        localStorage.setItem('pref_dark_mode', String(theme === 'dark'))
+        localStorage.setItem('pref_email_notif', String(emailNotif))
+        localStorage.setItem('pref_telegram_notif', String(telegramNotif))
+        // Update original values
+        setOriginalValues({
+          display_name: displayName, bio, timezone, language,
+          default_model: defaultModel, ai_personality: aiPersonality,
+          autonomy_level: autonomyLevel, theme,
+          email_notif: emailNotif, telegram_notif: telegramNotif,
+        })
+      } else {
+        toast(data.detail || (language === 'fa' ? 'خطا در ذخیره پروفایل' : 'Error saving profile'), 'error')
+      }
+    } catch {
+      toast(language === 'fa' ? 'خطا در ارتباط با سرور' : 'Server connection error', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 2 * 1024 * 1024) {
+      toast(language === 'fa' ? 'حجم تصویر نباید بیشتر از ۲ مگابایت باشد' : 'Image must be under 2MB', 'error')
+      return
+    }
+    setAvatarUploading(true)
+    try {
+      const reader = new FileReader()
+      reader.onload = async () => {
+        const base64 = (reader.result as string).split(',')[1]
+        const t = token || localStorage.getItem('multiai_auth_token')
+        const r = await fetch('/api/auth/avatar', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${t}`,
+          },
+          body: JSON.stringify({ avatar_base64: base64 }),
+        })
+        const data = await r.json()
+        if (r.ok) {
+          setAvatarUrl(data.avatar_url)
+          toast(language === 'fa' ? 'تصویر پروفایل بروزرسانی شد' : 'Avatar updated', 'success')
+        } else {
+          toast(data.detail || (language === 'fa' ? 'خطا در آپلود تصویر' : 'Upload error'), 'error')
+        }
+        setAvatarUploading(false)
+      }
+      reader.readAsDataURL(file)
+    } catch {
+      toast(language === 'fa' ? 'خطا در آپلود تصویر' : 'Upload error', 'error')
+      setAvatarUploading(false)
+    }
+  }
+
   const handleChangePassword = async () => {
     if (newPassword !== confirmPassword) {
-      toast('رمز عبور جدید با تکرار آن مطابقت ندارد', 'error')
+      toast(language === 'fa' ? 'رمز عبور جدید با تکرار آن مطابقت ندارد' : 'Passwords do not match', 'error')
       return
     }
     if (newPassword.length < 8) {
-      toast('رمز عبور باید حداقل ۸ کاراکتر باشد', 'error')
+      toast(language === 'fa' ? 'رمز عبور باید حداقل ۸ کاراکتر باشد' : 'Password must be at least 8 characters', 'error')
       return
     }
     setChangingPassword(true)
     try {
-      const token = localStorage.getItem('multiai_auth_token')
+      const t = token || localStorage.getItem('multiai_auth_token')
       const r = await fetch('/api/auth/change-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${t}`,
         },
         body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
       })
-      const data = await r.json()
       if (r.ok) {
-        toast('رمز عبور با موفقیت تغییر کرد', 'success')
+        toast(language === 'fa' ? 'رمز عبور با موفقیت تغییر کرد' : 'Password changed successfully', 'success')
         setCurrentPassword('')
         setNewPassword('')
         setConfirmPassword('')
       } else {
-        toast(data.detail || 'خطا در تغییر رمز عبور', 'error')
+        const data = await r.json()
+        toast(data.detail || (language === 'fa' ? 'خطا در تغییر رمز عبور' : 'Password change error'), 'error')
       }
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(language === 'fa' ? 'خطا در ارتباط با سرور' : 'Server connection error', 'error')
     } finally {
       setChangingPassword(false)
     }
@@ -88,55 +292,105 @@ export default function ProfilePage() {
 
   const handleLinkTelegram = async () => {
     if (!telegramId) {
-      toast('شناسه تلگرام را وارد کنید', 'error')
+      toast(language === 'fa' ? 'شناسه تلگرام را وارد کنید' : 'Enter Telegram ID', 'error')
       return
     }
     setLinkingTelegram(true)
     try {
-      const token = localStorage.getItem('multiai_auth_token')
+      const t = token || localStorage.getItem('multiai_auth_token')
       const r = await fetch('/api/auth/telegram-link', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${t}`,
         },
         body: JSON.stringify({ telegram_id: parseInt(telegramId) }),
       })
       if (r.ok) {
-        toast('حساب تلگرام با موفقیت متصل شد', 'success')
+        toast(language === 'fa' ? 'حساب تلگرام با موفقیت متصل شد' : 'Telegram linked successfully', 'success')
       } else {
-        toast('خطا در اتصال تلگرام', 'error')
+        toast(language === 'fa' ? 'خطا در اتصال تلگرام' : 'Telegram link error', 'error')
       }
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(language === 'fa' ? 'خطا در ارتباط با سرور' : 'Server connection error', 'error')
     } finally {
       setLinkingTelegram(false)
     }
   }
 
-  const userInitial = user?.email?.[0]?.toUpperCase() || 'U'
+  const userInitial = displayName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'U'
+  const isFa = language === 'fa'
+
+  if (loadingProfile) {
+    return (
+      <div className="profile-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+        <div className="apikeys-spinner" style={{ width: 32, height: 32 }} />
+      </div>
+    )
+  }
 
   return (
     <div className="profile-page">
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
-        <div className="profile-header-icon">
-          <Icon name="user" size={20} style={{ color: 'var(--accent)' }} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div className="profile-header-icon">
+            <Icon name="user" size={20} style={{ color: 'var(--accent)' }} />
+          </div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {isFa ? 'پروفایل کاربری' : 'User Profile'}
+          </h1>
         </div>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>پروفایل کاربری</h1>
       </div>
 
       {/* Avatar + User info card */}
       <div className="card profile-avatar-card">
         <div className="profile-avatar-section">
-          <div className="profile-avatar">
-            <span className="profile-avatar-letter">{userInitial}</span>
+          <div
+            className="profile-avatar"
+            style={{ cursor: 'pointer', position: 'relative' }}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt="avatar"
+                style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+              />
+            ) : (
+              <span className="profile-avatar-letter">{userInitial}</span>
+            )}
+            <div style={{
+              position: 'absolute', bottom: 0, right: 0,
+              background: 'var(--accent)', borderRadius: '50%',
+              width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              border: '2px solid var(--bg-card, #1a1a2e)',
+            }}>
+              {avatarUploading ? (
+                <div className="apikeys-spinner" style={{ width: 12, height: 12 }} />
+              ) : (
+                <Icon name="camera" size={12} style={{ color: '#fff' }} />
+              )}
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={handleAvatarUpload}
+            />
           </div>
           <div>
-            <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{user?.email || 'کاربر'}</h2>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+              {displayName || user?.email || (isFa ? 'کاربر' : 'User')}
+            </h2>
             <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-              عضو از {user?.created_at ? new Date(user.created_at).toLocaleDateString('fa-IR', { year: 'numeric', month: 'long' }) : '—'}
+              {isFa
+                ? `عضو از ${user?.created_at ? new Date(user.created_at).toLocaleDateString('fa-IR', { year: 'numeric', month: 'long' }) : '—'}`
+                : `Member since ${user?.created_at ? new Date(user.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : '—'}`
+              }
             </p>
+            {bio && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>{bio}</p>}
           </div>
         </div>
 
@@ -144,108 +398,299 @@ export default function ProfilePage() {
           <div className="profile-stat-card">
             <Icon name="wallet" size={18} style={{ color: 'var(--accent)' }} />
             <div>
-              <span className="profile-stat-label">موجودی</span>
+              <span className="profile-stat-label">{isFa ? 'موجودی' : 'Balance'}</span>
               <span className="profile-stat-value text-gradient">
-                {balance !== null ? `${balance.toLocaleString('fa-IR')} تومان` : '—'}
+                {balance !== null ? `${balance.toLocaleString(isFa ? 'fa-IR' : 'en-US')} ${isFa ? 'تومان' : 'IRR'}` : '—'}
               </span>
             </div>
           </div>
           <div className="profile-stat-card">
             <Icon name="chart" size={18} style={{ color: 'var(--positive)' }} />
             <div>
-              <span className="profile-stat-label">مصرف امروز</span>
+              <span className="profile-stat-label">{isFa ? 'مصرف امروز' : 'Today usage'}</span>
               <span className="profile-stat-value">
-                {usage ? `${usage.used_today?.toLocaleString('fa-IR')} / ${usage.daily_limit?.toLocaleString('fa-IR')} توکن` : '—'}
+                {usage ? `${(usage.used_today || 0).toLocaleString(isFa ? 'fa-IR' : 'en-US')} / ${(usage.daily_limit || 0).toLocaleString(isFa ? 'fa-IR' : 'en-US')} ${isFa ? 'توکن' : 'tokens'}` : '—'}
               </span>
             </div>
           </div>
           <div className="profile-stat-card">
             <Icon name="mail" size={18} style={{ color: 'var(--info)' }} />
             <div>
-              <span className="profile-stat-label">ایمیل</span>
+              <span className="profile-stat-label">{isFa ? 'ایمیل' : 'Email'}</span>
               <span className="profile-stat-value">{user?.email || '—'}</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Settings toggles */}
+      {/* ─── Profile Info Section ─── */}
       <div className="card profile-section-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-          <Icon name="settings" size={16} style={{ color: 'var(--accent)' }} />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>تنظیمات</h2>
+          <Icon name="user" size={16} style={{ color: 'var(--accent)' }} />
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {isFa ? 'اطلاعات شخصی' : 'Personal Info'}
+          </h2>
         </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="profile-input-group">
+            <label className="profile-input-label">{isFa ? 'نام نمایشی' : 'Display Name'}</label>
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder={isFa ? 'نام شما' : 'Your name'}
+              className="input"
+              maxLength={100}
+            />
+          </div>
+          <div className="profile-input-group">
+            <label className="profile-input-label">{isFa ? 'بیوگرافی' : 'Bio'}</label>
+            <textarea
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              placeholder={isFa ? 'درباره خودتان بنویسید...' : 'Tell us about yourself...'}
+              className="input"
+              rows={3}
+              maxLength={500}
+              style={{ resize: 'vertical', minHeight: 80 }}
+            />
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'left', display: 'block' }}>
+              {bio.length}/500
+            </span>
+          </div>
+          <div className="profile-input-group">
+            <label className="profile-input-label">{isFa ? 'منطقه زمانی' : 'Timezone'}</label>
+            <select
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+              className="input"
+              style={{ appearance: 'auto' }}
+            >
+              {TIMEZONES.map((tz) => (
+                <option key={tz.value} value={tz.value}>{tz.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
 
+      {/* ─── AI Preferences Section ─── */}
+      <div className="card profile-section-card">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <Icon name="cpu" size={16} style={{ color: 'var(--accent)' }} />
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {isFa ? 'تنظیمات هوش مصنوعی' : 'AI Preferences'}
+          </h2>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Default Model */}
+          <div className="profile-input-group">
+            <label className="profile-input-label">{isFa ? 'مدل پیش‌فرض' : 'Default Model'}</label>
+            <select
+              value={defaultModel}
+              onChange={(e) => setDefaultModel(e.target.value)}
+              className="input"
+              style={{ appearance: 'auto' }}
+            >
+              <option value="">{isFa ? '— انتخاب مدل —' : '— Select model —'}</option>
+              {models.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+              {isFa ? 'مدل پیش‌فرض برای چت‌های جدید' : 'Default model for new chats'}
+            </p>
+          </div>
+
+          {/* AI Personality */}
+          <div className="profile-input-group">
+            <label className="profile-input-label">
+              {isFa ? 'شخصیت / دستورالعمل هوش مصنوعی' : 'AI Personality / Instructions'}
+            </label>
+            <textarea
+              value={aiPersonality}
+              onChange={(e) => setAiPersonality(e.target.value)}
+              placeholder={isFa
+                ? 'مثال: تو یک دستیار فنی هستی. پاسخ‌ها را مختصر و فنی بده...'
+                : 'Example: You are a technical assistant. Keep responses concise and technical...'
+              }
+              className="input"
+              rows={4}
+              style={{ resize: 'vertical', minHeight: 100 }}
+            />
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+              {isFa
+                ? 'این دستورالعمل به عنوان سیستم پرامپت در هر چت جدید ارسال می‌شود'
+                : 'This instruction is sent as a system prompt in every new chat'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Autonomy Level Section ─── */}
+      <div className="card profile-section-card">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <Icon name="rocket" size={16} style={{ color: 'var(--accent)' }} />
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {isFa ? 'سطح خودمختاری' : 'Autonomy Level'}
+          </h2>
+        </div>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+          {isFa
+            ? 'سطح آزادی عمل هوش مصنوعی را تنظیم کنید. این تنظیم مشخص می‌کند هوش مصنوعی چقدر بدون تأیید شما عمل کند.'
+            : 'Set how much freedom the AI has to act on your behalf. This controls when the AI asks for confirmation.'}
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {AUTONOMY_LEVELS.map((level) => (
+            <div
+              key={level.value}
+              onClick={() => setAutonomyLevel(level.value)}
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 12,
+                padding: '14px 16px',
+                borderRadius: 10,
+                border: `2px solid ${autonomyLevel === level.value ? 'var(--accent)' : 'var(--border, #2a2a4a)'}`,
+                background: autonomyLevel === level.value ? 'var(--accent-bg, rgba(99,102,241,0.08))' : 'transparent',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              <div style={{
+                width: 20, height: 20, borderRadius: '50%', marginTop: 2, flexShrink: 0,
+                border: `2px solid ${autonomyLevel === level.value ? 'var(--accent)' : 'var(--border, #4a4a6a)'}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {autonomyLevel === level.value && (
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'var(--accent)' }} />
+                )}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', marginBottom: 4 }}>
+                  {isFa ? level.label_fa : level.label_en}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  {isFa ? level.desc_fa : level.desc_en}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ─── Appearance & Language Section ─── */}
+      <div className="card profile-section-card">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <Icon name="palette" size={16} style={{ color: 'var(--accent)' }} />
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {isFa ? 'ظاهر و زبان' : 'Appearance & Language'}
+          </h2>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {/* Theme toggle */}
+          <div className="profile-toggle-row">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Icon name="moon" size={16} style={{ color: 'var(--text-muted)' }} />
+              <div>
+                <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
+                  {isFa ? 'حالت تاریک' : 'Dark Mode'}
+                </span>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                  {isFa ? 'استفاده از تم تاریک' : 'Use dark theme'}
+                </p>
+              </div>
+            </div>
+            <button
+              className={`profile-toggle ${theme === 'dark' ? 'active' : ''}`}
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              role="switch"
+              aria-checked={theme === 'dark'}
+            >
+              <span className="profile-toggle-knob" />
+            </button>
+          </div>
+
+          {/* Language selector */}
+          <div className="profile-toggle-row">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Icon name="globe" size={16} style={{ color: 'var(--text-muted)' }} />
+              <div>
+                <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
+                  {isFa ? 'زبان / Language' : 'Language / زبان'}
+                </span>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                  {isFa ? 'فارسی یا انگلیسی' : 'Persian or English'}
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                className={`btn btn-sm ${language === 'fa' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setLanguage('fa')}
+                style={{ fontSize: 12, padding: '4px 12px' }}
+              >
+                فارسی
+              </button>
+              <button
+                className={`btn btn-sm ${language === 'en' ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setLanguage('en')}
+                style={{ fontSize: 12, padding: '4px 12px' }}
+              >
+                English
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Notification Preferences ─── */}
+      <div className="card profile-section-card">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <Icon name="bell" size={16} style={{ color: 'var(--accent)' }} />
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {isFa ? 'اعلان‌ها' : 'Notifications'}
+          </h2>
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <div className="profile-toggle-row">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <Icon name="mail" size={16} style={{ color: 'var(--text-muted)' }} />
               <div>
-                <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>اعلان ایمیلی</span>
-                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>دریافت اعلانها از طریق ایمیل</p>
+                <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
+                  {isFa ? 'اعلان ایمیلی' : 'Email Notifications'}
+                </span>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                  {isFa ? 'دریافت اعلانها از طریق ایمیل' : 'Receive notifications via email'}
+                </p>
               </div>
             </div>
             <button
               className={`profile-toggle ${emailNotif ? 'active' : ''}`}
-              onClick={() => {
-                const next = !emailNotif
-                setEmailNotif(next)
-                localStorage.setItem('pref_email_notif', String(next))
-                toast(next ? 'اعلان ایمیلی فعال شد' : 'اعلان ایمیلی غیرفعال شد', 'success')
-              }}
+              onClick={() => setEmailNotif(!emailNotif)}
               role="switch"
               aria-checked={emailNotif}
             >
               <span className="profile-toggle-knob" />
             </button>
           </div>
-
           <div className="profile-toggle-row">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <Icon name="send" size={16} style={{ color: 'var(--text-muted)' }} />
               <div>
-                <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>اعلان تلگرامی</span>
-                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>دریافت اعلانها از طریق ربات تلگرام</p>
+                <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
+                  {isFa ? 'اعلان تلگرامی' : 'Telegram Notifications'}
+                </span>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                  {isFa ? 'دریافت اعلانها از طریق ربات تلگرام' : 'Receive notifications via Telegram bot'}
+                </p>
               </div>
             </div>
             <button
               className={`profile-toggle ${telegramNotif ? 'active' : ''}`}
-              onClick={() => {
-                const next = !telegramNotif
-                setTelegramNotif(next)
-                localStorage.setItem('pref_telegram_notif', String(next))
-                toast(next ? 'اعلان تلگرامی فعال شد' : 'اعلان تلگرامی غیرفعال شد', 'success')
-              }}
+              onClick={() => setTelegramNotif(!telegramNotif)}
               role="switch"
               aria-checked={telegramNotif}
-            >
-              <span className="profile-toggle-knob" />
-            </button>
-          </div>
-
-          <div className="profile-toggle-row">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <Icon name="moon" size={16} style={{ color: 'var(--text-muted)' }} />
-              <div>
-                <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>حالت تاریک</span>
-                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>استفاده از تم تاریک</p>
-              </div>
-            </div>
-            <button
-              className={`profile-toggle ${darkMode ? 'active' : ''}`}
-              onClick={() => {
-                const next = !darkMode
-                setDarkMode(next)
-                localStorage.setItem('pref_dark_mode', String(next))
-                if (next) {
-                  document.documentElement.classList.add('dark')
-                } else {
-                  document.documentElement.classList.remove('dark')
-                }
-                toast(next ? 'حالت تاریک فعال شد' : 'حالت روشن فعال شد', 'success')
-              }}
-              role="switch"
-              aria-checked={darkMode}
             >
               <span className="profile-toggle-knob" />
             </button>
@@ -253,40 +698,59 @@ export default function ProfilePage() {
         </div>
       </div>
 
+      {/* ─── Save Button ─── */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
+        <button
+          onClick={handleSaveProfile}
+          disabled={saving}
+          className="btn btn-primary"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 24px', fontSize: 14, fontWeight: 600 }}
+        >
+          {saving ? (
+            <span className="apikeys-spinner" />
+          ) : (
+            <Icon name="check" size={14} />
+          )}
+          {isFa ? 'ذخیره تغییرات' : 'Save Changes'}
+        </button>
+      </div>
+
       {/* Change password */}
       <div className="card profile-section-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="lock" size={16} style={{ color: 'var(--accent)' }} />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>تغییر رمز عبور</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {isFa ? 'تغییر رمز عبور' : 'Change Password'}
+          </h2>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div className="profile-input-group">
-            <label className="profile-input-label">رمز عبور فعلی</label>
+            <label className="profile-input-label">{isFa ? 'رمز عبور فعلی' : 'Current Password'}</label>
             <input
               type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
-              placeholder="رمز عبور فعلی"
+              placeholder={isFa ? 'رمز عبور فعلی' : 'Current password'}
               className="input"
             />
           </div>
           <div className="profile-input-group">
-            <label className="profile-input-label">رمز عبور جدید</label>
+            <label className="profile-input-label">{isFa ? 'رمز عبور جدید' : 'New Password'}</label>
             <input
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="حداقل ۸ کاراکتر"
+              placeholder={isFa ? 'حداقل ۸ کاراکتر' : 'At least 8 characters'}
               className="input"
             />
           </div>
           <div className="profile-input-group">
-            <label className="profile-input-label">تکرار رمز عبور جدید</label>
+            <label className="profile-input-label">{isFa ? 'تکرار رمز عبور جدید' : 'Confirm New Password'}</label>
             <input
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="تکرار رمز عبور جدید"
+              placeholder={isFa ? 'تکرار رمز عبور جدید' : 'Confirm new password'}
               className="input"
             />
           </div>
@@ -301,7 +765,7 @@ export default function ProfilePage() {
             ) : (
               <Icon name="lock" size={14} />
             )}
-            تغییر رمز عبور
+            {isFa ? 'تغییر رمز عبور' : 'Change Password'}
           </button>
         </div>
       </div>
@@ -310,17 +774,21 @@ export default function ProfilePage() {
       <div className="card profile-section-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Icon name="send" size={16} style={{ color: 'var(--accent)' }} />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>اتصال تلگرام</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {isFa ? 'اتصال تلگرام' : 'Link Telegram'}
+          </h2>
         </div>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-          با اتصال حساب تلگرام میتوانید از طریق ربات Multiai چت کنید و موجودی خود را ببینید.
+          {isFa
+            ? 'با اتصال حساب تلگرام میتوانید از طریق ربات Multiai چت کنید و موجودی خود را ببینید.'
+            : 'Link your Telegram account to chat via the Multiai bot and view your balance.'}
         </p>
         <div style={{ display: 'flex', gap: 8 }}>
           <input
             type="number"
             value={telegramId}
             onChange={(e) => setTelegramId(e.target.value)}
-            placeholder="شناسه عددی تلگرام (Telegram ID)"
+            placeholder={isFa ? 'شناسه عددی تلگرام (Telegram ID)' : 'Telegram numeric ID'}
             className="input"
             style={{ flex: 1 }}
           />
@@ -335,12 +803,14 @@ export default function ProfilePage() {
             ) : (
               <Icon name="link" size={14} />
             )}
-            اتصال
+            {isFa ? 'اتصال' : 'Link'}
           </button>
         </div>
         <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
           <Icon name="info" size={12} />
-          برای دریافت شناسه تلگرام، به ربات @userinfobot پیام دهید.
+          {isFa
+            ? 'برای دریافت شناسه تلگرام، به ربات @userinfobot پیام دهید.'
+            : 'To get your Telegram ID, message @userinfobot.'}
         </p>
       </div>
 
@@ -348,15 +818,19 @@ export default function ProfilePage() {
       <div className="card profile-section-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Icon name="gift" size={16} style={{ color: 'var(--accent)' }} />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>دعوت دوستان</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {isFa ? 'دعوت دوستان' : 'Invite Friends'}
+          </h2>
         </div>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-          با دعوت دوستان به Multiai، به ازای هر ثبتنام موفق اعتبار هدیه دریافت کنید.
+          {isFa
+            ? 'با دعوت دوستان به Multiai، به ازای هر ثبتنام موفق اعتبار هدیه دریافت کنید.'
+            : 'Invite friends to Multiai and earn bonus credits for each successful signup.'}
         </p>
         {user?.referral_code && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
-              <label className="profile-input-label">کد دعوت شما</label>
+              <label className="profile-input-label">{isFa ? 'کد دعوت شما' : 'Your Referral Code'}</label>
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                 <code className="apikeys-code-block" style={{ flex: 1 }}>
                   {user.referral_code}
@@ -364,18 +838,18 @@ export default function ProfilePage() {
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(user.referral_code || '')
-                    toast('کد کپی شد', 'success')
+                    toast(isFa ? 'کد کپی شد' : 'Code copied', 'success')
                   }}
                   className="btn btn-secondary btn-sm"
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
                 >
                   <Icon name="copy" size={14} />
-                  کپی
+                  {isFa ? 'کپی' : 'Copy'}
                 </button>
               </div>
             </div>
             <div>
-              <label className="profile-input-label">لینک دعوت</label>
+              <label className="profile-input-label">{isFa ? 'لینک دعوت' : 'Referral Link'}</label>
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                 <code className="apikeys-code-block" style={{ flex: 1, fontSize: 11 }}>
                   {typeof window !== 'undefined' ? `${window.location.origin}/signup?ref=${user.referral_code}` : ''}
@@ -383,13 +857,13 @@ export default function ProfilePage() {
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(`${window.location.origin}/signup?ref=${user.referral_code}`)
-                    toast('لینک کپی شد', 'success')
+                    toast(isFa ? 'لینک کپی شد' : 'Link copied', 'success')
                   }}
                   className="btn btn-secondary btn-sm"
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
                 >
                   <Icon name="copy" size={14} />
-                  کپی
+                  {isFa ? 'کپی' : 'Copy'}
                 </button>
               </div>
             </div>
@@ -401,14 +875,18 @@ export default function ProfilePage() {
       <div className="card profile-danger-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Icon name="warning" size={16} style={{ color: 'var(--danger)' }} />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--danger)' }}>منطقه خطر</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--danger)' }}>
+            {isFa ? 'منطقه خطر' : 'Danger Zone'}
+          </h2>
         </div>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-          حذف حساب کاربری غیرقابل بازگشت است. تمام دادهها و تاریخچه شما حذف خواهد شد.
+          {isFa
+            ? 'حذف حساب کاربری غیرقابل بازگشت است. تمام دادهها و تاریخچه شما حذف خواهد شد.'
+            : 'Account deletion is permanent. All your data and history will be removed.'}
         </p>
         <button className="btn btn-danger" disabled style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <Icon name="trash" size={14} />
-          حذف حساب (بهزودی)
+          {isFa ? 'حذف حساب (بهزودی)' : 'Delete Account (coming soon)'}
         </button>
       </div>
     </div>

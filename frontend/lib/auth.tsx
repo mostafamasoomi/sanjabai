@@ -2,7 +2,12 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 
-type User = { id: number; email: string; created_at?: string; referral_code?: string }
+type User = {
+  id: number; email: string; created_at?: string; referral_code?: string
+  display_name?: string; avatar_url?: string; bio?: string
+  preferences?: Record<string, any>
+  timezone?: string; language?: string
+}
 
 type AuthCtx = {
   user: User | null

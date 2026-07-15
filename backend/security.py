@@ -35,13 +35,13 @@ class RateLimiter:
         now = int(time.time() / self.window)
         return f'ratelimit:{identifier}:{now}'
 
-    def is_allowed(self, identifier: str) -> tuple[bool, int]:
+    async def is_allowed(self, identifier: str) -> tuple[bool, int]:
         """Returns (allowed, remaining)"""
         key = self._key(identifier)
         try:
-            count = _get_redis().incr(key)
+            count = await _get_redis().incr(key)
             if count == 1:
-                _get_redis().expire(key, self.window * 2)
+                await _get_redis().expire(key, self.window * 2)
             remaining = max(0, self.max - count)
             return count <= self.max, remaining
         except Exception as e:
@@ -59,14 +59,14 @@ chat_limiter = RateLimiter(window_seconds=60, max_requests=120)      # 120 req/m
 admin_limiter = RateLimiter(window_seconds=60, max_requests=30)      # 30 req/min
 
 
-def get_client_identifier(request: Request) -> str:
+async def get_client_identifier(request: Request) -> str:
     """Get unique client identifier: prefer user_id, fallback to IP"""
     # Try auth token first
     token = request.headers.get('Authorization', '').removeprefix('Bearer ')
     if token:
         try:
             import json as _json
-            session_data = _get_redis().get(f'session:{token}')
+            session_data = await _get_redis().get(f'session:{token}')
             if session_data:
                 try:
                     uid = (_json.loads(session_data) or {}).get('user_id')
@@ -107,9 +107,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if request.url.path in ['/health', '/health/live', '/health/ready', '/health/detailed', '/']:
             return await call_next(request)
 
-        identifier = get_client_identifier(request)
+        identifier = await get_client_identifier(request)
         limiter = select_limiter(request.url.path)
-        allowed, remaining = limiter.is_allowed(identifier)
+        allowed, remaining = await limiter.is_allowed(identifier)
 
         if not allowed:
             return JSONResponse(

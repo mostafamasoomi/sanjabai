@@ -165,7 +165,27 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>(() => [
     { id: 'welcome', role: 'assistant', content: 'سلام! به Multiai خوش آمدید. چطور میتوانم کمک کنید؟' }
   ])
-  const [model, setModel] = useState<ModelCatalogItem | null>(null)
+  const [model, setModel] = useState<ModelCatalogItem | null>({
+    id: 'mimo-v2.5',
+    providerModelId: 'openai/mimo-v2.5',
+    provider: 'openai',
+    displayName: 'mimo-v2.5',
+    modalities: { input: ['text'], output: ['text'] },
+    capabilities: ['chat'],
+    recommendedFor: ['general'],
+    contextWindow: 4096,
+    pricing: {
+      currency: 'IRT',
+      inputPerMillion: 1000,
+      outputPerMillion: 2000,
+      priceVersion: 'v1',
+      effectiveFrom: '2023-01-01T00:00:00Z',
+    },
+    availability: 'available',
+    audience: ['consumer'],
+    lastVerifiedAt: '2023-01-01T00:00:00Z',
+    provenance: 'fallback',
+  });
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState('')
@@ -424,25 +444,9 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!model && models.length > 0) {
-      // 1. Try favorite model from onboarding
-      try {
-        const favs: string[] = JSON.parse(localStorage.getItem('multiai_favorite_models') || '[]')
-        const favModel = models.find(m => favs.includes(m.id))
-        if (favModel) { setModel(favModel); return }
-      } catch {}
-      // 2. Try organisation default model
-      fetch('/api/org/default-model')
-        .then(r => r.json())
-        .then(data => {
-          if (data.default_model) {
-            const orgModel = models.find(m => m.providerModelId === data.default_model || m.id === data.default_model)
-            if (orgModel) { setModel(orgModel); return }
-          }
-          setModel(models[0])
-        })
-        .catch(() => setModel(models[0]))
+      setModel(models[0]); // Always set the first model as default if no model is selected
     }
-  }, [models, model])
+  }, [models, model]);
 
   useEffect(() => {
     if (catalogError) toast('خطا در دریافت فهرست مدلها', 'error')
@@ -480,7 +484,15 @@ export default function ChatPage() {
   }, [messages, model])
 
   const sendMessage = useCallback(async (content: string, existingMsgs?: Message[]) => {
-    if (!model) return
+    let currentModel = model;
+    if (!currentModel && models.length > 0) {
+        currentModel = models[0];
+        setModel(models[0]); // Ensure model state is updated
+    }
+    if (!currentModel) {
+      toast('لطفاً یک مدل را انتخاب کنید.', 'error');
+      return;
+    }
     const msgs = existingMsgs || messages
     const userMsg: Message = { id: generateId(), role: 'user', content }
     const updated = [...msgs, userMsg]
@@ -500,12 +512,13 @@ export default function ChatPage() {
     }
 
     try {
+      console.error('DEBUG: About to make chat fetch call');
       const chatUrl = (smartMode && !attachedFile) ? '/api/v1/smart-chat' : '/api/chat'
       let res: Response
       if (attachedFile) {
         const fd = new FormData()
         fd.append('file', attachedFile)
-        fd.append('model', model.providerModelId || model.id)
+        fd.append('model', currentModel!.providerModelId || currentModel!.id)
         fd.append('messages', JSON.stringify(updated.map(m => ({ role: m.role, content: m.content }))))
         fd.append('stream', 'true')
         const fh: Record<string, string> = {}
@@ -518,10 +531,10 @@ export default function ChatPage() {
           headers: {
             'Content-Type': 'application/json',
             ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-            ...(smartMode ? { 'X-Smart-Model': model.providerModelId || model.id } : {}),
+            ...(smartMode ? { 'X-Smart-Model': currentModel!.providerModelId || currentModel!.id } : {}),
           },
           body: JSON.stringify({
-            model: model.providerModelId || model.id,
+            model: currentModel!.providerModelId || currentModel!.id,
             messages: updated.map(m => ({ role: m.role, content: m.content })),
             stream: true,
             ...(webSearch ? { web_search: true } : {}),
@@ -622,7 +635,7 @@ export default function ChatPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if ((!input.trim() && !attachedFile) || streaming || !model) return
+
     sendMessage(input.trim())
   }
 

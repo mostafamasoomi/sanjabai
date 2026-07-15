@@ -2473,12 +2473,12 @@ async def conversation_analytics(request: Request) -> JSONResponse:
                 }
 
         return JSONResponse({
-            'total_conversations': total_conversations,
-            'total_messages': total_messages,
-            'total_tokens_used': total_tokens_used,
-            'total_cost': total_cost,
-            'models_used': models_used,
-            'daily_usage': daily_usage,
+            'total_conversations': int(total_conversations),
+            'total_messages': int(total_messages),
+            'total_tokens_used': int(total_tokens_used),
+            'total_cost': float(total_cost),
+            'models_used': {m: {'calls': int(v['calls']), 'tokens': int(v['tokens']), 'cost': float(v['cost'])} for m, v in models_used.items()},
+            'daily_usage': {d: {'calls': int(v['calls']), 'tokens': int(v['tokens']), 'cost': float(v['cost'])} for d, v in daily_usage.items()},
         })
     except Exception as e:
         return JSONResponse(
@@ -2824,7 +2824,7 @@ async def get_skill_template(request: Request, template_id: int) -> JSONResponse
         # Non-public templates only visible to owner or admin
         if not data.get('is_public'):
             uid = await _get_user_id(request)
-            if not uid or (data.get('user_id') != uid and not admin_required(request)):
+            if not uid or (data.get('user_id') != uid and not await admin_required(request)):
                 return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
     return JSONResponse(jsonable_encoder(data))
 
@@ -4392,7 +4392,11 @@ async def get_my_billing(request: Request) -> JSONResponse:
 
     async with async_session() as session:
         res = await session.execute(
-            select(UserBillingSetting).where(UserBillingSetting.user_id == uid)
+            sqlalchemy.text(
+                'SELECT user_id, payg_enabled, payg_hard_limit, notify_on_usage_pct '
+                'FROM user_billing_settings WHERE user_id = :uid'
+            ),
+            {'uid': uid}
         )
         billing = res.fetchone()
 

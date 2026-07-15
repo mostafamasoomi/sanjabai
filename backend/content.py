@@ -242,26 +242,45 @@ async def api_exchange_rate() -> JSONResponse:
     if cached:
         return JSONResponse(json.loads(cached))
 
-    rate_irr = None
+    # 1. Check DB override first (market rate)
+    rate_irt = None
     source = 'fallback'
+    markup_pct = 20
     try:
-        resp = await _http.get('https://open.er-api.com/v6/latest/USD', follow_redirects=True)
-        resp.raise_for_status()
-        data = resp.json()
-        rate_irr = float(data['rates']['IRR'])
-        source = 'open.er-api.com'
+        if async_session is not None:
+            async with async_session() as session:
+                res = await session.execute(sqlalchemy.text(
+                    "SELECT rate FROM exchange_rate_overrides "
+                    "WHERE from_currency='USD' AND to_currency='IRT' AND active=TRUE "
+                    "ORDER BY id DESC LIMIT 1"
+                ))
+                row = res.fetchone()
+                if row:
+                    rate_irt = float(row.rate)
+                    source = 'manual-override'
     except Exception:
         pass
 
-    if rate_irr is None:
-        rate_irr = 1_264_884  # fallback ~1,264,884 IRR per USD
+    # 2. Fallback to online API
+    if rate_irt is None:
+        rate_irr = None
+        try:
+            resp = await _http.get('https://open.er-api.com/v6/latest/USD', follow_redirects=True)
+            resp.raise_for_status()
+            data = resp.json()
+            rate_irr = float(data['rates']['IRR'])
+            source = 'open.er-api.com'
+        except Exception:
+            pass
 
-    rate_irt = rate_irr / 10  # IRR → IRT (Toman)
-    markup_pct = 20
+        if rate_irr is None:
+            rate_irr = 1_264_884  # fallback
+
+        rate_irt = rate_irr / 10  # IRR → IRT (Toman)
 
     result = jsonable_encoder({
         'usd_to_irt': round(rate_irt),
-        'usd_to_irr': round(rate_irr),
+        'usd_to_irr': round(rate_irt * 10),
         'markup_pct': markup_pct,
         'source': source,
         'cached_at': datetime.now(timezone.utc).isoformat(),

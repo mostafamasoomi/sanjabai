@@ -60,6 +60,25 @@ interface UserRow {
   wallet_balance: number
 }
 
+interface UserDetail {
+  user: {
+    id: number; email: string; phone: string; telegram_id: number;
+    display_name: string; bio: string; avatar_url: string;
+    timezone: string; language: string; banned: boolean;
+    created_at: string; preferences: Record<string, unknown>;
+  }
+  balance: number
+  wallet: { balance: number; reserved: number }
+  quota: { daily_limit: number; used_today: number; reset_at: string } | null
+  stats: {
+    conversation_count: number; total_tokens: number;
+    usage_events: number; total_cost: number;
+    payment_count: number; total_payments: number;
+  }
+}
+
+type UserDetailTab = 'overview' | 'conversations' | 'usage' | 'ledger' | 'payments'
+
 // ─── Sidebar Navigation ──────────────────────────────────────────────────────
 
 const NAV_ITEMS: { key: Page; label: string; icon: IconName }[] = [
@@ -180,6 +199,12 @@ export default function AdminPage() {
 
   // ─── User Edit ────────────────────────────────────────────────────
   const [editingUser, setEditingUser] = useState<UserRow | null>(null)
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
+  const [userDetail, setUserDetail] = useState<UserDetail | null>(null)
+  const [userDetailTab, setUserDetailTab] = useState<UserDetailTab>('overview')
+  const [userTabData, setUserTabData] = useState<any>(null)
+  const [loadingDetail, setLoadingDetail] = useState(false)
+  const [userSearch, setUserSearch] = useState('')
 
   // ─── Org Default Model ─────────────────────────────────────────────
   const [orgDefaultModel, setOrgDefaultModel] = useState('')
@@ -385,6 +410,32 @@ export default function AdminPage() {
       setEditingUser(null)
       loadAll()
     } catch { toast('خطا در ویرایش کاربر', 'error') }
+  }
+
+  // ─── User Detail Actions ─────────────────────────────────────────
+
+  const openUserDetail = async (uid: number) => {
+    setSelectedUserId(uid)
+    setUserDetailTab('overview')
+    setUserTabData(null)
+    setLoadingDetail(true)
+    try {
+      const r = await api(`/api/admin/users/${uid}/detail`)
+      setUserDetail(await r.json())
+    } catch { toast('خطا در بارگذاری جزئیات', 'error') }
+    finally { setLoadingDetail(false) }
+  }
+
+  const loadUserTab = async (tab: UserDetailTab) => {
+    if (!selectedUserId) return
+    setUserDetailTab(tab)
+    setLoadingDetail(true)
+    setUserTabData(null)
+    try {
+      const r = await api(`/api/admin/users/${selectedUserId}/${tab}`)
+      setUserTabData(await r.json())
+    } catch { toast('خطا در بارگذاری', 'error') }
+    finally { setLoadingDetail(false) }
   }
 
   // ─── Logout ──────────────────────────────────────────────────────────────
@@ -594,7 +645,7 @@ export default function AdminPage() {
                               </td>
                             </tr>
                           ) : (
-                            (analytics.recent_ledger || []).map((l) => (
+                            (analytics.recent_ledger || []).map((l: any) => (
                               <tr key={l.id}>
                                 <td className="p-3 text-xs font-mono">{l.user_id}</td>
                                 <td className="p-3">
@@ -630,10 +681,17 @@ export default function AdminPage() {
           {/* ─────────────────────────────────────────────────────────────
               Users
              ───────────────────────────────────────────────────────────── */}
-          {page === 'users' && (
+          {page === 'users' && !selectedUserId && (
             <div className="space-y-4">
-              <SectionHeader title="مدیریت کاربران" subtitle={`${users.length} کاربر ثبت‌نام شده`} />
-
+              <SectionHeader title="مدیریت کاربران" subtitle={`${users.length} کاربر ثبتنام شده`} />
+              <div className="admin-card">
+                <input
+                  className="input w-full"
+                  placeholder="جستجو: ایمیل، نام، شناسه..."
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                />
+              </div>
               <div className="admin-card overflow-x-auto">
                 <table className="admin-table w-full text-sm">
                   <thead>
@@ -648,15 +706,27 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {users.length === 0 ? (
+                    {users.filter(u => {
+                      if (!userSearch) return true
+                      const q = userSearch.toLowerCase()
+                      return (u.username || '').toLowerCase().includes(q) ||
+                             (u.email || '').toLowerCase().includes(q) ||
+                             String(u.id).includes(q)
+                    }).length === 0 ? (
                       <tr>
                         <td colSpan={7} className="p-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
                           کاربری یافت نشد
                         </td>
                       </tr>
                     ) : (
-                      users.map((u) => (
-                        <tr key={u.id}>
+                      users.filter(u => {
+                        if (!userSearch) return true
+                        const q = userSearch.toLowerCase()
+                        return (u.username || '').toLowerCase().includes(q) ||
+                               (u.email || '').toLowerCase().includes(q) ||
+                               String(u.id).includes(q)
+                      }).map((u) => (
+                        <tr key={u.id} className="cursor-pointer hover:bg-[var(--bg-elevated)]" onClick={() => openUserDetail(u.id)}>
                           <td className="p-3 text-xs font-mono">{u.id}</td>
                           <td className="p-3 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{u.username || '—'}</td>
                           <td className="p-3 text-xs" style={{ color: 'var(--text-secondary)' }}>{u.email}</td>
@@ -670,12 +740,15 @@ export default function AdminPage() {
                             </span>
                           </td>
                           <td className="p-3">
-                            <div className="flex gap-1">
-                              <button className="btn btn-sm" onClick={() => setEditingUser(u)}>
+                            <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                              <button className="btn btn-sm" onClick={() => setEditingUser(u)} title="ویرایش">
                                 <Icon name="settings" size={14} />
                               </button>
+                              <button className="btn btn-sm" onClick={() => openUserDetail(u.id)} title="جزئیات">
+                                <Icon name="search" size={14} />
+                              </button>
                               {u.is_active && (
-                                <button className="btn btn-sm btn-danger" onClick={() => banUser(u.id)}>
+                                <button className="btn btn-sm btn-danger" onClick={() => banUser(u.id)} title="مسدودسازی">
                                   <Icon name="security" size={14} />
                                 </button>
                               )}
@@ -727,6 +800,206 @@ export default function AdminPage() {
             </div>
           )}
 
+          {/* ── User Detail View ─────────────────────────────────────── */}
+          {page === 'users' && selectedUserId && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <button className="btn btn-ghost btn-sm" onClick={() => { setSelectedUserId(null); setUserDetail(null); setUserTabData(null) }}>
+                  <Icon name="close" size={14} /> بازگشت
+                </button>
+                <SectionHeader title={`کاربر #${selectedUserId}`} subtitle={userDetail?.user?.email || ''} />
+              </div>
+
+              {loadingDetail && !userDetail && (
+                <div className="admin-card"><div className="skeleton h-40 w-full rounded" /></div>
+              )}
+
+              {userDetail && (
+                <>
+                  {/* Stat Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+                    <StatCard icon="wallet" label="موجودی" value={userDetail.balance.toLocaleString('fa-IR')} color="#22c55e" />
+                    <StatCard icon="models" label="توکن مصرفی" value={userDetail.stats.total_tokens.toLocaleString('fa-IR')} color="#3b82f6" />
+                    <StatCard icon="chat" label="گفتگوها" value={userDetail.stats.conversation_count} color="#a855f7" />
+                    <StatCard icon="pricing" label="هزینه کل" value={userDetail.stats.total_cost.toLocaleString('fa-IR')} color="#f59e0b" />
+                    <StatCard icon="wallet" label="پرداختها" value={userDetail.stats.payment_count} color="#06b6d4" />
+                    <StatCard icon="dashboard" label="درخواستها" value={userDetail.stats.usage_events} color="#ec4899" />
+                  </div>
+
+                  {/* User Info Card */}
+                  <div className="admin-card">
+                    <div className="flex items-start gap-4">
+                      <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
+                        {(userDetail.user.display_name || userDetail.user.email || '?')[0].toUpperCase()}
+                      </div>
+                      <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                        <div><span style={{ color: 'var(--text-muted)' }}>نام</span><p className="font-medium">{userDetail.user.display_name || '—'}</p></div>
+                        <div><span style={{ color: 'var(--text-muted)' }}>ایمیل</span><p className="font-medium">{userDetail.user.email || '—'}</p></div>
+                        <div><span style={{ color: 'var(--text-muted)' }}>تلگرام</span><p className="font-medium">{userDetail.user.telegram_id || '—'}</p></div>
+                        <div><span style={{ color: 'var(--text-muted)' }}>تلفن</span><p className="font-medium">{userDetail.user.phone || '—'}</p></div>
+                        <div><span style={{ color: 'var(--text-muted)' }}>کیف پول</span><p className="font-medium">{userDetail.wallet.balance.toLocaleString('fa-IR')} (رزرو: {userDetail.wallet.reserved.toLocaleString('fa-IR')})</p></div>
+                        <div><span style={{ color: 'var(--text-muted)' }}>سهمیه روزانه</span><p className="font-medium">{userDetail.quota?.daily_limit?.toLocaleString('fa-IR') || '—'}</p></div>
+                        <div><span style={{ color: 'var(--text-muted)' }}>مصرف امروز</span><p className="font-medium">{userDetail.quota?.used_today?.toLocaleString('fa-IR') || '0'}</p></div>
+                        <div><span style={{ color: 'var(--text-muted)' }}>عضویت</span><p className="font-medium">{new Date(userDetail.user.created_at).toLocaleDateString('fa-IR')}</p></div>
+                      </div>
+                    </div>
+                    {String(userDetail.user.preferences?.ai_personality || '') && (
+                      <div className="mt-3 p-3 rounded-lg text-xs" style={{ background: 'var(--bg-elevated)' }}>
+                        <span className="font-bold" style={{ color: 'var(--accent)' }}>🧠 Soul: </span>
+                        <span style={{ color: 'var(--text-secondary)' }}>{String(userDetail.user.preferences.ai_personality)}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Tabs */}
+                  <div className="flex gap-1 border-b" style={{ borderColor: 'var(--border)' }}>
+                    {(['overview', 'conversations', 'usage', 'ledger', 'payments'] as UserDetailTab[]).map(tab => (
+                      <button
+                        key={tab}
+                        className={`px-4 py-2 text-xs font-medium transition-colors ${userDetailTab === tab ? 'border-b-2' : 'opacity-60 hover:opacity-100'}`}
+                        style={userDetailTab === tab ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : { color: 'var(--text-secondary)' }}
+                        onClick={() => loadUserTab(tab)}
+                      >
+                        {{ overview: 'نمای کلی', conversations: 'گفتگوها', usage: 'مصرف توکن', ledger: 'تراکنشها', payments: 'پرداختها' }[tab]}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Tab Content */}
+                  <div className="admin-card min-h-[200px]">
+                    {loadingDetail && <div className="skeleton h-32 w-full rounded" />}
+                    {!loadingDetail && userDetailTab === 'overview' && (
+                      <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                        <p>از تب‌های بالا برای مشاهده جزئیات استفاده کنید.</p>
+                      </div>
+                    )}
+                    {!loadingDetail && userDetailTab === 'conversations' && userTabData && (
+                      <div className="overflow-x-auto">
+                        <table className="admin-table w-full text-sm">
+                          <thead><tr>
+                            <th className="text-right p-2">شناسه</th><th className="text-right p-2">عنوان</th>
+                            <th className="text-right p-2">مدل</th><th className="text-right p-2">پیامها</th>
+                            <th className="text-right p-2">تاریخ</th>
+                          </tr></thead>
+                          <tbody>
+                            {(userTabData?.items || []).map((c: any) => (
+                              <tr key={c.id}>
+                                <td className="p-2 text-xs font-mono">{c.id}</td>
+                                <td className="p-2 text-xs">{c.title}</td>
+                                <td className="p-2 text-xs"><span className="badge badge-accent">{c.model || '—'}</span></td>
+                                <td className="p-2 text-xs">{c.msg_count || '—'}</td>
+                                <td className="p-2 text-xs">{new Date(c.updated_at).toLocaleDateString('fa-IR')}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
+                          {(userTabData?.total || 0)} گفتگو
+                        </p>
+                      </div>
+                    )}
+                    {!loadingDetail && userDetailTab === 'usage' && userTabData && (
+                      <div className="space-y-4">
+                        <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>مصرف بر اساس مدل</h3>
+                        <table className="admin-table w-full text-sm">
+                          <thead><tr>
+                            <th className="text-right p-2">مدل</th><th className="text-right p-2">درخواست</th>
+                            <th className="text-right p-2">ورودی</th><th className="text-right p-2">خروجی</th>
+                            <th className="text-right p-2">هزینه</th><th className="text-right p-2">آخرین استفاده</th>
+                          </tr></thead>
+                          <tbody>
+                            {(userTabData?.by_model || []).map((m: any, i: number) => (
+                              <tr key={i}>
+                                <td className="p-2 text-xs font-medium">{m.model}</td>
+                                <td className="p-2 text-xs">{m.calls}</td>
+                                <td className="p-2 text-xs">{(m.input_tokens || 0).toLocaleString('fa-IR')}</td>
+                                <td className="p-2 text-xs">{(m.output_tokens || 0).toLocaleString('fa-IR')}</td>
+                                <td className="p-2 text-xs">{(m.total_cost || 0).toLocaleString('fa-IR')}</td>
+                                <td className="p-2 text-xs">{m.last_used ? new Date(m.last_used).toLocaleDateString('fa-IR') : '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    {!loadingDetail && userDetailTab === 'ledger' && userTabData && (
+                      <div className="overflow-x-auto">
+                        <table className="admin-table w-full text-sm">
+                          <thead><tr>
+                            <th className="text-right p-2">شناسه</th><th className="text-right p-2">مبلغ</th>
+                            <th className="text-right p-2">مانده</th><th className="text-right p-2">شرح</th>
+                            <th className="text-right p-2">تاریخ</th>
+                          </tr></thead>
+                          <tbody>
+                            {(userTabData?.items || []).map((l: any) => (
+                              <tr key={l.id}>
+                                <td className="p-2 text-xs font-mono">{l.id}</td>
+                                <td className={`p-2 text-xs font-bold ${l.amount >= 0 ? 'text-green-400' : 'text-red-400'}`}>{l.amount >= 0 ? '+' : ''}{l.amount.toLocaleString('fa-IR')}</td>
+                                <td className="p-2 text-xs">{l.balance_after.toLocaleString('fa-IR')}</td>
+                                <td className="p-2 text-xs">{l.reason}</td>
+                                <td className="p-2 text-xs">{new Date(l.created_at).toLocaleDateString('fa-IR')}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
+                          {(userTabData?.total || 0)} تراکنش
+                        </p>
+                      </div>
+                    )}
+                    {!loadingDetail && userDetailTab === 'payments' && userTabData && (
+                      <div className="space-y-4">
+                        <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>پرداختها</h3>
+                        <table className="admin-table w-full text-sm">
+                          <thead><tr>
+                            <th className="text-right p-2">شناسه</th><th className="text-right p-2">مبلغ</th>
+                            <th className="text-right p-2">وضعیت</th><th className="text-right p-2">نوع</th>
+                            <th className="text-right p-2">کد مرجع</th><th className="text-right p-2">تاریخ</th>
+                          </tr></thead>
+                          <tbody>
+                            {(userTabData?.payments || []).map((p: any) => (
+                              <tr key={p.id}>
+                                <td className="p-2 text-xs font-mono">{p.id}</td>
+                                <td className="p-2 text-xs font-bold">{p.amount.toLocaleString('fa-IR')}</td>
+                                <td className="p-2"><span className={`badge ${p.status === 'verified' ? 'badge-positive' : p.status === 'pending' ? 'badge-accent' : 'badge-danger'}`}>{p.status === 'verified' ? 'تایید شده' : p.status === 'pending' ? 'در انتظار' : 'ناموفق'}</span></td>
+                                <td className="p-2 text-xs">{p.payment_type}</td>
+                                <td className="p-2 text-xs font-mono">{p.ref_id || '—'}</td>
+                                <td className="p-2 text-xs">{new Date(p.created_at).toLocaleDateString('fa-IR')}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {(userTabData?.subscriptions || []).length > 0 && (
+                          <>
+                            <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>اشتراکها</h3>
+                            <table className="admin-table w-full text-sm">
+                              <thead><tr>
+                                <th className="text-right p-2">پلن</th><th className="text-right p-2">وضعیت</th>
+                                <th className="text-right p-2">شروع</th><th className="text-right p-2">پایان</th>
+                                <th className="text-right p-2">مبلغ</th>
+                              </tr></thead>
+                              <tbody>
+                                {(userTabData?.subscriptions || []).map((s: any, i: number) => (
+                                  <tr key={i}>
+                                    <td className="p-2 text-xs font-medium">{s.plan}</td>
+                                    <td className="p-2"><span className={`badge ${s.status === 'active' ? 'badge-positive' : 'badge-accent'}`}>{s.status === 'active' ? 'فعال' : s.status}</span></td>
+                                    <td className="p-2 text-xs">{new Date(s.starts_at).toLocaleDateString('fa-IR')}</td>
+                                    <td className="p-2 text-xs">{s.ends_at ? new Date(s.ends_at).toLocaleDateString('fa-IR') : '—'}</td>
+                                    <td className="p-2 text-xs">{s.price_paid?.toLocaleString('fa-IR')}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {/* ─────────────────────────────────────────────────────────────
               Pricing
              ───────────────────────────────────────────────────────────── */}
@@ -753,7 +1026,7 @@ export default function AdminPage() {
                         </td>
                       </tr>
                     ) : (
-                      prices.map((p) => (
+                      prices.map((p: any) => (
                         <tr key={p.model}>
                           <td className="p-3 text-sm font-mono font-medium" style={{ color: 'var(--text-primary)' }}>{p.model}</td>
                           <td className="p-3 text-xs">{p.input_per_million.toLocaleString('fa-IR')}</td>

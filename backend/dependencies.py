@@ -285,6 +285,23 @@ async def _get_user_memories(uid: int) -> list[str]:
         return []
 
 
+async def _get_user_soul(uid: int) -> str:
+    """Fetch ai_personality (soul) from user preferences for injection."""
+    if async_session is None:
+        return ''
+    try:
+        async with async_session() as session:
+            res = await session.execute(
+                User.__table__.select().where(User.id == uid)
+            )
+            row = res.fetchone()
+            if row and row.preferences:
+                return (row.preferences or {}).get('ai_personality', '')
+    except Exception:
+        pass
+    return ''
+
+
 # ── Email ───────────────────────────────────────────────────────
 
 SMTP_HOST = os.getenv('SMTP_HOST', '')

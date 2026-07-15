@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import async_session, _http, LITELLM_HOST
 from models import Quota, Assistant, Ledger, Subscription, UserMemory
-from dependencies import _get_user_id, _get_user_memories, _to_fa
+from dependencies import _get_user_id, _get_user_memories, _get_user_soul, _to_fa
 
 router = APIRouter()
 
@@ -363,6 +363,18 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
         messages.insert(insert_idx, memory_msg)
         payload['messages'] = messages
 
+    # Soul (ai_personality) injection
+    soul = await _get_user_soul(uid)
+    if soul:
+        _msgs = payload.get('messages', [])
+        _soul_msg = {'role': 'system', 'content': f'[User Soul — این شخصیت و لحن مورد انتظار کاربر است. طبق این رفتار کن:]\n{soul}'}
+        _idx = 0
+        for _i, _m in enumerate(_msgs):
+            if isinstance(_m, dict) and _m.get('role') == 'system':
+                _idx = _i + 1
+        _msgs.insert(_idx, _soul_msg)
+        payload['messages'] = _msgs
+
     # Web search injection
     if payload.pop('web_search', False):
         _msgs = payload.get('messages', [])
@@ -444,6 +456,15 @@ async def chat_with_file(
                 insert_idx = i + 1
                 break
         msgs.insert(insert_idx, memory_msg)
+        payload['messages'] = msgs
+    soul = await _get_user_soul(uid)
+    if soul:
+        _soul_msg = {'role': 'system', 'content': f'[User Soul — این شخصیت و لحن مورد انتظار کاربر است. طبق این رفتار کن:]\n{soul}'}
+        _si = 0
+        for _i, _m in enumerate(msgs):
+            if isinstance(_m, dict) and _m.get('role') == 'system':
+                _si = _i + 1
+        msgs.insert(_si, _soul_msg)
         payload['messages'] = msgs
     if stream:
         return await _chat_stream(payload, request)
@@ -652,6 +673,16 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
         messages.insert(insert_idx, memory_msg)
         payload['messages'] = messages
 
+    soul = await _get_user_soul(uid)
+    if soul:
+        _soul_msg = {'role': 'system', 'content': f'[User Soul — این شخصیت و لحن مورد انتظار کاربر است. طبق این رفتار کن:]\n{soul}'}
+        _si = 0
+        for _i, _m in enumerate(messages):
+            if isinstance(_m, dict) and _m.get('role') == 'system':
+                _si = _i + 1
+        messages.insert(_si, _soul_msg)
+        payload['messages'] = messages
+
     stream = payload.get('stream', False)
     if stream:
         return await _smart_chat_stream(payload, request, selected_model, category)
@@ -714,6 +745,22 @@ async def _smart_chat_stream(
                     break
             messages.insert(insert_idx, memory_msg)
             payload['messages'] = messages
+
+    # Soul injection (smart streaming)
+    if uid:
+        _soul = await _get_user_soul(uid)
+        if _soul and not any(
+            isinstance(m, dict) and '[User Soul' in m.get('content', '')
+            for m in payload.get('messages', [])
+        ):
+            _soul_msg = {'role': 'system', 'content': f'[User Soul — این شخصیت و لحن مورد انتظار کاربر است. طبق این رفتار کن:]\n{_soul}'}
+            _sm = payload.get('messages', [])
+            _si = 0
+            for _i, _m in enumerate(_sm):
+                if isinstance(_m, dict) and _m.get('role') == 'system':
+                    _si = _i + 1
+            _sm.insert(_si, _soul_msg)
+            payload['messages'] = _sm
 
     async def event_stream():
         usage_data = None

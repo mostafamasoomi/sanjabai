@@ -49,7 +49,7 @@ class SqlBillingRepo:
 
     # ── payment order lifecycle (used by payment.handle_payment_callback) ──
     async def lock_pending_payment(self, authority: str) -> Optional[dict]:
-        from app import Payment
+        from models import Payment
         from sqlalchemy import select
         res = await self.session.execute(
             select(Payment)
@@ -60,7 +60,7 @@ class SqlBillingRepo:
         return dict(row._mapping) if row else None
 
     async def mark_payment_failed(self, payment_id: int) -> None:
-        from app import Payment
+        from models import Payment
         await self.session.execute(
             Payment.__table__.update()
             .where(Payment.id == payment_id)
@@ -68,7 +68,7 @@ class SqlBillingRepo:
         )
 
     async def mark_payment_completed(self, payment_id: int, ref_id: str) -> None:
-        from app import Payment
+        from models import Payment
         await self.session.execute(
             Payment.__table__.update()
             .where(Payment.id == payment_id)
@@ -87,22 +87,22 @@ class SqlBillingRepo:
 
     # ── usage metering (used by services.metering.record_usage) ──
     async def append_usage_event(self, data: dict) -> None:
-        from app import UsageEvent
+        from models import UsageEvent
         self.session.add(UsageEvent(**data))
 
     # ── wallet helpers (used by credit_wallet / BillingService) ──
     async def get_wallet(self, user_id: int):
-        from app import Wallet
+        from models import Wallet
         from sqlalchemy import select
         res = await self.session.execute(select(Wallet).where(Wallet.user_id == user_id))
         return res.fetchone()
 
     async def create_wallet(self, user_id: int, balance: int) -> None:
-        from app import Wallet
+        from models import Wallet
         self.session.add(Wallet(user_id=user_id, balance=int(balance), reserved=0))
 
     async def ensure_wallet(self, user_id: int):
-        from app import Wallet
+        from models import Wallet
         from sqlalchemy import select
         res = await self.session.execute(select(Wallet).where(Wallet.user_id == user_id))
         row = res.fetchone()
@@ -112,7 +112,7 @@ class SqlBillingRepo:
         return {"balance": row["balance"], "reserved": row["reserved"]}
 
     async def set_wallet_balance(self, user_id: int, balance: int) -> None:
-        from app import Wallet
+        from models import Wallet
         from sqlalchemy import select
         res = await self.session.execute(select(Wallet).where(Wallet.user_id == user_id))
         row = res.fetchone()
@@ -126,7 +126,7 @@ class SqlBillingRepo:
             )
 
     async def set_wallet_reserved(self, user_id: int, reserved: int) -> None:
-        from app import Wallet
+        from models import Wallet
         from sqlalchemy import select
         res = await self.session.execute(select(Wallet).where(Wallet.user_id == user_id))
         row = res.fetchone()
@@ -140,11 +140,11 @@ class SqlBillingRepo:
             )
 
     async def append_ledger(self, data: dict) -> None:
-        from app import Ledger
+        from models import Ledger
         self.session.add(Ledger(**data))
 
     async def ledger_has_key(self, idempotency_key: str) -> bool:
-        from app import Ledger
+        from models import Ledger
         from sqlalchemy import select
         res = await self.session.execute(
             select(Ledger.id).where(Ledger.idempotency_key == idempotency_key)

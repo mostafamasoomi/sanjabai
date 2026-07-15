@@ -45,13 +45,14 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY must be set in .env}
       HTTP_PROXY: http://10.10.11.2:8888
       HTTPS_PROXY: http://10.10.11.2:8888
-      NO_PROXY: api.exchangerate-api.com,openrouter.ai,api.openrouter.com
+      NO_PROXY: localhost,127.0.0.1,api.exchangerate-api.com,openrouter.ai,api.openrouter.com
     networks: [multiai_net]
     healthcheck:
-      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:4000/health']
-      interval: 15s
-      timeout: 5s
-      retries: 3
+      test: ['CMD', '/app/.venv/bin/python', '-c', 'import urllib.request; urllib.request.urlopen("http://localhost:4000/health/liveliness", timeout=10)']
+      interval: 20s
+      timeout: 15s
+      retries: 5
+      start_period: 30s
 
   multiai_tunnel:
     build:
@@ -83,9 +84,10 @@ services:
       ADMIN_PASS: ${ADMIN_PASS:?ADMIN_PASS must be set in .env}
       ADMIN_TOKEN: ${ADMIN_TOKEN}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY must be set in .env}
+      LITELLM_HOST: http://multiai_litellm:4000
       HTTP_PROXY: http://10.10.11.2:8888
       HTTPS_PROXY: http://10.10.11.2:8888
-      NO_PROXY: api.exchangerate-api.com,openrouter.ai,api.openrouter.com
+      NO_PROXY: localhost,127.0.0.1,multiai_litellm,api.exchangerate-api.com,openrouter.ai,api.openrouter.com
     volumes:
       - ./.env:/app/.env:ro
     ports:

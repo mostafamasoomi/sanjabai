@@ -4,7 +4,7 @@ import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
-from app import Base, Pricing, Feature, Discount, AboutContent, ProxyConfig
+from models import Base, Pricing, Feature, Discount, AboutContent, ProxyConfig
 
 DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql+asyncpg://multiai:multiai@127.0.0.1:5432/multiai')
 

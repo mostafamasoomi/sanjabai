@@ -78,11 +78,11 @@ function Hero({ isLoggedIn, modelCount }: { isLoggedIn: boolean; modelCount: str
         </p>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center mt-8">
-          <Link href={isLoggedIn ? '/chat' : '/signup'} className="aurora-cta-glow btn btn-primary btn-lg text-base px-8 py-3">
+          <Link href={isLoggedIn ? '/chat' : '/signup'} className="aurora-cta-glow btn btn-primary btn-lg text-base px-10 py-3.5" style={{boxShadow: '0 4px 24px rgba(99,102,241,0.4), 0 0 48px rgba(99,102,241,0.15)'}}>
             {isLoggedIn ? 'شروع چت' : 'شروع رایگان'}
             <Icon name="arrowRight" size={18} />
           </Link>
-          <Link href="/models" className="btn btn-secondary btn-lg text-base px-8 py-3">
+          <Link href="/models" className="btn btn-secondary btn-lg text-base px-10 py-3.5" style={{borderColor: 'rgba(255,255,255,0.1)'}}>
             مشاهده مدلها
           </Link>
         </div>

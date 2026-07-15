@@ -116,10 +116,10 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       {/* ── Desktop Sidebar ─────────────────────────────────── */}
       <aside className="layout-sidebar hidden md:flex sidebar-glass">
         <div className="flex items-center gap-2 px-4 py-3.5">
-          <div className="w-7 h-7 rounded-lg bg-[var(--accent)] flex items-center justify-center">
-            <span className="text-white text-sm font-bold">M</span>
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{background: 'linear-gradient(135deg, #6366f1, #a855f7)', boxShadow: '0 0 16px rgba(99,102,241,0.3)'}}>
+            <span className="text-white text-sm font-extrabold tracking-tight">M</span>
           </div>
-          <Link href="/" className="text-base font-bold text-gradient tracking-tight">Multiai</Link>
+          <Link href="/" className="text-lg font-extrabold text-gradient tracking-tight">Multiai</Link>
         </div>
         <div className="divider" />
 

@@ -103,7 +103,7 @@ export default function ModelsPage() {
     <div className="py-6">
       <div className="mb-8">
         <h1 className="aurora-section-title text-2xl font-bold mb-2">مدلهای هوش مصنوعی</h1>
-        <p className="text-[var(--text-secondary)]">همه مدلها از یک پنل — بهترین مدل را برای نیاز خود انتخاب کنید</p>
+        <p className="text-[var(--text-secondary)] leading-relaxed" style={{maxWidth: '480px'}}>همه مدلها از یک پنل — بهترین مدل را برای نیاز خود انتخاب کنید</p>
       </div>
 
       {/* Search + Filter bar */}

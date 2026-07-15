@@ -18,7 +18,7 @@ _rds = None
 def _get_redis():
     global _rds
     if _rds is None:
-        from app import rds as _redis
+        from database import rds as _redis
         _rds = _redis
     return _rds
 

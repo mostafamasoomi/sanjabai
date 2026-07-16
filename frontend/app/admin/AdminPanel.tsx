@@ -3,6 +3,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
+import dynamic from 'next/dynamic'
+
+const AdminCharts = dynamic(() => import('./components/AdminCharts'), { ssr: false })
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Multiai Admin Panel — Aurora Design System
@@ -621,6 +624,9 @@ export default function AdminPage() {
                     <StatCard icon="code" label="توکن مصرفی" value={analytics.total_tokens?.toLocaleString('fa-IR') || '0'} color="var(--warning)" />
                     <StatCard icon="chat" label="گفتگوها" value={analytics.conv_count?.toLocaleString('fa-IR') || '0'} color="var(--accent)" />
                   </div>
+
+                  {/* Charts */}
+                  <AdminCharts />
 
                   <div className="admin-card">
                     <div className="flex items-center gap-2 mb-4">

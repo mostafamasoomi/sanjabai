@@ -1,0 +1,221 @@
+"""
+RAG (Document Search) API endpoints.
+
+POST /v1/rag/upload   — Upload document for indexing
+POST /v1/rag/query    — Query documents with RAG
+GET  /v1/rag/documents — List user's documents
+DELETE /v1/rag/documents/{id} — Soft-delete document
+GET  /v1/rag/documents/{id}/status — Poll indexing status
+"""
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+import sqlalchemy
+from fastapi import APIRouter, Request, UploadFile, File, Form
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from sqlalchemy import select
+
+from database import async_session
+from models import RagDocument
+from dependencies import _get_user_id
+from services.doc_processor import process_document, SUPPORTED_TYPES, MAX_FILE_SIZE
+from services.rag import query_documents
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+# ── Pydantic models ───────────────────────────────────────────────────────────
+
+
+class RagQueryRequest(BaseModel):
+    question: str
+    document_id: int | None = None
+    model: str = 'tencent-hy3'
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
+
+@router.post('/v1/rag/upload')
+async def rag_upload(request: Request, file: UploadFile = File(...)) -> JSONResponse:
+    """Upload a document for RAG indexing."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+
+    # Validate file type
+    filename = file.filename or 'unknown'
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    if ext not in SUPPORTED_TYPES:
+        return JSONResponse(
+            {'detail': f'فرمت فایل پشتیبانی نمی‌شود. فرمت‌های مجاز: {", ".join(SUPPORTED_TYPES)}'},
+            status_code=400,
+        )
+
+    # Read content
+    try:
+        content = await file.read()
+    except Exception as e:
+        return JSONResponse({'detail': f'خطا در خواندن فایل: {e}'}, status_code=400)
+
+    if len(content) > MAX_FILE_SIZE:
+        return JSONResponse(
+            {'detail': f'حجم فایل از {MAX_FILE_SIZE // (1024*1024)} مگابایت بیشتر است'},
+            status_code=400,
+        )
+
+    if len(content) == 0:
+        return JSONResponse({'detail': 'فایل خالی است'}, status_code=400)
+
+    # Process document
+    try:
+        result = await process_document(
+            user_id=uid,
+            file_content=content,
+            filename=filename,
+        )
+    except ValueError as e:
+        return JSONResponse({'detail': str(e)}, status_code=400)
+    except Exception as e:
+        logger.error(f'RAG upload failed uid={uid}: {e}')
+        return JSONResponse({'detail': 'خطا در پردازش سند'}, status_code=500)
+
+    return JSONResponse({
+        'document_id': result['document_id'],
+        'filename': filename,
+        'chunks': result.get('chunk_count', 0),
+        'status': result['status'],
+        'message': result.get('message', ''),
+    })
+
+
+@router.post('/v1/rag/query')
+async def rag_query(request: Request, payload: RagQueryRequest) -> JSONResponse:
+    """Query documents using RAG."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+
+    if not payload.question or not payload.question.strip():
+        return JSONResponse({'detail': 'لطفاً سوال خود را وارد کنید'}, status_code=400)
+
+    if len(payload.question) > 2000:
+        return JSONResponse({'detail': 'سوال نباید بیشتر از ۲۰۰۰ کاراکتر باشد'}, status_code=400)
+
+    try:
+        result = await query_documents(
+            user_id=uid,
+            question=payload.question,
+            document_id=payload.document_id,
+            model=payload.model,
+        )
+    except Exception as e:
+        logger.error(f'RAG query failed uid={uid}: {e}')
+        return JSONResponse({'detail': 'خطا در جستجوی اسناد'}, status_code=500)
+
+    return JSONResponse(result)
+
+
+@router.get('/v1/rag/documents')
+async def rag_list_documents(request: Request) -> JSONResponse:
+    """List user's RAG documents."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+
+    if async_session is None:
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+
+    async with async_session() as session:
+        res = await session.execute(
+            sqlalchemy.text("""
+                SELECT id, title, file_name, file_type, file_size, status,
+                       chunk_count, total_chars, error_message, created_at
+                FROM rag_documents
+                WHERE user_id = :uid AND status != 'deleted'
+                ORDER BY created_at DESC
+            """),
+            {'uid': uid},
+        )
+        rows = res.fetchall()
+
+    documents = []
+    for r in rows:
+        documents.append({
+            'id': r._mapping['id'],
+            'title': r._mapping['title'],
+            'file_name': r._mapping['file_name'],
+            'file_type': r._mapping['file_type'],
+            'file_size': r._mapping['file_size'],
+            'status': r._mapping['status'],
+            'chunk_count': r._mapping['chunk_count'],
+            'total_chars': r._mapping['total_chars'],
+            'error_message': r._mapping['error_message'],
+            'created_at': r._mapping['created_at'].isoformat() if r._mapping['created_at'] else None,
+        })
+
+    return JSONResponse({'documents': documents})
+
+
+@router.delete('/v1/rag/documents/{document_id}')
+async def rag_delete_document(request: Request, document_id: int) -> JSONResponse:
+    """Soft-delete a RAG document."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+
+    if async_session is None:
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+
+    async with async_session() as session:
+        res = await session.execute(
+            sqlalchemy.text("""
+                UPDATE rag_documents
+                SET status = 'deleted', updated_at = now()
+                WHERE id = :did AND user_id = :uid AND status != 'deleted'
+                RETURNING id
+            """),
+            {'did': document_id, 'uid': uid},
+        )
+        row = res.fetchone()
+        await session.commit()
+
+    if not row:
+        return JSONResponse({'detail': 'سند پیدا نشد'}, status_code=404)
+
+    return JSONResponse({'deleted': True})
+
+
+@router.get('/v1/rag/documents/{document_id}/status')
+async def rag_document_status(request: Request, document_id: int) -> JSONResponse:
+    """Poll document indexing status."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+
+    if async_session is None:
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+
+    async with async_session() as session:
+        res = await session.execute(
+            sqlalchemy.text("""
+                SELECT status, chunk_count, error_message
+                FROM rag_documents
+                WHERE id = :did AND user_id = :uid
+            """),
+            {'did': document_id, 'uid': uid},
+        )
+        row = res.fetchone()
+
+    if not row:
+        return JSONResponse({'detail': 'سند پیدا نشد'}, status_code=404)
+
+    return JSONResponse({
+        'status': row._mapping['status'],
+        'chunk_count': row._mapping['chunk_count'],
+        'error_message': row._mapping['error_message'],
+    })

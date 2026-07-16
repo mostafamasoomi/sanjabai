@@ -53,6 +53,26 @@ async def list_memories(request: Request, category: str | None = None) -> JSONRe
     return JSONResponse(jsonable_encoder(rows))
 
 
+@router.get('/memories/count')
+async def count_memories(request: Request, category: str | None = None) -> JSONResponse:
+    """Return count of active memories for the current user, optionally filtered by category."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+    async with async_session() as session:
+        stmt = UserMemory.__table__.select().where(
+            UserMemory.user_id == uid,
+            UserMemory.active == True,
+        )
+        if category:
+            stmt = stmt.where(UserMemory.category == category)
+        res = await session.execute(stmt)
+        count = len(res.fetchall())
+    return JSONResponse({'count': count})
+
+
 @router.get('/memories/search')
 async def search_memories(request: Request, q: str = '') -> JSONResponse:
     """Full-text search across memory content for the current user."""
@@ -166,3 +186,10 @@ async def delete_memory(request: Request, memory_id: int) -> JSONResponse:
         )
         await session.commit()
     return JSONResponse({'status': 'deleted'})
+
+
+@router.get('/memories/auto-status')
+async def auto_status() -> JSONResponse:
+    """Return auto-memory extraction status."""
+    from services.memory_extractor import get_auto_status
+    return JSONResponse(get_auto_status())

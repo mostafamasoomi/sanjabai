@@ -1,12 +1,15 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback, memo } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react'
 import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { useCatalog } from '@/lib/useCatalog'
 import { type ModelCatalogItem } from '@/types/catalog'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { Skeleton, EmptyState, toast } from '@/components/ui'
+import MarkdownRenderer from './components/MarkdownRenderer'
+import ModelPicker from './components/ModelPicker'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Multiai Chat — Aurora v2 + Conversation History Sidebar
@@ -130,7 +133,13 @@ const ChatMessageItem = memo(function ChatMessageItem({
             <span /><span /><span />
           </div>
         )}
-        <div className="chat-bubble-content">{msg.content}</div>
+        {msg.role === 'assistant' ? (
+          <span className={streaming && isLast ? 'streaming-cursor' : ''}>
+            <MarkdownRenderer content={msg.content} />
+          </span>
+        ) : (
+          <div className="chat-bubble-content chat-bubble-plain">{msg.content}</div>
+        )}
         {msg.role === 'assistant' && msg.content && !streaming && (
           <div className="chat-actions">
             <button
@@ -166,24 +175,24 @@ export default function ChatPage() {
     { id: 'welcome', role: 'assistant', content: 'سلام! به Multiai خوش آمدید. چطور میتوانم کمک کنید؟' }
   ])
   const [model, setModel] = useState<ModelCatalogItem | null>({
-    id: 'mimo-v2.5',
-    providerModelId: 'openai/mimo-v2.5',
-    provider: 'openai',
-    displayName: 'mimo-v2.5',
+    id: 'tencent-hy3',
+    providerModelId: 'tencent-hy3',
+    provider: 'bynara',
+    displayName: 'Tencent HY3',
     modalities: { input: ['text'], output: ['text'] },
     capabilities: ['chat'],
-    recommendedFor: ['general'],
-    contextWindow: 4096,
+    recommendedFor: ['general', 'common'],
+    contextWindow: 1000000,
     pricing: {
       currency: 'IRT',
-      inputPerMillion: 1000,
-      outputPerMillion: 2000,
+      inputPerMillion: 500,
+      outputPerMillion: 1000,
       priceVersion: 'v1',
-      effectiveFrom: '2023-01-01T00:00:00Z',
+      effectiveFrom: '2025-01-01T00:00:00Z',
     },
     availability: 'available',
     audience: ['consumer'],
-    lastVerifiedAt: '2023-01-01T00:00:00Z',
+    lastVerifiedAt: '2025-01-01T00:00:00Z',
     provenance: 'fallback',
   });
   const [input, setInput] = useState('')
@@ -207,14 +216,45 @@ export default function ChatPage() {
   const [smartModel, setSmartModel] = useState<string | null>(null)
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
   const [usageStats, setUsageStats] = useState<UsageStats>({ promptTokens: 0, completionTokens: 0, totalTokens: 0, estimatedCost: 0 })
+  const [tokensPerSec, setTokensPerSec] = useState<number>(0)
+  const streamStartTimeRef = useRef<number>(0)
   const exportMenuRef = useRef<HTMLDivElement>(null)
 
   /* ── Assistant integration ──────────────────────────────────────────── */
   const searchParams = useSearchParams()
   const assistantParam = searchParams?.get('assistant')
   const modelParam = searchParams?.get('model')
+  const promptParam = searchParams?.get('prompt')
   const [activeAssistant, setActiveAssistant] = useState<Assistant | null>(null)
   const [loadingAssistant, setLoadingAssistant] = useState(false)
+
+  /* ── Wallet balance ────────────────────────────────────────────────── */
+  const [walletBalance, setWalletBalance] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!token) return
+    fetch('/api/wallet', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(data => setWalletBalance(data.balance ?? 0))
+      .catch(() => { /* silent */ })
+  }, [token])
+
+  /* ── Pre-send cost estimate ────────────────────────────────────────── */
+  const preSendEstimate = useMemo(() => {
+    if (!model || !input.trim()) return null
+    const estimatedTokens = Math.max(1, Math.round(input.length / 4))
+    const costPerMillion = model.pricing.inputPerMillion
+    const estimatedCost = (estimatedTokens / 1_000_000) * costPerMillion
+    return { tokens: estimatedTokens, cost: estimatedCost }
+  }, [input, model])
+
+  /* ── Pre-fill input from prompt param ──────────────────────────────── */
+  useEffect(() => {
+    if (promptParam) {
+      setInput(promptParam)
+      inputRef.current?.focus()
+    }
+  }, [promptParam])
 
   /* ── Conversation sidebar state ──────────────────────────────────────── */
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -224,6 +264,7 @@ export default function ChatPage() {
   const [loadingConversations, setLoadingConversations] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [sidebarSearchQuery, setSidebarSearchQuery] = useState('')
   const activeConversationIdRef = useRef<string | null>(null)
   const messagesRef = useRef<Message[]>(messages)
 
@@ -391,6 +432,41 @@ export default function ChatPage() {
     setSmartModel(null)
   }, [])
 
+  /* ── Date grouping helper ──────────────────────────────────────────────── */
+  const getDateGroup = useCallback((dateStr: string): string => {
+    try {
+      const d = new Date(dateStr)
+      const now = new Date()
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const startOfYesterday = new Date(startOfToday.getTime() - 86400000)
+      const startOfWeek = new Date(startOfToday.getTime() - startOfToday.getDay() * 86400000)
+      if (d >= startOfToday) return 'امروز'
+      if (d >= startOfYesterday) return 'دیروز'
+      if (d >= startOfWeek) return 'این هفته'
+      return 'قدیمی\u200cتر'
+    } catch { return 'قدیمی\u200cتر' }
+  }, [])
+
+  /* ── Filtered + grouped conversations ──────────────────────────────────── */
+  const filteredConversations = useMemo(() => {
+    let list = conversations
+    if (sidebarSearchQuery.trim()) {
+      const q = sidebarSearchQuery.trim().toLowerCase()
+      list = list.filter(c => c.title.toLowerCase().includes(q))
+    }
+    return list
+  }, [conversations, sidebarSearchQuery])
+
+  const groupedConversations = useMemo(() => {
+    const groups: Record<string, Conversation[]> = { 'امروز': [], 'دیروز': [], 'این هفته': [], 'قدیمی\u200cتر': [] }
+    for (const c of filteredConversations) {
+      const g = getDateGroup(c.updated_at || c.created_at)
+      groups[g].push(c)
+    }
+    // Remove empty groups
+    return Object.entries(groups).filter(([, items]) => items.length > 0)
+  }, [filteredConversations, getDateGroup])
+
   /* ── Export conversation ──────────────────────────────────────────────── */
   const exportConversation = useCallback(async (format: 'json' | 'markdown' | 'text') => {
     if (!token || !activeConversationId) {
@@ -503,6 +579,8 @@ export default function ChatPage() {
     setShowPresets(false)
     setStreaming(true)
     setError('')
+    streamStartTimeRef.current = Date.now()
+    setTokensPerSec(0)
 
     const controller = new AbortController()
     abortRef.current = controller
@@ -585,6 +663,27 @@ export default function ChatPage() {
             }
             if (obj.usage) usageData = obj.usage
             if (obj.x_smart_model) setSmartModel(obj.x_smart_model)
+            // ── billing event (real IRT cost) ──
+            if (obj.type === 'billing') {
+              setUsageStats(prev => ({
+                promptTokens: obj.input_tokens ?? prev.promptTokens,
+                completionTokens: obj.output_tokens ?? prev.completionTokens,
+                totalTokens: (obj.input_tokens ?? 0) + (obj.output_tokens ?? 0),
+                estimatedCost: obj.cost ?? prev.estimatedCost
+              }))
+            }
+            // ── smart_info event ──
+            if (obj.type === 'smart_info') {
+              setSmartModel(obj.model)
+            }
+            // ── tokens/sec ──
+            if (streamStartTimeRef.current > 0) {
+              const elapsed = (Date.now() - streamStartTimeRef.current) / 1000
+              const tps = usageData
+                ? Math.round(((usageData.prompt_tokens ?? 0) + (usageData.completion_tokens ?? 0)) / Math.max(elapsed, 0.1))
+                : 0
+              setTokensPerSec(tps)
+            }
           } catch { /* partial chunk */ }
         }
       }
@@ -594,17 +693,16 @@ export default function ChatPage() {
         const finalMsgs = [...updated, { id: assistantId, role: 'assistant' as const, content: acc }]
         saveMessages(convId, finalMsgs)
       }
-      // Update usage stats
+      // Update token counts from usageData (cost comes from billing events)
       if (usageData) {
         const promptTokens = usageData.prompt_tokens || 0
         const completionTokens = usageData.completion_tokens || 0
         const totalTokens = promptTokens + completionTokens
-        const estimatedCost = totalTokens * 0.000002 // rough estimate
         setUsageStats(prev => ({
           promptTokens: prev.promptTokens + promptTokens,
           completionTokens: prev.completionTokens + completionTokens,
           totalTokens: prev.totalTokens + totalTokens,
-          estimatedCost: prev.estimatedCost + estimatedCost,
+          estimatedCost: prev.estimatedCost, // cost comes from billing events
         }))
       }
     } catch (err: unknown) {
@@ -647,70 +745,124 @@ export default function ChatPage() {
     }
   }
 
-  /* ── Sidebar conversation list ───────────────────────────────────────── */
-  const sidebarContent = (
-    <div className="conv-sidebar-content">
-      {/* New chat button */}
-      <button onClick={startNewChat} className="conv-new-chat-btn">
-        <Icon name="plus" size={16} />
-        چت جدید
-      </button>
+  /* ── Global keyboard shortcuts ─────────────────────────────────────────── */
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+N: New chat
+      if (e.ctrlKey && e.key === 'n') {
+        e.preventDefault()
+        startNewChat()
+        inputRef.current?.focus()
+        return
+      }
+      // Escape: Cancel streaming or close picker
+      if (e.key === 'Escape') {
+        if (streaming) {
+          e.preventDefault()
+          cancel()
+          return
+        }
+        // Focus input if nothing else to escape
+        if (document.activeElement !== inputRef.current) {
+          inputRef.current?.focus()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleGlobalKeyDown)
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown)
+  }, [streaming, cancel, startNewChat])
 
-      {/* Conversation list */}
-      <div className="conv-list">
-        {loadingConversations && conversations.length === 0 ? (
-          <div className="conv-list-loading">
-            <Skeleton className="w-full" height="2.5rem" />
-            <Skeleton className="w-full" height="2.5rem" />
-            <Skeleton className="w-full" height="2.5rem" />
-          </div>
-        ) : conversations.length === 0 ? (
-          <div className="conv-list-empty">
-            <Icon name="chat" size={20} className="text-[var(--text-muted)]" />
-            <span>هنوز مکالمه‌ای ندارید</span>
-          </div>
-        ) : (
-          conversations.map(conv => (
-            <div
-              key={conv.id}
-              className={`conv-item ${activeConversationId === conv.id ? 'conv-item-active' : ''}`}
-              onClick={() => loadConversation(conv.id)}
+  /* ── Sidebar conversation list ───────────────────────────────────────── */
+    const sidebarContent = (
+      <div className="conv-sidebar-content">
+        {/* New chat button */}
+        <button onClick={startNewChat} className="conv-new-chat-btn">
+          <Icon name="plus" size={16} />
+          چت جدید
+        </button>
+
+        {/* Search input */}
+        <div className="conv-search-wrapper">
+          <span className="conv-search-icon"><Icon name="search" size={14} /></span>
+          <input
+            type="text"
+            className="conv-search-input"
+            placeholder="جستجوی مکالمه..."
+            value={sidebarSearchQuery}
+            onChange={e => setSidebarSearchQuery(e.target.value)}
+            dir="rtl"
+          />
+          {sidebarSearchQuery && (
+            <button
+              className="conv-search-clear"
+              onClick={() => setSidebarSearchQuery('')}
+              aria-label="پاک کردن جستجو"
             >
-              <div className="conv-item-content">
-                <span className="conv-item-title">{conv.title}</span>
-                <span className="conv-item-meta">
-                  <span className="conv-item-date">{formatDate(conv.updated_at || conv.created_at)}</span>
-                  {conv.model && <span className="conv-item-model">{conv.model}</span>}
-                </span>
-              </div>
-              <button
-                className="conv-item-delete"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (confirmDeleteId === conv.id) {
-                    deleteConversation(conv.id)
-                  } else {
-                    setConfirmDeleteId(conv.id)
-                    setTimeout(() => setConfirmDeleteId(prev => prev === conv.id ? null : prev), 3000)
-                  }
-                }}
-                disabled={deletingId === conv.id}
-                title={confirmDeleteId === conv.id ? 'برای تأیید دوباره کلیک کنید' : 'حذف'}
-              >
-                {deletingId === conv.id ? (
-                  <span className="conv-delete-spin" />
-                ) : confirmDeleteId === conv.id ? (
-                  <CheckIcon size={13} />
-                ) : (
-                  <TrashIcon size={13} />
-                )}
-              </button>
+              <Icon name="close" size={12} />
+            </button>
+          )}
+        </div>
+
+        {/* Conversation list */}
+        <div className="conv-list">
+          {loadingConversations && conversations.length === 0 ? (
+            <div className="conv-list-loading">
+              <Skeleton className="w-full" height="2.5rem" />
+              <Skeleton className="w-full" height="2.5rem" />
+              <Skeleton className="w-full" height="2.5rem" />
             </div>
-          ))
-        )}
+          ) : filteredConversations.length === 0 ? (
+            <div className="conv-list-empty">
+              <Icon name={sidebarSearchQuery ? 'search' : 'chat'} size={20} className="text-[var(--text-muted)]" />
+              <span>{sidebarSearchQuery ? 'مکالمه\u200cای یافت نشد' : 'هنوز مکالمهای ندارید'}</span>
+            </div>
+          ) : (
+            groupedConversations.map(([group, items]) => (
+              <div key={group} className="conv-date-group">
+                <div className="conv-date-header">{group}</div>
+                {items.map(conv => (
+                  <div
+                    key={conv.id}
+                    className={`conv-item ${activeConversationId === conv.id ? 'conv-item-active' : ''}`}
+                    onClick={() => loadConversation(conv.id)}
+                  >
+                    <div className="conv-item-content">
+                      <span className="conv-item-title">{conv.title}</span>
+                      <span className="conv-item-meta">
+                        <span className="conv-item-date">{formatDate(conv.updated_at || conv.created_at)}</span>
+                        {conv.model && <span className="conv-item-model">{conv.model}</span>}
+                      </span>
+                    </div>
+                    <button
+                      className="conv-item-delete"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (confirmDeleteId === conv.id) {
+                          deleteConversation(conv.id)
+                        } else {
+                          setConfirmDeleteId(conv.id)
+                          setTimeout(() => setConfirmDeleteId(prev => prev === conv.id ? null : prev), 3000)
+                        }
+                      }}
+                      disabled={deletingId === conv.id}
+                      title={confirmDeleteId === conv.id ? 'برای تأیید دوباره کلیک کنید' : 'حذف'}
+                    >
+                      {deletingId === conv.id ? (
+                        <span className="conv-delete-spin" />
+                      ) : confirmDeleteId === conv.id ? (
+                        <CheckIcon size={13} />
+                      ) : (
+                        <TrashIcon size={13} />
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
       </div>
-    </div>
-  )
+    )
 
   return (
     <>
@@ -757,27 +909,18 @@ export default function ChatPage() {
               )}
 
               <Icon name="models" size={18} className="text-[var(--accent)]" />
-              {loading ? (
-                <Skeleton className="w-40" height="1.25rem" />
-              ) : catalogError ? (
+              {catalogError ? (
                 <span className="text-sm text-[var(--danger)] flex items-center gap-1">
                   <Icon name="close" size={14} /> خطا در بارگذاری مدلها
                 </span>
-              ) : models.length === 0 ? (
-                <span className="text-sm text-[var(--text-muted)]">مدلی یافت نشد</span>
               ) : (
-                <div className="model-select-wrapper" dir="ltr">
-                  <select
-                    value={model?.id ?? ''}
-                    onChange={e => setModel(models.find(m => m.id === e.target.value) || models[0] || null)}
-                    className="model-select"
-                    data-testid="model-select"
-                  >
-                    {models.map(m => (
-                      <option key={m.id} value={m.id}>{m.displayName}</option>
-                    ))}
-                  </select>
-                </div>
+                <ModelPicker
+                  models={models}
+                  selected={model}
+                  onSelect={setModel}
+                  loading={loading}
+                  smartModeActive={smartMode}
+                />
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -799,6 +942,16 @@ export default function ChatPage() {
                   🧠 {smartModel}
                 </span>
               )}
+
+              {/* Compare button */}
+              <Link
+                href="/compare"
+                className="conv-toggle-btn"
+                title="مقایسه مدلها"
+                style={{ textDecoration: 'none' }}
+              >
+                <Icon name="compare" size={16} />
+              </Link>
 
               {/* Export dropdown */}
               {activeConversationId && (
@@ -1053,17 +1206,59 @@ export default function ChatPage() {
                   `${model?.displayName ?? 'منتظر انتخاب مدل'} — ${smartMode ? '🧠 Smart Mode' : 'آماده'}`
                 )}
               </span>
+              <span className="chat-shortcuts-hint">
+                <kbd>Ctrl+N</kbd> چت جدید · <kbd>Esc</kbd> توقف
+              </span>
+              {/* ── Pre-send cost estimate ─────────────────────────── */}
+              {preSendEstimate && !streaming && (
+                <span className="cost-estimate">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                  </svg>
+                  ~{preSendEstimate.tokens.toLocaleString('fa-IR')} tokens
+                  <span className="cost-estimate-sep">·</span>
+                  ~{preSendEstimate.cost.toLocaleString('fa-IR', { maximumFractionDigits: 1 })} تومان
+                </span>
+              )}
               {usageStats.totalTokens > 0 && (
-                <span className="usage-badge" title={`پرامپت: ${usageStats.promptTokens} | پاسخ: ${usageStats.completionTokens}`}>
+                <span className="usage-badge" title={`پرامپت: ${usageStats.promptTokens.toLocaleString('fa-IR')} | پاسخ: ${usageStats.completionTokens.toLocaleString('fa-IR')}`}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
                   </svg>
-                  <span dir="ltr">{usageStats.totalTokens.toLocaleString()} tokens</span>
-                  <span className="usage-cost" dir="ltr">~${usageStats.estimatedCost.toFixed(4)}</span>
+                  <span dir="ltr">{usageStats.totalTokens.toLocaleString('fa-IR')} tokens</span>
+                  <span className="usage-cost" dir="ltr">{usageStats.estimatedCost.toLocaleString('fa-IR')} تومان</span>
+                  {streaming && tokensPerSec > 0 && (
+                    <span className="usage-tps" dir="ltr">{tokensPerSec.toLocaleString('fa-IR')} tok/s</span>
+                  )}
                 </span>
               )}
+              {/* ── Wallet balance / warning ────────────────────────── */}
+              {walletBalance !== null && walletBalance < 5000 && (
+                <a href="/wallet" className="wallet-warning" title="موجودی کم — شارژ کنید">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                  </svg>
+                  موجودی کم
+                </a>
+              )}
+              {walletBalance !== null && walletBalance >= 5000 && (
+                <span className="wallet-balance-inline">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8z"/>
+                  </svg>
+                  {(walletBalance / 10).toLocaleString('fa-IR')} تومان
+                </span>
+              )}
+              {/* ── Prompt Library button ───────────────────────────── */}
+              <a href="/prompts" className="prompt-lib-btn" title="کتابخانه پرامپت">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+                پرامپت‌ها
+              </a>
               <span className="text-[10px] text-[var(--text-muted)]">
-                {input.length > 0 && `${input.length} کاراکتر`}
+                {input.length > 0 && `${input.length.toLocaleString('fa-IR')} کاراکتر`}
               </span>
             </div>
           </form>

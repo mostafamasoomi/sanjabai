@@ -3,6 +3,7 @@ Security middleware: rate limiting, security headers, input validation.
 All rate limits use Redis for persistence across restarts.
 """
 import logging
+import os
 import time
 import hashlib
 from fastapi import Request
@@ -55,7 +56,9 @@ login_limiter = RateLimiter(window_seconds=60, max_requests=30)       # 30 req/m
 signup_limiter = RateLimiter(window_seconds=60, max_requests=5)        # 5 req/min
 forgot_password_limiter = RateLimiter(window_seconds=60, max_requests=20)  # 20 req/min
 auth_limiter = RateLimiter(window_seconds=60, max_requests=60)        # 60 req/min (general auth)
-chat_limiter = RateLimiter(window_seconds=60, max_requests=120)      # 120 req/min (streaming needs headroom)
+chat_free_limiter = RateLimiter(window_seconds=60, max_requests=30)        # 30 req/min (free tier)
+chat_pro_limiter = RateLimiter(window_seconds=60, max_requests=120)       # 120 req/min (pro tier)
+chat_enterprise_limiter = RateLimiter(window_seconds=60, max_requests=300)  # 300 req/min (enterprise tier)
 admin_limiter = RateLimiter(window_seconds=60, max_requests=30)      # 30 req/min
 
 
@@ -76,10 +79,34 @@ async def get_client_identifier(request: Request) -> str:
                     return f'user:{session_data}'
         except Exception:
             pass
-    # Fallback to IP + User-Agent hash
-    ip = request.headers.get('x-forwarded-for', request.client.host if request.client else 'unknown')
+    # Fallback to IP + User-Agent hash (using validated real IP)
+    ip = get_real_ip(request)
     ua = request.headers.get('user-agent', '')
     return f'ip:{hashlib.sha256(f"{ip}:{ua}".encode()).hexdigest()[:12]}'
+
+
+# ── X-Forwarded-For validation ─────────────────────────────
+
+TRUSTED_PROXY_IPS: set[str] = set(
+    ip.strip() for ip in os.getenv('TRUSTED_PROXY_IPS', '').split(',') if ip.strip()
+)
+
+
+def get_real_ip(request: Request) -> str:
+    """Get the real client IP, validating X-Forwarded-For against trusted proxies.
+
+    Only trusts XFF header when the connecting IP is a known proxy.
+    Falls back to request.client.host when XFF is not trusted or absent.
+    """
+    xff = request.headers.get('x-forwarded-for', '')
+    if xff and TRUSTED_PROXY_IPS:
+        connecting_ip = request.client.host if request.client else None
+        if connecting_ip and connecting_ip in TRUSTED_PROXY_IPS:
+            # X-Forwarded-For: client, proxy1, proxy2
+            # The leftmost IP is the original client
+            return xff.split(',')[0].strip()
+    # Fallback to direct connection IP
+    return request.client.host if request.client else 'unknown'
 
 
 def select_limiter(path: str) -> RateLimiter:
@@ -93,7 +120,7 @@ def select_limiter(path: str) -> RateLimiter:
     if path.startswith('/auth/'):
         return auth_limiter
     if path.startswith('/v1/chat/'):
-        return chat_limiter
+        return chat_pro_limiter
     if path.startswith('/admin/'):
         return admin_limiter
     return general_limiter
@@ -109,6 +136,21 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         identifier = await get_client_identifier(request)
         limiter = select_limiter(request.url.path)
+
+        # Tiered rate limits for chat endpoints
+        if request.url.path.startswith('/v1/chat/'):
+            uid = await _extract_user_id(request)
+            if uid is not None:
+                plan = await _get_user_plan(uid)
+                if plan == 'enterprise':
+                    limiter = chat_enterprise_limiter
+                elif plan == 'pro':
+                    limiter = chat_pro_limiter
+                else:
+                    limiter = chat_free_limiter
+            else:
+                limiter = chat_free_limiter  # unauthenticated = free tier
+
         allowed, remaining = await limiter.is_allowed(identifier)
 
         if not allowed:
@@ -126,6 +168,34 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         response.headers['X-RateLimit-Limit'] = str(limiter.max)
         response.headers['X-RateLimit-Remaining'] = str(remaining)
         return response
+
+
+async def _extract_user_id(request: Request) -> int | None:
+    """Extract user_id from session token (without full session resolution)."""
+    token = request.headers.get('Authorization', '').removeprefix('Bearer ')
+    if not token:
+        token = request.cookies.get('session')
+    if not token:
+        return None
+    try:
+        import json as _json
+        session_data = await _get_redis().get(f'session:{token}')
+        if session_data:
+            try:
+                uid = (_json.loads(session_data) or {}).get('user_id')
+                if uid:
+                    return int(uid)
+            except (ValueError, AttributeError):
+                return int(session_data)
+    except Exception:
+        pass
+    return None
+
+
+async def _get_user_plan(uid: int) -> str:
+    """Lazy-import _get_user_plan from chat module to avoid circular imports."""
+    from chat import _get_user_plan as _gup
+    return await _gup(uid)
 
 
 # ── Security Headers ───────────────────────────────────────

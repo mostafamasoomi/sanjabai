@@ -57,7 +57,18 @@ class SqlBillingRepo:
             .with_for_update()
         )
         row = res.fetchone()
-        return dict(row._mapping) if row else None
+        if row is None:
+            return None
+        p = row[0]
+        return {
+            "id": p.id,
+            "user_id": p.user_id,
+            "amount": p.amount,
+            "status": p.status,
+            "authority": p.authority,
+            "ref_id": p.ref_id,
+            "verified_at": p.verified_at,
+        }
 
     async def mark_payment_failed(self, payment_id: int) -> None:
         from models import Payment
@@ -95,7 +106,11 @@ class SqlBillingRepo:
         from models import Wallet
         from sqlalchemy import select
         res = await self.session.execute(select(Wallet).where(Wallet.user_id == user_id))
-        return res.fetchone()
+        row = res.fetchone()
+        if row is None:
+            return None
+        wallet = row[0]
+        return {"balance": wallet.balance, "reserved": wallet.reserved}
 
     async def create_wallet(self, user_id: int, balance: int) -> None:
         from models import Wallet
@@ -109,7 +124,8 @@ class SqlBillingRepo:
         if row is None:
             await self.create_wallet(user_id, 0)
             return {"balance": 0, "reserved": 0}
-        return {"balance": row["balance"], "reserved": row["reserved"]}
+        wallet = row[0]
+        return {"balance": wallet.balance, "reserved": wallet.reserved}
 
     async def set_wallet_balance(self, user_id: int, balance: int) -> None:
         from models import Wallet
@@ -150,6 +166,85 @@ class SqlBillingRepo:
             select(Ledger.id).where(Ledger.idempotency_key == idempotency_key)
         )
         return res.fetchone() is not None
+
+    # ── reservation lifecycle (used by BillingService.reserve/settle/release) ──
+    @asynccontextmanager
+    async def lock_wallet_for_update(self, user_id: int):
+        """Acquire FOR UPDATE lock on the wallet row (async context manager)."""
+        from models import Wallet
+        from sqlalchemy import select
+        await self.session.execute(
+            select(Wallet).where(Wallet.user_id == user_id).with_for_update()
+        )
+        yield
+
+    async def create_reservation(self, data: dict) -> None:
+        from models import WalletReservation
+        self.session.add(WalletReservation(
+            reservation_id=data["reservation_id"],
+            user_id=data["user_id"],
+            amount=data["hold_amount"],
+            currency="IRT",
+            status=data.get("status", "reserved"),
+            model=data.get("model"),
+            price_version=data.get("price_version"),
+            idempotency_key=data["idempotency_key"],
+        ))
+
+    async def get_reservation(self, reservation_id: str):
+        from models import WalletReservation
+        from sqlalchemy import select
+        res = await self.session.execute(
+            select(WalletReservation).where(
+                WalletReservation.reservation_id == reservation_id
+            )
+        )
+        row = res.fetchone()
+        if row is None:
+            return None
+        r = row[0]
+        return {
+            "reservation_id": r.reservation_id,
+            "user_id": r.user_id,
+            "hold_amount": r.amount,
+            "status": r.status,
+            "idempotency_key": r.idempotency_key,
+            "model": r.model,
+            "price_version": r.price_version,
+            "charged_amount": None,
+        }
+
+    async def get_reservation_by_idem(self, idempotency_key: str):
+        from models import WalletReservation
+        from sqlalchemy import select
+        res = await self.session.execute(
+            select(WalletReservation).where(
+                WalletReservation.idempotency_key == idempotency_key
+            )
+        )
+        row = res.fetchone()
+        if row is None:
+            return None
+        r = row[0]
+        return {
+            "reservation_id": r.reservation_id,
+            "user_id": r.user_id,
+            "hold_amount": r.amount,
+            "status": r.status,
+            "idempotency_key": r.idempotency_key,
+            "model": r.model,
+            "price_version": r.price_version,
+            "charged_amount": None,
+        }
+
+    async def mark_reservation_settled(self, reservation_id: str, charged_amount: int) -> None:
+        from models import WalletReservation
+        from sqlalchemy import update
+        await self.session.execute(
+            update(WalletReservation)
+            .where(WalletReservation.reservation_id == reservation_id)
+            .values(status="settled", settled_at=_now())
+        )
 
 
 async def credit_wallet(

@@ -39,7 +39,7 @@ async def create_payment(amount: int, description: str, callback_url: str, email
         'metadata': {'email': email, 'mobile': mobile},
     }
 
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with httpx.AsyncClient(timeout=15, trust_env=False) as client:
         try:
             r = await client.post(f'{ZARINPAL_API}/request.json', json=payload)
             data = r.json()
@@ -69,7 +69,7 @@ async def verify_payment(amount: int, authority: str) -> dict:
         'authority': authority,
     }
 
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with httpx.AsyncClient(timeout=15, trust_env=False) as client:
         try:
             r = await client.post(f'{ZARINPAL_API}/verify.json', json=payload)
             data = r.json()

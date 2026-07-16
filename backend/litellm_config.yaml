@@ -1,5 +1,25 @@
 model_list:
-  # ── Bynara proxy models ──────────────────────────────────────────
+  # ── Bynara proxy models (key1) ──────────────────────────────────
+  - model_name: deepseek-v4-pro
+    litellm_params: {model: openai/deepseek-v4-pro, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
+  - model_name: deepseek-v4-flash-bynara
+    litellm_params: {model: openai/deepseek-v4-flash-bynara, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
+  - model_name: deepseek-v4-pro-bynara
+    litellm_params: {model: openai/deepseek-v4-pro-bynara, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
+  - model_name: tencent-hy3
+    litellm_params: {model: openai/tencent-hy3, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
+  - model_name: mistral-large
+    litellm_params: {model: openai/mistral-large, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
+  - model_name: mistral-medium-3-5
+    litellm_params: {model: openai/mistral-medium-3-5, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
+
+  # ── Bynara proxy models (key2) ──────────────────────────────────
+  - model_name: mimo-v2.5-pro
+    litellm_params: {model: openai/mimo-v2.5-pro, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY_2}
+  - model_name: mimo-v2.5-pro-ultraspeed
+    litellm_params: {model: openai/mimo-v2.5-pro-ultraspeed, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY_2}
+
+  # ── Disabled / broken models (kept for reference) ────────────────
   - model_name: agnes-2.0-flash
     litellm_params: {model: openai/agnes-2.0-flash, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
   - model_name: agnes-2.5-flash
@@ -7,17 +27,7 @@ model_list:
   - model_name: gemini-3.5-flash
     litellm_params: {model: openai/gemini-3.5-flash, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
   - model_name: mimo-v2.5
-    litellm_params: {model: openai/mimo-v2.5, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
-  - model_name: mimo-v2.5-pro
-    litellm_params: {model: openai/mimo-v2.5-pro, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
-  - model_name: mimo-v2.5-pro-ultraspeed
-    litellm_params: {model: openai/mimo-v2.5-pro-ultraspeed, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
-  - model_name: mistral-large
-    litellm_params: {model: openai/mistral-large, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
-  - model_name: mistral-medium-3-5
-    litellm_params: {model: openai/mistral-medium-3-5, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
-  - model_name: tencent-hy3
-    litellm_params: {model: openai/tencent-hy3, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
+    litellm_params: {model: openai/mimo-v2.5, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY_2}
   - model_name: grok-4.5
     litellm_params: {model: openai/grok-4.5, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
   - model_name: glm-5.2-free
@@ -26,6 +36,9 @@ model_list:
     litellm_params: {model: openai/kimi-k2.7-code-free, api_base: https://router.bynara.id/v1, api_key: os.environ/BYNARA_API_KEY}
 
   # ── OPENROUTER models ──────────────────────────────────────────
+  # ── Embedding models ────────────────────────────────────────────
+  - model_name: text-embedding-3-small
+    litellm_params: {model: openai/text-embedding-3-small, api_key: os.environ/OPENROUTER_API_KEY}
   - model_name: kwaipilot/kat-coder-air-v2.5
     litellm_params: {model: openrouter/kwaipilot/kat-coder-air-v2.5, api_key: os.environ/OPENROUTER_API_KEY}
   - model_name: kwaipilot/kat-coder-pro-v2.5

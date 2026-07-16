@@ -126,6 +126,25 @@ services:
       HTTPS_PROXY: http://10.10.11.2:8888
     networks: [multiai_net]
 
+  multiai_watchdog:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: python watchdog.py
+    restart: unless-stopped
+    mem_limit: 256m
+    depends_on:
+      multiai_pg:
+        condition: service_healthy
+      multiai_redis:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql+asyncpg://multiai:${POSTGRES_PASSWORD:-multiai}@multiai_pg:5432/${POSTGRES_DB:-multiai}
+      REDIS_URL: redis://multiai_redis:6379/0
+      WATCHDOG_BOT_TOKEN: ${WATCHDOG_BOT_TOKEN:-}
+      WATCHDOG_CHAT_ID: ${WATCHDOG_CHAT_ID:-}
+    networks: [multiai_net]
+
 volumes:
   multiai_pg_data:
   multiai_redis_data:

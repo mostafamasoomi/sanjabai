@@ -1,0 +1,719 @@
+Parsed 354 models from config
+XX   1/354 agnes-2.0-flash                               400 1497ms {"error":{"message":"litellm.BadRequestError: OpenAIException - The model rejected this request. It may not support the input you sent (e.g. images on a text-only model) or a parameter is invalid.. Re
+XX   2/354 agnes-2.5-flash                               429 6269ms {"error":{"message":"litellm.RateLimitError: RateLimitError: OpenAIException - Your free daily quota for this model is used up for today. It resets tomorrow, or you can enable Pay-as-you-go (Overages)
+XX   3/354 gemini-3.5-flash                              400 1086ms {"error":{"message":"litellm.BadRequestError: OpenAIException - The model rejected this request. It may not support the input you sent (e.g. images on a text-only model) or a parameter is invalid.. Re
+XX   4/354 mimo-v2.5                                     403 6321ms litellm.APIError: APIError: OpenAIException - Your plan does not include the requested model.. Received Model Group=mimo-v2.5
+Available Model Group Fallbacks=None
+XX   5/354 mimo-v2.5-pro                                 403 7088ms litellm.APIError: APIError: OpenAIException - Your plan does not include the requested model.. Received Model Group=mimo-v2.5-pro
+Available Model Group Fallbacks=None
+XX   6/354 mimo-v2.5-pro-ultraspeed                      403 7056ms litellm.APIError: APIError: OpenAIException - Your plan does not include the requested model.. Received Model Group=mimo-v2.5-pro-ultraspeed
+Available Model Group Fallbacks=None
+OK   7/354 mistral-large                                 200 2928ms سلام
+OK   8/354 mistral-medium-3-5                            200 1101ms Salaam!
+OK   9/354 tencent-hy3                                   200 2650ms سلام
+XX  10/354 grok-4.5                                      400 696ms litellm.BadRequestError: OpenAIException - The requested model is not available.. Received Model Group=grok-4.5
+Available Model Group Fallbacks=None
+XX  11/354 glm-5.2-free                                  404 616ms litellm.NotFoundError: NotFoundError: OpenAIException - The requested model does not exist.. Received Model Group=glm-5.2-free
+Available Model Group Fallbacks=None
+XX  12/354 kimi-k2.7-code-free                           429 6731ms {"error":{"message":"litellm.RateLimitError: RateLimitError: OpenAIException - Your free daily quota for this model is used up for today. It resets tomorrow, or you can enable Pay-as-you-go (Overages)
+XX  13/354 kwaipilot/kat-coder-air-v2.5                  403 5199ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=kwaipilot/kat-coder-air-v2.5
+Available Model Group Fallbacks=
+XX  14/354 kwaipilot/kat-coder-pro-v2.5                  403 4912ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=kwaipilot/kat-coder-pro-v2.5
+Available Model Group Fallbacks=
+XX  15/354 openai/gpt-5.6-luna-pro                       403 5455ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.6-luna-pro
+Available Model Group Fallbacks=None
+XX  16/354 openai/gpt-5.6-luna                           403 5258ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.6-luna
+Available Model Group Fallbacks=None
+XX  17/354 openai/gpt-5.6-terra-pro                      403 5002ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.6-terra-pro
+Available Model Group Fallbacks=None
+XX  18/354 openai/gpt-5.6-terra                          403 5000ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.6-terra
+Available Model Group Fallbacks=None
+XX  19/354 openai/gpt-5.6-sol-pro                        403 4491ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.6-sol-pro
+Available Model Group Fallbacks=None
+XX  20/354 openai/gpt-5.6-sol                            403 5437ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.6-sol
+Available Model Group Fallbacks=None
+XX  21/354 x-ai/grok-4.5                                 403 4736ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=x-ai/grok-4.5
+Available Model Group Fallbacks=None
+XX  22/354 ~x-ai/grok-latest                             403 5027ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=~x-ai/grok-latest
+Available Model Group Fallbacks=None
+XX  23/354 aion-labs/aion-3.0-mini                       403 4518ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=aion-labs/aion-3.0-mini
+Available Model Group Fallbacks=None
+XX  24/354 aion-labs/aion-3.0                            403 5205ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=aion-labs/aion-3.0
+Available Model Group Fallbacks=None
+XX  25/354 tencent/hy3                                   403 5583ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=tencent/hy3
+Available Model Group Fallbacks=None
+XX  26/354 tencent/hy3:free                              403 5062ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=tencent/hy3:free
+Available Model Group Fallbacks=None
+XX  27/354 poolside/laguna-xs-2.1                        403 5702ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=poolside/laguna-xs-2.1
+Available Model Group Fallbacks=None
+XX  28/354 poolside/laguna-xs-2.1:free                   403 5255ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=poolside/laguna-xs-2.1:free
+Available Model Group Fallbacks=N
+XX  29/354 anthropic/claude-sonnet-5                     403 5433ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=anthropic/claude-sonnet-5
+Available Model Group Fallbacks=Non
+XX  30/354 google/gemini-3.1-flash-lite-image            403 4991ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemini-3.1-flash-lite-image
+Available Model Group Fall
+XX  31/354 nex-agi/nex-n2-mini                           403 5533ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=nex-agi/nex-n2-mini
+Available Model Group Fallbacks=None
+XX  32/354 sakana/fugu-ultra                             403 5640ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=sakana/fugu-ultra
+Available Model Group Fallbacks=None
+XX  33/354 google/gemini-3.1-flash-image                 403 4567ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemini-3.1-flash-image
+Available Model Group Fallbacks
+XX  34/354 google/gemini-3-pro-image                     403 4523ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemini-3-pro-image
+Available Model Group Fallbacks=Non
+XX  35/354 cohere/north-mini-code:free                   403 5021ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=cohere/north-mini-code:free
+Available Model Group Fallbacks=N
+XX  36/354 z-ai/glm-5.2                                  403 5740ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=z-ai/glm-5.2
+Available Model Group Fallbacks=None
+XX  37/354 openrouter/fusion                             403 4654ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openrouter/fusion
+Available Model Group Fallbacks=None
+XX  38/354 moonshotai/kimi-k2.7-code                     403 4518ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=moonshotai/kimi-k2.7-code
+Available Model Group Fallbacks=Non
+XX  39/354 ~anthropic/claude-fable-latest                403 5393ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=~anthropic/claude-fable-latest
+Available Model Group Fallback
+XX  40/354 anthropic/claude-fable-5                      403 4855ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=anthropic/claude-fable-5
+Available Model Group Fallbacks=None
+XX  41/354 nex-agi/nex-n2-pro                            403 4824ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=nex-agi/nex-n2-pro
+Available Model Group Fallbacks=None
+XX  42/354 nvidia/nemotron-3.5-content-safety:free       403 5331ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=nvidia/nemotron-3.5-content-safety:free
+Available Model Group
+XX  43/354 nvidia/nemotron-3-ultra-550b-a55b             403 4899ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=nvidia/nemotron-3-ultra-550b-a55b
+Available Model Group Fallb
+XX  44/354 nvidia/nemotron-3-ultra-550b-a55b:free        403 4855ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=nvidia/nemotron-3-ultra-550b-a55b:free
+Available Model Group 
+XX  45/354 qwen/qwen3.7-plus                             403 4970ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3.7-plus
+Available Model Group Fallbacks=None
+XX  46/354 minimax/minimax-m3                            403 4732ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=minimax/minimax-m3
+Available Model Group Fallbacks=None
+XX  47/354 stepfun/step-3.7-flash                        403 5324ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=stepfun/step-3.7-flash
+Available Model Group Fallbacks=None
+XX  48/354 anthropic/claude-opus-4.8-fast                403 4975ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=anthropic/claude-opus-4.8-fast
+Available Model Group Fallback
+XX  49/354 anthropic/claude-opus-4.8                     403 4864ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=anthropic/claude-opus-4.8
+Available Model Group Fallbacks=Non
+XX  50/354 qwen/qwen3.7-max                              403 5733ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3.7-max
+Available Model Group Fallbacks=None
+XX  51/354 x-ai/grok-build-0.1                           403 4504ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=x-ai/grok-build-0.1
+Available Model Group Fallbacks=None
+XX  52/354 google/gemini-3.5-flash                       403 4473ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemini-3.5-flash
+Available Model Group Fallbacks=None
+XX  53/354 anthropic/claude-opus-4.7-fast                403 4650ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=anthropic/claude-opus-4.7-fast
+Available Model Group Fallback
+XX  54/354 perceptron/perceptron-mk1                     403 4253ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=perceptron/perceptron-mk1
+Available Model Group Fallbacks=Non
+XX  55/354 inclusionai/ring-2.6-1t                       403 4659ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=inclusionai/ring-2.6-1t
+Available Model Group Fallbacks=None
+XX  56/354 google/gemini-3.1-flash-lite                  403 4411ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemini-3.1-flash-lite
+Available Model Group Fallbacks=
+XX  57/354 openai/gpt-chat-latest                        403 5034ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-chat-latest
+Available Model Group Fallbacks=None
+XX  58/354 x-ai/grok-4.3                                 403 4950ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=x-ai/grok-4.3
+Available Model Group Fallbacks=None
+XX  59/354 ibm-granite/granite-4.1-8b                    403 4896ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=ibm-granite/granite-4.1-8b
+Available Model Group Fallbacks=No
+XX  60/354 mistralai/mistral-medium-3-5                  403 5470ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=mistralai/mistral-medium-3-5
+Available Model Group Fallbacks=
+XX  61/354 nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free 403 4830ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free
+Available 
+XX  62/354 poolside/laguna-m.1                           403 5039ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=poolside/laguna-m.1
+Available Model Group Fallbacks=None
+XX  63/354 poolside/laguna-m.1:free                      403 4659ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=poolside/laguna-m.1:free
+Available Model Group Fallbacks=None
+XX  64/354 ~anthropic/claude-haiku-latest                403 5339ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=~anthropic/claude-haiku-latest
+Available Model Group Fallback
+XX  65/354 ~openai/gpt-mini-latest                       403 4778ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=~openai/gpt-mini-latest
+Available Model Group Fallbacks=None
+XX  66/354 ~google/gemini-pro-latest                     403 4700ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=~google/gemini-pro-latest
+Available Model Group Fallbacks=Non
+XX  67/354 ~moonshotai/kimi-latest                       403 5124ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=~moonshotai/kimi-latest
+Available Model Group Fallbacks=None
+XX  68/354 ~google/gemini-flash-latest                   403 5494ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=~google/gemini-flash-latest
+Available Model Group Fallbacks=N
+XX  69/354 ~anthropic/claude-sonnet-latest               403 5421ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=~anthropic/claude-sonnet-latest
+Available Model Group Fallbac
+XX  70/354 ~openai/gpt-latest                            403 5806ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=~openai/gpt-latest
+Available Model Group Fallbacks=None
+XX  71/354 qwen/qwen3.5-plus-20260420                    403 4821ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3.5-plus-20260420
+Available Model Group Fallbacks=No
+XX  72/354 qwen/qwen3.6-flash                            403 5909ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3.6-flash
+Available Model Group Fallbacks=None
+XX  73/354 qwen/qwen3.6-35b-a3b                          403 5405ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3.6-35b-a3b
+Available Model Group Fallbacks=None
+XX  74/354 qwen/qwen3.6-max-preview                      403 4732ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3.6-max-preview
+Available Model Group Fallbacks=None
+XX  75/354 qwen/qwen3.6-27b                              403 4938ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3.6-27b
+Available Model Group Fallbacks=None
+XX  76/354 openai/gpt-5.5-pro                            403 4878ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.5-pro
+Available Model Group Fallbacks=None
+XX  77/354 openai/gpt-5.5                                403 5160ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.5
+Available Model Group Fallbacks=None
+XX  78/354 deepseek/deepseek-v4-pro                      403 5142ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=deepseek/deepseek-v4-pro
+Available Model Group Fallbacks=None
+XX  79/354 deepseek/deepseek-v4-flash                    403 5399ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=deepseek/deepseek-v4-flash
+Available Model Group Fallbacks=No
+XX  80/354 inclusionai/ling-2.6-1t                       403 5878ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=inclusionai/ling-2.6-1t
+Available Model Group Fallbacks=None
+XX  81/354 tencent/hy3-preview                           403 5850ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=tencent/hy3-preview
+Available Model Group Fallbacks=None
+XX  82/354 xiaomi/mimo-v2.5-pro                          403 4764ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=xiaomi/mimo-v2.5-pro
+Available Model Group Fallbacks=None
+XX  83/354 xiaomi/mimo-v2.5                              403 5097ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=xiaomi/mimo-v2.5
+Available Model Group Fallbacks=None
+XX  84/354 openai/gpt-5.4-image-2                        403 4634ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.4-image-2
+Available Model Group Fallbacks=None
+XX  85/354 inclusionai/ling-2.6-flash                    403 4979ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=inclusionai/ling-2.6-flash
+Available Model Group Fallbacks=No
+XX  86/354 ~anthropic/claude-opus-latest                 403 5686ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=~anthropic/claude-opus-latest
+Available Model Group Fallbacks
+XX  87/354 openrouter/pareto-code                        403 5077ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openrouter/pareto-code
+Available Model Group Fallbacks=None
+XX  88/354 moonshotai/kimi-k2.6                          403 4676ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=moonshotai/kimi-k2.6
+Available Model Group Fallbacks=None
+XX  89/354 anthropic/claude-opus-4.7                     403 4926ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=anthropic/claude-opus-4.7
+Available Model Group Fallbacks=Non
+XX  90/354 z-ai/glm-5.1                                  403 4415ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=z-ai/glm-5.1
+Available Model Group Fallbacks=None
+XX  91/354 google/gemma-4-26b-a4b-it                     403 5288ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemma-4-26b-a4b-it
+Available Model Group Fallbacks=Non
+XX  92/354 google/gemma-4-26b-a4b-it:free                403 5314ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemma-4-26b-a4b-it:free
+Available Model Group Fallback
+XX  93/354 google/gemma-4-31b-it                         403 5889ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemma-4-31b-it
+Available Model Group Fallbacks=None
+XX  94/354 google/gemma-4-31b-it:free                    403 5366ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemma-4-31b-it:free
+Available Model Group Fallbacks=No
+XX  95/354 qwen/qwen3.6-plus                             403 4838ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3.6-plus
+Available Model Group Fallbacks=None
+XX  96/354 z-ai/glm-5v-turbo                             403 4697ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=z-ai/glm-5v-turbo
+Available Model Group Fallbacks=None
+XX  97/354 arcee-ai/trinity-large-thinking               403 5308ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=arcee-ai/trinity-large-thinking
+Available Model Group Fallbac
+XX  98/354 x-ai/grok-4.20-multi-agent                    403 4735ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=x-ai/grok-4.20-multi-agent
+Available Model Group Fallbacks=No
+XX  99/354 x-ai/grok-4.20                                403 5181ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=x-ai/grok-4.20
+Available Model Group Fallbacks=None
+XX 100/354 google/lyria-3-pro-preview                    403 4849ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/lyria-3-pro-preview
+Available Model Group Fallbacks=No
+XX 101/354 google/lyria-3-clip-preview                   403 4579ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/lyria-3-clip-preview
+Available Model Group Fallbacks=N
+XX 102/354 kwaipilot/kat-coder-pro-v2                    403 4792ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=kwaipilot/kat-coder-pro-v2
+Available Model Group Fallbacks=No
+XX 103/354 rekaai/reka-edge                              403 5409ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=rekaai/reka-edge
+Available Model Group Fallbacks=None
+XX 104/354 minimax/minimax-m2.7                          403 5445ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=minimax/minimax-m2.7
+Available Model Group Fallbacks=None
+XX 105/354 openai/gpt-5.4-nano                           403 5276ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.4-nano
+Available Model Group Fallbacks=None
+XX 106/354 openai/gpt-5.4-mini                           403 4371ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.4-mini
+Available Model Group Fallbacks=None
+XX 107/354 mistralai/mistral-small-2603                  403 5073ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=mistralai/mistral-small-2603
+Available Model Group Fallbacks=
+XX 108/354 z-ai/glm-5-turbo                              403 5123ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=z-ai/glm-5-turbo
+Available Model Group Fallbacks=None
+XX 109/354 nvidia/nemotron-3-super-120b-a12b             403 4416ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=nvidia/nemotron-3-super-120b-a12b
+Available Model Group Fallb
+XX 110/354 nvidia/nemotron-3-super-120b-a12b:free        403 4918ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=nvidia/nemotron-3-super-120b-a12b:free
+Available Model Group 
+XX 111/354 bytedance-seed/seed-2.0-lite                  403 4940ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=bytedance-seed/seed-2.0-lite
+Available Model Group Fallbacks=
+XX 112/354 qwen/qwen3.5-9b                               403 4680ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3.5-9b
+Available Model Group Fallbacks=None
+XX 113/354 openai/gpt-5.4-pro                            403 5275ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.4-pro
+Available Model Group Fallbacks=None
+XX 114/354 openai/gpt-5.4                                403 5374ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.4
+Available Model Group Fallbacks=None
+XX 115/354 inception/mercury-2                           403 5202ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=inception/mercury-2
+Available Model Group Fallbacks=None
+XX 116/354 openai/gpt-5.3-chat                           403 5303ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.3-chat
+Available Model Group Fallbacks=None
+XX 117/354 google/gemini-3.1-flash-lite-preview          403 4966ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemini-3.1-flash-lite-preview
+Available Model Group Fa
+XX 118/354 bytedance-seed/seed-2.0-mini                  403 5746ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=bytedance-seed/seed-2.0-mini
+Available Model Group Fallbacks=
+XX 119/354 google/gemini-3.1-flash-image-preview         403 4893ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemini-3.1-flash-image-preview
+Available Model Group F
+XX 120/354 qwen/qwen3.5-35b-a3b                          403 5000ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3.5-35b-a3b
+Available Model Group Fallbacks=None
+XX 121/354 qwen/qwen3.5-27b                              403 4512ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3.5-27b
+Available Model Group Fallbacks=None
+XX 122/354 qwen/qwen3.5-122b-a10b                        403 5346ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3.5-122b-a10b
+Available Model Group Fallbacks=None
+XX 123/354 qwen/qwen3.5-flash-02-23                      403 4680ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3.5-flash-02-23
+Available Model Group Fallbacks=None
+XX 124/354 google/gemini-3.1-pro-preview-customtools     403 4569ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemini-3.1-pro-preview-customtools
+Available Model Gro
+XX 125/354 openai/gpt-5.3-codex                          403 5307ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.3-codex
+Available Model Group Fallbacks=None
+XX 126/354 aion-labs/aion-2.0                            403 5564ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=aion-labs/aion-2.0
+Available Model Group Fallbacks=None
+XX 127/354 google/gemini-3.1-pro-preview                 403 4814ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemini-3.1-pro-preview
+Available Model Group Fallbacks
+XX 128/354 anthropic/claude-sonnet-4.6                   403 5597ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=anthropic/claude-sonnet-4.6
+Available Model Group Fallbacks=N
+XX 129/354 qwen/qwen3.5-plus-02-15                       403 4543ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3.5-plus-02-15
+Available Model Group Fallbacks=None
+XX 130/354 qwen/qwen3.5-397b-a17b                        403 5480ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3.5-397b-a17b
+Available Model Group Fallbacks=None
+XX 131/354 minimax/minimax-m2.5                          403 4708ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=minimax/minimax-m2.5
+Available Model Group Fallbacks=None
+XX 132/354 z-ai/glm-5                                    403 5324ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=z-ai/glm-5
+Available Model Group Fallbacks=None
+XX 133/354 qwen/qwen3-max-thinking                       403 4967ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-max-thinking
+Available Model Group Fallbacks=None
+XX 134/354 anthropic/claude-opus-4.6                     403 5608ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=anthropic/claude-opus-4.6
+Available Model Group Fallbacks=Non
+XX 135/354 qwen/qwen3-coder-next                         403 4770ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-coder-next
+Available Model Group Fallbacks=None
+XX 136/354 openrouter/free                               403 6092ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openrouter/free
+Available Model Group Fallbacks=None
+XX 137/354 stepfun/step-3.5-flash                        403 5033ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=stepfun/step-3.5-flash
+Available Model Group Fallbacks=None
+XX 138/354 moonshotai/kimi-k2.5                          403 5529ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=moonshotai/kimi-k2.5
+Available Model Group Fallbacks=None
+XX 139/354 upstage/solar-pro-3                           403 5210ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=upstage/solar-pro-3
+Available Model Group Fallbacks=None
+XX 140/354 minimax/minimax-m2-her                        403 4453ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=minimax/minimax-m2-her
+Available Model Group Fallbacks=None
+XX 141/354 writer/palmyra-x5                             403 4617ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=writer/palmyra-x5
+Available Model Group Fallbacks=None
+XX 142/354 openai/gpt-audio                              403 5672ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-audio
+Available Model Group Fallbacks=None
+XX 143/354 openai/gpt-audio-mini                         403 4976ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-audio-mini
+Available Model Group Fallbacks=None
+XX 144/354 z-ai/glm-4.7-flash                            403 4825ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=z-ai/glm-4.7-flash
+Available Model Group Fallbacks=None
+XX 145/354 openai/gpt-5.2-codex                          403 4242ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.2-codex
+Available Model Group Fallbacks=None
+XX 146/354 bytedance-seed/seed-1.6-flash                 403 5399ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=bytedance-seed/seed-1.6-flash
+Available Model Group Fallbacks
+XX 147/354 bytedance-seed/seed-1.6                       403 5729ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=bytedance-seed/seed-1.6
+Available Model Group Fallbacks=None
+XX 148/354 minimax/minimax-m2.1                          403 5698ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=minimax/minimax-m2.1
+Available Model Group Fallbacks=None
+XX 149/354 z-ai/glm-4.7                                  403 4691ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=z-ai/glm-4.7
+Available Model Group Fallbacks=None
+XX 150/354 google/gemini-3-flash-preview                 403 4621ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemini-3-flash-preview
+Available Model Group Fallbacks
+XX 151/354 nvidia/nemotron-3-nano-30b-a3b                403 4583ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=nvidia/nemotron-3-nano-30b-a3b
+Available Model Group Fallback
+XX 152/354 nvidia/nemotron-3-nano-30b-a3b:free           403 4628ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=nvidia/nemotron-3-nano-30b-a3b:free
+Available Model Group Fal
+XX 153/354 openai/gpt-5.2-chat                           403 4660ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.2-chat
+Available Model Group Fallbacks=None
+XX 154/354 openai/gpt-5.2-pro                            403 5530ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.2-pro
+Available Model Group Fallbacks=None
+XX 155/354 openai/gpt-5.2                                403 4875ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.2
+Available Model Group Fallbacks=None
+XX 156/354 mistralai/devstral-2512                       403 5135ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=mistralai/devstral-2512
+Available Model Group Fallbacks=None
+XX 157/354 relace/relace-search                          403 5117ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=relace/relace-search
+Available Model Group Fallbacks=None
+XX 158/354 z-ai/glm-4.6v                                 403 5536ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=z-ai/glm-4.6v
+Available Model Group Fallbacks=None
+XX 159/354 openrouter/bodybuilder                        403 4790ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openrouter/bodybuilder
+Available Model Group Fallbacks=None
+XX 160/354 openai/gpt-5.1-codex-max                      403 4475ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.1-codex-max
+Available Model Group Fallbacks=None
+XX 161/354 amazon/nova-2-lite-v1                         403 5428ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=amazon/nova-2-lite-v1
+Available Model Group Fallbacks=None
+XX 162/354 mistralai/ministral-14b-2512                  403 5610ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=mistralai/ministral-14b-2512
+Available Model Group Fallbacks=
+XX 163/354 mistralai/ministral-8b-2512                   403 4816ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=mistralai/ministral-8b-2512
+Available Model Group Fallbacks=N
+XX 164/354 mistralai/ministral-3b-2512                   403 5177ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=mistralai/ministral-3b-2512
+Available Model Group Fallbacks=N
+XX 165/354 mistralai/mistral-large-2512                  403 5643ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=mistralai/mistral-large-2512
+Available Model Group Fallbacks=
+XX 166/354 deepseek/deepseek-v3.2                        403 4913ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=deepseek/deepseek-v3.2
+Available Model Group Fallbacks=None
+XX 167/354 anthropic/claude-opus-4.5                     403 4971ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=anthropic/claude-opus-4.5
+Available Model Group Fallbacks=Non
+XX 168/354 allenai/olmo-3-32b-think                      403 4877ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=allenai/olmo-3-32b-think
+Available Model Group Fallbacks=None
+XX 169/354 google/gemini-3-pro-image-preview             403 5402ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemini-3-pro-image-preview
+Available Model Group Fallb
+XX 170/354 deepcogito/cogito-v2.1-671b                   403 4549ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=deepcogito/cogito-v2.1-671b
+Available Model Group Fallbacks=N
+XX 171/354 openai/gpt-5.1                                403 5515ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.1
+Available Model Group Fallbacks=None
+XX 172/354 openai/gpt-5.1-chat                           403 4574ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.1-chat
+Available Model Group Fallbacks=None
+XX 173/354 openai/gpt-5.1-codex                          403 5044ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.1-codex
+Available Model Group Fallbacks=None
+XX 174/354 openai/gpt-5.1-codex-mini                     403 5748ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5.1-codex-mini
+Available Model Group Fallbacks=Non
+XX 175/354 moonshotai/kimi-k2-thinking                   403 4981ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=moonshotai/kimi-k2-thinking
+Available Model Group Fallbacks=N
+XX 176/354 amazon/nova-premier-v1                        403 4497ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=amazon/nova-premier-v1
+Available Model Group Fallbacks=None
+XX 177/354 perplexity/sonar-pro-search                   403 4845ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=perplexity/sonar-pro-search
+Available Model Group Fallbacks=N
+XX 178/354 mistralai/voxtral-small-24b-2507              403 4933ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=mistralai/voxtral-small-24b-2507
+Available Model Group Fallba
+XX 179/354 openai/gpt-oss-safeguard-20b                  403 5343ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-oss-safeguard-20b
+Available Model Group Fallbacks=
+XX 180/354 nvidia/nemotron-nano-12b-v2-vl:free           403 5009ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=nvidia/nemotron-nano-12b-v2-vl:free
+Available Model Group Fal
+XX 181/354 minimax/minimax-m2                            403 4775ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=minimax/minimax-m2
+Available Model Group Fallbacks=None
+XX 182/354 qwen/qwen3-vl-32b-instruct                    403 5138ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-vl-32b-instruct
+Available Model Group Fallbacks=No
+XX 183/354 ibm-granite/granite-4.0-h-micro               403 4622ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=ibm-granite/granite-4.0-h-micro
+Available Model Group Fallbac
+XX 184/354 openai/gpt-5-image-mini                       403 4551ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5-image-mini
+Available Model Group Fallbacks=None
+XX 185/354 anthropic/claude-haiku-4.5                    403 5260ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=anthropic/claude-haiku-4.5
+Available Model Group Fallbacks=No
+XX 186/354 qwen/qwen3-vl-8b-thinking                     403 5183ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-vl-8b-thinking
+Available Model Group Fallbacks=Non
+XX 187/354 qwen/qwen3-vl-8b-instruct                     403 5084ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-vl-8b-instruct
+Available Model Group Fallbacks=Non
+XX 188/354 openai/gpt-5-image                            403 4311ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5-image
+Available Model Group Fallbacks=None
+XX 189/354 openai/o3-deep-research                       403 5278ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/o3-deep-research
+Available Model Group Fallbacks=None
+XX 190/354 openai/o4-mini-deep-research                  403 5074ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/o4-mini-deep-research
+Available Model Group Fallbacks=
+XX 191/354 nvidia/llama-3.3-nemotron-super-49b-v1.5      403 4959ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=nvidia/llama-3.3-nemotron-super-49b-v1.5
+Available Model Grou
+XX 192/354 google/gemini-2.5-flash-image                 403 5889ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemini-2.5-flash-image
+Available Model Group Fallbacks
+XX 193/354 qwen/qwen3-vl-30b-a3b-thinking                403 5450ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-vl-30b-a3b-thinking
+Available Model Group Fallback
+XX 194/354 qwen/qwen3-vl-30b-a3b-instruct                403 5778ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-vl-30b-a3b-instruct
+Available Model Group Fallback
+XX 195/354 openai/gpt-5-pro                              403 4980ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5-pro
+Available Model Group Fallbacks=None
+XX 196/354 z-ai/glm-4.6                                  403 4742ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=z-ai/glm-4.6
+Available Model Group Fallbacks=None
+XX 197/354 anthropic/claude-sonnet-4.5                   403 4961ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=anthropic/claude-sonnet-4.5
+Available Model Group Fallbacks=N
+XX 198/354 deepseek/deepseek-v3.2-exp                    403 4848ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=deepseek/deepseek-v3.2-exp
+Available Model Group Fallbacks=No
+XX 199/354 thedrummer/cydonia-24b-v4.1                   403 5307ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=thedrummer/cydonia-24b-v4.1
+Available Model Group Fallbacks=N
+XX 200/354 relace/relace-apply-3                         403 5446ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=relace/relace-apply-3
+Available Model Group Fallbacks=None
+XX 201/354 qwen/qwen3-vl-235b-a22b-thinking              403 5718ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-vl-235b-a22b-thinking
+Available Model Group Fallba
+XX 202/354 qwen/qwen3-vl-235b-a22b-instruct              403 5868ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-vl-235b-a22b-instruct
+Available Model Group Fallba
+XX 203/354 qwen/qwen3-max                                403 5847ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-max
+Available Model Group Fallbacks=None
+XX 204/354 qwen/qwen3-coder-plus                         403 5226ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-coder-plus
+Available Model Group Fallbacks=None
+XX 205/354 openai/gpt-5-codex                            403 5448ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5-codex
+Available Model Group Fallbacks=None
+XX 206/354 deepseek/deepseek-v3.1-terminus               403 5355ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=deepseek/deepseek-v3.1-terminus
+Available Model Group Fallbac
+XX 207/354 qwen/qwen3-coder-flash                        403 5669ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-coder-flash
+Available Model Group Fallbacks=None
+XX 208/354 qwen/qwen3-next-80b-a3b-thinking              403 6008ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-next-80b-a3b-thinking
+Available Model Group Fallba
+XX 209/354 qwen/qwen3-next-80b-a3b-instruct              403 4969ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-next-80b-a3b-instruct
+Available Model Group Fallba
+XX 210/354 qwen/qwen3-next-80b-a3b-instruct:free         403 4798ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-next-80b-a3b-instruct:free
+Available Model Group F
+XX 211/354 qwen/qwen-plus-2025-07-28                     403 5143ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen-plus-2025-07-28
+Available Model Group Fallbacks=Non
+XX 212/354 qwen/qwen-plus-2025-07-28:thinking            403 4598ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen-plus-2025-07-28:thinking
+Available Model Group Fall
+XX 213/354 nvidia/nemotron-nano-9b-v2:free               403 5113ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=nvidia/nemotron-nano-9b-v2:free
+Available Model Group Fallbac
+XX 214/354 moonshotai/kimi-k2-0905                       403 4818ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=moonshotai/kimi-k2-0905
+Available Model Group Fallbacks=None
+XX 215/354 qwen/qwen3-30b-a3b-thinking-2507              403 4965ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-30b-a3b-thinking-2507
+Available Model Group Fallba
+XX 216/354 nousresearch/hermes-4-70b                     403 5522ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=nousresearch/hermes-4-70b
+Available Model Group Fallbacks=Non
+XX 217/354 nousresearch/hermes-4-405b                    403 5325ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=nousresearch/hermes-4-405b
+Available Model Group Fallbacks=No
+XX 218/354 deepseek/deepseek-chat-v3.1                   403 5352ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=deepseek/deepseek-chat-v3.1
+Available Model Group Fallbacks=N
+XX 219/354 mistralai/mistral-medium-3.1                  403 5353ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=mistralai/mistral-medium-3.1
+Available Model Group Fallbacks=
+XX 220/354 z-ai/glm-4.5v                                 403 5011ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=z-ai/glm-4.5v
+Available Model Group Fallbacks=None
+XX 221/354 ai21/jamba-large-1.7                          403 4368ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=ai21/jamba-large-1.7
+Available Model Group Fallbacks=None
+XX 222/354 openai/gpt-5-chat                             403 5742ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5-chat
+Available Model Group Fallbacks=None
+XX 223/354 openai/gpt-5                                  403 4501ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5
+Available Model Group Fallbacks=None
+XX 224/354 openai/gpt-5-mini                             403 5069ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5-mini
+Available Model Group Fallbacks=None
+XX 225/354 openai/gpt-5-nano                             403 5312ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-5-nano
+Available Model Group Fallbacks=None
+XX 226/354 openai/gpt-oss-120b                           403 4922ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-oss-120b
+Available Model Group Fallbacks=None
+XX 227/354 openai/gpt-oss-20b                            403 5111ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-oss-20b
+Available Model Group Fallbacks=None
+XX 228/354 openai/gpt-oss-20b:free                       403 5343ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-oss-20b:free
+Available Model Group Fallbacks=None
+XX 229/354 anthropic/claude-opus-4.1                     403 4785ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=anthropic/claude-opus-4.1
+Available Model Group Fallbacks=Non
+XX 230/354 mistralai/codestral-2508                      403 5218ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=mistralai/codestral-2508
+Available Model Group Fallbacks=None
+XX 231/354 qwen/qwen3-coder-30b-a3b-instruct             403 4837ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-coder-30b-a3b-instruct
+Available Model Group Fallb
+XX 232/354 qwen/qwen3-30b-a3b-instruct-2507              403 4563ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-30b-a3b-instruct-2507
+Available Model Group Fallba
+XX 233/354 z-ai/glm-4.5                                  403 5715ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=z-ai/glm-4.5
+Available Model Group Fallbacks=None
+XX 234/354 z-ai/glm-4.5-air                              403 4691ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=z-ai/glm-4.5-air
+Available Model Group Fallbacks=None
+XX 235/354 qwen/qwen3-235b-a22b-thinking-2507            403 5186ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-235b-a22b-thinking-2507
+Available Model Group Fall
+XX 236/354 qwen/qwen3-coder                              403 5018ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-coder
+Available Model Group Fallbacks=None
+XX 237/354 qwen/qwen3-coder:free                         403 5007ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-coder:free
+Available Model Group Fallbacks=None
+XX 238/354 bytedance/ui-tars-1.5-7b                      403 5436ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=bytedance/ui-tars-1.5-7b
+Available Model Group Fallbacks=None
+XX 239/354 google/gemini-2.5-flash-lite                  403 5491ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemini-2.5-flash-lite
+Available Model Group Fallbacks=
+XX 240/354 qwen/qwen3-235b-a22b-2507                     403 5052ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-235b-a22b-2507
+Available Model Group Fallbacks=Non
+XX 241/354 moonshotai/kimi-k2                            403 5886ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=moonshotai/kimi-k2
+Available Model Group Fallbacks=None
+XX 242/354 cognitivecomputations/dolphin-mistral-24b-venice-edition 403 4968ms {"error":{"message":"litellm.APIError: APIError: OpenrouterException - { \"success\": false, \"error\": \"Access denied by security policy.\" }. Received Model Group=cognitivecomputations/dolphin-mist
+XX 243/354 cognitivecomputations/dolphin-mistral-24b-venice-edition:free 403 4732ms {"error":{"message":"litellm.APIError: APIError: OpenrouterException - { \"success\": false, \"error\": \"Access denied by security policy.\" }. Received Model Group=cognitivecomputations/dolphin-mist
+XX 244/354 tencent/hunyuan-a13b-instruct                 403 4995ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=tencent/hunyuan-a13b-instruct
+Available Model Group Fallbacks
+XX 245/354 morph/morph-v3-large                          403 4591ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=morph/morph-v3-large
+Available Model Group Fallbacks=None
+XX 246/354 morph/morph-v3-fast                           403 4825ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=morph/morph-v3-fast
+Available Model Group Fallbacks=None
+XX 247/354 baidu/ernie-4.5-vl-424b-a47b                  403 5394ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=baidu/ernie-4.5-vl-424b-a47b
+Available Model Group Fallbacks=
+XX 248/354 mistralai/mistral-small-3.2-24b-instruct      403 4601ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=mistralai/mistral-small-3.2-24b-instruct
+Available Model Grou
+XX 249/354 minimax/minimax-m1                            403 5688ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=minimax/minimax-m1
+Available Model Group Fallbacks=None
+XX 250/354 google/gemini-2.5-flash                       403 4877ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemini-2.5-flash
+Available Model Group Fallbacks=None
+XX 251/354 google/gemini-2.5-pro                         403 5466ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemini-2.5-pro
+Available Model Group Fallbacks=None
+XX 252/354 openai/o3-pro                                 403 4691ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/o3-pro
+Available Model Group Fallbacks=None
+XX 253/354 google/gemini-2.5-pro-preview                 403 4369ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemini-2.5-pro-preview
+Available Model Group Fallbacks
+XX 254/354 deepseek/deepseek-r1-0528                     403 4512ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=deepseek/deepseek-r1-0528
+Available Model Group Fallbacks=Non
+XX 255/354 anthropic/claude-opus-4                       403 5582ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=anthropic/claude-opus-4
+Available Model Group Fallbacks=None
+XX 256/354 anthropic/claude-sonnet-4                     403 4751ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=anthropic/claude-sonnet-4
+Available Model Group Fallbacks=Non
+XX 257/354 google/gemma-3n-e4b-it                        403 4641ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemma-3n-e4b-it
+Available Model Group Fallbacks=None
+XX 258/354 mistralai/mistral-medium-3                    403 4534ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=mistralai/mistral-medium-3
+Available Model Group Fallbacks=No
+XX 259/354 google/gemini-2.5-pro-preview-05-06           403 4820ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemini-2.5-pro-preview-05-06
+Available Model Group Fal
+XX 260/354 arcee-ai/virtuoso-large                       403 5090ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=arcee-ai/virtuoso-large
+Available Model Group Fallbacks=None
+XX 261/354 meta-llama/llama-guard-4-12b                  403 5246ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=meta-llama/llama-guard-4-12b
+Available Model Group Fallbacks=
+XX 262/354 qwen/qwen3-30b-a3b                            403 5015ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-30b-a3b
+Available Model Group Fallbacks=None
+XX 263/354 qwen/qwen3-8b                                 403 5607ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-8b
+Available Model Group Fallbacks=None
+XX 264/354 qwen/qwen3-14b                                403 4461ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-14b
+Available Model Group Fallbacks=None
+XX 265/354 qwen/qwen3-32b                                403 4455ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-32b
+Available Model Group Fallbacks=None
+XX 266/354 qwen/qwen3-235b-a22b                          403 5192ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen3-235b-a22b
+Available Model Group Fallbacks=None
+XX 267/354 openai/o4-mini-high                           403 4916ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/o4-mini-high
+Available Model Group Fallbacks=None
+XX 268/354 openai/o3                                     403 4325ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/o3
+Available Model Group Fallbacks=None
+XX 269/354 openai/o4-mini                                403 5029ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/o4-mini
+Available Model Group Fallbacks=None
+XX 270/354 openai/gpt-4.1                                403 4897ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-4.1
+Available Model Group Fallbacks=None
+XX 271/354 openai/gpt-4.1-mini                           403 5113ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-4.1-mini
+Available Model Group Fallbacks=None
+XX 272/354 openai/gpt-4.1-nano                           403 5018ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-4.1-nano
+Available Model Group Fallbacks=None
+XX 273/354 meta-llama/llama-4-maverick                   403 5224ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=meta-llama/llama-4-maverick
+Available Model Group Fallbacks=N
+XX 274/354 meta-llama/llama-4-scout                      403 4687ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=meta-llama/llama-4-scout
+Available Model Group Fallbacks=None
+XX 275/354 deepseek/deepseek-chat-v3-0324                403 5717ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=deepseek/deepseek-chat-v3-0324
+Available Model Group Fallback
+XX 276/354 openai/o1-pro                                 403 4961ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/o1-pro
+Available Model Group Fallbacks=None
+XX 277/354 mistralai/mistral-small-3.1-24b-instruct      403 4980ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=mistralai/mistral-small-3.1-24b-instruct
+Available Model Grou
+XX 278/354 google/gemma-3-4b-it                          403 5624ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemma-3-4b-it
+Available Model Group Fallbacks=None
+XX 279/354 google/gemma-3-12b-it                         403 5516ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemma-3-12b-it
+Available Model Group Fallbacks=None
+XX 280/354 cohere/command-a                              403 5230ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=cohere/command-a
+Available Model Group Fallbacks=None
+XX 281/354 openai/gpt-4o-mini-search-preview             403 5473ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-4o-mini-search-preview
+Available Model Group Fallb
+XX 282/354 openai/gpt-4o-search-preview                  403 5049ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-4o-search-preview
+Available Model Group Fallbacks=
+XX 283/354 rekaai/reka-flash-3                           403 4721ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=rekaai/reka-flash-3
+Available Model Group Fallbacks=None
+XX 284/354 google/gemma-3-27b-it                         403 4770ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemma-3-27b-it
+Available Model Group Fallbacks=None
+XX 285/354 thedrummer/skyfall-36b-v2                     403 4938ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=thedrummer/skyfall-36b-v2
+Available Model Group Fallbacks=Non
+XX 286/354 perplexity/sonar-reasoning-pro                403 5207ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=perplexity/sonar-reasoning-pro
+Available Model Group Fallback
+XX 287/354 perplexity/sonar-pro                          403 5799ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=perplexity/sonar-pro
+Available Model Group Fallbacks=None
+XX 288/354 perplexity/sonar-deep-research                403 4618ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=perplexity/sonar-deep-research
+Available Model Group Fallback
+XX 289/354 mistralai/mistral-saba                        403 4727ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=mistralai/mistral-saba
+Available Model Group Fallbacks=None
+XX 290/354 openai/o3-mini-high                           403 5280ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/o3-mini-high
+Available Model Group Fallbacks=None
+XX 291/354 aion-labs/aion-rp-llama-3.1-8b                403 5260ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=aion-labs/aion-rp-llama-3.1-8b
+Available Model Group Fallback
+XX 292/354 qwen/qwen2.5-vl-72b-instruct                  403 4943ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen2.5-vl-72b-instruct
+Available Model Group Fallbacks=
+XX 293/354 qwen/qwen-plus                                403 4282ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen-plus
+Available Model Group Fallbacks=None
+XX 294/354 openai/o3-mini                                403 5662ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/o3-mini
+Available Model Group Fallbacks=None
+XX 295/354 mistralai/mistral-small-24b-instruct-2501     403 5189ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=mistralai/mistral-small-24b-instruct-2501
+Available Model Gro
+XX 296/354 perplexity/sonar                              403 4887ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=perplexity/sonar
+Available Model Group Fallbacks=None
+XX 297/354 deepseek/deepseek-r1-distill-llama-70b        403 4452ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=deepseek/deepseek-r1-distill-llama-70b
+Available Model Group 
+XX 298/354 deepseek/deepseek-r1                          403 4936ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=deepseek/deepseek-r1
+Available Model Group Fallbacks=None
+XX 299/354 minimax/minimax-01                            403 4922ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=minimax/minimax-01
+Available Model Group Fallbacks=None
+XX 300/354 microsoft/phi-4                               403 5333ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=microsoft/phi-4
+Available Model Group Fallbacks=None
+XX 301/354 deepseek/deepseek-chat                        403 5187ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=deepseek/deepseek-chat
+Available Model Group Fallbacks=None
+XX 302/354 sao10k/l3.3-euryale-70b                       403 5139ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=sao10k/l3.3-euryale-70b
+Available Model Group Fallbacks=None
+XX 303/354 openai/o1                                     403 4715ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/o1
+Available Model Group Fallbacks=None
+XX 304/354 cohere/command-r7b-12-2024                    403 4954ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=cohere/command-r7b-12-2024
+Available Model Group Fallbacks=No
+XX 305/354 meta-llama/llama-3.3-70b-instruct             403 5011ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=meta-llama/llama-3.3-70b-instruct
+Available Model Group Fallb
+XX 306/354 meta-llama/llama-3.3-70b-instruct:free        403 4895ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=meta-llama/llama-3.3-70b-instruct:free
+Available Model Group 
+XX 307/354 amazon/nova-lite-v1                           403 4334ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=amazon/nova-lite-v1
+Available Model Group Fallbacks=None
+XX 308/354 amazon/nova-micro-v1                          403 4818ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=amazon/nova-micro-v1
+Available Model Group Fallbacks=None
+XX 309/354 amazon/nova-pro-v1                            403 4613ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=amazon/nova-pro-v1
+Available Model Group Fallbacks=None
+XX 310/354 openai/gpt-4o-2024-11-20                      403 5458ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-4o-2024-11-20
+Available Model Group Fallbacks=None
+XX 311/354 mistralai/mistral-large-2407                  403 5529ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=mistralai/mistral-large-2407
+Available Model Group Fallbacks=
+XX 312/354 qwen/qwen-2.5-coder-32b-instruct              403 4872ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen-2.5-coder-32b-instruct
+Available Model Group Fallba
+XX 313/354 thedrummer/unslopnemo-12b                     403 4993ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=thedrummer/unslopnemo-12b
+Available Model Group Fallbacks=Non
+XX 314/354 anthracite-org/magnum-v4-72b                  403 5033ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=anthracite-org/magnum-v4-72b
+Available Model Group Fallbacks=
+XX 315/354 qwen/qwen-2.5-7b-instruct                     403 5198ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen-2.5-7b-instruct
+Available Model Group Fallbacks=Non
+XX 316/354 inflection/inflection-3-pi                    403 5330ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=inflection/inflection-3-pi
+Available Model Group Fallbacks=No
+XX 317/354 inflection/inflection-3-productivity          403 5370ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=inflection/inflection-3-productivity
+Available Model Group Fa
+XX 318/354 thedrummer/rocinante-12b                      403 4778ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=thedrummer/rocinante-12b
+Available Model Group Fallbacks=None
+XX 319/354 meta-llama/llama-3.2-11b-vision-instruct      403 4390ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=meta-llama/llama-3.2-11b-vision-instruct
+Available Model Grou
+XX 320/354 meta-llama/llama-3.2-1b-instruct              403 4825ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=meta-llama/llama-3.2-1b-instruct
+Available Model Group Fallba
+XX 321/354 meta-llama/llama-3.2-3b-instruct              403 4967ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=meta-llama/llama-3.2-3b-instruct
+Available Model Group Fallba
+XX 322/354 meta-llama/llama-3.2-3b-instruct:free         403 5591ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=meta-llama/llama-3.2-3b-instruct:free
+Available Model Group F
+XX 323/354 qwen/qwen-2.5-72b-instruct                    403 4940ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=qwen/qwen-2.5-72b-instruct
+Available Model Group Fallbacks=No
+XX 324/354 cohere/command-r-08-2024                      403 5401ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=cohere/command-r-08-2024
+Available Model Group Fallbacks=None
+XX 325/354 cohere/command-r-plus-08-2024                 403 4991ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=cohere/command-r-plus-08-2024
+Available Model Group Fallbacks
+XX 326/354 sao10k/l3.1-euryale-70b                       403 5161ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=sao10k/l3.1-euryale-70b
+Available Model Group Fallbacks=None
+XX 327/354 nousresearch/hermes-3-llama-3.1-70b           403 4770ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=nousresearch/hermes-3-llama-3.1-70b
+Available Model Group Fal
+XX 328/354 nousresearch/hermes-3-llama-3.1-405b          403 5534ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=nousresearch/hermes-3-llama-3.1-405b
+Available Model Group Fa
+XX 329/354 nousresearch/hermes-3-llama-3.1-405b:free     403 4418ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=nousresearch/hermes-3-llama-3.1-405b:free
+Available Model Gro
+XX 330/354 sao10k/l3-lunaris-8b                          403 5213ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=sao10k/l3-lunaris-8b
+Available Model Group Fallbacks=None
+XX 331/354 openai/gpt-4o-2024-08-06                      403 4980ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-4o-2024-08-06
+Available Model Group Fallbacks=None
+XX 332/354 meta-llama/llama-3.1-70b-instruct             403 4913ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=meta-llama/llama-3.1-70b-instruct
+Available Model Group Fallb
+XX 333/354 meta-llama/llama-3.1-8b-instruct              403 5042ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=meta-llama/llama-3.1-8b-instruct
+Available Model Group Fallba
+XX 334/354 mistralai/mistral-nemo                        403 5370ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=mistralai/mistral-nemo
+Available Model Group Fallbacks=None
+XX 335/354 openai/gpt-4o-mini                            403 5046ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-4o-mini
+Available Model Group Fallbacks=None
+XX 336/354 openai/gpt-4o-mini-2024-07-18                 403 4790ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-4o-mini-2024-07-18
+Available Model Group Fallbacks
+XX 337/354 google/gemma-2-27b-it                         403 5082ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=google/gemma-2-27b-it
+Available Model Group Fallbacks=None
+XX 338/354 openai/gpt-4o                                 403 4678ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-4o
+Available Model Group Fallbacks=None
+XX 339/354 openai/gpt-4o-2024-05-13                      403 5281ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-4o-2024-05-13
+Available Model Group Fallbacks=None
+XX 340/354 mistralai/mixtral-8x22b-instruct              403 4542ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=mistralai/mixtral-8x22b-instruct
+Available Model Group Fallba
+XX 341/354 microsoft/wizardlm-2-8x22b                    403 5175ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=microsoft/wizardlm-2-8x22b
+Available Model Group Fallbacks=No
+XX 342/354 openai/gpt-4-turbo                            403 4543ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-4-turbo
+Available Model Group Fallbacks=None
+XX 343/354 anthropic/claude-3-haiku                      403 5286ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=anthropic/claude-3-haiku
+Available Model Group Fallbacks=None
+XX 344/354 mistralai/mistral-large                       403 5028ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=mistralai/mistral-large
+Available Model Group Fallbacks=None
+XX 345/354 openai/gpt-3.5-turbo-0613                     403 5445ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-3.5-turbo-0613
+Available Model Group Fallbacks=Non
+XX 346/354 openai/gpt-4-turbo-preview                    403 5461ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-4-turbo-preview
+Available Model Group Fallbacks=No
+XX 347/354 openrouter/auto                               403 4889ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openrouter/auto
+Available Model Group Fallbacks=None
+XX 348/354 openai/gpt-3.5-turbo-instruct                 403 5606ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-3.5-turbo-instruct
+Available Model Group Fallbacks
+XX 349/354 openai/gpt-3.5-turbo-16k                      403 5257ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-3.5-turbo-16k
+Available Model Group Fallbacks=None
+XX 350/354 mancer/weaver                                 403 5190ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=mancer/weaver
+Available Model Group Fallbacks=None
+XX 351/354 undi95/remm-slerp-l2-13b                      403 5405ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=undi95/remm-slerp-l2-13b
+Available Model Group Fallbacks=None
+XX 352/354 gryphe/mythomax-l2-13b                        403 5479ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=gryphe/mythomax-l2-13b
+Available Model Group Fallbacks=None
+XX 353/354 openai/gpt-3.5-turbo                          403 5723ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-3.5-turbo
+Available Model Group Fallbacks=None
+XX 354/354 openai/gpt-4                                  403 5016ms litellm.APIError: APIError: OpenrouterException - { "success": false, "error": "Access denied by security policy." }. Received Model Group=openai/gpt-4
+Available Model Group Fallbacks=None
+
+=== SUMMARY ===
+{
+  "total": 354,
+  "working": 3,
+  "broken": 351,
+  "working_models": [
+    "mistral-large",
+    "mistral-medium-3-5",
+    "tencent-hy3"
+  ],
+  "code_distribution": {
+    "400": 3,
+    "429": 2,
+    "403": 345,
+    "200": 3,
+    "404": 1
+  }
+}

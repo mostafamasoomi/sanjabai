@@ -57,6 +57,27 @@ async def list_conversations(request: Request) -> JSONResponse:
     return JSONResponse(jsonable_encoder({'items': rows, 'total': total, 'page': page, 'limit': limit}))
 
 
+async def _auto_generate_title(messages: list[dict[str, Any]]) -> str:
+    """Generate a title from the first user message (first 50 chars)."""
+    for msg in (messages or []):
+        if isinstance(msg, dict) and msg.get('role') == 'user':
+            content = msg.get('content', '')
+            if isinstance(content, list):
+                # Handle multimodal content
+                parts = []
+                for part in content:
+                    if isinstance(part, dict) and part.get('type') == 'text':
+                        parts.append(part.get('text', ''))
+                content = ' '.join(parts)
+            if content and isinstance(content, str):
+                # Take first 50 chars, break at word boundary
+                title = content.strip()[:50]
+                if len(content.strip()) > 50:
+                    title = title.rsplit(' ', 1)[0] if ' ' in title else title
+                return title
+    return 'گفتگوی جدید'
+
+
 @router.post('/conversations')
 async def create_conversation(request: Request, payload: ConvCreate) -> JSONResponse:
     uid = await _get_user_id(request)
@@ -65,7 +86,11 @@ async def create_conversation(request: Request, payload: ConvCreate) -> JSONResp
     if async_session is None:
         return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
-        conv = Conversation(user_id=uid, title=payload.title, model=payload.model, messages=payload.messages)
+        # Auto-generate title from first user message if still default
+        title = payload.title
+        if title == 'گفتگوی جدید' and payload.messages:
+            title = await _auto_generate_title(payload.messages)
+        conv = Conversation(user_id=uid, title=title, model=payload.model, messages=payload.messages)
         session.add(conv)
         await session.commit()
         await session.refresh(conv)

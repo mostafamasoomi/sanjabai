@@ -80,6 +80,80 @@
   box-shadow: 0 4px 12px rgba(124, 111, 247, 0.15);
 }
 
+/* ── Search input ───────────────────────────────────────────────────────── */
+
+.conv-search-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0 var(--space-3) var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: border-color var(--motion-fast);
+}
+
+.conv-search-wrapper:focus-within {
+  border-color: var(--accent);
+}
+
+.conv-search-icon {
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.conv-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  min-width: 0;
+}
+
+.conv-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.conv-search-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.conv-search-clear:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+/* ── Date grouping ──────────────────────────────────────────────────────── */
+
+.conv-date-group {
+  margin-bottom: 2px;
+}
+
+.conv-date-header {
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  user-select: none;
+}
+
 /* ── Conversation list ──────────────────────────────────────────────────── */
 
 .conv-list {

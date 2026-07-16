@@ -74,9 +74,10 @@ async def payment_callback(request: Request) -> JSONResponse:
             select(Payment).where(Payment.authority == authority_str)
         )
         pay_row = pay_res.fetchone()
-        if pay_row:
-            payment_type = getattr(pay_row, 'payment_type', 'wallet_topup') or 'wallet_topup'
-            reference_id = getattr(pay_row, 'reference_id', None)
+        p = pay_row[0] if pay_row else None
+        if p:
+            payment_type = getattr(p, 'payment_type', 'wallet_topup') or 'wallet_topup'
+            reference_id = getattr(p, 'reference_id', None)
 
     async with async_session() as session:
         repo = SqlBillingRepo(session)
@@ -93,10 +94,11 @@ async def payment_callback(request: Request) -> JSONResponse:
     extra_data = {}
 
     if payment_type == 'subscription' and reference_id:
-        uid = pay_row.user_id if pay_row else 0
+        uid = p.user_id if pay_row else 0
         async with async_session() as session:
             plan_res = await session.execute(select(Plan).where(Plan.id == int(reference_id)))
-            plan = plan_res.fetchone()
+            plan_row = plan_res.fetchone()
+            plan = plan_row[0] if plan_row else None
             if plan:
                 await session.execute(
                     sqlalchemy.text(
@@ -123,7 +125,7 @@ async def payment_callback(request: Request) -> JSONResponse:
         redirect_path = '/dashboard?subscription=active'
 
     elif payment_type == 'credit_package' and reference_id:
-        uid = pay_row.user_id if pay_row else 0
+        uid = p.user_id if pay_row else 0
         async with async_session() as session:
             pkg_res = await session.execute(select(CreditPackage).where(CreditPackage.id == int(reference_id)))
             pkg = pkg_res.fetchone()

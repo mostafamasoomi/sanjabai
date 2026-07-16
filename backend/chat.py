@@ -1,11 +1,21 @@
 """
 Chat endpoints: /v1/chat/completions, /v1/chat/with-file, /v1/smart-chat.
 Includes streaming, usage tracking, web search, and smart model selection.
+
+S2 fixes:
+- Extract memory/soul injection to services/context_injection.py with limits & sanitization
+- Replace silent except: pass with logger.warning
+- Add model whitelist validation (DB + hardcoded working set)
+- Add streaming timeout & client disconnect handling
+- Fix default model for file chat (mimo disabled -> tencent-hy3)
 """
 from __future__ import annotations
 
+import asyncio
 import io
 import json
+import logging
+import traceback
 import re as _re
 import secrets
 from datetime import datetime, timezone
@@ -19,10 +29,25 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import async_session, _http, LITELLM_HOST
-from models import Quota, Assistant, Ledger, Subscription, UserMemory
-from dependencies import _get_user_id, _get_user_memories, _get_user_soul, _to_fa
+from models import Quota, Assistant, Ledger, Subscription
+from dependencies import _get_user_id, _to_fa
+from services.context_injection import get_injection_messages, inject_messages
+from services.billing import SqlBillingRepo, BillingService, InsufficientBalanceError
+from services.money import Money
+from services.memory_extractor import extract_memories, MIN_MSG_COUNT
+from middleware.compression import compress_messages, estimate_savings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _fire_memory_extraction(uid: int, messages: list[dict[str, Any]]) -> None:
+    """Schedule background auto-memory extraction if conversation has enough messages."""
+    if uid and messages and len(messages) > MIN_MSG_COUNT:
+        # Capture a copy of messages to avoid mutation issues
+        msgs_snapshot = [dict(m) for m in messages[-40:]]  # Keep last 40 max
+        asyncio.create_task(extract_memories(uid, msgs_snapshot))
 
 
 class ChatRequest(BaseModel):
@@ -35,7 +60,70 @@ class ChatRequest(BaseModel):
     assistant_id: int | None = None
 
 
+class CompareRequest(BaseModel):
+    model_a: str
+    model_b: str
+    messages: list = []
+    stream: bool = False
+
+
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB hard cap
+
+# Working model set — SINGLE SOURCE OF TRUTH (confirmed via live test 2026-07-16)
+# All 8 bynara models verified working. Removed kimi-k2 (disabled/429).
+_WORKING_SET = frozenset({
+    'tencent-hy3', 'mistral-large', 'mistral-medium-3-5',
+    'deepseek-v4-pro', 'deepseek-v4-flash-bynara', 'deepseek-v4-pro-bynara',
+    'mimo-v2.5-pro', 'mimo-v2.5-pro-ultraspeed',
+})
+WORKING_MODELS = _WORKING_SET  # alias — single source of truth
+
+# For validation we also allow provider prefixed variants e.g. bynara/tencent-hy3 ?
+# But portal sends bare ids, so check bare.
+
+
+async def _is_model_allowed(model_id: str) -> bool:
+    """Check if model is in available catalog OR hardcoded working set."""
+    if not model_id:
+        return False
+    # Strip provider prefix if present (e.g. bynara/tencent-hy3 -> tencent-hy3)
+    bare = model_id.split('/')[-1] if '/' in model_id else model_id
+    # Fast-path hardcoded
+    if bare in WORKING_MODELS or model_id in WORKING_MODELS:
+        # Still verify DB if possible, but allow anyway
+        if async_session is None:
+            return True
+        try:
+            async with async_session() as session:
+                res = await session.execute(
+                    sqlalchemy.text(
+                        "SELECT 1 FROM model_catalog WHERE (provider_model_id = :mid OR id = :mid OR provider_model_id = :bare OR id = :bare) AND availability='available' LIMIT 1"
+                    ),
+                    {'mid': model_id, 'bare': bare},
+                )
+                row = res.fetchone()
+                if row:
+                    return True
+                # If DB miss but in WORKING_MODELS, allow (cache lag)
+                return bare in WORKING_MODELS
+        except Exception as e:
+            logger.warning(f"_is_model_allowed DB check failed model={model_id}: {e}")
+            return bare in WORKING_MODELS
+    # Not in hardcoded set -> must be in DB available
+    if async_session is None:
+        return False
+    try:
+        async with async_session() as session:
+            res = await session.execute(
+                sqlalchemy.text(
+                    "SELECT 1 FROM model_catalog WHERE (provider_model_id = :mid OR id = :mid) AND availability='available' LIMIT 1"
+                ),
+                {'mid': model_id},
+            )
+            return res.fetchone() is not None
+    except Exception as e:
+        logger.warning(f"_is_model_allowed DB check failed model={model_id}: {e}")
+        return False
 
 
 # ── Shared helpers ──────────────────────────────────────────────
@@ -76,8 +164,8 @@ async def _check_quota_pre(uid: int) -> JSONResponse | None:
                     {'error': {'message': 'insufficient wallet balance | موجودی کیف پول کافی نیست', 'type': 'quota_exceeded', 'code': 'balance'}},
                     status_code=429,
                 )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"_check_quota_pre failed uid={uid}: {e}")
     return None
 
 
@@ -99,6 +187,7 @@ async def _extract_file_text(upload: UploadFile) -> tuple[str, str]:
         try:
             return data.decode('utf-8', errors='replace'), ''
         except Exception as e:
+            logger.warning(f"_extract_file_text decode error {name}: {e}")
             return '', f'read error: {e}'
     if name.endswith('.pdf'):
         try:
@@ -109,6 +198,7 @@ async def _extract_file_text(upload: UploadFile) -> tuple[str, str]:
             text = '\n'.join((p.extract_text() or '') for p in reader.pages[:100])
             return text[:200000], ''
         except Exception as e:
+            logger.warning(f"_extract_file_text pdf error {name}: {e}")
             return '', f'pdf extract error: {e}'
     return '', f'unsupported file type: {name or "unknown"}'
 
@@ -141,7 +231,8 @@ async def _web_search(query: str, max_results: int = 5) -> str:
                     actual_url = unquote(m.group(1))
             lines.append(f'• {title}\n  {snippet}\n  {actual_url}')
         return '\n'.join(lines)
-    except Exception:
+    except Exception as e:
+        logger.warning(f"_web_search failed query={query[:80]}: {e}")
         return ''
 
 
@@ -176,8 +267,8 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
             {'mid': model, 'avail': 'available'},
         )
         price_row = price_res.fetchone()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"_record_usage price lookup failed model={model} uid={uid}: {e}")
 
     if price_row:
         inp_rate = float(price_row.input_per_million or 0)
@@ -215,8 +306,8 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
             input_tokens=input_tokens,
             output_tokens=output_tokens,
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"_record_usage metering failed model={model} uid={uid}: {e}")
 
     return result
 
@@ -234,7 +325,8 @@ async def _track_usage(request: Request, payload: dict[str, Any], response_data:
             cost_info = await _record_usage(session, uid, payload, usage)
             await session.commit()
             return cost_info
-    except Exception:
+    except Exception as e:
+        logger.warning(f"_track_usage failed uid={uid} model={payload.get('model')}: {e}")
         return {}
 
 
@@ -247,7 +339,8 @@ async def _bill_stream_usage(uid: int, payload: dict[str, Any], usage: dict[str,
             cost_info = await _record_usage(session, uid, payload, usage)
             await session.commit()
             return cost_info
-    except Exception:
+    except Exception as e:
+        logger.warning(f"_bill_stream_usage failed uid={uid} model={payload.get('model')}: {e}")
         return {}
 
 
@@ -255,22 +348,23 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
     """Stream chat completion via SSE, collecting usage for billing."""
     uid = await _get_user_id(request)
 
-    if uid and not any(
-        isinstance(m, dict) and m.get('content', '').startswith('[User Memories]')
-        for m in payload.get('messages', [])
-    ):
-        memories = await _get_user_memories(uid)
-        if memories:
-            memory_block = '\n'.join(f'- {m}' for m in memories)
-            memory_msg = {'role': 'system', 'content': f'[User Memories]\n{memory_block}'}
-            messages = payload.get('messages', [])
-            insert_idx = 0
-            for i, msg in enumerate(messages):
-                if isinstance(msg, dict) and msg.get('role') == 'system':
-                    insert_idx = i + 1
-                    break
-            messages.insert(insert_idx, memory_msg)
-            payload['messages'] = messages
+    if uid:
+        try:
+            injs = await get_injection_messages(uid)
+            if injs:
+                payload['messages'] = inject_messages(payload.get('messages', []), injs)
+        except Exception as e:
+            logger.warning(f"_chat_stream injection failed uid={uid}: {e}")
+
+    # Compress old messages to reduce token usage
+    try:
+        _orig = [m.copy() for m in payload.get("messages", [])]
+        payload["messages"] = compress_messages(payload.get("messages", []), preserve_last=2)
+        _sav = estimate_savings(_orig, payload["messages"])
+        if _sav["savings_pct"] > 0:
+            logger.info(f"Headroom stream: {_sav['savings_pct']}% saved ({_sav['saved_chars']} chars)")
+    except Exception as e:
+        logger.debug(f"Compression skipped: {e}")
 
     async def event_stream():
         usage_data = None
@@ -279,8 +373,20 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
             payload.setdefault('stream_options', {})
             if isinstance(payload['stream_options'], dict):
                 payload['stream_options']['include_usage'] = True
-            async with _http.stream('POST', f"{LITELLM_HOST}/v1/chat/completions", json=payload, headers={'Accept': 'text/event-stream'}) as r:
+            import httpx
+            # Streaming timeout: 90s total, 10s connect
+            async with _http.stream(
+                'POST',
+                f"{LITELLM_HOST}/v1/chat/completions",
+                json=payload,
+                headers={'Accept': 'text/event-stream'},
+                timeout=httpx.Timeout(90, connect=10, read=90),
+            ) as r:
                 async for line in r.aiter_lines():
+                    # Disconnect handling
+                    if await request.is_disconnected():
+                        logger.info(f"_chat_stream client disconnected uid={uid} model={payload.get('model')}")
+                        break
                     if line:
                         stripped = line.strip()
                         if stripped.startswith('data:'):
@@ -295,6 +401,7 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
                                 pass
                         yield f"{line}\n\n"
         except Exception as e:
+            logger.warning(f"_chat_stream error uid={uid} model={payload.get('model')}: {e}")
             yield f'data: {json.dumps({"error": "سرویس موقتاً در دسترس نیست", "code": "gateway_error"})}\n\n'
         finally:
             if uid and usage_data and async_session is not None:
@@ -310,8 +417,11 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
                             'currency': 'IRT',
                         })
                         yield f'data: {billing_event}\n\n'
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"_chat_stream billing emit failed uid={uid}: {e}")
+            # P3: Fire background auto-memory extraction (streaming)
+            if uid:
+                _fire_memory_extraction(uid, payload.get('messages', []))
 
     return StreamingResponse(event_stream(), media_type='text/event-stream')
 
@@ -324,14 +434,60 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
 
-    payload = payload.model_dump(exclude_none=True)
+    payload_dict = payload.model_dump(exclude_none=True)
 
-    quota_err = await _check_quota_pre(uid)
-    if quota_err is not None:
-        return quota_err
+    # P1: BillingService reserve (replaces _check_quota_pre with proper FOR UPDATE locking)
+    # Fall back to legacy _check_quota_pre if BillingService fails
+    reservation = None
+    try:
+        async with async_session() as _bill_session:
+            _repo = SqlBillingRepo(_bill_session)
+            _bill_svc = BillingService(_repo)
+            _model = payload_dict.get('model', '') or 'tencent-hy3'
+            _est_cost = 1000 if _model in _WORKING_SET else 5000
+            reservation = await _bill_svc.reserve(
+                uid, Money(_est_cost),
+                idempotency_key=f"chat:{secrets.token_hex(8)}",
+                model=_model,
+            )
+            await _bill_session.commit()
+    except InsufficientBalanceError:
+        return JSONResponse(
+            {'error': {'message': 'insufficient wallet balance | موجودی کیف پول کافی نیست', 'type': 'quota_exceeded', 'code': 'balance'}},
+            status_code=429,
+        )
+    except Exception as e:
+        import traceback
+        logger.warning(f"BillingService.reserve failed uid={uid}, falling back to legacy _check_quota_pre: {e}\n{traceback.format_exc()}")
+        quota_err = await _check_quota_pre(uid)
+        if quota_err is not None:
+            return quota_err
+
+    # Default model if empty (S2: mimo disabled, use tencent-hy3)
+    if not payload_dict.get('model'):
+        payload_dict['model'] = 'tencent-hy3'
+
+    # --- Model whitelist validation ---
+    model_to_check = payload_dict.get('model', '')
+    if model_to_check and not await _is_model_allowed(model_to_check):
+        logger.info(f"chat blocked: model={model_to_check} uid={uid} not allowed")
+        # Release reservation on early return
+        if reservation:
+            try:
+                async with async_session() as _rel_session:
+                    _rel_repo = SqlBillingRepo(_rel_session)
+                    _rel_svc = BillingService(_rel_repo)
+                    await _rel_svc.release(reservation['reservation_id'])
+                    await _rel_session.commit()
+            except Exception as _rel_e:
+                logger.warning(f"BillingService.release on model reject failed uid={uid}: {_rel_e}")
+        return JSONResponse(
+            {'error': {'message': f'مدل {model_to_check} در دسترس نیست | مدل پیشفرض tencent-hy3 را انتخاب کنید', 'type': 'invalid_request', 'code': 'model_not_available'}},
+            status_code=400,
+        )
 
     # Assistant injection
-    _assistant_id = payload.pop('assistant_id', None)
+    _assistant_id = payload_dict.pop('assistant_id', None)
     if _assistant_id and async_session is not None:
         try:
             async with async_session() as _asession:
@@ -341,43 +497,25 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
                 _arow = _ares.fetchone()
                 if _arow and _arow.system_prompt:
                     _sys_msg = {'role': 'system', 'content': _arow.system_prompt}
-                    _msgs = payload.get('messages', [])
+                    _msgs = payload_dict.get('messages', [])
                     _msgs.insert(0, _sys_msg)
-                    payload['messages'] = _msgs
-                    if _arow.model_id and not payload.get('model'):
-                        payload['model'] = _arow.model_id
-        except Exception:
-            pass
+                    payload_dict['messages'] = _msgs
+                    if _arow.model_id and not payload_dict.get('model'):
+                        payload_dict['model'] = _arow.model_id
+        except Exception as e:
+            logger.warning(f"chat assistant injection failed aid={_assistant_id} uid={uid}: {e}")
 
-    # Memory injection
-    memories = await _get_user_memories(uid)
-    if memories:
-        memory_block = '\n'.join(f'- {m}' for m in memories)
-        memory_msg = {'role': 'system', 'content': f'[User Memories]\n{memory_block}'}
-        messages = payload.get('messages', [])
-        insert_idx = 0
-        for i, msg in enumerate(messages):
-            if isinstance(msg, dict) and msg.get('role') == 'system':
-                insert_idx = i + 1
-                break
-        messages.insert(insert_idx, memory_msg)
-        payload['messages'] = messages
-
-    # Soul (ai_personality) injection
-    soul = await _get_user_soul(uid)
-    if soul:
-        _msgs = payload.get('messages', [])
-        _soul_msg = {'role': 'system', 'content': f'[User Soul — این شخصیت و لحن مورد انتظار کاربر است. طبق این رفتار کن:]\n{soul}'}
-        _idx = 0
-        for _i, _m in enumerate(_msgs):
-            if isinstance(_m, dict) and _m.get('role') == 'system':
-                _idx = _i + 1
-        _msgs.insert(_idx, _soul_msg)
-        payload['messages'] = _msgs
+    # Memory + soul injection via helper (S2 fix duplication + limits + sanitization)
+    try:
+        injs = await get_injection_messages(uid)
+        if injs:
+            payload_dict['messages'] = inject_messages(payload_dict.get('messages', []), injs)
+    except Exception as e:
+        logger.warning(f"chat injection failed uid={uid}: {e}")
 
     # Web search injection
-    if payload.pop('web_search', False):
-        _msgs = payload.get('messages', [])
+    if payload_dict.pop('web_search', False):
+        _msgs = payload_dict.get('messages', [])
         _query = ''
         for _m in reversed(_msgs):
             if isinstance(_m, dict) and _m.get('role') == 'user':
@@ -386,22 +524,41 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
         if _query:
             _results = await _web_search(_query)
             if _results:
-                _search_msg = {'role': 'system', 'content': f'[Web Search Results for: {_query[:100]}]\n{_results}'}
+                _search_msg = {'role': 'system', 'content': f'[Web Search Results for: {_query[:100]}]\\n{_results}'}
                 _idx = 0
                 for _i, _m in enumerate(_msgs):
                     if isinstance(_m, dict) and _m.get('role') == 'system':
                         _idx = _i + 1
                 _msgs.insert(_idx, _search_msg)
-                payload['messages'] = _msgs
+                payload_dict['messages'] = _msgs
 
-    stream = payload.get('stream', False)
-    if stream:
-        return await _chat_stream(payload, request)
+    # Compress old messages to reduce token usage
     try:
-        r = await _http.post(f"{LITELLM_HOST}/v1/chat/completions", json=payload, headers={'Accept': 'application/json'})
+        _orig = [m.copy() for m in payload_dict.get('messages', [])]
+        payload_dict['messages'] = compress_messages(payload_dict.get('messages', []), preserve_last=2)
+        _sav = estimate_savings(_orig, payload_dict['messages'])
+        if _sav['savings_pct'] > 0:
+            logger.info(f"Headroom: {_sav['savings_pct']}%% saved ({_sav['saved_chars']} chars)")
+    except Exception as e:
+        logger.debug(f"Compression skipped: {e}")
+
+    stream = payload_dict.get('stream', False)
+    if stream:
+        # P1: Release reservation before streaming (stream billing handles actual cost in finally)
+        if reservation:
+            try:
+                async with async_session() as _rel_session:
+                    _rel_repo = SqlBillingRepo(_rel_session)
+                    _rel_svc = BillingService(_rel_repo)
+                    await _rel_svc.release(reservation['reservation_id'])
+                    await _rel_session.commit()
+            except Exception as _rel_e:
+                logger.warning(f"BillingService.release before stream failed uid={uid}: {_rel_e}")
+        return await _chat_stream(payload_dict, request)
+    try:
+        r = await _http.post(f"{LITELLM_HOST}/v1/chat/completions", json=payload_dict, headers={'Accept': 'application/json'})
         if r.status_code == 200:
-            cost_info = await _track_usage(request, payload, r.json())
-            # Inject billing info into response
+            cost_info = await _track_usage(request, payload_dict, r.json())
             resp_data = r.json()
             if cost_info and cost_info.get('cost', 0) > 0:
                 resp_data['billing'] = {
@@ -411,9 +568,32 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
                     'balance_after': cost_info.get('balance_after', 0),
                     'currency': 'IRT',
                 }
+            # P1: Release reservation after successful billing (track_usage already wrote ledger)
+            if reservation:
+                try:
+                    async with async_session() as _rel_session:
+                        _rel_repo = SqlBillingRepo(_rel_session)
+                        _rel_svc = BillingService(_rel_repo)
+                        await _rel_svc.release(reservation['reservation_id'])
+                        await _rel_session.commit()
+                except Exception as _rel_e:
+                    logger.warning(f"BillingService.release after success failed uid={uid}: {_rel_e}")
+            # P3: Fire background auto-memory extraction
+            _fire_memory_extraction(uid, payload_dict.get('messages', []))
             return Response(content=json.dumps(resp_data), status_code=200, media_type='application/json')
         return Response(content=r.content, status_code=r.status_code, media_type='application/json')
     except Exception as e:
+        logger.warning(f"chat gateway error uid={uid} model={payload_dict.get('model')}: {e}")
+        # P1: Release reservation on error
+        if reservation:
+            try:
+                async with async_session() as _rel_session:
+                    _rel_repo = SqlBillingRepo(_rel_session)
+                    _rel_svc = BillingService(_rel_repo)
+                    await _rel_svc.release(reservation['reservation_id'])
+                    await _rel_session.commit()
+            except Exception as _rel_e:
+                logger.warning(f"BillingService.release on error failed uid={uid}: {_rel_e}")
         return JSONResponse({'detail': 'سرویس موقتاً در دسترس نیست', 'code': 'gateway_error'}, status_code=502)
 
 
@@ -429,44 +609,94 @@ async def chat_with_file(
     uid = await _get_user_id(request)
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
-    quota_err = await _check_quota_pre(uid)
-    if quota_err is not None:
-        return quota_err
+
+    # P1: BillingService reserve (replaces _check_quota_pre with proper FOR UPDATE locking)
+    # Fall back to legacy _check_quota_pre if BillingService fails
+    reservation = None
+    try:
+        async with async_session() as _bill_session:
+            _repo = SqlBillingRepo(_bill_session)
+            _bill_svc = BillingService(_repo)
+            _est_cost = 1000 if (model or 'tencent-hy3') in _WORKING_SET else 5000
+            reservation = await _bill_svc.reserve(
+                uid, Money(_est_cost),
+                idempotency_key=f"file:{secrets.token_hex(8)}",
+                model=model or 'tencent-hy3',
+            )
+            await _bill_session.commit()
+    except InsufficientBalanceError:
+        return JSONResponse(
+            {'error': {'message': 'insufficient wallet balance | موجودی کیف پول کافی نیست', 'type': 'quota_exceeded', 'code': 'balance'}},
+            status_code=429,
+        )
+    except Exception as e:
+        import traceback
+        logger.warning(f"BillingService.reserve failed uid={uid}, falling back to legacy _check_quota_pre: {e}\n{traceback.format_exc()}")
+        quota_err = await _check_quota_pre(uid)
+        if quota_err is not None:
+            return quota_err
     try:
         msgs = json.loads(messages) if messages else []
-    except Exception:
+    except Exception as e:
+        logger.warning(f"chat_with_file messages parse failed uid={uid}: {e}")
         msgs = []
     if not isinstance(msgs, list):
         msgs = []
     text, err = await _extract_file_text(file)
     if err:
+        # P1: Release reservation on early return
+        if reservation:
+            try:
+                async with async_session() as _rel_session:
+                    _rel_repo = SqlBillingRepo(_rel_session)
+                    _rel_svc = BillingService(_rel_repo)
+                    await _rel_svc.release(reservation['reservation_id'])
+                    await _rel_session.commit()
+            except Exception as _rel_e:
+                logger.warning(f"BillingService.release on file error failed uid={uid}: {_rel_e}")
         return JSONResponse({'error': {'message': err, 'type': 'file_error'}}, status_code=400)
     if text.strip():
         file_block = f'[Attached file: {file.filename}]\n\n{text[:50000]}'
         msgs.append({'role': 'user', 'content': file_block})
-    selected_model = model or 'mimo-v2.5'
+    # S2 fix: mimo-v2.5 disabled, use tencent-hy3 as default
+    selected_model = model or 'tencent-hy3'
+    # Whitelist validation
+    if not await _is_model_allowed(selected_model):
+        logger.info(f"chat_with_file blocked model={selected_model} uid={uid}")
+        # P1: Release reservation on early return
+        if reservation:
+            try:
+                async with async_session() as _rel_session:
+                    _rel_repo = SqlBillingRepo(_rel_session)
+                    _rel_svc = BillingService(_rel_repo)
+                    await _rel_svc.release(reservation['reservation_id'])
+                    await _rel_session.commit()
+            except Exception as _rel_e:
+                logger.warning(f"BillingService.release on model reject failed uid={uid}: {_rel_e}")
+        return JSONResponse(
+            {'error': {'message': f'مدل {selected_model} در دسترس نیست | مدل tencent-hy3', 'type': 'invalid_request', 'code': 'model_not_available'}},
+            status_code=400,
+        )
     payload = {'model': selected_model, 'messages': msgs, 'stream': stream}
-    memories = await _get_user_memories(uid)
-    if memories:
-        memory_block = '\n'.join(f'- {m}' for m in memories)
-        memory_msg = {'role': 'system', 'content': f'[User Memories]\n{memory_block}'}
-        insert_idx = 0
-        for i, msg in enumerate(msgs):
-            if isinstance(msg, dict) and msg.get('role') == 'system':
-                insert_idx = i + 1
-                break
-        msgs.insert(insert_idx, memory_msg)
-        payload['messages'] = msgs
-    soul = await _get_user_soul(uid)
-    if soul:
-        _soul_msg = {'role': 'system', 'content': f'[User Soul — این شخصیت و لحن مورد انتظار کاربر است. طبق این رفتار کن:]\n{soul}'}
-        _si = 0
-        for _i, _m in enumerate(msgs):
-            if isinstance(_m, dict) and _m.get('role') == 'system':
-                _si = _i + 1
-        msgs.insert(_si, _soul_msg)
-        payload['messages'] = msgs
+    # Use helper for injection (S2)
+    try:
+        injs = await get_injection_messages(uid)
+        if injs:
+            payload['messages'] = inject_messages(msgs, injs)
+            msgs = payload['messages']
+    except Exception as e:
+        logger.warning(f"chat_with_file injection failed uid={uid}: {e}")
     if stream:
+        # P1: Release reservation before streaming (stream billing handles actual cost in finally)
+        if reservation:
+            try:
+                async with async_session() as _rel_session:
+                    _rel_repo = SqlBillingRepo(_rel_session)
+                    _rel_svc = BillingService(_rel_repo)
+                    await _rel_svc.release(reservation['reservation_id'])
+                    await _rel_session.commit()
+            except Exception as _rel_e:
+                logger.warning(f"BillingService.release before stream failed uid={uid}: {_rel_e}")
         return await _chat_stream(payload, request)
     try:
         r = await _http.post(
@@ -484,13 +714,212 @@ async def chat_with_file(
                     'balance_after': cost_info.get('balance_after', 0),
                     'currency': 'IRT',
                 }
+            # P1: Release reservation after successful billing (track_usage already wrote ledger)
+            if reservation:
+                try:
+                    async with async_session() as _rel_session:
+                        _rel_repo = SqlBillingRepo(_rel_session)
+                        _rel_svc = BillingService(_rel_repo)
+                        await _rel_svc.release(reservation['reservation_id'])
+                        await _rel_session.commit()
+                except Exception as _rel_e:
+                    logger.warning(f"BillingService.release after success failed uid={uid}: {_rel_e}")
+            # P3: Fire background auto-memory extraction
+            _fire_memory_extraction(uid, msgs)
             return Response(content=json.dumps(resp_data), status_code=200, media_type='application/json')
         return Response(content=r.content, status_code=r.status_code, media_type='application/json')
     except Exception as e:
+        logger.warning(f"chat_with_file gateway error uid={uid} model={selected_model}: {e}")
+        # P1: Release reservation on error
+        if reservation:
+            try:
+                async with async_session() as _rel_session:
+                    _rel_repo = SqlBillingRepo(_rel_session)
+                    _rel_svc = BillingService(_rel_repo)
+                    await _rel_svc.release(reservation['reservation_id'])
+                    await _rel_session.commit()
+            except Exception as _rel_e:
+                logger.warning(f"BillingService.release on error failed uid={uid}: {_rel_e}")
         return JSONResponse(
             {'detail': 'سرویس موقتاً در دسترس نیست', 'code': 'gateway_error'},
             status_code=502,
         )
+
+
+# ── Compare ──────────────────────────────────────────────────────
+
+async def _call_model_once(
+    model: str,
+    messages: list,
+    uid: int,
+    request: Request,
+) -> dict[str, Any]:
+    """Call a single model and return response + timing + usage + cost."""
+    import time
+    start = time.monotonic()
+    payload = {'model': model, 'messages': messages, 'stream': False}
+
+    # Memory + soul injection
+    try:
+        injs = await get_injection_messages(uid)
+        if injs:
+            payload['messages'] = inject_messages(payload.get('messages', []), injs)
+    except Exception as e:
+        logger.warning(f"_call_model_once injection failed uid={uid} model={model}: {e}")
+
+    # Compress
+    try:
+        _orig = [m.copy() for m in payload.get('messages', [])]
+        payload['messages'] = compress_messages(payload.get('messages', []), preserve_last=2)
+    except Exception as e:
+        logger.debug(f"Compression skipped in compare: {e}")
+
+    try:
+        r = await _http.post(
+            f'{LITELLM_HOST}/v1/chat/completions',
+            json=payload,
+            headers={'Accept': 'application/json'},
+        )
+        elapsed = round(time.monotonic() - start, 3)
+        if r.status_code == 200:
+            resp_data = r.json()
+            cost_info = await _track_usage(request, payload, resp_data)
+            usage = resp_data.get('usage', {})
+            content = ''
+            choices = resp_data.get('choices', [])
+            if choices:
+                content = choices[0].get('message', {}).get('content', '')
+            return {
+                'model': model,
+                'content': content,
+                'elapsed': elapsed,
+                'input_tokens': usage.get('prompt_tokens', 0) or usage.get('input_tokens', 0) or 0,
+                'output_tokens': usage.get('completion_tokens', 0) or usage.get('output_tokens', 0) or 0,
+                'cost': cost_info.get('cost', 0) if cost_info else 0,
+                'error': None,
+            }
+        else:
+            return {
+                'model': model,
+                'content': '',
+                'elapsed': elapsed,
+                'input_tokens': 0,
+                'output_tokens': 0,
+                'cost': 0,
+                'error': f'upstream error {r.status_code}',
+            }
+    except Exception as e:
+        elapsed = round(time.monotonic() - start, 3)
+        logger.warning(f"_call_model_once failed uid={uid} model={model}: {e}")
+        return {
+            'model': model,
+            'content': '',
+            'elapsed': elapsed,
+            'input_tokens': 0,
+            'output_tokens': 0,
+            'cost': 0,
+            'error': str(e),
+        }
+
+
+@router.post('/v1/compare')
+async def compare_models(request: Request, payload: CompareRequest) -> Response:
+    """Compare two models side-by-side. Non-streaming first."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+
+    model_a = payload.model_a
+    model_b = payload.model_b
+    messages = payload.messages
+
+    if not model_a or not model_b:
+        return JSONResponse(
+            {'error': {'message': 'هر دو مدل باید مشخص شوند', 'type': 'invalid_request', 'code': 'missing_models'}},
+            status_code=400,
+        )
+
+    # Validate both models
+    if not await _is_model_allowed(model_a):
+        return JSONResponse(
+            {'error': {'message': f'مدل {model_a} در دسترس نیست', 'type': 'invalid_request', 'code': 'model_not_available'}},
+            status_code=400,
+        )
+    if not await _is_model_allowed(model_b):
+        return JSONResponse(
+            {'error': {'message': f'مدل {model_b} در دسترس نیست', 'type': 'invalid_request', 'code': 'model_not_available'}},
+            status_code=400,
+        )
+
+    # P1: Reserve billing for both models (estimate worst-case)
+    reservation_a = None
+    reservation_b = None
+    try:
+        async with async_session() as _bill_session:
+            _repo = SqlBillingRepo(_bill_session)
+            _bill_svc = BillingService(_repo)
+            reservation_a = await _bill_svc.reserve(
+                uid, Money(1000),
+                idempotency_key=f"cmp:{secrets.token_hex(8)}",
+                model=model_a,
+            )
+            reservation_b = await _bill_svc.reserve(
+                uid, Money(1000),
+                idempotency_key=f"cmp:{secrets.token_hex(8)}",
+                model=model_b,
+            )
+            await _bill_session.commit()
+    except InsufficientBalanceError:
+        return JSONResponse(
+            {'error': {'message': 'insufficient wallet balance | موجودی کیف پول کافی نیست', 'type': 'quota_exceeded', 'code': 'balance'}},
+            status_code=429,
+        )
+    except Exception as e:
+        logger.warning(f"Compare BillingService.reserve failed uid={uid}: {e}")
+        quota_err = await _check_quota_pre(uid)
+        if quota_err is not None:
+            return quota_err
+
+    # Run both models in parallel
+    results = await asyncio.gather(
+        _call_model_once(model_a, messages, uid, request),
+        _call_model_once(model_b, messages, uid, request),
+    )
+
+    result_a, result_b = results
+
+    # Release reservations
+    for res in (reservation_a, reservation_b):
+        if res:
+            try:
+                async with async_session() as _rel_session:
+                    _rel_repo = SqlBillingRepo(_rel_session)
+                    _rel_svc = BillingService(_rel_repo)
+                    await _rel_svc.release(res['reservation_id'])
+                    await _rel_session.commit()
+            except Exception as _rel_e:
+                logger.warning(f"Compare BillingService.release failed uid={uid}: {_rel_e}")
+
+    # Determine winner stats
+    faster = None
+    cheaper = None
+    if not result_a.get('error') and not result_b.get('error'):
+        if result_a['elapsed'] < result_b['elapsed']:
+            faster = 'model_a'
+        elif result_b['elapsed'] < result_a['elapsed']:
+            faster = 'model_b'
+        if result_a['cost'] < result_b['cost']:
+            cheaper = 'model_a'
+        elif result_b['cost'] < result_a['cost']:
+            cheaper = 'model_b'
+
+    return JSONResponse({
+        'model_a': result_a,
+        'model_b': result_b,
+        'faster': faster,
+        'cheaper': cheaper,
+        'messages': messages,
+    })
 
 
 # ── Smart Chat ──────────────────────────────────────────────────
@@ -525,13 +954,18 @@ _Creative_KEYWORDS = _re.compile(
     _re.IGNORECASE,
 )
 
-_FREE_MODELS = [('qwen3-coder-free', 'openrouter'), ('hermes-3-405b-free', 'openrouter')]
-_CODING_MODELS = [('qwen3-coder-free', 'openrouter'), ('mimo-v2.5', 'bynara2')]
-_REASONING_MODELS = [('mimo-v2.5', 'bynara2'), ('mimo-v2.5-pro', 'bynara2')]
-_CREATIVE_MODELS = [('mimo-v2.5', 'bynara2'), ('mimo-v2.5-pro', 'bynara2')]
-_DEFAULT_MODEL = ('mimo-v2.5', 'bynara2')
-_ADVANCED_MODEL = ('mimo-v2.5-pro', 'bynara2')
-_PREMIUM_MODEL = ('gpt-5.6-luna', 'bynara2')
+# S1 verified live test 2026-07-16 (354 models, 3 working):
+#   WORKING: mistral-large, mistral-medium-3-5, tencent-hy3 (all bynara)
+#   kimi-k2.7-code-free -> 429 free daily quota (UNRELIABLE; do not route as primary)
+# S1 Fix 2026-07-16: Only WORKING models (8 total: 3 mistral, 1 tencent, 2 deepseek, 2 mimo)
+# See audit-v2/S1_MODEL_REPORT.md for live test results
+_FREE_MODELS = [('tencent-hy3', 'bynara'), ('deepseek-v4-flash-bynara', 'bynara')]
+_CODING_MODELS = [('deepseek-v4-pro', 'bynara'), ('mistral-large', 'bynara')]
+_REASONING_MODELS = [('deepseek-v4-pro', 'bynara'), ('mimo-v2.5-pro', 'bynara')]
+_CREATIVE_MODELS = [('mistral-large', 'bynara'), ('mistral-medium-3-5', 'bynara')]
+_DEFAULT_MODEL = ('tencent-hy3', 'bynara')            # cheapest, 1M ctx, reliable
+_ADVANCED_MODEL = ('deepseek-v4-pro', 'bynara')        # best reasoning
+_PREMIUM_MODEL = ('mimo-v2.5-pro', 'bynara')           # premium coding
 
 
 def _analyze_message(text: str) -> str:
@@ -564,7 +998,8 @@ async def _get_user_balance(uid: int) -> int:
             )
             row = res.fetchone()
             return int(row.balance) if row else 0
-    except Exception:
+    except Exception as e:
+        logger.warning(f"_get_user_balance failed uid={uid}: {e}")
         return 0
 
 
@@ -586,7 +1021,8 @@ async def _get_user_plan(uid: int) -> str:
             )
             sub = res.scalar_one_or_none()
             return sub.plan if sub else 'free'
-    except Exception:
+    except Exception as e:
+        logger.warning(f"_get_user_plan failed uid={uid}: {e}")
         return 'free'
 
 
@@ -618,6 +1054,16 @@ def _select_smart_model(category: str, balance: int, plan: str) -> tuple[str, st
     return _DEFAULT_MODEL
 
 
+
+def _select_smart_model_safe(category: str, balance: int, plan: str) -> tuple[str, str]:
+    model, provider = _select_smart_model(category, balance, plan)
+    if model not in _WORKING_SET:
+        return _DEFAULT_MODEL
+    return model, provider
+
+# Working model set (confirmed via live test 2026-07-16)
+# _WORKING_SET moved to top of file (near WORKING_MODELS)
+
 @router.post('/v1/smart-chat')
 async def smart_chat(request: Request, payload: ChatRequest) -> Response:
     """Smart Mode: auto-selects the cheapest model capable of handling the request."""
@@ -625,13 +1071,9 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
 
-    payload = payload.model_dump(exclude_none=True)
+    payload_dict = payload.model_dump(exclude_none=True)
 
-    quota_err = await _check_quota_pre(uid)
-    if quota_err is not None:
-        return quota_err
-
-    messages = payload.get('messages', [])
+    messages = payload_dict.get('messages', [])
     last_user_msg = ''
     for msg in reversed(messages):
         if isinstance(msg, dict) and msg.get('role') == 'user':
@@ -648,53 +1090,93 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
     balance = await _get_user_balance(uid)
     plan = await _get_user_plan(uid)
 
-    original_model = payload.get('model', '')
+    original_model = payload_dict.get('model', '')
     force_model = request.headers.get('X-Smart-Model', '').strip()
     if force_model and force_model.lower() != 'auto':
+        # Whitelist validation for forced model
+        if not await _is_model_allowed(force_model if '/' not in force_model else force_model.split('/', 1)[1]):
+            logger.info(f"smart_chat blocked forced model={force_model} uid={uid}")
+            return JSONResponse(
+                {'error': {'message': f'مدل {force_model} در دسترس نیست', 'type': 'invalid_request', 'code': 'model_not_available'}},
+                status_code=400,
+            )
         if '/' in force_model:
             selected_provider, selected_model = force_model.split('/', 1)
         else:
             selected_model = force_model
             selected_provider = 'bynara2'
     else:
-        selected_model, selected_provider = _select_smart_model(category, balance, plan)
+        selected_model, selected_provider = _select_smart_model_safe(category, balance, plan)
 
-    payload['model'] = selected_model
+    # P1: BillingService reserve (replaces _check_quota_pre with proper FOR UPDATE locking)
+    # Fall back to legacy _check_quota_pre if BillingService fails
+    reservation = None
+    try:
+        async with async_session() as _bill_session:
+            _repo = SqlBillingRepo(_bill_session)
+            _bill_svc = BillingService(_repo)
+            _est_cost = 1000 if selected_model in _WORKING_SET else 5000
+            reservation = await _bill_svc.reserve(
+                uid, Money(_est_cost),
+                idempotency_key=f"smart:{secrets.token_hex(8)}",
+                model=selected_model,
+            )
+            await _bill_session.commit()
+    except InsufficientBalanceError:
+        return JSONResponse(
+            {'error': {'message': 'insufficient wallet balance | موجودی کیف پول کافی نیست', 'type': 'quota_exceeded', 'code': 'balance'}},
+            status_code=429,
+        )
+    except Exception as e:
+        import traceback
+        logger.warning(f"BillingService.reserve failed uid={uid}, falling back to legacy _check_quota_pre: {e}\n{traceback.format_exc()}")
+        quota_err = await _check_quota_pre(uid)
+        if quota_err is not None:
+            return quota_err
 
-    memories = await _get_user_memories(uid)
-    if memories:
-        memory_block = '\n'.join(f'- {m}' for m in memories)
-        memory_msg = {'role': 'system', 'content': f'[User Memories]\n{memory_block}'}
-        insert_idx = 0
-        for i, msg in enumerate(messages):
-            if isinstance(msg, dict) and msg.get('role') == 'system':
-                insert_idx = i + 1
-                break
-        messages.insert(insert_idx, memory_msg)
-        payload['messages'] = messages
+    payload_dict['model'] = selected_model
 
-    soul = await _get_user_soul(uid)
-    if soul:
-        _soul_msg = {'role': 'system', 'content': f'[User Soul — این شخصیت و لحن مورد انتظار کاربر است. طبق این رفتار کن:]\n{soul}'}
-        _si = 0
-        for _i, _m in enumerate(messages):
-            if isinstance(_m, dict) and _m.get('role') == 'system':
-                _si = _i + 1
-        messages.insert(_si, _soul_msg)
-        payload['messages'] = messages
+    # Use helper for injection (S2 deduplication)
+    try:
+        injs = await get_injection_messages(uid)
+        if injs:
+            messages = inject_messages(messages, injs)
+            payload_dict['messages'] = messages
+    except Exception as e:
+        logger.warning(f"smart_chat injection failed uid={uid}: {e}")
 
-    stream = payload.get('stream', False)
+    # Compress old messages to reduce token usage (smart_chat)
+    try:
+        _orig = [m.copy() for m in payload_dict.get('messages', [])]
+        payload_dict['messages'] = compress_messages(payload_dict.get('messages', []), preserve_last=2)
+        _sav = estimate_savings(_orig, payload_dict['messages'])
+        if _sav['savings_pct'] > 0:
+            logger.info(f"Headroom smart: {_sav['savings_pct']}%% saved ({_sav['saved_chars']} chars)")
+    except Exception as e:
+        logger.debug(f"Compression skipped: {e}")
+
+    stream = payload_dict.get('stream', False)
     if stream:
-        return await _smart_chat_stream(payload, request, selected_model, category)
+        # P1: Release reservation before streaming (stream billing handles actual cost in finally)
+        if reservation:
+            try:
+                async with async_session() as _rel_session:
+                    _rel_repo = SqlBillingRepo(_rel_session)
+                    _rel_svc = BillingService(_rel_repo)
+                    await _rel_svc.release(reservation['reservation_id'])
+                    await _rel_session.commit()
+            except Exception as _rel_e:
+                logger.warning(f"BillingService.release before stream failed uid={uid}: {_rel_e}")
+        return await _smart_chat_stream(payload_dict, request, selected_model, category)
 
     try:
         r = await _http.post(
             f'{LITELLM_HOST}/v1/chat/completions',
-            json=payload,
+            json=payload_dict,
             headers={'Accept': 'application/json'},
         )
         if r.status_code == 200:
-            cost_info = await _track_usage(request, payload, r.json())
+            cost_info = await _track_usage(request, payload_dict, r.json())
             resp_data = r.json()
             if cost_info and cost_info.get('cost', 0) > 0:
                 resp_data['billing'] = {
@@ -704,9 +1186,21 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
                     'balance_after': cost_info.get('balance_after', 0),
                     'currency': 'IRT',
                 }
+            # P1: Release reservation after successful billing (track_usage already wrote ledger)
+            if reservation:
+                try:
+                    async with async_session() as _rel_session:
+                        _rel_repo = SqlBillingRepo(_rel_session)
+                        _rel_svc = BillingService(_rel_repo)
+                        await _rel_svc.release(reservation['reservation_id'])
+                        await _rel_session.commit()
+                except Exception as _rel_e:
+                    logger.warning(f"BillingService.release after success failed uid={uid}: {_rel_e}")
             resp = Response(content=json.dumps(resp_data), status_code=200, media_type='application/json')
         else:
             resp = Response(content=r.content, status_code=r.status_code, media_type='application/json')
+        # P3: Fire background auto-memory extraction
+        _fire_memory_extraction(uid, payload_dict.get('messages', []))
         resp.headers['X-Smart-Model'] = selected_model
         resp.headers['X-Smart-Category'] = category
         resp.headers['X-Smart-Provider'] = selected_provider
@@ -714,6 +1208,17 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
             resp.headers['X-Smart-Original-Model'] = original_model
         return resp
     except Exception as e:
+        logger.warning(f"smart_chat gateway error uid={uid} model={selected_model}: {e}")
+        # P1: Release reservation on error
+        if reservation:
+            try:
+                async with async_session() as _rel_session:
+                    _rel_repo = SqlBillingRepo(_rel_session)
+                    _rel_svc = BillingService(_rel_repo)
+                    await _rel_svc.release(reservation['reservation_id'])
+                    await _rel_session.commit()
+            except Exception as _rel_e:
+                logger.warning(f"BillingService.release on error failed uid={uid}: {_rel_e}")
         return JSONResponse(
             {'detail': 'سرویس موقتاً در دسترس نیست', 'code': 'gateway_error'},
             status_code=502,
@@ -729,38 +1234,14 @@ async def _smart_chat_stream(
     """Stream smart chat completion via SSE."""
     uid = await _get_user_id(request)
 
-    if uid and not any(
-        isinstance(m, dict) and m.get('content', '').startswith('[User Memories]')
-        for m in payload.get('messages', [])
-    ):
-        memories = await _get_user_memories(uid)
-        if memories:
-            memory_block = '\n'.join(f'- {m}' for m in memories)
-            memory_msg = {'role': 'system', 'content': f'[User Memories]\n{memory_block}'}
-            messages = payload.get('messages', [])
-            insert_idx = 0
-            for i, msg in enumerate(messages):
-                if isinstance(msg, dict) and msg.get('role') == 'system':
-                    insert_idx = i + 1
-                    break
-            messages.insert(insert_idx, memory_msg)
-            payload['messages'] = messages
-
-    # Soul injection (smart streaming)
+    # Dedup guard + helper (previously duplicated)
     if uid:
-        _soul = await _get_user_soul(uid)
-        if _soul and not any(
-            isinstance(m, dict) and '[User Soul' in m.get('content', '')
-            for m in payload.get('messages', [])
-        ):
-            _soul_msg = {'role': 'system', 'content': f'[User Soul — این شخصیت و لحن مورد انتظار کاربر است. طبق این رفتار کن:]\n{_soul}'}
-            _sm = payload.get('messages', [])
-            _si = 0
-            for _i, _m in enumerate(_sm):
-                if isinstance(_m, dict) and _m.get('role') == 'system':
-                    _si = _i + 1
-            _sm.insert(_si, _soul_msg)
-            payload['messages'] = _sm
+        try:
+            injs = await get_injection_messages(uid)
+            if injs:
+                payload['messages'] = inject_messages(payload.get('messages', []), injs)
+        except Exception as e:
+            logger.warning(f"_smart_chat_stream injection failed uid={uid}: {e}")
 
     async def event_stream():
         usage_data = None
@@ -769,14 +1250,19 @@ async def _smart_chat_stream(
             payload.setdefault('stream_options', {})
             if isinstance(payload['stream_options'], dict):
                 payload['stream_options']['include_usage'] = True
+            import httpx
             async with _http.stream(
                 'POST',
                 f'{LITELLM_HOST}/v1/chat/completions',
                 json=payload,
                 headers={'Accept': 'text/event-stream'},
+                timeout=httpx.Timeout(90, connect=10, read=90),
             ) as r:
                 yield f'data: {json.dumps({"type": "smart_info", "model": selected_model, "category": category})}\n\n'
                 async for line in r.aiter_lines():
+                    if await request.is_disconnected():
+                        logger.info(f"_smart_chat_stream disconnected uid={uid} model={selected_model}")
+                        break
                     if line:
                         stripped = line.strip()
                         if stripped.startswith('data:'):
@@ -791,6 +1277,7 @@ async def _smart_chat_stream(
                                 pass
                         yield f'{line}\n\n'
         except Exception as e:
+            logger.warning(f"_smart_chat_stream error uid={uid} model={selected_model}: {e}")
             yield f'data: {json.dumps({"error": f"upstream unavailable: {e}"})}\n\n'
         finally:
             if uid and usage_data and async_session is not None:
@@ -806,8 +1293,11 @@ async def _smart_chat_stream(
                             'currency': 'IRT',
                         })
                         yield f'data: {billing_event}\n\n'
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"_smart_chat_stream billing emit failed uid={uid}: {e}")
+            # P3: Fire background auto-memory extraction (streaming)
+            if uid:
+                _fire_memory_extraction(uid, payload.get('messages', []))
 
     response = StreamingResponse(event_stream(), media_type='text/event-stream')
     response.headers['X-Smart-Model'] = selected_model

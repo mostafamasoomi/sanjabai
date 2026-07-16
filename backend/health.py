@@ -73,6 +73,9 @@ async def health_detailed(request: Request) -> JSONResponse:
     mem = psutil.virtual_memory()
     disk = psutil.disk_usage('/')
 
+    from middleware.compression import get_compression_stats
+    compression = get_compression_stats()
+
     db_status = 'ok'
     redis_status = 'ok'
     litellm_status = 'ok'
@@ -112,4 +115,5 @@ async def health_detailed(request: Request) -> JSONResponse:
             'disk_percent': disk.percent,
             'disk_free_gb': round(disk.free / (1024**3), 1),
         },
+        'compression': compression,
     })

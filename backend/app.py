@@ -40,6 +40,7 @@ from models import (
     WalletReservation, UsageEvent, Notification, ApiKey, AuditLog, Plan,
     CreditPackage, UserBillingSetting, UserMemory, SkillTemplate,
     SkillTemplateRating, ScheduledTask, TaskExecution,
+    RagDocument, RagChunk, RagEmbeddingUsage,
 )
 
 # ── Import shared helpers (for backward compat: from app import _gen_token, etc.) ──
@@ -158,6 +159,7 @@ from payment_endpoints import router as payment_router
 from notifications import router as notifications_router
 from tasks import router as tasks_router
 from websocket import router as websocket_router
+from rag_endpoints import router as rag_router
 
 app.include_router(health_router)
 app.include_router(auth_router)
@@ -175,3 +177,4 @@ app.include_router(payment_router)
 app.include_router(notifications_router)
 app.include_router(tasks_router)
 app.include_router(websocket_router)
+app.include_router(rag_router)

@@ -1,146 +1,327 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '@/lib/auth'
-import { Spinner, Skeleton, EmptyState, toast } from '@/components/ui'
-import { Icon } from '@/components/ui/Icon'
 import { useCatalog } from '@/lib/useCatalog'
-import type { ModelCatalogItem } from '@/types/catalog'
+import { type ModelCatalogItem } from '@/types/catalog'
+import { Icon } from '@/components/ui/Icon'
+import { Skeleton, EmptyState, toast } from '@/components/ui'
+import MarkdownRenderer from '@/app/chat/components/MarkdownRenderer'
+import ModelPicker from '@/app/chat/components/ModelPicker'
 
-type CompareResult = { model: string; label: string; content: string; error?: string }
+/* ═══════════════════════════════════════════════════════════════════════════
+   Model Compare — Split view side-by-side
+   Pick two models, enter a prompt, see results + stats simultaneously.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+type CompareResult = {
+  model: string
+  content: string
+  elapsed: number
+  input_tokens: number
+  output_tokens: number
+  cost: number
+  error: string | null
+}
+
+type CompareResponse = {
+  model_a: CompareResult
+  model_b: CompareResult
+  faster: 'model_a' | 'model_b' | null
+  cheaper: 'model_a' | 'model_b' | null
+  messages: { role: string; content: string }[]
+}
+
+type Side = 'a' | 'b'
+
+function Spinner({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
+  const sz = size === 'sm' ? 16 : size === 'lg' ? 32 : 24
+  return (
+    <svg className="animate-spin" width={sz} height={sz} viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" opacity="0.25" />
+      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function formatElapsed(sec: number): string {
+  if (sec < 1) return `${(sec * 1000).toFixed(0)}ms`
+  return `${sec.toFixed(1)}s`
+}
+
+function formatCost(tomans: number): string {
+  if (tomans >= 1000) return `${(tomans / 1000).toFixed(1)}k`
+  return `${tomans}`
+}
 
 export default function ComparePage() {
   const { token } = useAuth()
-  const { models, loading, error } = useCatalog()
+  const { models, loading: catalogLoading, error: catalogError } = useCatalog()
+  const [modelA, setModelA] = useState<ModelCatalogItem | null>(null)
+  const [modelB, setModelB] = useState<ModelCatalogItem | null>(null)
   const [prompt, setPrompt] = useState('')
   const [busy, setBusy] = useState(false)
-  const [results, setResults] = useState<CompareResult[]>([])
-  const [selected, setSelected] = useState<string[]>([])
+  const [results, setResults] = useState<CompareResponse | null>(null)
+  const [error, setError] = useState('')
 
-  // Default to first 3 models once catalog loads
+  // Default to first two working models from catalog
   useEffect(() => {
-    if (models.length > 0 && selected.length === 0) {
-      setSelected(models.slice(0, 3).map((m) => m.id))
+    if (models.length > 0 && !modelA && !modelB) {
+      setModelA(models[0])
+      if (models.length > 1) setModelB(models[1])
     }
-  }, [models, selected.length])
+  }, [models, modelA, modelB])
 
   useEffect(() => {
-    if (error) toast('خطا در دریافت فهرست مدلها', 'error')
-  }, [error])
+    if (catalogError) toast('خطا در دریافت فهرست مدلها', 'error')
+  }, [catalogError])
 
-  const toggle = (id: string) => {
-    setSelected((prev) => {
-      if (prev.includes(id)) return prev.filter((x) => x !== id)
-      if (prev.length >= 4) {
-        toast('حداکثر ۴ مدل قابل مقایسه است', 'info')
-        return prev
-      }
-      return [...prev, id]
-    })
-  }
+  const canCompare = useMemo(
+    () => modelA && modelB && modelA.id !== modelB.id && prompt.trim() && !busy,
+    [modelA, modelB, prompt, busy],
+  )
 
-  const compare = async () => {
-    if (!prompt.trim() || busy) return
-    const chosen = models.filter((m) => selected.includes(m.id))
-    if (chosen.length < 2) {
-      toast('حداقل ۲ مدل انتخاب کنید', 'error')
-      return
-    }
+  const handleCompare = async () => {
+    if (!canCompare || !modelA || !modelB) return
 
     setBusy(true)
-    setResults([])
+    setResults(null)
+    setError('')
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (token) headers['Authorization'] = `Bearer ${token}`
 
-    const promises = chosen.map(async (m) => {
-      try {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            model: m.id,
-            messages: [{ role: 'user', content: prompt }],
-          }),
-        })
-        const data = await res.json()
-        return { model: m.id, label: m.displayName, content: data?.choices?.[0]?.message?.content || '[بدون پاسخ]' }
-      } catch {
-        return { model: m.id, label: m.displayName, content: '', error: 'خطا در ارتباط' }
-      }
-    })
+    try {
+      const res = await fetch('/api/v1/compare', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model_a: modelA.providerModelId || modelA.id,
+          model_b: modelB.providerModelId || modelB.id,
+          messages: [{ role: 'user', content: prompt.trim() }],
+        }),
+      })
 
-    const allResults = await Promise.all(promises)
-    setResults(allResults)
-    setBusy(false)
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        const msg = errData?.error?.message || errData?.detail || `خطای سرور: ${res.status}`
+        if (res.status === 429) throw new Error('INSUFFICIENT_BALANCE')
+        throw new Error(msg)
+      }
+
+      const data: CompareResponse = await res.json()
+      setResults(data)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'خطا در ارتباط'
+      if (msg === 'INSUFFICIENT_BALANCE') {
+        setError('موجودی کیف پول کافی نیست. لطفاً حساب خود را شارژ کنید.')
+      } else {
+        setError(msg)
+      }
+    } finally {
+      setBusy(false)
+    }
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gradient">مقایسه مدلها</h1>
-        <p className="text-sm text-[var(--text-secondary)] mt-2">یک prompt به چند مدل ارسال کنید و پاسخها را مقایسه کنید</p>
-      </div>
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault()
+      handleCompare()
+    }
+  }
 
-      {/* Model Selection */}
-      <div className="card">
-        <div className="flex items-center gap-2 mb-4">
-          <Icon name="models" size={16} className="text-[var(--accent)]" />
-          <span className="text-sm font-semibold text-[var(--text-primary)]">انتخاب مدلها</span>
-          <span className="badge badge-accent">{selected.length} انتخاب شده</span>
-        </div>
-        <div className="flex flex-wrap gap-2 mb-4">
-          {loading ? (
-            Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="w-24" height="2rem" />
-            ))
-          ) : models.length === 0 ? (
-            <span className="text-sm text-[var(--text-muted)]">مدلی برای مقایسه یافت نشد.</span>
-          ) : (
-            models.map((m) => {
-              const isSelected = selected.includes(m.id)
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => toggle(m.id)}
-                  className={`btn btn-sm transition-all ${isSelected ? 'btn-primary' : 'btn-ghost'}`}
-                  style={isSelected ? { boxShadow: '0 0 12px rgba(99, 102, 241, 0.3)' } : {}}
-                >
-                  {isSelected && <Icon name="check" size={12} />}
-                  {m.displayName}
-                </button>
-              )
-            })
+  const renderResultPanel = (side: Side, model: ModelCatalogItem | null, result: CompareResult | null) => {
+    const isFaster = results?.faster === `model_${side}`
+    const isCheaper = results?.cheaper === `model_${side}`
+
+    return (
+      <div className="compare-panel">
+        {/* Panel header */}
+        <div className="compare-panel-header">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'var(--accent-dim)' }}>
+              <Icon name="models" size={16} className="text-[var(--accent)]" />
+            </div>
+            <div className="min-w-0">
+              {model ? (
+                <>
+                  <span className="compare-model-name" dir="ltr">{model.displayName}</span>
+                  <span className="compare-model-provider" dir="ltr">{model.provider}</span>
+                </>
+              ) : (
+                <span className="text-sm text-[var(--text-muted)]">مدل انتخاب نشده</span>
+              )}
+            </div>
+          </div>
+
+          {/* Winner badges */}
+          {result && !result.error && (
+            <div className="compare-badges">
+              {isFaster && (
+                <span className="compare-badge compare-badge-fast" title="سریعتر">
+                  ⚡ سریعتر
+                </span>
+              )}
+              {isCheaper && (
+                <span className="compare-badge compare-badge-cheap" title="ارزانتر">
+                  💰 ارزانتر
+                </span>
+              )}
+            </div>
           )}
         </div>
 
+        {/* Stats bar */}
+        {result && !result.error && (
+          <div className="compare-stats">
+            <div className="compare-stat">
+              <span className="compare-stat-label">زمان</span>
+              <span className={`compare-stat-value ${isFaster ? 'compare-stat-winner' : ''}`}>
+                {formatElapsed(result.elapsed)}
+              </span>
+            </div>
+            <div className="compare-stat">
+              <span className="compare-stat-label">توکن ورودی</span>
+              <span className="compare-stat-value">{result.input_tokens.toLocaleString()}</span>
+            </div>
+            <div className="compare-stat">
+              <span className="compare-stat-label">توکن خروجی</span>
+              <span className="compare-stat-value">{result.output_tokens.toLocaleString()}</span>
+            </div>
+            <div className="compare-stat">
+              <span className="compare-stat-label">هزینه</span>
+              <span className={`compare-stat-value ${isCheaper ? 'compare-stat-winner' : ''}`}>
+                {formatCost(result.cost)} IRT
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Content area */}
+        <div className="compare-content">
+          {busy ? (
+            <div className="compare-loading">
+              <Spinner size="md" />
+              <span className="text-sm text-[var(--text-secondary)] mt-2">در حال دریافت پاسخ...</span>
+            </div>
+          ) : result?.error ? (
+            <div className="compare-error">
+              <Icon name="close" size={20} className="text-[var(--danger)]" />
+              <span className="text-sm text-[var(--danger)]">{result.error}</span>
+            </div>
+          ) : result?.content ? (
+            <div className="compare-markdown">
+              <MarkdownRenderer content={result.content} />
+            </div>
+          ) : (
+            <div className="compare-placeholder">
+              <Icon name="compare" size={24} className="text-[var(--text-muted)]" />
+              <span className="text-sm text-[var(--text-muted)]">پاسخ مدل در اینجا نمایش داده میشود</span>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="compare-page">
+      {/* Header */}
+      <div className="compare-header">
+        <div>
+          <h1 className="text-2xl font-bold text-gradient">مقایسه مدلها</h1>
+          <p className="text-sm text-[var(--text-secondary)] mt-1">
+            دو مدل را انتخاب کنید، یک prompt بنویسید و پاسخ‌ها را کنار هم مقایسه کنید
+          </p>
+        </div>
+      </div>
+
+      {/* Model pickers + prompt */}
+      <div className="card">
+        <div className="compare-controls">
+          {/* Model A picker */}
+          <div className="compare-picker-col">
+            <label className="compare-picker-label">
+              <span className="compare-picker-badge a">مدل A</span>
+            </label>
+            {catalogLoading ? (
+              <Skeleton className="w-full" height="2.5rem" />
+            ) : (
+              <ModelPicker
+                models={models.filter(m => m.id !== modelB?.id)}
+                selected={modelA}
+                onSelect={setModelA}
+                loading={false}
+                disabled={busy}
+              />
+            )}
+          </div>
+
+          {/* VS divider */}
+          <div className="compare-vs">
+            <span>VS</span>
+          </div>
+
+          {/* Model B picker */}
+          <div className="compare-picker-col">
+            <label className="compare-picker-label">
+              <span className="compare-picker-badge b">مدل B</span>
+            </label>
+            {catalogLoading ? (
+              <Skeleton className="w-full" height="2.5rem" />
+            ) : (
+              <ModelPicker
+                models={models.filter(m => m.id !== modelA?.id)}
+                selected={modelB}
+                onSelect={setModelB}
+                loading={false}
+                disabled={busy}
+              />
+            )}
+          </div>
+        </div>
+
         {/* Prompt input */}
-        <div className="flex gap-3">
+        <div className="compare-input-row">
           <textarea
             className="input flex-1"
-            rows={3}
-            placeholder="prompt خود را بنویسید..."
+            rows={2}
+            placeholder="prompt خود را بنویسید... (Ctrl+Enter برای ارسال)"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) compare()
-            }}
+            onKeyDown={handleKeyDown}
+            disabled={busy}
+            dir="auto"
           />
           <button
-            className="btn btn-primary self-end"
-            onClick={compare}
-            disabled={busy || !prompt.trim() || selected.length < 2}
+            className="btn btn-primary compare-submit-btn"
+            onClick={handleCompare}
+            disabled={!canCompare}
           >
-            {busy ? <Spinner size="sm" /> : <Icon name="compare" size={16} />}
-            {busy ? 'در حال مقایسه...' : 'مقایسه'}
+            {busy ? (
+              <>
+                <Spinner size="sm" />
+                در حال مقایسه...
+              </>
+            ) : (
+              <>
+                <Icon name="compare" size={16} />
+                مقایسه
+              </>
+            )}
           </button>
         </div>
-        <p className="text-xs text-[var(--text-muted)] mt-2">Ctrl+Enter برای ارسال</p>
+
+        {error && (
+          <div className="compare-error-banner">
+            <Icon name="close" size={16} />
+            <span>{error}</span>
+          </div>
+        )}
       </div>
 
       {/* Empty state */}
-      {!loading && !error && models.length === 0 && (
+      {!catalogLoading && !catalogError && models.length === 0 && (
         <EmptyState
           icon="compare"
           title="مدلی برای مقایسه نیست"
@@ -148,40 +329,11 @@ export default function ComparePage() {
         />
       )}
 
-      {/* Loading indicator */}
-      {busy && (
-        <div className="text-center py-8">
-          <Spinner size="lg" />
-          <p className="text-sm text-[var(--text-secondary)] mt-3">در حال دریافت پاسخ از مدلها...</p>
-        </div>
-      )}
-
-      {/* Results */}
-      {results.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {results.map((r, i) => (
-            <div
-              key={r.model}
-              className="card"
-              style={{ animationDelay: `${i * 100}ms`, animation: 'slideUp 0.3s ease both' }}
-            >
-              <div className="flex items-center gap-2 mb-3 pb-3 border-b border-[var(--border)]">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--accent-dim)' }}>
-                  <Icon name="models" size={16} className="text-[var(--accent)]" />
-                </div>
-                <span className="badge badge-accent font-semibold">{r.label}</span>
-              </div>
-              {r.error ? (
-                <p className="text-sm text-[var(--danger)]">{r.error}</p>
-              ) : (
-                <div className="text-sm leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto">
-                  {r.content}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Results — split view */}
+      <div className="compare-results">
+        {renderResultPanel('a', modelA, results?.model_a ?? null)}
+        {renderResultPanel('b', modelB, results?.model_b ?? null)}
+      </div>
     </div>
   )
 }

@@ -24,9 +24,10 @@ from models import ApiKey, AuditLog, User, UserMemory
 # ── Session / cookie configuration ──────────────────────────────
 SESSION_TTL = 86400 * 7
 SESSION_COOKIE_NAME = 'session'
+_debug_raw_secure = os.getenv('DEBUG', '').lower()
 SESSION_COOKIE_SECURE = (
     os.getenv('ENV', 'production').lower() not in ('development', 'dev')
-    and not os.getenv('DEBUG')
+    and _debug_raw_secure not in ('1', 'true', 'yes')
 )
 ADMIN_COOKIE_NAME = 'admin_session'
 ADMIN_CSRF_COOKIE_NAME = 'admin_csrf'

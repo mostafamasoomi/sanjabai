@@ -10,7 +10,7 @@ import React, {
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
-import rehypeRaw from 'rehype-raw'
+import rehypeSanitize from 'rehype-sanitize'
 import CodeBlock from './CodeBlock'
 
 type MarkdownRendererProps = {
@@ -62,7 +62,7 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
     <div className="markdown-content" dir={containerDir ?? 'auto'}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw, rehypeHighlight]}
+        rehypePlugins={[rehypeSanitize, rehypeHighlight]}
         components={{
           pre: ({ children }: { children?: ReactNode }) => {
             // Avoid double <pre> nesting — CodeBlock already renders its own <pre>

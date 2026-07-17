@@ -204,22 +204,54 @@ async def _extract_file_text(upload: UploadFile) -> tuple[str, str]:
 
 
 async def _web_search(query: str, max_results: int = 5) -> str:
-    """Search DuckDuckGo via SOCKS5 tunnel proxy. Returns formatted results."""
+    """Search DuckDuckGo HTML. Tries direct → backhaul HTTP proxy → SOCKS tunnel.
+
+    Returns formatted bullet list of results, or '' on total failure.
+    The SOCKS tunnel (multiai_tunnel) is often down, so it is tried LAST.
+    """
     import os as _os
     import httpx
-    import socksio  # noqa: F401 — httpx SOCKS transport dependency
+    from urllib.parse import unquote
+
     _socks_proxy = _os.getenv('WEB_SEARCH_PROXY', 'socks5://multiai_tunnel:9090')
+    _http_proxy = _os.getenv('HTTPS_PROXY') or _os.getenv('HTTP_PROXY') or 'http://10.10.11.2:8888'
+
+    # Order: direct first (works in most DCs), then backhaul, then socks tunnel
+    attempts: list[dict] = [
+        {'proxy': None},
+        {'proxy': _http_proxy},
+    ]
+    if _socks_proxy:
+        try:
+            import socksio  # noqa: F401
+            attempts.append({'proxy': _socks_proxy})
+        except ImportError:
+            pass
+
+    html = ''
+    for cfg in attempts:
+        try:
+            kwargs = {'timeout': 15, 'follow_redirects': True}
+            if cfg['proxy']:
+                kwargs['proxy'] = cfg['proxy']
+            async with httpx.AsyncClient(**kwargs) as _sc:
+                r = await _sc.post(
+                    'https://html.duckduckgo.com/html/',
+                    data={'q': query, 'b': ''},
+                    headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
+                )
+            if r.status_code == 200 and 'result__a' in r.text:
+                html = r.text
+                break
+        except Exception as e:
+            logger.debug(f"_web_search attempt proxy={cfg['proxy']} failed: {type(e).__name__}")
+            continue
+
+    if not html:
+        logger.warning(f"_web_search all attempts failed query={query[:80]}")
+        return ''
+
     try:
-        from urllib.parse import unquote
-        async with httpx.AsyncClient(proxy=_socks_proxy, timeout=15, follow_redirects=True) as _sc:
-            r = await _sc.post(
-                'https://html.duckduckgo.com/html/',
-                data={'q': query, 'b': ''},
-                headers={'User-Agent': 'Mozilla/5.0 (compatible; Multiai/1.0)'},
-            )
-        if r.status_code != 200:
-            return ''
-        html = r.text
         links = _re.findall(r'class="result__a"\s+href="([^"]+)"[^>]*>(.+?)</a>', html)
         snippets = _re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', html, _re.DOTALL)
         if not links:
@@ -236,7 +268,7 @@ async def _web_search(query: str, max_results: int = 5) -> str:
             lines.append(f'• {title}\n  {snippet}\n  {actual_url}')
         return '\n'.join(lines)
     except Exception as e:
-        logger.warning(f"_web_search failed query={query[:80]}: {e}")
+        logger.warning(f"_web_search parse failed query={query[:80]}: {e}")
         return ''
 
 

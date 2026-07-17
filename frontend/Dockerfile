@@ -1,7 +1,9 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --no-audit --no-fund
+# npm install with --maxsockets 1 avoids the "Exit handler never called!"
+# crash that happens intermittently inside Docker builds on this host.
+RUN npm install --no-audit --no-fund --legacy-peer-deps --maxsockets 1
 ARG NEXT_PUBLIC_API_URL=http://127.0.0.1:8081
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 COPY . .

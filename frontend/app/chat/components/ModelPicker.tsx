@@ -350,10 +350,12 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
 
                     {groupedByProvider.map(([provider, groupModels]) => (
                       <div key={provider} className="model-picker-provider-group">
-                        <div className="model-picker-provider-group-title" dir="ltr">
-                          <span className="model-provider-badge">{getProviderLabel(provider)}</span>
-                          <span className="text-muted" style={{ fontSize: '10px' }}>{groupModels.length} مدل</span>
-                        </div>
+                        {groupedByProvider.length > 1 && (
+                          <div className="model-picker-provider-group-title" dir="ltr">
+                            <span className="model-provider-badge">{getProviderLabel(provider)}</span>
+                            <span className="text-muted" style={{ fontSize: '10px' }}>{groupModels.length} مدل</span>
+                          </div>
+                        )}
                         <div className="model-picker-cards">
                           {groupModels.map(m => {
                             const flatIdx = flatList.findIndex(x => x.id === m.id)

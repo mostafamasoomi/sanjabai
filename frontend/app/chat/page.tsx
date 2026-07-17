@@ -979,7 +979,6 @@ export default function ChatPage() {
                 </div>
               )}
 
-              {model && <span className="badge badge-accent text-[10px]" dir="ltr">{model.provider}</span>}
               {streaming && (
                 <button onClick={cancel} className="btn btn-ghost btn-sm text-[var(--danger)]">
                   <Icon name="close" size={14} />

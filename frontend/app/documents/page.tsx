@@ -148,6 +148,23 @@ export default function DocumentsPage() {
     'سند نقشه راه محصول ۱۴۰۵',
   ]
 
+  // Auth gate — documents require login
+  if (!token) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }} dir="rtl">
+        <div className="card" style={{ textAlign: 'center', padding: '48px 32px', maxWidth: 400 }}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>سندساز</h2>
+          <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>
+            برای ساخت پاورپوینت، ورد یا اسلاید با هوش مصنوعی، ابتدا وارد حساب خود شوید.
+          </p>
+          <a href="/login" className="btn btn-lg btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            ورود / ثبتنام
+          </a>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="page-container" dir="rtl">
       <div className="content-wrapper">

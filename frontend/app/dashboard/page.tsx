@@ -21,9 +21,9 @@ type UserProfile = {
 }
 
 type Usage = {
-  total_spend: number
+  total_spent_this_month: number
   turns: number
-  total_tokens: number
+  total_input_tokens_this_month: number
 }
 
 type LedgerEntry = {
@@ -521,19 +521,19 @@ export default function DashboardPage() {
         <StatCard
           icon="payment"
           label="کل هزینه"
-          value={`${faNum(usage?.total_spend ?? 0)}`}
+          value={`${faNum(usage?.total_spent_this_month ?? 0)}`}
           sub="تومان"
         />
         <StatCard
           icon="chat"
           label="تعداد مکالمات"
-          value={faNum(usage?.turns ?? 0)}
+          value={faNum(usage?.event_count_this_month ?? 0)}
           sub="مکالمه"
         />
         <StatCard
           icon="code"
           label="کل توکنها"
-          value={faNum(usage?.total_tokens ?? 0)}
+          value={faNum(usage?.total_input_tokens_this_month ?? 0)}
           sub="توکن"
         />
 

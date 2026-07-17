@@ -30,9 +30,9 @@ const STEPS = [
 ]
 
 const STATS = [
-  { value: '+۵۰', label: 'مدل هوش مصنوعی' },
-  { value: '+۱۰K', label: 'کاربر فعال' },
-  { value: '۹۹.۹٪', label: 'آپتایم' },
+  { value: '۸ مدل', label: 'در دسترس هم‌اکنون' },
+  { value: 'شفاف', label: 'قیمت‌گذاری ریالی' },
+  { value: 'بدون VPN', label: 'دسترسی مستقیم' },
   { value: '< ۲ دقیقه', label: 'شروع استفاده' },
 ]
 

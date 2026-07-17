@@ -1,6 +1,9 @@
 services:
   multiai_pg:
-    image: postgres:16-alpine
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.pg
+    image: multiai-multiai_pg:latest
     restart: unless-stopped
     mem_limit: 1g
     environment:

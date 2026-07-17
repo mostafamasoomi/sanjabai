@@ -49,15 +49,29 @@ class AdminUserEdit(BaseModel):
 
 @router.get('/admin/pricing')
 async def list_pricing(request: Request) -> JSONResponse:
+    """List live model prices. Source of truth = model_catalog (used by chat billing)."""
     if not await admin_required(request):
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
-        res = await session.execute(
-            Pricing.__table__.select().order_by(Pricing.model, Pricing.price_version.desc())
-        )
-        rows = [dict(r._mapping) for r in res.fetchall()]
+        res = await session.execute(sqlalchemy.text(
+            "SELECT id AS model, display_name, input_per_million, output_per_million, currency, "
+            "usd_input_per_million, usd_output_per_million, availability "
+            "FROM model_catalog ORDER BY display_name"
+        ))
+        rows = []
+        for r in res.fetchall():
+            rows.append({
+                'model': r.model,
+                'display_name': r.display_name,
+                'input_per_million': int(r.input_per_million or 0),
+                'output_per_million': int(r.output_per_million or 0),
+                'currency': r.currency,
+                'usd_input_per_million': r.usd_input_per_million,
+                'usd_output_per_million': r.usd_output_per_million,
+                'availability': r.availability,
+            })
     return JSONResponse(jsonable_encoder(rows))
 
 
@@ -74,7 +88,7 @@ async def get_active_price(session, model_id: str) -> "Pricing | None":
 
 @router.post('/admin/pricing')
 async def set_pricing(request: Request, payload: dict[str, Any]) -> JSONResponse:
-    """Insert a NEW versioned price row."""
+    """Update live prices on model_catalog (the table chat billing actually reads)."""
     if not await admin_required(request):
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
@@ -88,26 +102,19 @@ async def set_pricing(request: Request, payload: dict[str, Any]) -> JSONResponse
     except (TypeError, ValueError):
         return JSONResponse({'detail': 'قیمتها باید عدد صحیح باشند'}, status_code=400)
     currency = payload.get('currency', 'IRT')
-    provider = payload.get('provider', 'unknown')
-    source = payload.get('source')
     async with async_session() as session:
-        cur = await session.execute(
-            select(func.coalesce(func.max(Pricing.price_version), 0)).where(Pricing.model == model)
-        )
-        next_version = (cur.scalar_one() or 0) + 1
-        row = Pricing(
-            model=model, provider=provider,
-            input_per_million=input_pm, output_per_million=output_pm,
-            currency=currency, source=source,
-            price_version=next_version,
-            effective_from=datetime.now(timezone.utc).replace(tzinfo=None),
-            effective_to=None,
-        )
-        session.add(row)
+        res = await session.execute(sqlalchemy.text(
+            "UPDATE model_catalog SET input_per_million=:inp, output_per_million=:out, "
+            "currency=:cur, updated_at=now() WHERE id=:m"
+        ), {'inp': input_pm, 'out': output_pm, 'cur': currency, 'm': model})
+        if res.rowcount == 0:
+            return JSONResponse({'detail': 'مدل در کاتالوگ یافت نشد'}, status_code=404)
         await session.commit()
-    await _write_audit_log('admin.pricing.set', target_type='pricing', target_id=model, details={'price_version': next_version})
-    await rds.delete('cache:catalog:models', 'cache:catalog:pricing')
-    return JSONResponse({'status': 'inserted', 'model': model, 'price_version': next_version})
+    await _write_audit_log('admin.pricing.set', target_type='model_catalog', target_id=model,
+                           details={'input_per_million': input_pm, 'output_per_million': output_pm})
+    if rds:
+        await rds.delete('cache:catalog:models', 'cache:catalog:pricing', 'cache:api:pricing')
+    return JSONResponse({'status': 'updated', 'model': model})
 
 
 # ── Features ────────────────────────────────────────────────────

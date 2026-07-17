@@ -108,7 +108,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 # App creation
 # ═══════════════════════════════════════════════════════════════════
 
-_is_production = os.getenv('ENV', 'production').lower() not in ('development', 'dev') and not os.getenv('DEBUG')
+_debug_raw = os.getenv('DEBUG', '').lower()
+_is_production = os.getenv('ENV', 'production').lower() not in ('development', 'dev') and _debug_raw not in ('1', 'true', 'yes')
 app = FastAPI(
     title='Persian AI Gateway',
     version='0.1.0',

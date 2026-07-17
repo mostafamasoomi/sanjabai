@@ -91,22 +91,41 @@ Generate structured content for a {doc_type.upper()} document based on the user'
 
 IMPORTANT: Return ONLY valid JSON. No markdown code blocks, no explanations. Just the raw JSON.'''
 
-    max_tokens = 4096
-
-    r = await _http.post(
-        f'{LITELLM_HOST}/v1/chat/completions',
-        json={
-            'model': model,
-            'messages': [
-                {'role': 'system', 'content': system_msg},
-                {'role': 'user', 'content': prompt},
-            ],
-            'stream': False,
-            'max_tokens': max_tokens,
-        },
-        headers={'Accept': 'application/json'},
-    )
-    r.raise_for_status()
+    # DOCX/PPTX content is long — use a dedicated longer timeout + one retry
+    max_tokens = 4096 if doc_type != 'docx' else 3072
+    timeout = httpx.Timeout(120.0, connect=15.0)
+    payload = {
+        'model': model,
+        'messages': [
+            {'role': 'system', 'content': system_msg},
+            {'role': 'user', 'content': prompt},
+        ],
+        'stream': False,
+        'max_tokens': max_tokens,
+    }
+    last_err: Exception | None = None
+    r = None
+    for attempt in range(2):
+        try:
+            r = await _http.post(
+                f'{LITELLM_HOST}/v1/chat/completions',
+                json=payload,
+                headers={'Accept': 'application/json'},
+                timeout=timeout,
+            )
+            r.raise_for_status()
+            break
+        except (httpx.TimeoutException, httpx.HTTPStatusError, httpx.TransportError) as e:
+            last_err = e
+            logger.warning('docgen AI attempt %s failed: %s', attempt + 1, e)
+            if attempt == 0:
+                # fallback model for second try if primary is slow/unavailable
+                if payload['model'] != 'mimo-v2.5-pro':
+                    payload['model'] = 'mimo-v2.5-pro'
+                continue
+            raise
+    if r is None:
+        raise last_err or RuntimeError('document content generation failed')
     content = r.json()['choices'][0]['message']['content']
 
     # Try to parse JSON from response — handle markdown code blocks

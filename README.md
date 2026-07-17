@@ -50,10 +50,10 @@ Multiai یک **پلتفرم جامع هوش مصنوعی** است که به کا
 | MiMo V2.5 Pro | Bynara (Xiaomi) | 1M tokens | Chat, Reasoning |
 | MiMo V2.5 Pro Ultraspeed | Bynara (Xiaomi) | 1M tokens | Chat, Reasoning |
 | DeepSeek V4 Pro | Bynara | 131K tokens | Chat, Reasoning |
-| DeepSeek V4 Flash | Bynara | 131K tokens | Chat |
+| DeepSeek V4 Flash Bynara | Bynara | 131K tokens | Chat |
 | DeepSeek V4 Pro Bynara | Bynara | 131K tokens | Chat, Reasoning |
 | Mistral Large | Bynara | 252K tokens | Chat, Function Calling |
-| Mistral Medium 3.5 | Bynara | 256K tokens | Chat, Reasoning, FC |
+| Mistral Medium 3.5 (`mistral-medium-3-5`) | Bynara | 256K tokens | Chat, Reasoning, FC |
 
 ### 💬 چت و مکالمه
 - **Streaming پاسخ** — پاسخ لحظه‌ای با SSE
@@ -70,21 +70,48 @@ Multiai یک **پلتفرم جامع هوش مصنوعی** است که به کا
 - **Tasks** — تسکهای زمانبندیشده
 
 ### 📄 تولید سند و ارائه (Document Generator)
-با یک پرامپت ساده، Multiai بهصورت خودکار **اسلاید، گزارش و ارائه** حرفهای میسازد — بدون نیاز به قالب یا طراحی دستی:
-- **PowerPoint (`.pptx`)** — ارائه ۱۶:۹ با اسلاید عنوان، بدنه (bulletها + نوار رنگی)، یادداشت سخنران و اسلاید پایانی. ۶–۱۰ اسلاید، با `python-pptx`.
-- **Word (`.docx`)** — سند ساختاریافته با سرفصل/زیربخش، قالب Arial و فوتر برند. ۴–۸ بخش، با `python-docx`.
-- **Markdown Deck (`.md` / Marp / reveal.js)** — دک اسلاید مارکدون سازگار با Marp و reveal.js برای تبدیل سریع به HTML/PDF.
-- مدل پیشفرض تولید محتوا: `mimo-v2.5-pro` (قابل تغییر در درخواست، لیست مدلهای مجاز محدود شده).
-- خروجیها در `/tmp/multiai_docs` ذخیره شده و از طریق endpoint دانلود میشوند.
-- **دسترسی درونبرنامه‌ای:** از منوی **«سندساز»** در مسیر `/documents` بدون نیاز به کد.
+با یک پرامپت ساده، Multiai به‌صورت خودکار **اسلاید، گزارش و ارائه** حرفه‌ای می‌سازد — بدون نیاز به قالب یا طراحی دستی:
+
+| خروجی | پسوند | کتابخانه | کاربرد |
+|-------|-------|----------|--------|
+| PowerPoint | `.pptx` | `python-pptx` | ارائه ۱۶:۹ (عنوان، bullet، speaker notes، اسلاید پایانی) |
+| Word | `.docx` | `python-docx` | سند ساختاریافته با سرفصل/زیربخش و فوتر برند |
+| Markdown Deck | `.md` | built-in | سازگار با Marp / reveal.js برای HTML/PDF |
+
+- **بله — Multiai می‌تواند پاورپوینت، ورد و اسلاید بسازد** (API + UI «سندساز»).
+- مدل پیش‌فرض تولید محتوا: `mimo-v2.5-pro` (allow-list مدل‌های Bynara).
+- فایل‌ها روی volume `multiai_docs` (`/tmp/multiai_docs`)؛ metadata رجیستری فعلاً in-memory (تا restart API).
+- UI: مسیر `/documents` در منوی «سندساز».
+- Auth الزامی است (Bearer/session).
 
 ```bash
+# نیاز به توکن لاگین دارد
+TOKEN=$(curl -s -X POST http://localhost:8081/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"you@example.com","password":"..."}' | jq -r .token)
+
 curl -X POST http://localhost:8081/v1/documents/generate \
-  -H "Content-Type: application/json" \
-  -d '{"prompt":"یک ارائه درباره مزایای هوش مصنوعی در کشاورزی بنویس","type":"pptx"}'
-# پاسخ: { "id": "...", "download_url": "/v1/documents/<id>/download", "slides_count": 8, ... }
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"prompt":"یک ارائه درباره مزایای هوش مصنوعی در کشاورزی","type":"pptx"}'
+# → { "id":"...", "download_url":"/v1/documents/<id>/download", "slides_count":8, ... }
 ```
-> ⚠️ نکته: رجیستری اسناد درونحافظهای است (تا ریاستارت کانتینر باقی میماند). خروجیهای فایل اما روی یک **named volume** (`multiai_docs`) ذخیره میشوند و با ریاستارت از دست نمیروند. برای ذخیرهسازی پایدارتر (چند نمونه/کاربر) باید به PostgreSQL/Object Storage مهاجرت کند — نگاه کنید به [بخش Roadmap](#-نقشهراه-roadmap).
+
+> ⚠️ رجیستری اسناد درون‌حافظه‌ای است؛ برای multi-worker/production پایدار → PostgreSQL + Object Storage (نگاه به Roadmap).
+
+### 📚 RAG (بازیابی دانش)
+- آپلود سند و chunk/embedding روی PostgreSQL + pgvector
+- Query معنایی روی اسناد کاربر
+- Endpoints: `POST /v1/rag/upload` · `POST /v1/rag/query` · `GET/DELETE /v1/rag/documents`
+
+### 💱 نرخ دلار لحظه‌ای (tgju)
+- `GET /api/exchange-rate` و `GET /exchange-rate` (سازگار با rewrite فرانت `/api/*`)
+- منبع اصلی: **tgju.org** (دلار آزاد) با cache Redis و fallback
+- تیکر «دلار آزاد» در صفحه اصلی پنل
+
+### 🌐 Proxy / Egress پروایدرها
+- ترافیک مدل‌های Bynara از **backhaul HTTP proxy** (`HTTP(S)_PROXY` → `10.10.11.2:8888`) عبور می‌کند
+- `NO_PROXY` سرویس‌های داخلی Docker را مستقیم نگه می‌دارد
+- تونل SOCKS (`multiai_tunnel:9090`) برای web-search/آینده؛ اگر SSH jump down باشد، LiteLLM روی backhaul می‌ماند
 
 ### 💰 سیستم Billing
 - **Wallet** — کیف پول با شارژ ریالی
@@ -93,6 +120,7 @@ curl -X POST http://localhost:8081/v1/documents/generate \
 - **Credit Packages** — بسته‌های اعتباری
 - **Subscriptions** — اشتراک ماهانه
 - **Zarinpal Gateway** — درگاه پرداخت ایرانی
+- **Usage** — `GET /me/usage` (فرانت: `/api/me/usage`)
 
 ### 🔐 امنیت
 - **Session Management** — Redis-backed با TTL و rotation
@@ -101,6 +129,7 @@ curl -X POST http://localhost:8081/v1/documents/generate \
 - **API Keys** — کلیدهای API با SHA256 + pepper hashing
 - **Security Headers** — HSTS, CSP, X-Frame-Options, Permissions-Policy
 - **Input Validation** — محافظت در برابر XSS, SQL Injection, CSRF
+- **OpenAPI** — `/docs` و `/openapi.json` در production مخفی (404)
 
 ### 📊 مدیریت و نظارت
 - **Admin Dashboard** — آمار کاربران، درآمد، مصرف
@@ -114,10 +143,11 @@ curl -X POST http://localhost:8081/v1/documents/generate \
 | لایه | تکنولوژی |
 |------|----------|
 | **Frontend** | Next.js 15, React 18, TypeScript, Tailwind CSS |
-| **Backend** | FastAPI, Uvicorn, Python 3.10+ |
-| **Database** | PostgreSQL 16, SQLAlchemy (async) |
-| **Cache** | Redis 7 (sessions, rate limits, locks) |
-| **AI Gateway** | Bynara API (via self-hosted LiteLLM proxy) |
+| **Backend** | FastAPI, Uvicorn, Python 3.11 |
+| **Database** | PostgreSQL 16, SQLAlchemy (async), pgvector |
+| **Cache** | Redis 7 (sessions, rate limits, locks, FX cache) |
+| **AI Gateway** | Bynara via self-hosted LiteLLM + HTTP backhaul proxy |
+| **Docs** | python-pptx, python-docx |
 | **Container** | Docker Compose |
 | **Auth** | PBKDF2-SHA256, Session tokens, CSRF |
 
@@ -231,18 +261,20 @@ multiai/
 ### Public Endpoints (No Auth)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/v1/models` | لیست مدل‌های فعال |
-| GET | `/catalog/models` | کاتالوگ مدل‌ها |
-| GET | `/catalog/pricing` | قیمت‌گذاری |
-| GET | `/plans` | پلن‌های اشتراک |
-| GET | `/credit-packages` | بسته‌های اعتباری |
+| GET | `/v1/models` | لیست مدلهای فعال |
+| GET | `/catalog/models` | کاتالوگ مدلها |
+| GET | `/catalog/pricing` | قیمتگذاری |
+| GET | `/plans` | پلنهای اشتراک |
+| GET | `/credit-packages` | بستههای اعتباری |
 | GET | `/about` | درباره ما |
 | GET | `/health` | وضعیت سرویس |
+| GET | `/exchange-rate` | نرخ دلار (سازگار با rewrite فرانت) |
+| GET | `/api/exchange-rate` | نرخ دلار (مسیر مستقیم) |
 
 ### Auth Endpoints
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/auth/signup` | ثبت‌نام |
+| POST | `/auth/signup` | ثبتنام |
 | POST | `/auth/login` | ورود |
 | POST | `/auth/logout` | خروج |
 | POST | `/auth/forgot-password` | بازیابی رمز |
@@ -255,7 +287,7 @@ multiai/
 | POST | `/v1/chat/completions` | چت با مدل (streaming) |
 | POST | `/v1/smart-chat` | چت هوشمند |
 | POST | `/v1/chat/with-file` | چت با فایل |
-| POST | `/v1/compare` | مقایسه مدل‌ها |
+| POST | `/v1/compare` | مقایسه مدلها |
 
 ### Wallet & Billing (Auth Required)
 | Method | Endpoint | Description |
@@ -265,6 +297,7 @@ multiai/
 | GET | `/subscription` | وضعیت اشتراک |
 | POST | `/subscribe` | خرید اشتراک |
 | GET | `/payment/history` | تاریخچه پرداخت |
+| GET | `/me/usage` | مصرف و هزینه (فرانت: `/api/me/usage`) |
 
 ### Document Generator (Auth Required)
 | Method | Endpoint | Description |
@@ -273,6 +306,15 @@ multiai/
 | GET | `/v1/documents` | لیست اسناد تولیدشده کاربر |
 | GET | `/v1/documents/{id}/download` | دانلود سند |
 | DELETE | `/v1/documents/{id}` | حذف سند |
+
+### RAG (Auth Required)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/rag/upload` | آپلود سند برای ایندکس |
+| POST | `/v1/rag/query` | پرسش معنایی (`question`) |
+| GET | `/v1/rag/documents` | لیست اسناد RAG |
+| DELETE | `/v1/rag/documents/{id}` | حذف سند |
+| GET | `/v1/rag/documents/{id}/status` | وضعیت ایندکس |
 
 > 📖 مستندات کامل API: `http://localhost:8081/docs` (فقط در حالت DEBUG)
 
@@ -292,26 +334,31 @@ multiai/
 
 ## 🗺️ نقشهراه (Roadmap)
 
-- [x] **AI Agent Platform** — چت، حافظه، دستیار، مارکتپلیس مدل
+- [x] **AI Agent Platform** — چت، حافظه، دستیار، مارکت‌پلیس مدل
 - [x] **Document Generator** — تولید خودکار PPTX / DOCX / MDX
-- [ ] **Persistent Document Storage** — انتقال رجیستری درونحافظه به PostgreSQL + Object Storage (MinIO/S3)
-- [ ] **Templates** — قالبهای آماده ارائه (کسبوکار، آموزشی، فروش)
-- [ ] **Image/Chart Embedding** — تزریق نمودار و تصویر تولیدشده در اسلایدها
+- [x] **RAG Core** — upload/query/pgvector
+- [x] **Live FX (tgju)** — نرخ دلار آزاد + تیکر هوم
+- [x] **Provider backhaul proxy** — egress مدل‌ها از پروکسی
+- [ ] **Persistent Document Storage** — انتقال رجیستری درون‌حافظه به PostgreSQL + Object Storage (MinIO/S3)
+- [ ] **DocGen Billing** — reserve/settle روی wallet (فعلاً MVP بدون کسر جداگانه)
+- [ ] **Templates** — قالب‌های آماده ارائه (کسب‌وکار، آموزشی، فروش)
+- [ ] **Image/Chart Embedding** — تزریق نمودار و تصویر در اسلایدها
 - [ ] **Multi-language Docs** — تولید سند فارسی/انگلیسی با RTL صحیح در DOCX
-- [ ] **Batch & Scheduled Generation** — تولید زمانبندیشده گزارشهای دورهای
-- [ ] **Usage Metering** — احتساب هزینه تولید سند روی wallet (در حال حاضر رایگان در MVP)
+- [ ] **Batch & Scheduled Generation** — تولید زمان‌بندی‌شده گزارش‌های دوره‌ای
+- [ ] **Usage Metering for Docs** — احتساب هزینه تولید سند روی wallet
 
 ## 📊 آمار فنی
 
 | متریک | مقدار |
 |-------|-------|
-| API Endpoints | 136 |
+| API Endpoints | 136+ |
 | Frontend Pages | 26 |
-| Database Tables | 31 |
+| Database Tables | 31+ |
 | SQLAlchemy Models | 30 |
-| AI Models | 8 |
-| Security Score | 9.7/10 |
-| MVP Readiness | ✅ Ready |
+| AI Models (available) | 8 Bynara |
+| Document formats | PPTX · DOCX · MD |
+| Security baseline | `/docs` hidden, authz on wallet/usage/rag/docs |
+| MVP Readiness | ✅ Ready (verified restart + E2E) |
 
 ## 🤝 مشارکت
 

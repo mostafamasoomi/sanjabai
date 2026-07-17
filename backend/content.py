@@ -235,9 +235,15 @@ async def catalog_pricing(request: Request) -> JSONResponse:
     return JSONResponse(result)
 
 
+@router.get('/exchange-rate')
 @router.get('/api/exchange-rate')
 async def api_exchange_rate() -> JSONResponse:
-    """Return the current USD→IRT exchange rate with markup."""
+    """Return the current USD→IRT exchange rate with markup.
+
+    Dual paths:
+    - `/exchange-rate` — used by Next.js rewrite (`/api/exchange-rate` → backend `/exchange-rate`)
+    - `/api/exchange-rate` — direct backend / external clients
+    """
     cached = await rds.get('exchange_rate:usd_irt')
     if cached:
         return JSONResponse(json.loads(cached))
@@ -320,9 +326,13 @@ async def _get_exchange_rate() -> tuple[float, int]:
     return float(data.get('usd_to_irt', 126_488)), int(data.get('markup_pct', 20))
 
 
+@router.get('/pricing-table')
 @router.get('/api/pricing')
 async def api_pricing(request: Request) -> JSONResponse:
-    """Return all active model pricing in Toman."""
+    """Return all active model pricing in Toman.
+
+    Dual paths for Next rewrite compatibility (`/api/pricing` → `/pricing-table`).
+    """
     cached = await rds.get('cache:api:pricing')
     if cached:
         return JSONResponse(json.loads(cached))

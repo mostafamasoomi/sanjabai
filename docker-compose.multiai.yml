@@ -16,11 +16,27 @@ services:
       multiai_redis:
         condition: service_started
     environment:
+      ADMIN_PASS: ${ADMIN_PASS:?ADMIN_PASS must be set in .env}
+      ADMIN_TOKEN: ${ADMIN_TOKEN}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      DATABASE_URL: postgresql+asyncpg://multiai:${POSTGRES_PASSWORD:-multiai}@multiai_pg:5432/${POSTGRES_DB:-multiai}
       HTTPS_PROXY: http://10.10.11.2:8888
       HTTP_PROXY: http://10.10.11.2:8888
+      LITELLM_HOST: http://multiai_litellm:4000
       NO_PROXY: localhost,127.0.0.1,multiai_pg,multiai_redis,multiai_litellm,multiai_frontend
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY must be set in
+        .env}
+      REDIS_URL: redis://multiai_redis:6379/0
+      WEB_SEARCH_PROXY: ${WEB_SEARCH_PROXY:-socks5://multiai_tunnel:9090}
     mem_limit: 512m
+    networks:
+    - multiai_net
+    ports:
+    - 0.0.0.0:8081:8000
     restart: unless-stopped
+    volumes:
+    - ./.env:/app/.env:ro
+    - multiai_docs:/tmp/multiai_docs
   multiai_bot:
     build:
       context: ./bot
@@ -31,6 +47,7 @@ services:
       API_URL: http://multiai_api:8000
       HTTPS_PROXY: ${PROVIDER_HTTPS_PROXY:-http://10.10.11.2:8888}
       HTTP_PROXY: ${PROVIDER_HTTP_PROXY:-http://10.10.11.2:8888}
+      NO_PROXY: localhost,127.0.0.1,multiai_api,multiai_tunnel
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
     mem_limit: 256m
     networks:
@@ -46,8 +63,6 @@ services:
     - multiai_api
     environment:
       HOSTNAME: 0.0.0.0
-      HTTPS_PROXY: ${PROVIDER_HTTPS_PROXY:-http://10.10.11.2:8888}
-      HTTP_PROXY: ${PROVIDER_HTTP_PROXY:-http://10.10.11.2:8888}
       NEXT_PUBLIC_API_URL: http://multiai_api:8000
     mem_limit: 512m
     networks:
@@ -66,10 +81,29 @@ services:
     - '4000'
     - --host
     - 0.0.0.0
-    depends_on:
-    - multiai_pg
-    - multiai_redis
+    depends_on: {}
+    environment:
+      BYNARA_API_KEY: ${BYNARA_API_KEY:?BYNARA_API_KEY must be set in .env}
+      BYNARA_API_KEY_2: ${BYNARA_API_KEY_2:?BYNARA_API_KEY_2 must be set in .env}
+      HTTPS_PROXY: ${PROVIDER_HTTPS_PROXY:-http://10.10.11.2:8888}
+      HTTP_PROXY: ${PROVIDER_HTTP_PROXY:-http://10.10.11.2:8888}
+      NO_PROXY: localhost,127.0.0.1,multiai_pg,multiai_redis,multiai_api,multiai_frontend,multiai_litellm,multiai_tunnel
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY must be set in
+        .env}
+    healthcheck:
+      interval: 20s
+      retries: 5
+      start_period: 30s
+      test:
+      - CMD
+      - /app/.venv/bin/python
+      - -c
+      - import urllib.request; urllib.request.urlopen("http://localhost:4000/health/liveliness",
+        timeout=10)
+      timeout: 15s
     mem_limit: 2g
+    networks:
+    - multiai_net
     restart: unless-stopped
     volumes:
     - ./backend/litellm_config.yaml:/app/config.yaml:ro

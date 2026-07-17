@@ -26,7 +26,7 @@ Multiai یک **پلتفرم جامع هوش مصنوعی** است که به کا
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    🖥️  Frontend (Next.js 15)                    │
-│   RTL Persian UI • Dark/Light Mode • Responsive • 28 Pages     │
+│   RTL Persian UI • Dark/Light Mode • Responsive • 26 Pages     │
 ├─────────────────────────────────────────────────────────────────┤
 │                    ⚡ API Gateway (FastAPI)                      │
 │   136 Endpoints • Rate Limiting • Auth • Billing • Streaming   │
@@ -35,7 +35,7 @@ Multiai یک **پلتفرم جامع هوش مصنوعی** است که به کا
 │   8 Models • Streaming • Smart Routing • Web Search            │
 ├─────────────────────────────────────────────────────────────────┤
 │              🐘 PostgreSQL  │  🔴 Redis  │  💰 Billing          │
-│              37 Tables      │  Sessions  │  Wallet/Reserve      │
+│              31 Tables      │  Sessions  │  Wallet/Reserve      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -65,9 +65,26 @@ Multiai یک **پلتفرم جامع هوش مصنوعی** است که به کا
 
 ### 🧠 حافظه و دستیار
 - **User Memory** — حافظه بلندمدت (ذخیره خودکار + دستی)
-- **Assistants** — دستیارهای شخصی‌سازی‌شده با system prompt
-- **Skills** — قالب‌های آماده پرامپت
-- **Tasks** — تسک‌های زمان‌بندی‌شده
+- **Assistants** — دستیارهای شخصیسازیشده با system prompt
+- **Skills** — قالبهای آماده پرامپت
+- **Tasks** — تسکهای زمانبندیشده
+
+### 📄 تولید سند و ارائه (Document Generator)
+با یک پرامپت ساده، Multiai بهصورت خودکار **اسلاید، گزارش و ارائه** حرفهای میسازد — بدون نیاز به قالب یا طراحی دستی:
+- **PowerPoint (`.pptx`)** — ارائه ۱۶:۹ با اسلاید عنوان، بدنه (bulletها + نوار رنگی)، یادداشت سخنران و اسلاید پایانی. ۶–۱۰ اسلاید، با `python-pptx`.
+- **Word (`.docx`)** — سند ساختاریافته با سرفصل/زیربخش، قالب Arial و فوتر برند. ۴–۸ بخش، با `python-docx`.
+- **Markdown Deck (`.md` / Marp / reveal.js)** — دک اسلاید مارکدون سازگار با Marp و reveal.js برای تبدیل سریع به HTML/PDF.
+- مدل پیشفرض تولید محتوا: `mimo-v2.5-pro` (قابل تغییر در درخواست، لیست مدلهای مجاز محدود شده).
+- خروجیها در `/tmp/multiai_docs` ذخیره شده و از طریق endpoint دانلود میشوند.
+- **دسترسی درونبرنامه‌ای:** از منوی **«سندساز»** در مسیر `/documents` بدون نیاز به کد.
+
+```bash
+curl -X POST http://localhost:8081/v1/documents/generate \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"یک ارائه درباره مزایای هوش مصنوعی در کشاورزی بنویس","type":"pptx"}'
+# پاسخ: { "id": "...", "download_url": "/v1/documents/<id>/download", "slides_count": 8, ... }
+```
+> ⚠️ نکته: رجیستری اسناد درونحافظهای است (تا ریاستارت کانتینر باقی میماند). خروجیهای فایل اما روی یک **named volume** (`multiai_docs`) ذخیره میشوند و با ریاستارت از دست نمیروند. برای ذخیرهسازی پایدارتر (چند نمونه/کاربر) باید به PostgreSQL/Object Storage مهاجرت کند — نگاه کنید به [بخش Roadmap](#-نقشهراه-roadmap).
 
 ### 💰 سیستم Billing
 - **Wallet** — کیف پول با شارژ ریالی
@@ -100,7 +117,7 @@ Multiai یک **پلتفرم جامع هوش مصنوعی** است که به کا
 | **Backend** | FastAPI, Uvicorn, Python 3.10+ |
 | **Database** | PostgreSQL 16, SQLAlchemy (async) |
 | **Cache** | Redis 7 (sessions, rate limits, locks) |
-| **AI Gateway** | Bynara API (multi-model) |
+| **AI Gateway** | Bynara API (via self-hosted LiteLLM proxy) |
 | **Container** | Docker Compose |
 | **Auth** | PBKDF2-SHA256, Session tokens, CSRF |
 
@@ -203,7 +220,7 @@ multiai/
 │   │   ├── usage/          # Usage analytics
 │   │   ├── compare/        # Model comparison
 │   │   ├── playground/     # API playground
-│   │   └── ...             # 28 pages total
+│   │   └── documents/      # Document Generator (سندساز)
 │   └── components/         # Shared components
 ├── docker-compose.multiai.yml
 └── README.md
@@ -249,6 +266,14 @@ multiai/
 | POST | `/subscribe` | خرید اشتراک |
 | GET | `/payment/history` | تاریخچه پرداخت |
 
+### Document Generator (Auth Required)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/v1/documents/generate` | تولید سند (نوع: `pptx`/`docx`/`mdx`) از پرامپت |
+| GET | `/v1/documents` | لیست اسناد تولیدشده کاربر |
+| GET | `/v1/documents/{id}/download` | دانلود سند |
+| DELETE | `/v1/documents/{id}` | حذف سند |
+
 > 📖 مستندات کامل API: `http://localhost:8081/docs` (فقط در حالت DEBUG)
 
 ## 🔒 امنیت
@@ -265,13 +290,24 @@ multiai/
 | **Headers** | CSP, X-Frame-Options, Permissions-Policy |
 | **Session** | HttpOnly, Secure, SameSite=Lax cookies |
 
+## 🗺️ نقشهراه (Roadmap)
+
+- [x] **AI Agent Platform** — چت، حافظه، دستیار، مارکتپلیس مدل
+- [x] **Document Generator** — تولید خودکار PPTX / DOCX / MDX
+- [ ] **Persistent Document Storage** — انتقال رجیستری درونحافظه به PostgreSQL + Object Storage (MinIO/S3)
+- [ ] **Templates** — قالبهای آماده ارائه (کسبوکار، آموزشی، فروش)
+- [ ] **Image/Chart Embedding** — تزریق نمودار و تصویر تولیدشده در اسلایدها
+- [ ] **Multi-language Docs** — تولید سند فارسی/انگلیسی با RTL صحیح در DOCX
+- [ ] **Batch & Scheduled Generation** — تولید زمانبندیشده گزارشهای دورهای
+- [ ] **Usage Metering** — احتساب هزینه تولید سند روی wallet (در حال حاضر رایگان در MVP)
+
 ## 📊 آمار فنی
 
 | متریک | مقدار |
 |-------|-------|
 | API Endpoints | 136 |
-| Frontend Pages | 28 |
-| Database Tables | 37 |
+| Frontend Pages | 26 |
+| Database Tables | 31 |
 | SQLAlchemy Models | 30 |
 | AI Models | 8 |
 | Security Score | 9.7/10 |

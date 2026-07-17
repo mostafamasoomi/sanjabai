@@ -524,7 +524,7 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
         if _query:
             _results = await _web_search(_query)
             if _results:
-                _search_msg = {'role': 'system', 'content': f'[Web Search Results for: {_query[:100]}]\\n{_results}'}
+                _search_msg = {'role': 'system', 'content': f'[نتایج جستجوی وب برای: {_query[:100]}]\n{_results}\n\nمهم: این نتایج جستجوی لحظه‌ای از اینترنت هستند. از آنها مستقیماً برای پاسخ استفاده کن. هرگز نگو "به اینترنت دسترسی ندارم" یا "اطلاعات من قدیمی است" — چون نتایج جستجوی زنده بالا در دسترس تو هستند. پاسخ را بر اساس این نتایج بنویس و منبع خبر را ذکر کن.'}
                 _idx = 0
                 for _i, _m in enumerate(_msgs):
                     if isinstance(_m, dict) and _m.get('role') == 'system':

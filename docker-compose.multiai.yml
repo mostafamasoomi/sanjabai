@@ -1,158 +1,128 @@
+networks:
+  multiai_net:
+    driver: bridge
+  wazuh_default:
+    external: true
 services:
-  multiai_pg:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.pg
-    image: multiai-multiai_pg:latest
-    restart: unless-stopped
-    mem_limit: 1g
-    environment:
-      POSTGRES_USER: multiai
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-multiai}
-      POSTGRES_DB: ${POSTGRES_DB:-multiai}
-    volumes:
-      - multiai_pg_data:/var/lib/postgresql/data
-    networks: [multiai_net]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U multiai"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  multiai_redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    mem_limit: 512m
-    command: ["redis-server", "--save", "60", "1", "--appendonly", "yes"]
-    volumes:
-      - multiai_redis_data:/data
-    networks: [multiai_net]
-    healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
-  multiai_tunnel:
-    build:
-      context: ./infra
-      dockerfile: Dockerfile.tunnel
-    restart: unless-stopped
-    mem_limit: 128m
-    volumes:
-      - ./infra/ssh_key:/root/.ssh/id_ed25519:ro
-    networks: [multiai_net]
-    healthcheck:
-      test: ["CMD-SHELL", "python3 -c \"import socket; s=socket.create_connection(('127.0.0.1',9091),2); s.close()\""]
-      interval: 20s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
-
-  multiai_litellm:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.litellm
-    restart: unless-stopped
-    mem_limit: 2g
-    command: ["--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]
-    volumes:
-      - ./backend/litellm_config.yaml:/app/config.yaml:ro
-    depends_on:
-      multiai_tunnel:
-        condition: service_started
-    environment:
-      BYNARA_API_KEY: ${BYNARA_API_KEY:?BYNARA_API_KEY must be set in .env}
-      BYNARA_API_KEY_2: ${BYNARA_API_KEY_2:?BYNARA_API_KEY_2 must be set in .env}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY must be set in .env}
-      # Provider egress via backhaul HTTP proxy (SSH tunnel host currently down)
-      # Prefer 10.10.11.2:8888 which reaches Bynara/OpenRouter from this host
-      HTTP_PROXY: ${PROVIDER_HTTP_PROXY:-http://10.10.11.2:8888}
-      HTTPS_PROXY: ${PROVIDER_HTTPS_PROXY:-http://10.10.11.2:8888}
-      NO_PROXY: localhost,127.0.0.1,multiai_pg,multiai_redis,multiai_api,multiai_frontend,multiai_litellm,multiai_tunnel
-    networks: [multiai_net]
-    healthcheck:
-      test: ['CMD', '/app/.venv/bin/python', '-c', 'import urllib.request; urllib.request.urlopen("http://localhost:4000/health/liveliness", timeout=10)']
-      interval: 20s
-      timeout: 15s
-      retries: 5
-      start_period: 30s
-
   multiai_api:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    restart: unless-stopped
-    mem_limit: 512m
     depends_on:
+      multiai_litellm:
+        condition: service_started
       multiai_pg:
         condition: service_healthy
       multiai_redis:
         condition: service_started
-      multiai_litellm:
-        condition: service_started
-      multiai_tunnel:
-        condition: service_started
     environment:
-      DATABASE_URL: postgresql+asyncpg://multiai:${POSTGRES_PASSWORD:-multiai}@multiai_pg:5432/${POSTGRES_DB:-multiai}
-      REDIS_URL: redis://multiai_redis:6379/0
-      ADMIN_USER: ${ADMIN_USER:-admin}
-      ADMIN_PASS: ${ADMIN_PASS:?ADMIN_PASS must be set in .env}
-      ADMIN_TOKEN: ${ADMIN_TOKEN}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY must be set in .env}
-      LITELLM_HOST: http://multiai_litellm:4000
-      WEB_SEARCH_PROXY: ${WEB_SEARCH_PROXY:-socks5://multiai_tunnel:9090}
-      # External provider egress via backhaul; internal services stay direct
-      HTTP_PROXY: ${PROVIDER_HTTP_PROXY:-http://10.10.11.2:8888}
-      HTTPS_PROXY: ${PROVIDER_HTTPS_PROXY:-http://10.10.11.2:8888}
-      NO_PROXY: localhost,127.0.0.1,multiai_pg,multiai_redis,multiai_api,multiai_frontend,multiai_litellm,multiai_tunnel,multiai_bot
-    volumes:
-      - ./.env:/app/.env:ro
-      - multiai_docs:/tmp/multiai_docs
-    ports:
-      - "0.0.0.0:8081:8000"
-    networks: [multiai_net]
-
-  multiai_frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: http://multiai_api:8000
-    restart: unless-stopped
+      HTTPS_PROXY: http://10.10.11.2:8888
+      HTTP_PROXY: http://10.10.11.2:8888
+      NO_PROXY: localhost,127.0.0.1,multiai_pg,multiai_redis,multiai_litellm,multiai_frontend
     mem_limit: 512m
-    depends_on:
-      - multiai_api
-    environment:
-      NEXT_PUBLIC_API_URL: http://multiai_api:8000
-      HOSTNAME: 0.0.0.0
-    ports:
-      - "0.0.0.0:3003:3000"
-    networks: [multiai_net]
-
+    restart: unless-stopped
   multiai_bot:
     build:
       context: ./bot
       dockerfile: Dockerfile
-    restart: unless-stopped
-    mem_limit: 256m
     depends_on:
-      - multiai_api
+    - multiai_api
     environment:
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       API_URL: http://multiai_api:8000
-      HTTP_PROXY: ${PROVIDER_HTTP_PROXY:-http://10.10.11.2:8888}
       HTTPS_PROXY: ${PROVIDER_HTTPS_PROXY:-http://10.10.11.2:8888}
-      NO_PROXY: localhost,127.0.0.1,multiai_api,multiai_tunnel
-    networks: [multiai_net]
-
+      HTTP_PROXY: ${PROVIDER_HTTP_PROXY:-http://10.10.11.2:8888}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    mem_limit: 256m
+    networks:
+    - multiai_net
+    restart: unless-stopped
+  multiai_frontend:
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: http://multiai_api:8000
+      context: ./frontend
+      dockerfile: Dockerfile
+    depends_on:
+    - multiai_api
+    environment:
+      HOSTNAME: 0.0.0.0
+      HTTPS_PROXY: ${PROVIDER_HTTPS_PROXY:-http://10.10.11.2:8888}
+      HTTP_PROXY: ${PROVIDER_HTTP_PROXY:-http://10.10.11.2:8888}
+      NEXT_PUBLIC_API_URL: http://multiai_api:8000
+    mem_limit: 512m
+    networks:
+    - multiai_net
+    ports:
+    - 0.0.0.0:3003:3000
+    restart: unless-stopped
+  multiai_litellm:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.litellm
+    command:
+    - --config
+    - /app/config.yaml
+    - --port
+    - '4000'
+    - --host
+    - 0.0.0.0
+    depends_on:
+    - multiai_pg
+    - multiai_redis
+    mem_limit: 2g
+    restart: unless-stopped
+    volumes:
+    - ./backend/litellm_config.yaml:/app/config.yaml:ro
+  multiai_pg:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.pg
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-multiai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-multiai}
+      POSTGRES_USER: multiai
+    healthcheck:
+      interval: 10s
+      retries: 5
+      test:
+      - CMD-SHELL
+      - pg_isready -U multiai
+      timeout: 5s
+    image: multiai-multiai_pg:latest
+    mem_limit: 1g
+    networks:
+    - multiai_net
+    restart: unless-stopped
+    volumes:
+    - multiai_pg_data:/var/lib/postgresql/data
+  multiai_redis:
+    command:
+    - redis-server
+    - --save
+    - '60'
+    - '1'
+    - --appendonly
+    - 'yes'
+    healthcheck:
+      interval: 10s
+      retries: 3
+      test:
+      - CMD
+      - redis-cli
+      - ping
+      timeout: 5s
+    image: redis:7-alpine
+    mem_limit: 512m
+    networks:
+    - multiai_net
+    restart: unless-stopped
+    volumes:
+    - multiai_redis_data:/data
   multiai_watchdog:
     build:
       context: ./backend
       dockerfile: Dockerfile
     command: python watchdog.py
-    restart: unless-stopped
-    mem_limit: 256m
     depends_on:
       multiai_pg:
         condition: service_healthy
@@ -163,32 +133,27 @@ services:
       REDIS_URL: redis://multiai_redis:6379/0
       WATCHDOG_BOT_TOKEN: ${WATCHDOG_BOT_TOKEN:-}
       WATCHDOG_CHAT_ID: ${WATCHDOG_CHAT_ID:-}
-    networks: [multiai_net]
-
-  wazuh-agent:
-    image: wazuh/wazuh-agent:4.14.6
-    restart: unless-stopped
     mem_limit: 256m
-    environment:
-      - WAZUH_MANAGER_SERVER=wazuh-manager
-      - WAZUH_REGISTRATION_SERVER=wazuh-manager
-      - WAZUH_AGENT_GROUP=multiai
-      - WAZUH_AGENT_NAME=multiai-agent
-    volumes:
-      - /var/log:/var/log:ro
-      - ./wazuh-agent/local_internal_options.conf:/var/ossec/etc/local_internal_options.conf:ro
-      - ./wazuh-agent/local_agent.conf:/var/ossec/etc/shared/default/agent.conf:ro
     networks:
-      - multiai_net
-      - wazuh_default
-
+    - multiai_net
+    restart: unless-stopped
+  wazuh-agent:
+    environment:
+    - WAZUH_MANAGER_SERVER=wazuh-manager
+    - WAZUH_REGISTRATION_SERVER=wazuh-manager
+    - WAZUH_AGENT_GROUP=multiai
+    - WAZUH_AGENT_NAME=multiai-agent
+    image: wazuh/wazuh-agent:4.14.6
+    mem_limit: 256m
+    networks:
+    - multiai_net
+    - wazuh_default
+    restart: unless-stopped
+    volumes:
+    - /var/log:/var/log:ro
+    - ./wazuh-agent/local_internal_options.conf:/var/ossec/etc/local_internal_options.conf:ro
+    - ./wazuh-agent/local_agent.conf:/var/ossec/etc/shared/default/agent.conf:ro
 volumes:
-  multiai_pg_data:
-  multiai_redis_data:
-  multiai_docs:
-
-networks:
-  multiai_net:
-    driver: bridge
-  wazuh_default:
-    external: true
+  multiai_docs: null
+  multiai_pg_data: null
+  multiai_redis_data: null

@@ -30,30 +30,6 @@ services:
       timeout: 5s
       retries: 3
 
-  multiai_litellm:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.litellm
-    restart: unless-stopped
-    mem_limit: 2g
-    command: ["--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]
-    volumes:
-      - ./backend/litellm_config.yaml:/app/config.yaml:ro
-    environment:
-      BYNARA_API_KEY: ${BYNARA_API_KEY:?BYNARA_API_KEY must be set in .env}
-      BYNARA_API_KEY_2: ${BYNARA_API_KEY_2:?BYNARA_API_KEY_2 must be set in .env}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY must be set in .env}
-      HTTP_PROXY: http://10.10.11.2:8888
-      HTTPS_PROXY: http://10.10.11.2:8888
-      NO_PROXY: localhost,127.0.0.1,api.exchangerate-api.com,openrouter.ai,api.openrouter.com
-    networks: [multiai_net]
-    healthcheck:
-      test: ['CMD', '/app/.venv/bin/python', '-c', 'import urllib.request; urllib.request.urlopen("http://localhost:4000/health/liveliness", timeout=10)']
-      interval: 20s
-      timeout: 15s
-      retries: 5
-      start_period: 30s
-
   multiai_tunnel:
     build:
       context: ./infra
@@ -63,6 +39,41 @@ services:
     volumes:
       - ./infra/ssh_key:/root/.ssh/id_ed25519:ro
     networks: [multiai_net]
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import socket; s=socket.create_connection(('127.0.0.1',9091),2); s.close()\""]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  multiai_litellm:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.litellm
+    restart: unless-stopped
+    mem_limit: 2g
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]
+    volumes:
+      - ./backend/litellm_config.yaml:/app/config.yaml:ro
+    depends_on:
+      multiai_tunnel:
+        condition: service_started
+    environment:
+      BYNARA_API_KEY: ${BYNARA_API_KEY:?BYNARA_API_KEY must be set in .env}
+      BYNARA_API_KEY_2: ${BYNARA_API_KEY_2:?BYNARA_API_KEY_2 must be set in .env}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY must be set in .env}
+      # Provider egress via backhaul HTTP proxy (SSH tunnel host currently down)
+      # Prefer 10.10.11.2:8888 which reaches Bynara/OpenRouter from this host
+      HTTP_PROXY: ${PROVIDER_HTTP_PROXY:-http://10.10.11.2:8888}
+      HTTPS_PROXY: ${PROVIDER_HTTPS_PROXY:-http://10.10.11.2:8888}
+      NO_PROXY: localhost,127.0.0.1,multiai_pg,multiai_redis,multiai_api,multiai_frontend,multiai_litellm,multiai_tunnel
+    networks: [multiai_net]
+    healthcheck:
+      test: ['CMD', '/app/.venv/bin/python', '-c', 'import urllib.request; urllib.request.urlopen("http://localhost:4000/health/liveliness", timeout=10)']
+      interval: 20s
+      timeout: 15s
+      retries: 5
+      start_period: 30s
 
   multiai_api:
     build:
@@ -77,6 +88,8 @@ services:
         condition: service_started
       multiai_litellm:
         condition: service_started
+      multiai_tunnel:
+        condition: service_started
     environment:
       DATABASE_URL: postgresql+asyncpg://multiai:${POSTGRES_PASSWORD:-multiai}@multiai_pg:5432/${POSTGRES_DB:-multiai}
       REDIS_URL: redis://multiai_redis:6379/0
@@ -85,11 +98,14 @@ services:
       ADMIN_TOKEN: ${ADMIN_TOKEN}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?OPENROUTER_API_KEY must be set in .env}
       LITELLM_HOST: http://multiai_litellm:4000
-      HTTP_PROXY: http://10.10.11.2:8888
-      HTTPS_PROXY: http://10.10.11.2:8888
-      NO_PROXY: localhost,127.0.0.1,multiai_litellm,api.exchangerate-api.com,openrouter.ai,api.openrouter.com
+      WEB_SEARCH_PROXY: ${WEB_SEARCH_PROXY:-socks5://multiai_tunnel:9090}
+      # External provider egress via backhaul; internal services stay direct
+      HTTP_PROXY: ${PROVIDER_HTTP_PROXY:-http://10.10.11.2:8888}
+      HTTPS_PROXY: ${PROVIDER_HTTPS_PROXY:-http://10.10.11.2:8888}
+      NO_PROXY: localhost,127.0.0.1,multiai_pg,multiai_redis,multiai_api,multiai_frontend,multiai_litellm,multiai_tunnel,multiai_bot
     volumes:
       - ./.env:/app/.env:ro
+      - multiai_docs:/tmp/multiai_docs
     ports:
       - "0.0.0.0:8081:8000"
     networks: [multiai_net]
@@ -122,8 +138,9 @@ services:
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       API_URL: http://multiai_api:8000
-      HTTP_PROXY: http://10.10.11.2:8888
-      HTTPS_PROXY: http://10.10.11.2:8888
+      HTTP_PROXY: ${PROVIDER_HTTP_PROXY:-http://10.10.11.2:8888}
+      HTTPS_PROXY: ${PROVIDER_HTTPS_PROXY:-http://10.10.11.2:8888}
+      NO_PROXY: localhost,127.0.0.1,multiai_api,multiai_tunnel
     networks: [multiai_net]
 
   multiai_watchdog:
@@ -145,10 +162,30 @@ services:
       WATCHDOG_CHAT_ID: ${WATCHDOG_CHAT_ID:-}
     networks: [multiai_net]
 
+  wazuh-agent:
+    image: wazuh/wazuh-agent:4.14.6
+    restart: unless-stopped
+    mem_limit: 256m
+    environment:
+      - WAZUH_MANAGER_SERVER=wazuh-manager
+      - WAZUH_REGISTRATION_SERVER=wazuh-manager
+      - WAZUH_AGENT_GROUP=multiai
+      - WAZUH_AGENT_NAME=multiai-agent
+    volumes:
+      - /var/log:/var/log:ro
+      - ./wazuh-agent/local_internal_options.conf:/var/ossec/etc/local_internal_options.conf:ro
+      - ./wazuh-agent/local_agent.conf:/var/ossec/etc/shared/default/agent.conf:ro
+    networks:
+      - multiai_net
+      - wazuh_default
+
 volumes:
   multiai_pg_data:
   multiai_redis_data:
+  multiai_docs:
 
 networks:
   multiai_net:
     driver: bridge
+  wazuh_default:
+    external: true

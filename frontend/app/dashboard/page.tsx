@@ -316,7 +316,7 @@ export default function DashboardPage() {
     try {
       const [meRes, usageRes, walletRes, ledgerRes, modelsRes, subRes, billingRes] = await Promise.allSettled([
         fetch('/api/auth/me', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),
-        fetch('/api/usage', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),
+        fetch('/api/me/usage', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),
         fetch('/api/wallet', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),
         fetch('/api/wallet/ledger', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),
         fetch('/api/models', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),

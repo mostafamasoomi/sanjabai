@@ -10,6 +10,8 @@ GET  /v1/rag/documents/{id}/status — Poll indexing status
 from __future__ import annotations
 
 import logging
+import os
+import re
 from typing import Any
 
 import sqlalchemy
@@ -26,6 +28,30 @@ from services.rag import query_documents
 
 logger = logging.getLogger(__name__)
 
+# Characters that could enable path traversal or null-byte tricks in a stored filename.
+_UNSAFE_FILENAME_CHARS = re.compile(r'[\x00-\x1f/\\:*?"<>|]')
+
+
+def sanitize_filename(filename: str) -> str:
+    """Strip path components and control chars so a filename can never traverse.
+
+    We never use the client-supplied name to build a filesystem path (content is
+    kept in memory / DB), but the name is reflected back to the user and stored,
+    so we normalize it to a safe basename with no directory components.
+    """
+    if not filename:
+        return 'unknown'
+    # Take only the final path component (defeats ../, C:\..., etc.)
+    base = os.path.basename(filename.strip())
+    # Remove null bytes and path/control/dangerous characters
+    base = _UNSAFE_FILENAME_CHARS.sub('_', base)
+    # Collapse leading dots (defeats hidden-file / traversal tricks)
+    base = base.lstrip('.')
+    if not base:
+        return 'unknown'
+    # Bound length to avoid oversized metadata
+    return base[:255]
+
 router = APIRouter()
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
@@ -34,7 +60,8 @@ router = APIRouter()
 class RagQueryRequest(BaseModel):
     question: str
     document_id: int | None = None
-    model: str = 'tencent-hy3'
+    model: str = 'mimo-v2.5'
+    top_k: int = 5  # number of source chunks to send to the LLM
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -47,8 +74,18 @@ async def rag_upload(request: Request, file: UploadFile = File(...)) -> JSONResp
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
 
-    # Validate file type
-    filename = file.filename or 'unknown'
+    # CSRF defense-in-depth for cookie-authenticated mutations: require a custom
+    # header that cross-origin form submissions cannot set. API-key (Bearer) auth
+    # is exempt because it is not vulnerable to browser CSRF.
+    if request.cookies.get('session') and not request.headers.get('x-requested-with'):
+        return JSONResponse(
+            {'detail': 'هدر X-Requested-With ارسال نشده (محافظت CSRF)'},
+            status_code=403,
+        )
+
+    # Validate file type (operate on a sanitized basename — never a path)
+    raw_filename = file.filename or 'unknown'
+    filename = sanitize_filename(raw_filename)
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
     if ext not in SUPPORTED_TYPES:
         return JSONResponse(
@@ -59,8 +96,9 @@ async def rag_upload(request: Request, file: UploadFile = File(...)) -> JSONResp
     # Read content
     try:
         content = await file.read()
-    except Exception as e:
-        return JSONResponse({'detail': f'خطا در خواندن فایل: {e}'}, status_code=400)
+    except Exception:
+        logger.warning(f'RAG upload file read failed uid={uid}')
+        return JSONResponse({'detail': 'خطا در خواندن فایل'}, status_code=400)
 
     if len(content) > MAX_FILE_SIZE:
         return JSONResponse(
@@ -111,6 +149,7 @@ async def rag_query(request: Request, payload: RagQueryRequest) -> JSONResponse:
             user_id=uid,
             question=payload.question,
             document_id=payload.document_id,
+            top_k=payload.top_k,
             model=payload.model,
         )
     except Exception as e:
@@ -167,6 +206,13 @@ async def rag_delete_document(request: Request, document_id: int) -> JSONRespons
     uid = await _get_user_id(request)
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+
+    # CSRF defense-in-depth for cookie-authenticated mutations (see upload handler)
+    if request.cookies.get('session') and not request.headers.get('x-requested-with'):
+        return JSONResponse(
+            {'detail': 'هدر X-Requested-With ارسال نشده (محافظت CSRF)'},
+            status_code=403,
+        )
 
     if async_session is None:
         return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)

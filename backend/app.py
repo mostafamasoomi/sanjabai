@@ -161,6 +161,7 @@ from notifications import router as notifications_router
 from tasks import router as tasks_router
 from websocket import router as websocket_router
 from rag_endpoints import router as rag_router
+from document_generator import router as doc_gen_router
 
 app.include_router(health_router)
 app.include_router(auth_router)
@@ -179,3 +180,4 @@ app.include_router(notifications_router)
 app.include_router(tasks_router)
 app.include_router(websocket_router)
 app.include_router(rag_router)
+app.include_router(doc_gen_router)

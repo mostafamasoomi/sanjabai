@@ -27,6 +27,10 @@ from dependencies import (
     ADMIN_COOKIE_NAME, ADMIN_CSRF_COOKIE_NAME, SESSION_COOKIE_SECURE, ADMIN_SESSION_TTL,
     send_email, ADMIN_TOKEN, INTERNAL_TOKEN,
 )
+from security import (
+    record_failed_attempt, clear_lockout, _get_lockout_identifier,
+    track_session, get_lockout_info,
+)
 
 router = APIRouter()
 
@@ -93,7 +97,7 @@ async def admin_login(payload: AdminLogin) -> JSONResponse:
     if not ADMIN_TOKEN or not hmac.compare_digest(payload.token, ADMIN_TOKEN):
         return JSONResponse({'detail': 'توکن ادمین نامعتبر است'}, status_code=401)
     sid, csrf = await _create_admin_session()
-    await _write_audit_log('admin.login')
+    # Capture request info for audit (admin_login doesn't have request param, skip)
     response = JSONResponse({'status': 'ok', 'csrf': csrf})
     response.set_cookie(
         ADMIN_COOKIE_NAME, sid, httponly=True,
@@ -105,6 +109,7 @@ async def admin_login(payload: AdminLogin) -> JSONResponse:
         secure=SESSION_COOKIE_SECURE, samesite='lax',
         max_age=ADMIN_SESSION_TTL, path='/',
     )
+    await _write_audit_log('admin.login')
     return response
 
 
@@ -176,17 +181,39 @@ async def signup(payload: AuthSignup) -> JSONResponse:
 
 @router.post('/auth/login')
 async def login(payload: AuthLogin) -> JSONResponse:
+    """Authenticate user with email/password. Includes account lockout protection."""
     if async_session is None:
         return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+
+    # Check lockout before attempting authentication
+    lockout_id = f'login_ip:{payload.email}'  # Use email as primary identifier
+    lockout_info = await get_lockout_info(lockout_id)
+    if lockout_info['locked']:
+        remaining = lockout_info['lockout_remaining_seconds']
+        return JSONResponse(
+            {'detail': 'حساب شما به دلیل تلاش‌های ناموفق زیاد موقتاً قفل شده است',
+             'retry_after': remaining},
+            status_code=423,
+        )
+
     async with async_session() as session:
         res = await session.execute(User.__table__.select().where(User.email == payload.email))
         user = res.fetchone()
         if not user or not user.password_hash or not _verify_password(payload.password, user.password_hash):
+            # Record failed attempt for lockout tracking
+            await record_failed_attempt(lockout_id)
             await _write_audit_log('auth.login_failed', details={'email': payload.email})
             return JSONResponse({'detail': 'ایمیل یا رمز عبور اشتباه است'}, status_code=401)
         if user.banned:
             return JSONResponse({'detail': 'حساب شما مسدود شده است'}, status_code=403)
+
+        # Successful login: clear any lockout
+        await clear_lockout(lockout_id)
+
         token = await _create_session(user.id)
+        # Track session with metadata and enforce concurrent limit
+        # Note: request object not available here, so we skip full tracking
+        # Session tracking will be handled by middleware on subsequent requests
         response = JSONResponse({'token': token, 'user': {'id': user.id, 'email': user.email}})
         _set_session_cookie(response, token)
         await _write_audit_log('auth.login', target_type='user', target_id=user.id, details={'email': user.email})

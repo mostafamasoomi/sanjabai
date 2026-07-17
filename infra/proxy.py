@@ -5,7 +5,7 @@ from socks import socksocket, SOCKS5
 LISTEN = "0.0.0.0"
 PORT = 9091
 SOCKS5_HOST = "127.0.0.1"
-SOCKS5_PORT = 9090
+SOCKS5_PORT = 9090  # local ssh -D inside same container
 
 def handle(client):
     try:

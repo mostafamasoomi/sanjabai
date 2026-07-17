@@ -261,20 +261,39 @@ async def api_exchange_rate() -> JSONResponse:
     except Exception:
         pass
 
-    # 2. Fallback to online API
+    # 2. Primary: tgju.org (Iran market, live)
     if rate_irt is None:
         rate_irr = None
         try:
-            resp = await _http.get('https://open.er-api.com/v6/latest/USD', follow_redirects=True)
-            resp.raise_for_status()
-            data = resp.json()
-            rate_irr = float(data['rates']['IRR'])
-            source = 'open.er-api.com'
+            import re, httpx as _hx
+            # Use a fresh client (trust_env=True) because the app client has trust_env=False
+            # which blocks Docker DNS resolution for some external hosts
+            async with _hx.AsyncClient(timeout=_hx.Timeout(15, connect=10)) as _c:
+                resp = await _c.get(
+                    'https://www.tgju.org/profile/price_dollar_rl',
+                    headers={'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'},
+                    follow_redirects=True,
+                )
+                resp.raise_for_status()
+                m = re.search(r'class="price"[^>]*>([\d,]+)<', resp.text)
+                if m:
+                    rate_irr = float(m.group(1).replace(',', ''))
+                    source = 'tgju.org'
         except Exception:
             pass
 
+        # 3. Fallback to open.er-api.com
         if rate_irr is None:
-            rate_irr = 1_264_884  # fallback
+            try:
+                resp2 = await _http.get('https://open.er-api.com/v6/latest/USD', follow_redirects=True, timeout=10)
+                resp2.raise_for_status()
+                rate_irr = float(resp2.json()['rates']['IRR'])
+                source = 'open.er-api.com'
+            except Exception:
+                pass
+
+        if rate_irr is None:
+            rate_irr = 1_264_884  # hardcoded fallback
 
         rate_irt = rate_irr / 10  # IRR → IRT (Toman)
 

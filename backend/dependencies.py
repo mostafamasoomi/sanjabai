@@ -232,6 +232,14 @@ async def _get_admin_session(sid: str | None) -> dict | None:
 
 
 async def admin_required(request: Request) -> bool:
+    """Verify admin authorization.
+
+    Supports cookie-based admin sessions (CSRF-protected) and legacy
+    header-token auth.  When the ``totp_verified`` flag is not present
+    in the session and MFA is enabled for the admin, the request is
+    rejected with ``totp_required`` so the frontend can prompt for a
+    TOTP code.
+    """
     # Primary: isolated server-side admin session cookie (CSRF-protected mutations)
     sid = request.cookies.get(ADMIN_COOKIE_NAME)
     if sid:
@@ -241,6 +249,13 @@ async def admin_required(request: Request) -> bool:
                 csrf = request.headers.get('x-csrf-token') or request.headers.get('x-csrf')
                 if not csrf or not hmac.compare_digest(csrf, sess.get('csrf', '')):
                     return False
+            # TOTP gate: if MFA is enabled on the admin user, require TOTP verification
+            totp_enabled = sess.get('totp_enabled', False)
+            totp_verified = sess.get('totp_verified', False)
+            if totp_enabled and not totp_verified:
+                # Attach a flag so callers can detect TOTP-required state
+                request.state.totp_required = True
+                return False
             return True
     # Legacy: constant-time header token (no CSRF needed for header-based auth)
     token = request.headers.get('x-admin-token') or request.headers.get('authorization', '').removeprefix('Bearer ')
@@ -250,10 +265,21 @@ async def admin_required(request: Request) -> bool:
 # ── Audit logging ───────────────────────────────────────────────
 
 async def _write_audit_log(action: str, target_type: str | None = None,
-                            target_id: Any = None, details: dict | None = None) -> None:
-    """Best-effort, fire-and-forget audit record of a privileged/admin action."""
+                            target_id: Any = None, details: dict | None = None,
+                            request: Request | None = None) -> None:
+    """Best-effort, fire-and-forget audit record of a privileged/admin action.
+
+    When *request* is provided the client IP and User-Agent are captured
+    and stored alongside the audit entry for forensic traceability.
+    """
     if async_session is None:
         return
+    ip_address = None
+    user_agent = None
+    if request is not None:
+        from security import get_real_ip
+        ip_address = get_real_ip(request)
+        user_agent = (request.headers.get('user-agent') or '')[:200]
     try:
         async with async_session() as s:
             s.add(AuditLog(
@@ -261,6 +287,8 @@ async def _write_audit_log(action: str, target_type: str | None = None,
                 target_type=target_type,
                 target_id=str(target_id) if target_id is not None else None,
                 details=details,
+                ip_address=ip_address,
+                user_agent=user_agent,
             ))
             await s.commit()
     except Exception:

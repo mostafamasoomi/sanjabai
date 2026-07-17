@@ -147,7 +147,7 @@ export default function ProfilePage() {
   const fetchUsage = async () => {
     try {
       const t = token || localStorage.getItem('multiai_auth_token')
-      const r = await fetch('/api/usage', { headers: { Authorization: `Bearer ${t}` } })
+      const r = await fetch('/api/me/usage', { headers: { Authorization: `Bearer ${t}` } })
       if (r.ok) setUsage(await r.json())
     } catch {}
   }

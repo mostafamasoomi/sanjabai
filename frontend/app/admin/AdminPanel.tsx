@@ -14,7 +14,7 @@ const AdminCharts = dynamic(() => import('./components/AdminCharts'), { ssr: fal
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Page = 'dashboard' | 'pricing' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'users'
+type Page = 'dashboard' | 'pricing' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'users' | 'security'
 
 interface Analytics {
   user_count: number
@@ -52,6 +52,34 @@ interface ProxyConfig {
   proxy_type: string
   proxy_url: string
   active: boolean
+}
+
+interface SecurityStats {
+  threat_level: 'low' | 'medium' | 'high' | 'critical'
+  failed_logins_24h: number
+  active_sessions: number
+  failed_login_chart: { hour: string; count: number }[]
+  banned_users: { id: number; email: string; username: string; banned_at: string }[]
+}
+
+interface SecurityEvent {
+  id: number
+  event_type: string
+  user_id: number | null
+  user_email: string | null
+  ip_address: string | null
+  details: string | null
+  created_at: string
+}
+
+interface AuditLog {
+  id: number
+  admin_id: number
+  action: string
+  target_type: string | null
+  target_id: number | null
+  details: string | null
+  created_at: string
 }
 
 interface UserRow {
@@ -92,7 +120,8 @@ const NAV_ITEMS: { key: Page; label: string; icon: IconName }[] = [
   { key: 'discounts', label: 'تخفیف‌ها', icon: 'wallet' },
   { key: 'about', label: 'درباره ما', icon: 'notification' },
   { key: 'proxy', label: 'پروکسی', icon: 'security' },
-  { key: 'models', label: 'مدل‌ها', icon: 'code' },
+  { key: 'models', label: 'مدلها', icon: 'code' },
+  { key: 'security', label: 'امنیت', icon: 'lock' },
 ]
 
 // ─── API Helper ──────────────────────────────────────────────────────────────
@@ -200,6 +229,15 @@ export default function AdminPage() {
   const [pxUrl, setPxUrl] = useState('')
   const [pxActive, setPxActive] = useState(true)
 
+  // ─── Security State ─────────────────────────────────────────────
+  const [securityStats, setSecurityStats] = useState<SecurityStats | null>(null)
+  const [securityEvents, setSecurityEvents] = useState<SecurityEvent[]>([])
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
+  const [auditPage, setAuditPage] = useState(1)
+  const [auditTotal, setAuditTotal] = useState(0)
+  const [auditActionFilter, setAuditActionFilter] = useState('')
+  const [securityLoading, setSecurityLoading] = useState(false)
+
   // ─── User Edit ────────────────────────────────────────────────────
   const [editingUser, setEditingUser] = useState<UserRow | null>(null)
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
@@ -258,6 +296,62 @@ export default function AdminPage() {
   useEffect(() => {
     if (authed) loadAll()
   }, [authed, loadAll])
+
+  // ─── Security Data Loading ───────────────────────────────────────
+  const loadSecurityData = useCallback(async () => {
+    setSecurityLoading(true)
+    try {
+      const [statsRes, eventsRes] = await Promise.allSettled([
+        api('/api/admin/security/stats'),
+        api('/api/admin/audit-logs?page=' + auditPage + (auditActionFilter ? '&action=' + auditActionFilter : '')),
+      ])
+      if (statsRes.status === 'fulfilled') {
+        const stats = await statsRes.value.json()
+        setSecurityStats(stats)
+      }
+      if (eventsRes.status === 'fulfilled') {
+        const data = await eventsRes.value.json()
+        setSecurityEvents(data.events || data.security_events || [])
+        setAuditLogs(data.audit_logs || [])
+        setAuditTotal(data.total || 0)
+      }
+    } catch {
+      // Silently handle — stats may not be available yet
+    } finally {
+      setSecurityLoading(false)
+    }
+  }, [auditPage, auditActionFilter])
+
+  useEffect(() => {
+    if (authed && page === 'security') {
+      loadSecurityData()
+    }
+  }, [authed, page, loadSecurityData])
+
+  // ─── Auto-refresh every 30 seconds when on security page ─────────
+  useEffect(() => {
+    if (!authed || page !== 'security') return
+    const interval = setInterval(() => {
+      loadSecurityData()
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [authed, page, loadSecurityData])
+
+  // ─── Unban User ──────────────────────────────────────────────────
+  const unbanUser = async (uid: number) => {
+    try {
+      await api(`/api/admin/users/${uid}/ban`, { method: 'DELETE' })
+      toast('کاربر رفع مسدودیت شد', 'success')
+      loadSecurityData()
+      loadAll()
+    } catch { toast('خطا در رفع مسدودیت', 'error') }
+  }
+
+  // ─── Audit Log Filter ────────────────────────────────────────────
+  const loadAuditWithFilter = async (action: string) => {
+    setAuditActionFilter(action)
+    setAuditPage(1)
+  }
 
   // ─── Login ───────────────────────────────────────────────────────────────
 
@@ -605,7 +699,7 @@ export default function AdminPage() {
             <div>
               <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>{currentNav?.label}</h1>
             </div>
-            <button className="btn btn-sm" onClick={loadAll} title="بروزرسانی">
+            <button className="btn btn-sm" onClick={page === 'security' ? loadSecurityData : loadAll} title="بروزرسانی">
               <Icon name="refresh" size={16} />
             </button>
           </div>
@@ -1359,6 +1453,371 @@ export default function AdminPage() {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ─────────────────────────────────────────────────────────────
+              Security Dashboard
+             ───────────────────────────────────────────────────────────── */}
+          {page === 'security' && (
+            <div className="space-y-6">
+              <SectionHeader
+                title="مرکز عملیات امنیتی (SOC)"
+                subtitle="نظارت بر تهدیدات، رویدادها و فعالیت کاربران"
+              />
+
+              {/* ─── Threat Level + Stats Row ──────────────────────────── */}
+              {securityStats ? (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                    {/* Threat Level Card */}
+                    <div
+                      className="admin-card"
+                      style={{
+                        borderRight: `3px solid ${
+                          securityStats.threat_level === 'critical' ? '#ef4444'
+                          : securityStats.threat_level === 'high' ? '#f97316'
+                          : securityStats.threat_level === 'medium' ? '#eab308'
+                          : '#22c55e'
+                        }`,
+                      }}
+                    >
+                      <div className="flex items-center gap-3 mb-3">
+                        <div
+                          className="p-2 rounded-lg"
+                          style={{
+                            background: `${
+                              securityStats.threat_level === 'critical' ? '#ef4444'
+                              : securityStats.threat_level === 'high' ? '#f97316'
+                              : securityStats.threat_level === 'medium' ? '#eab308'
+                              : '#22c55e'
+                            }15`,
+                          }}
+                        >
+                          <Icon
+                            name="warning"
+                            size={18}
+                            style={{
+                              color: securityStats.threat_level === 'critical' ? '#ef4444'
+                                : securityStats.threat_level === 'high' ? '#f97316'
+                                : securityStats.threat_level === 'medium' ? '#eab308'
+                                : '#22c55e',
+                            }}
+                          />
+                        </div>
+                        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>سطح تهدید</span>
+                      </div>
+                      <p
+                        className="text-xl font-bold"
+                        style={{
+                          color: securityStats.threat_level === 'critical' ? '#ef4444'
+                            : securityStats.threat_level === 'high' ? '#f97316'
+                            : securityStats.threat_level === 'medium' ? '#eab308'
+                            : '#22c55e',
+                        }}
+                      >
+                        {{ low: 'پایین', medium: 'متوسط', high: 'بالا', critical: 'بحرانی' }[securityStats.threat_level]}
+                      </p>
+                    </div>
+
+                    <StatCard
+                      icon="lock"
+                      label="ورودهای ناموفق (۲۴ ساعت)"
+                      value={securityStats.failed_logins_24h.toLocaleString('fa-IR')}
+                      color="var(--danger)"
+                    />
+                    <StatCard
+                      icon="user"
+                      label="نشستهای فعال"
+                      value={securityStats.active_sessions.toLocaleString('fa-IR')}
+                      color="var(--info)"
+                    />
+                    <StatCard
+                      icon="security"
+                      label="کاربران مسدود شده"
+                      value={securityStats.banned_users?.length?.toLocaleString('fa-IR') || '0'}
+                      color="var(--warning)"
+                    />
+                  </div>
+
+                  {/* ─── Failed Login Chart (sparkline-style bars) ──────── */}
+                  <div className="admin-card">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Icon name="chart" size={18} style={{ color: 'var(--text-secondary)' }} />
+                      <h3 className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
+                        نمودار ورودهای ناموفق (۲۴ ساعت اخیر)
+                      </h3>
+                    </div>
+                    <div className="flex items-end gap-1 h-24">
+                      {(securityStats.failed_login_chart || []).slice(-24).map((bar, i) => {
+                        const maxCount = Math.max(...(securityStats.failed_login_chart || []).map((b) => b.count), 1)
+                        const heightPct = (bar.count / maxCount) * 100
+                        return (
+                          <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                            <div
+                              className="w-full rounded-t transition-all duration-300"
+                              style={{
+                                height: `${Math.max(heightPct, 4)}%`,
+                                background: bar.count > maxCount * 0.7
+                                  ? 'var(--danger)'
+                                  : bar.count > maxCount * 0.3
+                                    ? 'var(--warning)'
+                                    : 'var(--accent)',
+                                opacity: 0.8,
+                              }}
+                              title={`${bar.hour}: ${bar.count} تلاش ناموفق`}
+                            />
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <div className="flex justify-between mt-2">
+                      <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                        {securityStats.failed_login_chart?.[0]?.hour || ''}
+                      </span>
+                      <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                        {securityStats.failed_login_chart?.[securityStats.failed_login_chart.length - 1]?.hour || ''}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* ─── Banned Users ──────────────────────────────────── */}
+                  <div className="admin-card">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Icon name="security" size={18} style={{ color: 'var(--warning)' }} />
+                      <h3 className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
+                        کاربران مسدود شده
+                      </h3>
+                      <span className="badge badge-warning mr-auto">{securityStats.banned_users?.length || 0}</span>
+                    </div>
+                    {(securityStats.banned_users || []).length === 0 ? (
+                      <div className="text-center py-6 text-sm" style={{ color: 'var(--text-muted)' }}>
+                        کاربر مسدود شده‌ای وجود ندارد
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="admin-table w-full text-sm">
+                          <thead>
+                            <tr>
+                              <th className="text-right p-3">شناسه</th>
+                              <th className="text-right p-3">نام کاربری</th>
+                              <th className="text-right p-3">ایمیل</th>
+                              <th className="text-right p-3">تاریخ مسدودیت</th>
+                              <th className="text-right p-3">عملیات</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(securityStats.banned_users || []).map((u) => (
+                              <tr key={u.id}>
+                                <td className="p-3 text-xs font-mono">{u.id}</td>
+                                <td className="p-3 text-sm" style={{ color: 'var(--text-primary)' }}>{u.username || '—'}</td>
+                                <td className="p-3 text-xs" style={{ color: 'var(--text-secondary)' }}>{u.email}</td>
+                                <td className="p-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                                  {u.banned_at ? new Date(u.banned_at).toLocaleDateString('fa-IR') : '—'}
+                                </td>
+                                <td className="p-3">
+                                  <button
+                                    className="btn btn-sm"
+                                    style={{ background: 'var(--positive)', color: '#fff' }}
+                                    onClick={() => unbanUser(u.id)}
+                                  >
+                                    رفع مسدودیت
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                /* Loading skeleton */
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="admin-card">
+                      <div className="skeleton h-3 w-20 mb-3 rounded" />
+                      <div className="skeleton h-7 w-16 rounded" />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ─── Security Events Table ──────────────────────────── */}
+              <div className="admin-card">
+                <div className="flex items-center gap-2 mb-4">
+                  <Icon name="notification" size={18} style={{ color: 'var(--danger)' }} />
+                  <h3 className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
+                    رویدادهای امنیتی اخیر
+                  </h3>
+                  {securityLoading && (
+                    <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin inline-block" />
+                  )}
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="admin-table w-full text-sm">
+                    <thead>
+                      <tr>
+                        <th className="text-right p-3">نوع رویداد</th>
+                        <th className="text-right p-3">کاربر</th>
+                        <th className="text-right p-3">آدرس IP</th>
+                        <th className="text-right p-3">جزئیات</th>
+                        <th className="text-right p-3">زمان</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {securityEvents.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="p-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+                            رویداد امنیتی ثبت نشده
+                          </td>
+                        </tr>
+                      ) : (
+                        securityEvents.map((ev) => (
+                          <tr key={ev.id}>
+                            <td className="p-3">
+                              <span className={`badge ${
+                                ev.event_type?.includes('failed') || ev.event_type?.includes('lockout')
+                                  ? 'badge-danger'
+                                  : ev.event_type?.includes('login') || ev.event_type?.includes('success')
+                                    ? 'badge-positive'
+                                    : 'badge-accent'
+                              }`}>
+                                {ev.event_type || 'نامشخص'}
+                              </span>
+                            </td>
+                            <td className="p-3 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                              {ev.user_email || ev.user_id || '—'}
+                            </td>
+                            <td className="p-3 text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
+                              {ev.ip_address || '—'}
+                            </td>
+                            <td className="p-3 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                              {ev.details || '—'}
+                            </td>
+                            <td className="p-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                              {new Date(ev.created_at).toLocaleString('fa-IR')}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* ─── Audit Log Table ─────────────────────────────────── */}
+              <div className="admin-card">
+                <div className="flex items-center gap-2 mb-4">
+                  <Icon name="history" size={18} style={{ color: 'var(--accent)' }} />
+                  <h3 className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
+                    لاگ عملیات ادمین
+                  </h3>
+                </div>
+
+                {/* Filter bar */}
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {[
+                    { label: 'همه', value: '' },
+                    { label: 'ban', value: 'ban' },
+                    { label: 'unban', value: 'unban' },
+                    { label: 'edit_user', value: 'edit_user' },
+                    { label: 'create', value: 'create' },
+                    { label: 'delete', value: 'delete' },
+                    { label: 'update', value: 'update' },
+                  ].map((f) => (
+                    <button
+                      key={f.value}
+                      className={`btn btn-sm ${auditActionFilter === f.value ? 'font-bold' : ''}`}
+                      style={{
+                        background: auditActionFilter === f.value ? 'var(--accent-dim)' : 'var(--bg-elevated)',
+                        color: auditActionFilter === f.value ? 'var(--accent)' : 'var(--text-secondary)',
+                      }}
+                      onClick={() => loadAuditWithFilter(f.value)}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="admin-table w-full text-sm">
+                    <thead>
+                      <tr>
+                        <th className="text-right p-3">شناسه</th>
+                        <th className="text-right p-3">عملیات</th>
+                        <th className="text-right p-3">نوع هدف</th>
+                        <th className="text-right p-3">شناسه هدف</th>
+                        <th className="text-right p-3">جزئیات</th>
+                        <th className="text-right p-3">زمان</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {auditLogs.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+                            لاگ عملیاتی ثبت نشده
+                          </td>
+                        </tr>
+                      ) : (
+                        auditLogs.map((log) => (
+                          <tr key={log.id}>
+                            <td className="p-3 text-xs font-mono">{log.id}</td>
+                            <td className="p-3">
+                              <span className={`badge ${
+                                log.action?.includes('ban') ? 'badge-danger'
+                                : log.action?.includes('delete') ? 'badge-warning'
+                                : log.action?.includes('create') ? 'badge-positive'
+                                : 'badge-accent'
+                              }`}>
+                                {log.action || '—'}
+                              </span>
+                            </td>
+                            <td className="p-3 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                              {log.target_type || '—'}
+                            </td>
+                            <td className="p-3 text-xs font-mono">
+                              {log.target_id || '—'}
+                            </td>
+                            <td className="p-3 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                              {log.details || '—'}
+                            </td>
+                            <td className="p-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                              {new Date(log.created_at).toLocaleString('fa-IR')}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination */}
+                {auditTotal > 50 && (
+                  <div className="flex items-center justify-between mt-4 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                      صفحه {auditPage} از {Math.ceil(auditTotal / 50)}
+                    </span>
+                    <div className="flex gap-2">
+                      <button
+                        className="btn btn-sm"
+                        disabled={auditPage <= 1}
+                        onClick={() => { setAuditPage(Math.max(1, auditPage - 1)); loadSecurityData() }}
+                      >
+                        قبلی
+                      </button>
+                      <button
+                        className="btn btn-sm"
+                        disabled={auditPage >= Math.ceil(auditTotal / 50)}
+                        onClick={() => { setAuditPage(auditPage + 1); loadSecurityData() }}
+                      >
+                        بعدی
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </main>

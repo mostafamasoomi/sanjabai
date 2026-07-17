@@ -21,7 +21,14 @@ OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY', '')
 OPENROUTER_BASE = 'https://openrouter.ai/api/v1'
 EMBEDDING_DIMENSIONS = 1536
 BATCH_SIZE = 20  # texts per API call
-MAX_RETRIES = 3
+MAX_RETRIES = 1   # reduced from 3 — external APIs are blocked
+API_TIMEOUT = 1.5  # fast-fail to hash fallback when external APIs are blocked
+# Circuit breaker: after N consecutive external failures, skip external APIs
+# for a short window so upload/query stay snappy.
+_external_fail_count = 0
+_external_fail_until = 0.0
+_EXTERNAL_FAIL_THRESHOLD = 2
+_EXTERNAL_COOLDOWN_SEC = 300
 
 
 async def embed_texts(
@@ -53,9 +60,19 @@ async def _embed_batch(
     document_id: int | None,
 ) -> list[list[float]]:
     """Call embedding API for a single batch of texts with retry.
-    
-    Tries LiteLLM proxy first, falls back to OpenRouter directly.
+
+    Tries LiteLLM proxy first, falls back to OpenRouter directly, then hash.
+    Uses a short circuit-breaker so repeated external failures do not add
+    multi-second latency to every request.
     """
+    global _external_fail_count, _external_fail_until
+    import time
+
+    now = time.time()
+    if _external_fail_count >= _EXTERNAL_FAIL_THRESHOLD and now < _external_fail_until:
+        logger.info('Embedding circuit open — using local hash fallback')
+        return [_hash_embedding(text) for text in texts]
+
     last_error = None
 
     for attempt in range(MAX_RETRIES):
@@ -66,7 +83,7 @@ async def _embed_batch(
                 resp = await _http.post(
                     f'{LITELLM_HOST}/v1/embeddings',
                     json={'model': EMBEDDING_MODEL, 'input': texts, 'encoding_format': 'float'},
-                    timeout=30,
+                    timeout=API_TIMEOUT,
                 )
                 if resp.status_code != 200:
                     resp = None  # fall through to OpenRouter
@@ -83,14 +100,20 @@ async def _embed_batch(
                     f'{OPENROUTER_BASE}/embeddings',
                     json={'model': EMBEDDING_MODEL, 'input': texts},
                     headers=headers,
-                    timeout=30,
+                    timeout=API_TIMEOUT,
                 )
 
-            if resp.status_code != 200:
-                raise RuntimeError(f'Embedding API returned {resp.status_code}: {resp.text[:200]}')
+            if resp is None or resp.status_code != 200:
+                code = getattr(resp, 'status_code', 'no-response')
+                body = getattr(resp, 'text', '')[:200]
+                raise RuntimeError(f'Embedding API returned {code}: {body}')
 
             data = resp.json()
             embeddings = [item['embedding'] for item in data['data']]
+
+            # Success — reset circuit
+            _external_fail_count = 0
+            _external_fail_until = 0.0
 
             # Bill usage
             usage = data.get('usage', {})
@@ -112,6 +135,13 @@ async def _embed_batch(
                 await asyncio.sleep(wait)
 
     # Fallback: simple hash-based embedding (for testing/development)
+    _external_fail_count += 1
+    if _external_fail_count >= _EXTERNAL_FAIL_THRESHOLD:
+        _external_fail_until = time.time() + _EXTERNAL_COOLDOWN_SEC
+        logger.warning(
+            f'Embedding circuit opened for {_EXTERNAL_COOLDOWN_SEC}s after '
+            f'{_external_fail_count} failures'
+        )
     logger.warning(f'External embedding failed, using local hash fallback: {last_error}')
     return [_hash_embedding(text) for text in texts]
 

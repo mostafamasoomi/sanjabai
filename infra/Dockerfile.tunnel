@@ -1,5 +1,20 @@
 FROM alpine:3.20
-RUN apk add --no-cache openssh-client \
+RUN apk add --no-cache openssh-client python3 py3-pysocks \
     && mkdir -p /root/.ssh && chmod 700 /root/.ssh
-EXPOSE 9090
-CMD ["sh", "-c", "chmod 600 /root/.ssh/id_ed25519 2>/dev/null; while true; do ssh -i /root/.ssh/id_ed25519 -p 22022 -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -N -D 0.0.0.0:9090 root@89.169.55.129; echo 'tunnel down, retrying in 5s'; sleep 5; done"]
+WORKDIR /app
+COPY proxy.py /app/proxy.py
+EXPOSE 9090 9091
+# SSH dynamic SOCKS on 9090 + HTTP CONNECT bridge on 9091 for LiteLLM/httpx
+CMD ["sh", "-c", "\
+  chmod 600 /root/.ssh/id_ed25519 2>/dev/null; \
+  (while true; do \
+     ssh -i /root/.ssh/id_ed25519 -p 22022 \
+       -o StrictHostKeyChecking=no \
+       -o ServerAliveInterval=30 \
+       -o ServerAliveCountMax=3 \
+       -N -D 0.0.0.0:9090 root@89.169.55.129; \
+     echo 'socks tunnel down, retrying in 5s'; sleep 5; \
+   done) & \
+  sleep 2; \
+  exec python3 /app/proxy.py \
+"]

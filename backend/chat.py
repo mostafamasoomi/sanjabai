@@ -204,15 +204,19 @@ async def _extract_file_text(upload: UploadFile) -> tuple[str, str]:
 
 
 async def _web_search(query: str, max_results: int = 5) -> str:
-    """Search DuckDuckGo via httpx. Returns formatted results."""
+    """Search DuckDuckGo via SOCKS5 tunnel proxy. Returns formatted results."""
+    import os as _os
+    import httpx
+    import socksio  # noqa: F401 — httpx SOCKS transport dependency
+    _socks_proxy = _os.getenv('WEB_SEARCH_PROXY', 'socks5://multiai_tunnel:9090')
     try:
         from urllib.parse import unquote
-        r = await _http.post(
-            'https://html.duckduckgo.com/html/',
-            data={'q': query, 'b': ''},
-            headers={'User-Agent': 'Mozilla/5.0 (compatible; Multiai/1.0)'},
-            timeout=12, follow_redirects=True,
-        )
+        async with httpx.AsyncClient(proxy=_socks_proxy, timeout=15, follow_redirects=True) as _sc:
+            r = await _sc.post(
+                'https://html.duckduckgo.com/html/',
+                data={'q': query, 'b': ''},
+                headers={'User-Agent': 'Mozilla/5.0 (compatible; Multiai/1.0)'},
+            )
         if r.status_code != 200:
             return ''
         html = r.text

@@ -41,6 +41,7 @@ class User(Base):
     preferences: Mapped[dict | None] = mapped_column(sqlalchemy.JSON, default=dict)
     timezone: Mapped[str | None] = mapped_column(default='Asia/Tehran')
     language: Mapped[str | None] = mapped_column(default='fa')
+    totp_secret: Mapped[str | None] = mapped_column(nullable=True)
 
 
 class Subscription(Base):
@@ -291,6 +292,8 @@ class AuditLog(Base):
     target_type: Mapped[str | None] = mapped_column(nullable=True)
     target_id: Mapped[str | None] = mapped_column(nullable=True)
     details: Mapped[dict[str, Any] | None] = mapped_column(sqlalchemy.JSON, nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=_utcnow)
 
 

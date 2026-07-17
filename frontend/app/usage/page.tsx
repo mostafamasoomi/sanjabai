@@ -208,7 +208,7 @@ export default function UsagePage() {
     if (!silent) setLoading(true)
     else setRefreshing(true)
     try {
-      const res = await fetch('/api/usage', { headers: { Authorization: `Bearer ${token}` } })
+      const res = await fetch('/api/me/usage', { headers: { Authorization: `Bearer ${token}` } })
       if (res.ok) {
         const d = await res.json()
         setData(d)

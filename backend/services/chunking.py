@@ -95,8 +95,10 @@ def chunk_text(
 
 def _split_by_sentences(text: str, max_size: int) -> list[str]:
     """Split text by sentence boundaries, respecting max_size."""
-    # Split on sentence-ending punctuation (supports Persian and English)
-    sentences = re.split(r'(?<=[.!?\n])\s+', text)
+    # Split on sentence-ending punctuation (supports Persian and English).
+    # Persian separators: ؟ (question mark), ، (comma), . (period), and
+    # standard . ! ? plus newlines.
+    sentences = re.split(r'(?<=[\u060C\u061F.!?\n])\s+', text)
     sentences = [s.strip() for s in sentences if s.strip()]
 
     chunks = []

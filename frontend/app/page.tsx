@@ -92,6 +92,52 @@ function Hero({ isLoggedIn, modelCount }: { isLoggedIn: boolean; modelCount: str
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Dollar Ticker — Live USD→IRT from tgju.org
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function DollarTicker() {
+  const [rate, setRate] = useState<{ usd_to_irt: number; source: string } | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/exchange-rate')
+      .then((r) => r.json())
+      .then((d) => { if (!cancelled) setRate(d) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  const irt = rate?.usd_to_irt
+  const formatted = irt ? new Intl.NumberFormat('fa-IR').format(irt) : '—'
+
+  return (
+    <div className="aurora-fade-in-up flex justify-center mb-4">
+      <div className="inline-flex items-center gap-3 px-5 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)]/70 backdrop-blur-sm text-sm">
+        <span className="flex items-center gap-1.5">
+          <span className="text-lg">💵</span>
+          <span className="text-[var(--text-muted)]">دلار آزاد</span>
+        </span>
+        <span className="w-px h-5 bg-[var(--border)]" />
+        {loading ? (
+          <span className="text-[var(--text-muted)]">...</span>
+        ) : (
+          <span className="font-bold text-[var(--text-primary)] tabular-nums tracking-wide">
+            {formatted} <span className="text-xs text-[var(--text-muted)]">تومان</span>
+          </span>
+        )}
+        {rate?.source && rate.source !== 'fallback' && (
+          <span className="text-[10px] text-[var(--text-muted)] bg-[var(--bg-hover)] px-1.5 py-0.5 rounded">
+            {rate.source === 'tgju.org' ? 'لحظه‌ای' : rate.source}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Stats Bar
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -264,6 +310,7 @@ export default function LandingPage() {
   return (
     <>
       <Hero isLoggedIn={isLoggedIn} modelCount={modelCount} />
+      <DollarTicker />
       <StatsBar />
       <Features />
       <Steps />

@@ -1,11 +1,13 @@
 """
-Security middleware: rate limiting, security headers, input validation.
+Security middleware: rate limiting, security headers, input validation,
+account lockout, and session security.
 All rate limits use Redis for persistence across restarts.
 """
 import logging
 import os
 import time
 import hashlib
+import json as _json
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -22,6 +24,139 @@ def _get_redis():
         from database import rds as _redis
         _rds = _redis
     return _rds
+
+
+# ── Account Lockout System ──────────────────────────────────
+
+# Escalating lockout durations (attempt threshold → seconds)
+_LOCKOUT_THRESHOLDS: list[tuple[int, int]] = [
+    (5,  15 * 60),    # 5 failures  → 15 minutes
+    (10, 60 * 60),    # 10 failures → 1 hour
+    (15, 24 * 60 * 60),  # 15 failures → 24 hours
+]
+
+# Redis key prefixes
+_LOCKOUT_KEY = 'lockout:{}'           # lockout:{identifier} → TTL-based lock
+_ATTEMPTS_KEY = 'login_attempts:{}'   # login_attempts:{identifier} → count
+_LOCKOUT_WINDOW = 24 * 60 * 60        # 24h window for counting attempts
+
+
+async def _get_lockout_identifier(request: Request) -> str | None:
+    """Get lockout identifier from request (email or IP-based).
+
+    Only returns an identifier for login-related endpoints.
+    """
+    path = request.url.path
+    if path not in ('/auth/login', '/admin/login'):
+        return None
+    # For /auth/login, try to extract email from request body
+    # For /admin/login, use IP-based identifier
+    if path == '/admin/login':
+        ip = get_real_ip(request)
+        return f'admin_ip:{ip}'
+    # For regular login, use IP as identifier (email extraction is done at the endpoint level)
+    ip = get_real_ip(request)
+    return f'login_ip:{ip}'
+
+
+async def check_lockout(identifier: str) -> bool:
+    """Check if an identifier is currently locked out.
+
+    Returns True if locked, False otherwise.
+    """
+    try:
+        lockout_ttl = await _get_redis().ttl(_LOCKOUT_KEY.format(identifier))
+        return lockout_ttl > 0
+    except Exception as e:
+        logger.warning("Lockout check Redis error: %s", e)
+        return False  # Fail open if Redis is down
+
+
+async def record_failed_attempt(identifier: str) -> None:
+    """Record a failed login attempt and apply lockout if threshold exceeded.
+
+    Escalating lockout:
+      - 5 failures  → 15 minutes
+      - 10 failures → 1 hour
+      - 15 failures → 24 hours
+    """
+    try:
+        key = _ATTEMPTS_KEY.format(identifier)
+        count = await _get_redis().incr(key)
+        if count == 1:
+            await _get_redis().expire(key, _LOCKOUT_WINDOW)
+
+        # Determine lockout duration based on attempt count
+        lockout_seconds = 0
+        for threshold, duration in reversed(_LOCKOUT_THRESHOLDS):
+            if count >= threshold:
+                lockout_seconds = duration
+                break
+
+        if lockout_seconds > 0:
+            lockout_key = _LOCKOUT_KEY.format(identifier)
+            await _get_redis().setex(lockout_key, lockout_seconds, str(count))
+            logger.warning(
+                "Account lockout applied: identifier=%s attempts=%d lockout=%ds",
+                identifier, count, lockout_seconds,
+            )
+            # Send Telegram alert for lockout
+            await _send_lockout_alert(identifier, count, lockout_seconds)
+
+    except Exception as e:
+        logger.warning("Failed to record attempt: %s", e)
+
+
+async def clear_lockout(identifier: str) -> None:
+    """Clear lockout and attempt counter for an identifier (on successful login)."""
+    try:
+        await _get_redis().delete(
+            _LOCKOUT_KEY.format(identifier),
+            _ATTEMPTS_KEY.format(identifier),
+        )
+    except Exception as e:
+        logger.warning("Failed to clear lockout: %s", e)
+
+
+async def get_lockout_info(identifier: str) -> dict:
+    """Get current lockout information for an identifier."""
+    try:
+        lockout_ttl = await _get_redis().ttl(_LOCKOUT_KEY.format(identifier))
+        attempts_raw = await _get_redis().get(_ATTEMPTS_KEY.format(identifier))
+        attempts = int(attempts_raw) if attempts_raw else 0
+        return {
+            'locked': lockout_ttl > 0,
+            'attempts': attempts,
+            'lockout_remaining_seconds': max(0, lockout_ttl),
+        }
+    except Exception:
+        return {'locked': False, 'attempts': 0, 'lockout_remaining_seconds': 0}
+
+
+async def _send_lockout_alert(identifier: str, attempts: int, lockout_seconds: int) -> None:
+    """Send Telegram alert on account lockout (best-effort)."""
+    bot_token = os.getenv('WATCHDOG_BOT_TOKEN', '')
+    chat_id = os.getenv('WATCHDOG_CHAT_ID', '')
+    if not bot_token or not chat_id:
+        return
+    try:
+        import httpx
+        duration_label = f"{lockout_seconds // 60}min" if lockout_seconds < 3600 else f"{lockout_seconds // 3600}hr"
+        msg = (
+            f"🔒 Account Lockout Alert\n"
+            f"Identifier: {identifier}\n"
+            f"Failed attempts: {attempts}\n"
+            f"Lockout duration: {duration_label}\n"
+            f"Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}"
+        )
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.post(
+                f'https://api.telegram.org/bot{bot_token}/sendMessage',
+                json={'chat_id': chat_id, 'text': msg, 'parse_mode': 'HTML'},
+            )
+    except Exception as e:
+        logger.warning("Failed to send lockout alert: %s", e)
+
 
 # ── Rate Limiting ──────────────────────────────────────────
 
@@ -60,6 +195,10 @@ chat_free_limiter = RateLimiter(window_seconds=60, max_requests=30)        # 30 
 chat_pro_limiter = RateLimiter(window_seconds=60, max_requests=120)       # 120 req/min (pro tier)
 chat_enterprise_limiter = RateLimiter(window_seconds=60, max_requests=300)  # 300 req/min (enterprise tier)
 admin_limiter = RateLimiter(window_seconds=60, max_requests=30)      # 30 req/min
+# RAG endpoints — stricter limits to protect embedding/LLM compute + storage
+rag_upload_limiter = RateLimiter(window_seconds=60, max_requests=5)   # 5 uploads/min
+rag_query_limiter = RateLimiter(window_seconds=60, max_requests=20)   # 20 queries/min
+rag_general_limiter = RateLimiter(window_seconds=60, max_requests=60) # 60/min other RAG
 
 
 async def get_client_identifier(request: Request) -> str:
@@ -68,7 +207,6 @@ async def get_client_identifier(request: Request) -> str:
     token = request.headers.get('Authorization', '').removeprefix('Bearer ')
     if token:
         try:
-            import json as _json
             session_data = await _get_redis().get(f'session:{token}')
             if session_data:
                 try:
@@ -123,6 +261,12 @@ def select_limiter(path: str) -> RateLimiter:
         return chat_pro_limiter
     if path.startswith('/admin/'):
         return admin_limiter
+    if path == '/v1/rag/upload':
+        return rag_upload_limiter
+    if path == '/v1/rag/query':
+        return rag_query_limiter
+    if path.startswith('/v1/rag/'):
+        return rag_general_limiter
     return general_limiter
 
 
@@ -133,6 +277,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Skip health check and static
         if request.url.path in ['/health', '/health/live', '/health/ready', '/health/detailed', '/']:
             return await call_next(request)
+
+        # Account lockout check for login endpoints
+        lockout_id = await _get_lockout_identifier(request)
+        if lockout_id and await check_lockout(lockout_id):
+            return JSONResponse(
+                {'detail': 'حساب شما به دلیل تلاش‌های ناموفق زیاد موقتاً قفل شده است', 'retry_after': 900},
+                status_code=423,
+                headers={'Retry-After': '900'},
+            )
 
         identifier = await get_client_identifier(request)
         limiter = select_limiter(request.url.path)
@@ -178,7 +331,6 @@ async def _extract_user_id(request: Request) -> int | None:
     if not token:
         return None
     try:
-        import json as _json
         session_data = await _get_redis().get(f'session:{token}')
         if session_data:
             try:
@@ -196,6 +348,90 @@ async def _get_user_plan(uid: int) -> str:
     """Lazy-import _get_user_plan from chat module to avoid circular imports."""
     from chat import _get_user_plan as _gup
     return await _gup(uid)
+
+
+# ── Session Security ────────────────────────────────────────
+
+MAX_CONCURRENT_SESSIONS = 3
+
+
+async def track_session(token: str, user_id: int, request: Request) -> None:
+    """Track session metadata and enforce concurrent session limit.
+
+    Stores session metadata (IP, user-agent, created_at) in Redis.
+    If user exceeds MAX_CONCURRENT_SESSIONS, revokes the oldest session.
+    """
+    try:
+        metadata = {
+            'user_id': user_id,
+            'ip': get_real_ip(request),
+            'user_agent': request.headers.get('user-agent', '')[:200],
+            'created_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+            'last_seen': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
+        }
+        session_key = f'session_meta:{token}'
+        await _get_redis().setex(session_key, 86400 * 7, _json.dumps(metadata))
+
+        # Track active sessions per user for concurrent limit
+        user_sessions_key = f'active_sessions:{user_id}'
+        await _get_redis().sadd(user_sessions_key, token)
+        await _get_redis().expire(user_sessions_key, 86400 * 7)
+
+        # Enforce concurrent session limit
+        members = await _get_redis().smembers(user_sessions_key)
+        if members and len(members) > MAX_CONCURRENT_SESSIONS:
+            # Find oldest session to revoke
+            oldest_token = None
+            oldest_time = None
+            for tok in members:
+                meta_raw = await _get_redis().get(f'session_meta:{tok}')
+                if meta_raw:
+                    try:
+                        meta = _json.loads(meta_raw)
+                        created = meta.get('created_at', '')
+                        if oldest_time is None or created < oldest_time:
+                            oldest_time = created
+                            oldest_token = tok
+                    except (ValueError, KeyError):
+                        pass
+            if oldest_token and oldest_token != token:
+                await _revoke_session(oldest_token, user_id)
+                logger.info("Revoked oldest session %s for user %d (limit exceeded)", oldest_token[:8], user_id)
+
+    except Exception as e:
+        logger.warning("Session tracking error: %s", e)
+
+
+async def _revoke_session(token: str, user_id: int) -> None:
+    """Revoke a single session and clean up tracking data."""
+    try:
+        await _get_redis().delete(f'session:{token}', f'session_meta:{token}')
+        await _get_redis().srem(f'active_sessions:{user_id}', token)
+    except Exception:
+        pass
+
+
+async def update_session_last_seen(token: str) -> None:
+    """Update the last_seen timestamp for a session."""
+    try:
+        meta_raw = await _get_redis().get(f'session_meta:{token}')
+        if meta_raw:
+            meta = _json.loads(meta_raw)
+            meta['last_seen'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+            await _get_redis().setex(f'session_meta:{token}', 86400 * 7, _json.dumps(meta))
+    except Exception:
+        pass
+
+
+async def get_session_info(token: str) -> dict | None:
+    """Get session metadata (IP, user-agent, timestamps)."""
+    try:
+        meta_raw = await _get_redis().get(f'session_meta:{token}')
+        if meta_raw:
+            return _json.loads(meta_raw)
+    except Exception:
+        pass
+    return None
 
 
 # ── Security Headers ───────────────────────────────────────
@@ -241,7 +477,7 @@ BANNED_EMAIL_DOMAINS = {'mailinator.com', 'guerrillamail.com', '10minutemail.com
 
 # Paths that are cookie-authenticated user mutation endpoints.
 # Admin endpoints already have their own CSRF token system.
-_CSRF_PROTECTED_PREFIXES = ('/auth/', '/api-keys', '/referral/')
+_CSRF_PROTECTED_PREFIXES = ('/auth/', '/api-keys', '/referral/', '/v1/rag/')
 _SAFE_METHODS = ('GET', 'HEAD', 'OPTIONS')
 
 

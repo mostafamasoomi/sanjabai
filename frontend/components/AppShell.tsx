@@ -37,6 +37,7 @@ const NAV: NavItem[] = [
   { href: '/assistants', label: 'دستیارها', icon: 'sparkles', section: 'tools' },
   { href: '/memory', label: 'حافظه', icon: 'sparkles', section: 'tools' },
   { href: '/tasks', label: 'تسک\u200cها', icon: 'calendar', section: 'tools' },
+  { href: '/documents', label: 'سندساز', icon: 'file', section: 'tools' },
   { href: '/developer', label: 'توسعه\u200cدهندگان', icon: 'code', section: 'tools' },
   { href: '/profile', label: 'پروفایل', icon: 'profile', section: 'account' },
   { href: '/referral', label: 'دعوت', icon: 'referral', section: 'account' },

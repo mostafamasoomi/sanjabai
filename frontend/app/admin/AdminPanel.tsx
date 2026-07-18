@@ -914,7 +914,7 @@ export default function AdminPage() {
               </div>
 
               {loadingDetail && !userDetail && (
-                <div className="admin-card"><div className="skeleton h-40 w-full rounded" /></div>
+                <div className="admin-card skeletskeleton h-40 w-full rounded" /></div>
               )}
 
               {userDetail && (
@@ -936,14 +936,14 @@ export default function AdminPage() {
                         {(userDetail.user.display_name || userDetail.user.email || '?')[0].toUpperCase()}
                       </div>
                       <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-                        <div><span className="text-muted">نام</span><p className="font-medium">{userDetail.user.display_name || '—'}</p></div>
-                        <div><span className="text-muted">ایمیل</span><p className="font-medium">{userDetail.user.email || '—'}</p></div>
-                        <div><span className="text-muted">تلگرام</span><p className="font-medium">{userDetail.user.telegram_id || '—'}</p></div>
-                        <div><span className="text-muted">تلفن</span><p className="font-medium">{userDetail.user.phone || '—'}</p></div>
-                        <div><span className="text-muted">کیف پول</span><p className="font-medium">{userDetail.wallet.balance.toLocaleString('fa-IR')} (رزرو: {userDetail.wallet.reserved.toLocaleString('fa-IR')})</p></div>
-                        <div><span className="text-muted">سهمیه روزانه</span><p className="font-medium">{userDetail.quota?.daily_limit?.toLocaleString('fa-IR') || '—'}</p></div>
-                        <div><span className="text-muted">مصرف امروز</span><p className="font-medium">{userDetail.quota?.used_today?.toLocaleString('fa-IR') || '0'}</p></div>
-                        <div><span className="text-muted">عضویت</span><p className="font-medium">{new Date(userDetail.user.created_at).toLocaleDateString('fa-IR')}</p></div>
+                        <div><span className="text-muted font-medium">نfont-medium">{userDetail.user.display_name || '—'}</p></div>
+                        <div><span className="text-muted font-medium">ایمfont-medium">{userDetail.user.email || '—'}</p></div>
+                        <div><span className="text-muted font-medium">تلگرfont-medium">{userDetail.user.telegram_id || '—'}</p></div>
+                        <div><span className="text-muted font-medium">تلfont-medium">{userDetail.user.phone || '—'}</p></div>
+                        <div><span className="text-muted font-medium">کیف پfont-medium">{userDetail.wallet.balance.toLocaleString('fa-IR')} (رزرو: {userDetail.wallet.reserved.toLocaleString('fa-IR')})</p></div>
+                        <div><span className="text-muted font-medium">سهمیه روزاfont-medium">{userDetail.quota?.daily_limit?.toLocaleString('fa-IR') || '—'}</p></div>
+                        <div><span className="text-muted font-medium">مصرف امرfont-medium">{userDetail.quota?.used_today?.toLocaleString('fa-IR') || '0'}</p></div>
+                        <div><span className="text-muted font-medium">عضوfont-medium">{new Date(userDetail.user.created_at).toLocaleDateString('fa-IR')}</p></div>
                       </div>
                     </div>
                     {String(userDetail.user.preferences?.ai_personality || '') && (
@@ -980,8 +980,8 @@ export default function AdminPage() {
                       <div className="overflow-x-auto">
                         <table className="admin-table w-full text-sm">
                           <thead><tr>
-                            <th className="text-right p-2">شناسه</th><th className="text-right p-2">عنوان</th>
-                            <th className="text-right p-2">مدل</th><th className="text-right p-2">پیامها</th>
+                            <th className="text-right p-2 text-right p-2"text-right p-2">عنوان</th>
+                            <th className="text-right p-2 text-right p-text-right p-2">پیامها</th>
                             <th className="text-right p-2">تاریخ</th>
                           </tr></thead>
                           <tbody>
@@ -989,7 +989,7 @@ export default function AdminPage() {
                               <tr key={c.id}>
                                 <td className="p-2 text-xs font-mono">{c.id}</td>
                                 <td className="p-2 text-xs">{c.title}</td>
-                                <td className="p-2 text-xs"><span className="badge badge-accent">{c.model || '—'}</span></td>
+                                <td className="p-2 text-xs badge bbadge badge-accent">{c.model || '—'}</span></td>
                                 <td className="p-2 text-xs">{c.msg_count || '—'}</td>
                                 <td className="p-2 text-xs">{new Date(c.updated_at).toLocaleDateString('fa-IR')}</td>
                               </tr>
@@ -1006,9 +1006,9 @@ export default function AdminPage() {
                         <h3 className="text-sm font-bold text-primary">مصرف بر اساس مدل</h3>
                         <table className="admin-table w-full text-sm">
                           <thead><tr>
-                            <th className="text-right p-2">مدل</th><th className="text-right p-2">درخواست</th>
-                            <th className="text-right p-2">ورودی</th><th className="text-right p-2">خروجی</th>
-                            <th className="text-right p-2">هزینه</th><th className="text-right p-2">آخرین استفاده</th>
+                            <th className="text-right p-2 text-right p-text-right p-2">درخواست</th>
+                            <th className="text-right p-2 text-right p-2"text-right p-2">خروجی</th>
+                            <th className="text-right p-2 text-right p-2"text-right p-2">آخرین استفاده</th>
                           </tr></thead>
                           <tbody>
                             {(userTabData?.by_model || []).map((m: any, i: number) => (
@@ -1029,8 +1029,8 @@ export default function AdminPage() {
                       <div className="overflow-x-auto">
                         <table className="admin-table w-full text-sm">
                           <thead><tr>
-                            <th className="text-right p-2">شناسه</th><th className="text-right p-2">مبلغ</th>
-                            <th className="text-right p-2">مانده</th><th className="text-right p-2">شرح</th>
+                            <th className="text-right p-2 text-right p-2"text-right p-2">مبلغ</th>
+                            <th className="text-right p-2 text-right p-2"text-right p-2">شرح</th>
                             <th className="text-right p-2">تاریخ</th>
                           </tr></thead>
                           <tbody>
@@ -1055,9 +1055,9 @@ export default function AdminPage() {
                         <h3 className="text-sm font-bold text-primary">پرداختها</h3>
                         <table className="admin-table w-full text-sm">
                           <thead><tr>
-                            <th className="text-right p-2">شناسه</th><th className="text-right p-2">مبلغ</th>
-                            <th className="text-right p-2">وضعیت</th><th className="text-right p-2">نوع</th>
-                            <th className="text-right p-2">کد مرجع</th><th className="text-right p-2">تاریخ</th>
+                            <th className="text-right p-2 text-right p-2"text-right p-2">مبلغ</th>
+                            <th className="text-right p-2 text-right p-2"text-right p-2">نوع</th>
+                            <th className="text-right p-2 text-right p-2">کtext-right p-2">تاریخ</th>
                           </tr></thead>
                           <tbody>
                             {(userTabData?.payments || []).map((p: any) => (
@@ -1077,8 +1077,8 @@ export default function AdminPage() {
                             <h3 className="text-sm font-bold text-primary">اشتراکها</h3>
                             <table className="admin-table w-full text-sm">
                               <thead><tr>
-                                <th className="text-right p-2">پلن</th><th className="text-right p-2">وضعیت</th>
-                                <th className="text-right p-2">شروع</th><th className="text-right p-2">پایان</th>
+                                <th className="text-right p-2 text-right p-text-right p-2">وضعیت</th>
+                                <th className="text-right p-2 text-right p-2text-right p-2">پایان</th>
                                 <th className="text-right p-2">مبلغ</th>
                               </tr></thead>
                               <tbody>
@@ -1134,7 +1134,7 @@ export default function AdminPage() {
                           <td className="p-3 text-sm font-mono font-medium text-primary">{p.model}</td>
                           <td className="p-3 text-xs">{p.input_per_million.toLocaleString('fa-IR')}</td>
                           <td className="p-3 text-xs">{p.output_per_million.toLocaleString('fa-IR')}</td>
-                          <td className="p-3"><span className="badge">{p.currency}</span></td>
+                          <td className="p-3 badge">badge">{p.currency}</span></td>
                           <td className="p-3">
                             <button className="btn btn-sm" onClick={() => { setPzModel(p.model); setPzIn(String(p.input_per_million)); setPzOut(String(p.output_per_million)); setPzCur(p.currency) }}>
                               <Icon name="settings" size={14} />

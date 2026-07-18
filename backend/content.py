@@ -274,7 +274,8 @@ async def api_exchange_rate() -> JSONResponse:
             import re, httpx as _hx
             # Use a fresh client (trust_env=True) because the app client has trust_env=False
             # which blocks Docker DNS resolution for some external hosts
-            async with _hx.AsyncClient(timeout=_hx.Timeout(15, connect=10)) as _c:
+            proxy_url = os.getenv("HTTP_PROXY", "http://10.10.11.2:8888")
+            async with _hx.AsyncClient(timeout=_hx.Timeout(15, connect=10), proxy=proxy_url) as _c:
                 resp = await _c.get(
                     'https://www.tgju.org/profile/price_dollar_rl',
                     headers={'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'},
@@ -537,3 +538,32 @@ async def test_models():
     
     results = await asyncio.gather(*[test_one(m) for m in models])
     return JSONResponse({"results": results, "total": len(results)})
+
+# --- Web Search Endpoint ---
+@router.post("/api/search")
+async def web_search(request: Request):
+    """Search the web and return results. Requires auth."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({"detail": "لطفا وارد شوید"}, status_code=401)
+    try:
+        body = await request.json()
+        query = body.get("query", "").strip()
+        if not query:
+            return JSONResponse({"detail": "query is required"}, status_code=400)
+        import httpx
+        proxy_url = os.getenv("HTTP_PROXY", "http://10.10.11.2:8888")
+        async with httpx.AsyncClient(timeout=15, proxy=proxy_url) as c:
+            r = await c.get(
+                "https://api.duckduckgo.com/",
+                params={"q": query, "format": "json", "no_html": 1, "skip_disambig": 1},
+                headers={"User-Agent": "Mozilla/5.0"}
+            )
+            data = r.json()
+            results = []
+            for item in data.get("RelatedTopics", [])[:8]:
+                if "Text" in item and "FirstURL" in item:
+                    results.append({"title": item["Text"].split(" - ")[0], "url": item["FirstURL"], "snippet": item["Text"]})
+            return JSONResponse({"results": results, "query": query})
+    except Exception as e:
+        return JSONResponse({"detail": str(e)[:200]}, status_code=500)

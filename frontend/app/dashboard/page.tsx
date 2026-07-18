@@ -245,14 +245,14 @@ function LedgerRow({ entry }: { entry: LedgerEntry }) {
           </div>
         </div>
       </div>
-      <div className="text-left shrink-0 ml-4">
+      <div className="text-end shrink-0 ms-4">
         <div
           className="text-sm font-semibold"
           style={{ color: isCredit ? 'var(--positive)' : 'var(--danger)' }}
         >
           {isCredit ? '+' : ''}{faNum(entry.amount)} <span className="text-[10px] font-normal">تومان</span>
         </div>
-        <div className="text-[10px] text-[var(--text-muted)] text-left">
+        <div className="text-[10px] text-[var(--text-muted)] text-end">
           موجودی: {faNum(entry.balance_after)}
         </div>
       </div>
@@ -273,7 +273,7 @@ function InfoRow({ icon, label, value }: { icon: IconName; label: string; value:
         </span>
         <span className="text-xs text-[var(--text-secondary)]">{label}</span>
       </div>
-      <span className="text-[13px] font-medium text-[var(--text-primary)] overflow-hidden text-ellipsis whitespace-nowrap text-left">
+      <span className="text-[13px] font-medium text-[var(--text-primary)] overflow-hidden text-ellipsis whitespace-nowrap text-end">
         {value}
       </span>
     </div>
@@ -437,7 +437,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Stat cards skeleton */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--space-4)' }}>
           <StatCardSkeleton />
           <StatCardSkeleton />
           <StatCardSkeleton />

@@ -57,6 +57,41 @@ from dependencies import (
 from security import RateLimitMiddleware, SecurityHeadersMiddleware, CsrfMiddleware
 
 
+# ── Inline security-headers middleware (defense-in-depth) ─────────
+from starlette.middleware.base import BaseHTTPMiddleware
+
+
+class ContentSecurityPolicyMiddleware(BaseHTTPMiddleware):
+    """Explicitly set CSP and core security headers on every response.
+
+    This complements security.SecurityHeadersMiddleware and guarantees the
+    headers exist even if that middleware is removed/renamed. Headers already
+    present on the response (e.g. set by the security middleware) are preserved.
+    """
+
+    _SECURITY_HEADERS = {
+        'Content-Security-Policy': (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: https:; "
+            "connect-src 'self' ws: wss:; "
+            "frame-ancestors 'none';"
+        ),
+        'X-Frame-Options': 'DENY',
+        'X-Content-Type-Options': 'nosniff',
+        'X-XSS-Protection': '1; mode=block',
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+    }
+
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        for key, value in self._SECURITY_HEADERS.items():
+            if key not in response.headers:
+                response.headers[key] = value
+        return response
+
+
 # ═══════════════════════════════════════════════════════════════════
 # Lifespan
 # ═══════════════════════════════════════════════════════════════════
@@ -129,6 +164,7 @@ app.add_middleware(
 )
 app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(ContentSecurityPolicyMiddleware)
 app.add_middleware(CsrfMiddleware)
 app.add_middleware(RateLimitMiddleware)
 

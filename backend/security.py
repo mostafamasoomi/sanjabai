@@ -451,9 +451,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
             'X-DNS-Prefetch-Control': 'off',
             'Content-Security-Policy': (
-                "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-                "style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; "
-                "connect-src 'self' wss: https:;"
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: https:; "
+                "connect-src 'self' ws: wss:; "
+                "frame-ancestors 'none';"
             ),
         }
 

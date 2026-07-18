@@ -564,7 +564,7 @@ async def test_all_models(request: Request):
 import io, random, base64
 from PIL import Image, ImageDraw, ImageFont
 
-@router.get("/api/captcha")
+@router.get("/captcha")
 async def captcha_image(request: Request):
     """Generate a simple math captcha image."""
     a = random.randint(1, 15)
@@ -586,7 +586,7 @@ async def captcha_image(request: Request):
         draw.point((x, y), fill=(random.randint(100, 200), random.randint(100, 200), random.randint(100, 200)))
     try:
         font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
-    except:
+    except Exception:
         font = ImageFont.load_default()
     draw.text((15, 12), text, fill=(200, 200, 255), font=font)
     

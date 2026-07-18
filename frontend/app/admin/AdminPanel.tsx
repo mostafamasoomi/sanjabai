@@ -149,9 +149,9 @@ function StatCard({ icon, label, value, color }: { icon: React.ComponentProps<ty
         <div className="p-2 rounded-lg" style={{ background: `${color}15` }}>
           <Icon name={icon} size={18} className="opacity-80" style={{ color }} />
         </div>
-        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{label}</span>
+        <span className="text-xs text-muted">{label}</span>
       </div>
-      <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{value}</p>
+      <p className="text-2xl font-bold text-primary">{value}</p>
     </div>
   )
 }
@@ -161,8 +161,8 @@ function StatCard({ icon, label, value, color }: { icon: React.ComponentProps<ty
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div className="mb-6">
-      <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>{title}</h1>
-      {subtitle && <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{subtitle}</p>}
+      <h1 className="text-xl font-bold text-primary">{title}</h1>
+      {subtitle && <p className="text-sm mt-1 text-muted">{subtitle}</p>}
     </div>
   )
 }
@@ -172,7 +172,7 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }}>{label}</label>
+      <label className="block text-xs font-medium mb-1.5 text-secondary">{label}</label>
       {children}
     </div>
   )
@@ -559,10 +559,10 @@ export default function AdminPage() {
         <div className="card w-full max-w-sm">
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4" style={{ background: 'var(--accent-dim)' }}>
-              <Icon name="settings" size={28} style={{ color: 'var(--accent)' }} />
+              <Icon name="settings" size={28} className="text-accent" />
             </div>
-            <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>پنل مدیریت</h1>
-            <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Multiai Admin Dashboard</p>
+            <h1 className="text-xl font-bold text-primary">پنل مدیریت</h1>
+            <p className="text-sm mt-1 text-muted">Multiai Admin Dashboard</p>
           </div>
 
           <div className="space-y-4">
@@ -610,7 +610,7 @@ export default function AdminPage() {
         <button className="btn btn-icon btn-sm" onClick={() => setSidebarOpen(!sidebarOpen)}>
           <Icon name={sidebarOpen ? 'close' : 'menu'} size={20} />
         </button>
-        <span className="text-sm font-bold" style={{ color: 'var(--accent)' }}>
+        <span className="text-sm font-bold text-accent">
           {currentNav?.label}
         </span>
         <button className="btn btn-icon btn-sm" onClick={logout}>
@@ -635,11 +635,11 @@ export default function AdminPage() {
           <div className="p-5 border-b" style={{ borderColor: 'var(--border)' }}>
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'var(--accent-dim)' }}>
-                <Icon name="settings" size={18} style={{ color: 'var(--accent)' }} />
+                <Icon name="settings" size={18} className="text-accent" />
               </div>
               <div>
-                <h2 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>Multiai</h2>
-                <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>Admin Panel</p>
+                <h2 className="text-sm font-bold text-primary">Multiai</h2>
+                <p className="text-[10px] text-muted">Admin Panel</p>
               </div>
             </div>
           </div>
@@ -677,8 +677,7 @@ export default function AdminPage() {
           {/* Sidebar Footer */}
           <div className="absolute bottom-0 right-0 left-0 p-3 border-t" style={{ borderColor: 'var(--border)' }}>
             <button
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors"
-              style={{ color: 'var(--text-muted)' }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-muted"
               onClick={logout}
             >
               <Icon name="logout" size={18} />
@@ -689,7 +688,7 @@ export default function AdminPage() {
 
         {/* Mobile Overlay */}
         {sidebarOpen && (
-          <div className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />
+          <div role="button" tabIndex={0} className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />
         )}
 
         {/* ─── Main Content ────────────────────────────────────────────── */}
@@ -697,7 +696,7 @@ export default function AdminPage() {
           {/* Refresh Button */}
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>{currentNav?.label}</h1>
+              <h1 className="text-xl font-bold text-primary">{currentNav?.label}</h1>
             </div>
             <button className="btn btn-sm" onClick={page === 'security' ? loadSecurityData : loadAll} title="بروزرسانی">
               <Icon name="refresh" size={16} />
@@ -724,8 +723,8 @@ export default function AdminPage() {
 
                   <div className="admin-card">
                     <div className="flex items-center gap-2 mb-4">
-                      <Icon name="history" size={18} style={{ color: 'var(--text-secondary)' }} />
-                      <h3 className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>تراکنش‌های اخیر</h3>
+                      <Icon name="history" size={18} className="text-secondary" />
+                      <h3 className="font-semibold text-sm text-primary">تراکنش‌های اخیر</h3>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="admin-table w-full text-sm">
@@ -740,7 +739,7 @@ export default function AdminPage() {
                         <tbody>
                           {(analytics.recent_ledger || []).length === 0 ? (
                             <tr>
-                              <td colSpan={4} className="p-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+                              <td colSpan={4} className="p-6 text-center text-sm text-muted">
                                 تراکنشی ثبت نشده
                               </td>
                             </tr>
@@ -753,8 +752,8 @@ export default function AdminPage() {
                                     {l.amount > 0 ? '+' : ''}{l.amount.toLocaleString('fa-IR')}
                                   </span>
                                 </td>
-                                <td className="p-3 text-xs" style={{ color: 'var(--text-secondary)' }}>{l.reason}</td>
-                                <td className="p-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                                <td className="p-3 text-xs text-secondary">{l.reason}</td>
+                                <td className="p-3 text-xs text-muted">
                                   {new Date(l.created_at).toLocaleDateString('fa-IR')}
                                 </td>
                               </tr>
@@ -783,14 +782,18 @@ export default function AdminPage() {
              ───────────────────────────────────────────────────────────── */}
           {page === 'users' && !selectedUserId && (
             <div className="space-y-4">
-              <SectionHeader title="مدیریت کاربران" subtitle={`${users.length} کاربر ثبتنام شده`} />
+              <SectionHeader title="مدیریت کاربران" subtitle={`${users.length} کاربر ثبت‌نام شده`} />
               <div className="admin-card">
-                <input
-                  className="input w-full"
-                  placeholder="جستجو: ایمیل، نام، شناسه..."
-                  value={userSearch}
-                  onChange={(e) => setUserSearch(e.target.value)}
-                />
+                <div style={{ position: 'relative' }}>
+                  <Icon name="search" size={16} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+                  <input
+                    className="input w-full"
+                    placeholder="جستجو: ایمیل، نام، شناسه..."
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                    style={{ paddingRight: '2.5rem' }}
+                  />
+                </div>
               </div>
               <div className="admin-card overflow-x-auto">
                 <table className="admin-table w-full text-sm">
@@ -814,7 +817,7 @@ export default function AdminPage() {
                              String(u.id).includes(q)
                     }).length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="p-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+                        <td colSpan={7} className="p-6 text-center text-sm text-muted">
                           کاربری یافت نشد
                         </td>
                       </tr>
@@ -828,8 +831,8 @@ export default function AdminPage() {
                       }).map((u) => (
                         <tr key={u.id} className="cursor-pointer hover:bg-[var(--bg-elevated)]" onClick={() => openUserDetail(u.id)}>
                           <td className="p-3 text-xs font-mono">{u.id}</td>
-                          <td className="p-3 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{u.username || '—'}</td>
-                          <td className="p-3 text-xs" style={{ color: 'var(--text-secondary)' }}>{u.email}</td>
+                          <td className="p-3 text-sm font-medium text-primary">{u.username || '—'}</td>
+                          <td className="p-3 text-xs text-secondary">{u.email}</td>
                           <td className="p-3">
                             <span className="badge badge-accent">{u.plan || 'رایگان'}</span>
                           </td>
@@ -840,7 +843,7 @@ export default function AdminPage() {
                             </span>
                           </td>
                           <td className="p-3">
-                            <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                            <div role="button" tabIndex={0} className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                               <button className="btn btn-sm" onClick={() => setEditingUser(u)} title="ویرایش">
                                 <Icon name="settings" size={14} />
                               </button>
@@ -863,11 +866,11 @@ export default function AdminPage() {
 
               {/* User Edit Modal */}
               {editingUser && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setEditingUser(null)}>
+                <div role="button" tabIndex={0} className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setEditingUser(null)}>
                   <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-                  <div className="card relative w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+                  <div role="button" tabIndex={0} className="card relative w-full max-w-md" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-bold" style={{ color: 'var(--text-primary)' }}>ویرایش کاربر</h3>
+                      <h3 className="font-bold text-primary">ویرایش کاربر</h3>
                       <button className="btn btn-icon btn-sm" onClick={() => setEditingUser(null)}>
                         <Icon name="close" size={16} />
                       </button>
@@ -933,20 +936,20 @@ export default function AdminPage() {
                         {(userDetail.user.display_name || userDetail.user.email || '?')[0].toUpperCase()}
                       </div>
                       <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-                        <div><span style={{ color: 'var(--text-muted)' }}>نام</span><p className="font-medium">{userDetail.user.display_name || '—'}</p></div>
-                        <div><span style={{ color: 'var(--text-muted)' }}>ایمیل</span><p className="font-medium">{userDetail.user.email || '—'}</p></div>
-                        <div><span style={{ color: 'var(--text-muted)' }}>تلگرام</span><p className="font-medium">{userDetail.user.telegram_id || '—'}</p></div>
-                        <div><span style={{ color: 'var(--text-muted)' }}>تلفن</span><p className="font-medium">{userDetail.user.phone || '—'}</p></div>
-                        <div><span style={{ color: 'var(--text-muted)' }}>کیف پول</span><p className="font-medium">{userDetail.wallet.balance.toLocaleString('fa-IR')} (رزرو: {userDetail.wallet.reserved.toLocaleString('fa-IR')})</p></div>
-                        <div><span style={{ color: 'var(--text-muted)' }}>سهمیه روزانه</span><p className="font-medium">{userDetail.quota?.daily_limit?.toLocaleString('fa-IR') || '—'}</p></div>
-                        <div><span style={{ color: 'var(--text-muted)' }}>مصرف امروز</span><p className="font-medium">{userDetail.quota?.used_today?.toLocaleString('fa-IR') || '0'}</p></div>
-                        <div><span style={{ color: 'var(--text-muted)' }}>عضویت</span><p className="font-medium">{new Date(userDetail.user.created_at).toLocaleDateString('fa-IR')}</p></div>
+                        <div><span className="text-muted">نام</span><p className="font-medium">{userDetail.user.display_name || '—'}</p></div>
+                        <div><span className="text-muted">ایمیل</span><p className="font-medium">{userDetail.user.email || '—'}</p></div>
+                        <div><span className="text-muted">تلگرام</span><p className="font-medium">{userDetail.user.telegram_id || '—'}</p></div>
+                        <div><span className="text-muted">تلفن</span><p className="font-medium">{userDetail.user.phone || '—'}</p></div>
+                        <div><span className="text-muted">کیف پول</span><p className="font-medium">{userDetail.wallet.balance.toLocaleString('fa-IR')} (رزرو: {userDetail.wallet.reserved.toLocaleString('fa-IR')})</p></div>
+                        <div><span className="text-muted">سهمیه روزانه</span><p className="font-medium">{userDetail.quota?.daily_limit?.toLocaleString('fa-IR') || '—'}</p></div>
+                        <div><span className="text-muted">مصرف امروز</span><p className="font-medium">{userDetail.quota?.used_today?.toLocaleString('fa-IR') || '0'}</p></div>
+                        <div><span className="text-muted">عضویت</span><p className="font-medium">{new Date(userDetail.user.created_at).toLocaleDateString('fa-IR')}</p></div>
                       </div>
                     </div>
                     {String(userDetail.user.preferences?.ai_personality || '') && (
                       <div className="mt-3 p-3 rounded-lg text-xs" style={{ background: 'var(--bg-elevated)' }}>
-                        <span className="font-bold" style={{ color: 'var(--accent)' }}>🧠 Soul: </span>
-                        <span style={{ color: 'var(--text-secondary)' }}>{String(userDetail.user.preferences.ai_personality)}</span>
+                        <span className="font-bold text-accent">🧠 Soul: </span>
+                        <span className="text-secondary">{String(userDetail.user.preferences.ai_personality)}</span>
                       </div>
                     )}
                   </div>
@@ -969,7 +972,7 @@ export default function AdminPage() {
                   <div className="admin-card min-h-[200px]">
                     {loadingDetail && <div className="skeleton h-32 w-full rounded" />}
                     {!loadingDetail && userDetailTab === 'overview' && (
-                      <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                      <div className="text-sm text-secondary">
                         <p>از تب‌های بالا برای مشاهده جزئیات استفاده کنید.</p>
                       </div>
                     )}
@@ -993,14 +996,14 @@ export default function AdminPage() {
                             ))}
                           </tbody>
                         </table>
-                        <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
+                        <p className="text-xs mt-2 text-muted">
                           {(userTabData?.total || 0)} گفتگو
                         </p>
                       </div>
                     )}
                     {!loadingDetail && userDetailTab === 'usage' && userTabData && (
                       <div className="space-y-4">
-                        <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>مصرف بر اساس مدل</h3>
+                        <h3 className="text-sm font-bold text-primary">مصرف بر اساس مدل</h3>
                         <table className="admin-table w-full text-sm">
                           <thead><tr>
                             <th className="text-right p-2">مدل</th><th className="text-right p-2">درخواست</th>
@@ -1042,14 +1045,14 @@ export default function AdminPage() {
                             ))}
                           </tbody>
                         </table>
-                        <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>
+                        <p className="text-xs mt-2 text-muted">
                           {(userTabData?.total || 0)} تراکنش
                         </p>
                       </div>
                     )}
                     {!loadingDetail && userDetailTab === 'payments' && userTabData && (
                       <div className="space-y-4">
-                        <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>پرداختها</h3>
+                        <h3 className="text-sm font-bold text-primary">پرداختها</h3>
                         <table className="admin-table w-full text-sm">
                           <thead><tr>
                             <th className="text-right p-2">شناسه</th><th className="text-right p-2">مبلغ</th>
@@ -1071,7 +1074,7 @@ export default function AdminPage() {
                         </table>
                         {(userTabData?.subscriptions || []).length > 0 && (
                           <>
-                            <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>اشتراکها</h3>
+                            <h3 className="text-sm font-bold text-primary">اشتراکها</h3>
                             <table className="admin-table w-full text-sm">
                               <thead><tr>
                                 <th className="text-right p-2">پلن</th><th className="text-right p-2">وضعیت</th>
@@ -1121,14 +1124,14 @@ export default function AdminPage() {
                   <tbody>
                     {prices.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="p-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+                        <td colSpan={5} className="p-6 text-center text-sm text-muted">
                           تعرفه‌ای ثبت نشده
                         </td>
                       </tr>
                     ) : (
                       prices.map((p: any) => (
                         <tr key={p.model}>
-                          <td className="p-3 text-sm font-mono font-medium" style={{ color: 'var(--text-primary)' }}>{p.model}</td>
+                          <td className="p-3 text-sm font-mono font-medium text-primary">{p.model}</td>
                           <td className="p-3 text-xs">{p.input_per_million.toLocaleString('fa-IR')}</td>
                           <td className="p-3 text-xs">{p.output_per_million.toLocaleString('fa-IR')}</td>
                           <td className="p-3"><span className="badge">{p.currency}</span></td>
@@ -1145,7 +1148,7 @@ export default function AdminPage() {
               </div>
 
               <div className="admin-card">
-                <h3 className="font-semibold text-sm mb-4" style={{ color: 'var(--text-primary)' }}>
+                <h3 className="font-semibold text-sm mb-4 text-primary">
                   {pzModel ? `ویرایش ${pzModel}` : 'افزودن تعرفه جدید'}
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1186,7 +1189,7 @@ export default function AdminPage() {
 
               <div className="space-y-2">
                 {features.length === 0 && (
-                  <div className="admin-card text-center py-8" style={{ color: 'var(--text-muted)' }}>
+                  <div className="admin-card text-center py-8 text-muted">
                     ویژگی‌ای ثبت نشده
                   </div>
                 )}
@@ -1197,8 +1200,8 @@ export default function AdminPage() {
                         {f.icon || '—'}
                       </div>
                       <div>
-                        <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{f.title}</p>
-                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{f.description || 'بدون توضیح'}</p>
+                        <p className="text-sm font-medium text-primary">{f.title}</p>
+                        <p className="text-xs text-muted">{f.description || 'بدون توضیح'}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1218,7 +1221,7 @@ export default function AdminPage() {
               </div>
 
               <div className="admin-card">
-                <h3 className="font-semibold text-sm mb-4" style={{ color: 'var(--text-primary)' }}>
+                <h3 className="font-semibold text-sm mb-4 text-primary">
                   {ftId ? 'ویرایش ویژگی' : 'افزودن ویژگی جدید'}
                 </h3>
                 <div className="space-y-4">
@@ -1269,7 +1272,7 @@ export default function AdminPage() {
 
               <div className="space-y-2">
                 {discounts.length === 0 && (
-                  <div className="admin-card text-center py-8" style={{ color: 'var(--text-muted)' }}>
+                  <div className="admin-card text-center py-8 text-muted">
                     کد تخفیفی ثبت نشده
                   </div>
                 )}
@@ -1279,7 +1282,7 @@ export default function AdminPage() {
                       <div className="px-3 py-1.5 rounded-lg font-mono text-sm font-bold" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
                         {d.code}
                       </div>
-                      <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{d.percent}%</span>
+                      <span className="text-sm text-primary">{d.percent}%</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={d.active ? 'badge badge-positive' : 'badge badge-warning'}>
@@ -1297,7 +1300,7 @@ export default function AdminPage() {
               </div>
 
               <div className="admin-card">
-                <h3 className="font-semibold text-sm mb-4" style={{ color: 'var(--text-primary)' }}>
+                <h3 className="font-semibold text-sm mb-4 text-primary">
                   {dcId ? 'ویرایش کد تخفیف' : 'افزودن کد تخفیف'}
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1409,11 +1412,11 @@ export default function AdminPage() {
               <div className="admin-card">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--accent-dim)' }}>
-                    <Icon name="models" size={16} style={{ color: 'var(--accent)' }} />
+                    <Icon name="models" size={16} className="text-accent" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>مدل پیشفرض سازمان</h3>
-                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>مدلی که کاربران جدید به‌صورت پیشفرض استفاده می‌کنند</p>
+                    <h3 className="text-sm font-bold text-primary">مدل پیشفرض سازمان</h3>
+                    <p className="text-xs text-muted">مدلی که کاربران جدید به‌صورت پیشفرض استفاده می‌کنند</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -1438,17 +1441,17 @@ export default function AdminPage() {
               {models.length === 0 ? (
                 <div className="admin-card text-center py-12">
                   <Icon name="models" size={40} style={{ color: 'var(--text-muted)', margin: '0 auto 12px' }} />
-                  <p style={{ color: 'var(--text-muted)' }}>مدلی بارگذاری نشده</p>
-                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>پروکسی را بررسی کنید</p>
+                  <p className="text-muted">مدلی بارگذاری نشده</p>
+                  <p className="text-xs mt-1 text-muted">پروکسی را بررسی کنید</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {models.map((m) => (
                     <div key={m} className="admin-card flex items-center gap-3">
                       <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--accent-dim)' }}>
-                        <Icon name="models" size={16} style={{ color: 'var(--accent)' }} />
+                        <Icon name="models" size={16} className="text-accent" />
                       </div>
-                      <span className="text-sm font-mono" style={{ color: 'var(--text-primary)' }}>{m}</span>
+                      <span className="text-sm font-mono text-primary">{m}</span>
                     </div>
                   ))}
                 </div>
@@ -1505,7 +1508,7 @@ export default function AdminPage() {
                             }}
                           />
                         </div>
-                        <span className="text-xs" style={{ color: 'var(--text-muted)' }}>سطح تهدید</span>
+                        <span className="text-xs text-muted">سطح تهدید</span>
                       </div>
                       <p
                         className="text-xl font-bold"
@@ -1543,8 +1546,8 @@ export default function AdminPage() {
                   {/* ─── Failed Login Chart (sparkline-style bars) ──────── */}
                   <div className="admin-card">
                     <div className="flex items-center gap-2 mb-4">
-                      <Icon name="chart" size={18} style={{ color: 'var(--text-secondary)' }} />
-                      <h3 className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
+                      <Icon name="chart" size={18} className="text-secondary" />
+                      <h3 className="font-semibold text-sm text-primary">
                         نمودار ورودهای ناموفق (۲۴ ساعت اخیر)
                       </h3>
                     </div>
@@ -1572,10 +1575,10 @@ export default function AdminPage() {
                       })}
                     </div>
                     <div className="flex justify-between mt-2">
-                      <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                      <span className="text-[10px] text-muted">
                         {securityStats.failed_login_chart?.[0]?.hour || ''}
                       </span>
-                      <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                      <span className="text-[10px] text-muted">
                         {securityStats.failed_login_chart?.[securityStats.failed_login_chart.length - 1]?.hour || ''}
                       </span>
                     </div>
@@ -1584,14 +1587,14 @@ export default function AdminPage() {
                   {/* ─── Banned Users ──────────────────────────────────── */}
                   <div className="admin-card">
                     <div className="flex items-center gap-2 mb-4">
-                      <Icon name="security" size={18} style={{ color: 'var(--warning)' }} />
-                      <h3 className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
+                      <Icon name="security" size={18} className="text-warning" />
+                      <h3 className="font-semibold text-sm text-primary">
                         کاربران مسدود شده
                       </h3>
                       <span className="badge badge-warning mr-auto">{securityStats.banned_users?.length || 0}</span>
                     </div>
                     {(securityStats.banned_users || []).length === 0 ? (
-                      <div className="text-center py-6 text-sm" style={{ color: 'var(--text-muted)' }}>
+                      <div className="text-center py-6 text-sm text-muted">
                         کاربر مسدود شده‌ای وجود ندارد
                       </div>
                     ) : (
@@ -1610,15 +1613,15 @@ export default function AdminPage() {
                             {(securityStats.banned_users || []).map((u) => (
                               <tr key={u.id}>
                                 <td className="p-3 text-xs font-mono">{u.id}</td>
-                                <td className="p-3 text-sm" style={{ color: 'var(--text-primary)' }}>{u.username || '—'}</td>
-                                <td className="p-3 text-xs" style={{ color: 'var(--text-secondary)' }}>{u.email}</td>
-                                <td className="p-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                                <td className="p-3 text-sm text-primary">{u.username || '—'}</td>
+                                <td className="p-3 text-xs text-secondary">{u.email}</td>
+                                <td className="p-3 text-xs text-muted">
                                   {u.banned_at ? new Date(u.banned_at).toLocaleDateString('fa-IR') : '—'}
                                 </td>
                                 <td className="p-3">
                                   <button
                                     className="btn btn-sm"
-                                    style={{ background: 'var(--positive)', color: '#fff' }}
+                                    style={{ background: 'var(--positive)', color: 'var(--text-on-accent)' }}
                                     onClick={() => unbanUser(u.id)}
                                   >
                                     رفع مسدودیت
@@ -1647,8 +1650,8 @@ export default function AdminPage() {
               {/* ─── Security Events Table ──────────────────────────── */}
               <div className="admin-card">
                 <div className="flex items-center gap-2 mb-4">
-                  <Icon name="notification" size={18} style={{ color: 'var(--danger)' }} />
-                  <h3 className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
+                  <Icon name="notification" size={18} className="text-danger" />
+                  <h3 className="font-semibold text-sm text-primary">
                     رویدادهای امنیتی اخیر
                   </h3>
                   {securityLoading && (
@@ -1669,7 +1672,7 @@ export default function AdminPage() {
                     <tbody>
                       {securityEvents.length === 0 ? (
                         <tr>
-                          <td colSpan={5} className="p-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+                          <td colSpan={5} className="p-6 text-center text-sm text-muted">
                             رویداد امنیتی ثبت نشده
                           </td>
                         </tr>
@@ -1687,16 +1690,16 @@ export default function AdminPage() {
                                 {ev.event_type || 'نامشخص'}
                               </span>
                             </td>
-                            <td className="p-3 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                            <td className="p-3 text-xs text-secondary">
                               {ev.user_email || ev.user_id || '—'}
                             </td>
-                            <td className="p-3 text-xs font-mono" style={{ color: 'var(--text-muted)' }}>
+                            <td className="p-3 text-xs font-mono text-muted">
                               {ev.ip_address || '—'}
                             </td>
-                            <td className="p-3 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                            <td className="p-3 text-xs text-secondary">
                               {ev.details || '—'}
                             </td>
-                            <td className="p-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                            <td className="p-3 text-xs text-muted">
                               {new Date(ev.created_at).toLocaleString('fa-IR')}
                             </td>
                           </tr>
@@ -1710,8 +1713,8 @@ export default function AdminPage() {
               {/* ─── Audit Log Table ─────────────────────────────────── */}
               <div className="admin-card">
                 <div className="flex items-center gap-2 mb-4">
-                  <Icon name="history" size={18} style={{ color: 'var(--accent)' }} />
-                  <h3 className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>
+                  <Icon name="history" size={18} className="text-accent" />
+                  <h3 className="font-semibold text-sm text-primary">
                     لاگ عملیات ادمین
                   </h3>
                 </div>
@@ -1756,7 +1759,7 @@ export default function AdminPage() {
                     <tbody>
                       {auditLogs.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="p-6 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
+                          <td colSpan={6} className="p-6 text-center text-sm text-muted">
                             لاگ عملیاتی ثبت نشده
                           </td>
                         </tr>
@@ -1774,16 +1777,16 @@ export default function AdminPage() {
                                 {log.action || '—'}
                               </span>
                             </td>
-                            <td className="p-3 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                            <td className="p-3 text-xs text-secondary">
                               {log.target_type || '—'}
                             </td>
                             <td className="p-3 text-xs font-mono">
                               {log.target_id || '—'}
                             </td>
-                            <td className="p-3 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                            <td className="p-3 text-xs text-secondary">
                               {log.details || '—'}
                             </td>
-                            <td className="p-3 text-xs" style={{ color: 'var(--text-muted)' }}>
+                            <td className="p-3 text-xs text-muted">
                               {new Date(log.created_at).toLocaleString('fa-IR')}
                             </td>
                           </tr>
@@ -1796,7 +1799,7 @@ export default function AdminPage() {
                 {/* Pagination */}
                 {auditTotal > 50 && (
                   <div className="flex items-center justify-between mt-4 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
-                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                    <span className="text-xs text-muted">
                       صفحه {auditPage} از {Math.ceil(auditTotal / 50)}
                     </span>
                     <div className="flex gap-2">

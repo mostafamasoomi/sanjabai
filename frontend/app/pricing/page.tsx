@@ -56,7 +56,7 @@ function getModelTier(modelId: string): { label: string; color: string } {
   if (modelId.includes('flash') && !modelId.includes('agnes')) return { label: 'اقتصادی', color: 'var(--positive)' }
   if (modelId.includes('pro-ultraspeed')) return { label: 'سریع', color: 'var(--warning)' }
   if (modelId.includes('pro')) return { label: 'پیشرفته', color: 'var(--accent)' }
-  if (modelId.includes('large') || modelId.includes('medium')) return { label: 'حرفهای', color: '#e879f9' }
+  if (modelId.includes('large') || modelId.includes('medium')) return { label: 'حرفهای', color: 'var(--accent)' }
   return { label: 'اقتصادی', color: 'var(--positive)' }
 }
 
@@ -132,11 +132,11 @@ export default function PricingPage() {
       {/* Hero */}
       <div style={{ textAlign: 'center', marginBottom: 48 }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 16px', borderRadius: 'var(--radius-full)', background: 'var(--accent-dim)', marginBottom: 20 }}>
-          <Icon name="sparkles" size={16} style={{ color: 'var(--accent)' }} />
+          <Icon name="sparkles" size={16} className="text-accent" />
           <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>تعرفه مدلها</span>
         </div>
         <h1 style={{ fontSize: 32, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12, lineHeight: 1.4 }}>
-          قیمتگذاری شفاف، پرداخت به ازای مصرف
+          قیمت‌گذاری شفاف، پرداخت به ازای مصرف
         </h1>
         <p style={{ fontSize: 15, color: 'var(--text-secondary)', maxWidth: 560, margin: '0 auto', lineHeight: 1.7 }}>
           هر مدل هوش مصنوعی قیمت مشخصی دارد. فقط به اندازه مصرف واقعی خود پرداخت کنید. قیمتها به تومان به ازای هر ۱ میلیون توکن هستند.
@@ -147,7 +147,7 @@ export default function PricingPage() {
       {exchangeRate && (
         <div className="card" style={{ padding: '14px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, background: 'linear-gradient(135deg, rgba(124,111,247,0.06) 0%, rgba(103,232,249,0.03) 100%)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Icon name="refresh" size={18} style={{ color: 'var(--accent)' }} />
+            <Icon name="refresh" size={18} className="text-accent" />
             <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>نرخ ارز:</span>
             <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>
               ۱ دلار = {exchangeRate.toLocaleString('fa-IR')} تومان
@@ -167,7 +167,7 @@ export default function PricingPage() {
       {user && balance !== null && (
         <div className="card" style={{ padding: '16px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Icon name="wallet" size={18} style={{ color: 'var(--accent)' }} />
+            <Icon name="wallet" size={18} className="text-accent" />
             <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>موجودی کیف پول:</span>
             <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{fmtToman(balance)}</span>
           </div>
@@ -182,12 +182,12 @@ export default function PricingPage() {
       <div className="card" style={{ overflow: 'hidden', marginBottom: 32 }}>
         {/* Table Header */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 130px 130px 130px 90px', gap: 8, padding: '14px 16px', borderBottom: '2px solid var(--border)', background: 'var(--bg-hover)', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
-          <div style={{ cursor: 'pointer' }} onClick={() => setSortBy('name')}>مدل {sortBy === 'name' && '↕'}</div>
-          <div style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setSortBy('input')}>ورودی/1M (USD) {sortBy === 'input' && '↕'}</div>
-          <div style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setSortBy('input')}>ورودی/1M (تومان) {sortBy === 'input' && '↕'}</div>
-          <div style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setSortBy('output')}>خروجی/1M (USD) {sortBy === 'output' && '↕'}</div>
-          <div style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setSortBy('output')}>خروجی/1M (تومان) {sortBy === 'output' && '↕'}</div>
-          <div style={{ textAlign: 'center' }}>سطح</div>
+          <div role="button" tabIndex={0} className="cursor-pointer" onClick={() => setSortBy('name')}>مدل {sortBy === 'name' && '↕'}</div>
+          <div role="button" tabIndex={0} style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setSortBy('input')}>ورودی/1M (USD) {sortBy === 'input' && '↕'}</div>
+          <div role="button" tabIndex={0} style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setSortBy('input')}>ورودی/1M (تومان) {sortBy === 'input' && '↕'}</div>
+          <div role="button" tabIndex={0} style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setSortBy('output')}>خروجی/1M (USD) {sortBy === 'output' && '↕'}</div>
+          <div role="button" tabIndex={0} style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setSortBy('output')}>خروجی/1M (تومان) {sortBy === 'output' && '↕'}</div>
+          <div className="text-center">سطح</div>
         </div>
 
         {loading ? (
@@ -195,7 +195,7 @@ export default function PricingPage() {
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
               <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '14px 0', borderBottom: i < 9 ? '1px solid var(--border)' : 'none' }}>
                 <div className="skeleton" style={{ width: 36, height: 36, borderRadius: 'var(--radius-full)' }} />
-                <div style={{ flex: 1 }}><div className="skeleton" style={{ width: 140, height: 16, borderRadius: 'var(--radius-sm)' }} /></div>
+                <div className="flex-1"><div className="skeleton" style={{ width: 140, height: 16, borderRadius: 'var(--radius-sm)' }} /></div>
                 <div className="skeleton" style={{ width: 80, height: 16, borderRadius: 'var(--radius-sm)' }} />
                 <div className="skeleton" style={{ width: 80, height: 16, borderRadius: 'var(--radius-sm)' }} />
                 <div className="skeleton" style={{ width: 80, height: 16, borderRadius: 'var(--radius-sm)' }} />
@@ -269,7 +269,7 @@ export default function PricingPage() {
                 </div>
 
                 {/* Tier badge */}
-                <div style={{ textAlign: 'center' }}>
+                <div className="text-center">
                   <span style={{ fontSize: 10, fontWeight: 600, color: tier.color, background: `${tier.color}15`, padding: '3px 8px', borderRadius: 'var(--radius-full)' }}>{tier.label}</span>
                 </div>
               </div>
@@ -282,29 +282,29 @@ export default function PricingPage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 40 }}>
         <div className="card" style={{ padding: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <Icon name="info" size={16} style={{ color: 'var(--accent)' }} />
+            <Icon name="info" size={16} className="text-accent" />
             <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>واحد قیمت</span>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-            قیمتها به <strong>تومان</strong> و <strong>دلار</strong> به ازای هر <strong>۱ میلیون توکن</strong> هستند. یک پیام معمولی حدود ۵۰۰-۲۰۰۰ توکن مصرف میکند.
+            قیمتها به <strong>تومان</strong> و <strong>دلار</strong> به ازای هر <strong>۱ میلیون توکن</strong> هستند. یک پیام معمولی حدود ۵۰۰-۲۰۰۰ توکن مصرف می‌کند.
           </p>
         </div>
         <div className="card" style={{ padding: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <Icon name="wallet" size={16} style={{ color: 'var(--accent)' }} />
+            <Icon name="wallet" size={16} className="text-accent" />
             <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>شارژ کیف پول</span>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-            کیف پول خود را شارژ کنید و به ازای مصرف واقعی هر پیام، هزینه از موجودی کسر میشود. بدون اشتراک ماهانه!
+            کیف پول خود را شارژ کنید و به ازای مصرف واقعی هر پیام، هزینه از موجودی کسر می‌شود. بدون اشتراک ماهانه!
           </p>
         </div>
         <div className="card" style={{ padding: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <Icon name="sparkles" size={16} style={{ color: 'var(--accent)' }} />
+            <Icon name="sparkles" size={16} className="text-accent" />
             <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>مدل هوشمند</span>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-            با حالت «Smart»، سیستم بهترین مدل را بر اساس پیام شما انتخاب میکند تا بهترین کیفیت و هزینه را داشته باشید.
+            با حالت «Smart»، سیستم بهترین مدل را بر اساس پیام شما انتخاب می‌کند تا بهترین کیفیت و هزینه را داشته باشید.
           </p>
         </div>
       </div>

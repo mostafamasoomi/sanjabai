@@ -121,7 +121,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   ]
 
   return (
-    <div className="layout-shell" onClick={() => userMenuOpen && setUserMenuOpen(false)}>
+    <div role="button" tabIndex={0} className="layout-shell" onClick={() => userMenuOpen && setUserMenuOpen(false)}>
       {/* ── Desktop Sidebar — hidden when not logged in ── */}
       {user && (
       <aside className="layout-sidebar hidden md:flex sidebar-glass">
@@ -181,7 +181,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           ) : (
             <div className="flex flex-col gap-2">
               <Link href="/login" className="btn btn-primary w-full text-sm">ورود</Link>
-              <Link href="/signup" className="btn btn-secondary w-full text-sm">ثبتنام</Link>
+              <Link href="/signup" className="btn btn-secondary w-full text-sm">ثبت‌نام</Link>
             </div>
           )}
         </div>
@@ -251,7 +251,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* ── Mobile sidebar overlay ─────────────────────────── */}
-      <div className={`mobile-overlay ${sidebarOpen ? 'mobile-overlay--open' : ''}`} onClick={() => setSidebarOpen(false)}>
+      <div role="button" tabIndex={0} className={`mobile-overlay ${sidebarOpen ? 'mobile-overlay--open' : ''}`} onClick={() => setSidebarOpen(false)}>
         <div className="mobile-overlay-bg" />
         <div
           className="mobile-drawer"
@@ -283,7 +283,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
                 <button onClick={logout} className="btn btn-ghost btn-sm w-full text-[var(--danger)]">خروج</button>
               </div>
             ) : (
-              <Link href="/login" className="btn btn-primary w-full">ورود / ثبتنام</Link>
+              <Link href="/login" className="btn btn-primary w-full">ورود / ثبت‌نام</Link>
             )}
           </div>
         </div>

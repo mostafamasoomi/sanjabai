@@ -158,7 +158,7 @@ export default function DocumentsPage() {
             برای ساخت پاورپوینت، ورد یا اسلاید با هوش مصنوعی، ابتدا وارد حساب خود شوید.
           </p>
           <a href="/login" className="btn btn-lg btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            ورود / ثبتنام
+            ورود / ثبت‌نام
           </a>
         </div>
       </div>
@@ -214,7 +214,7 @@ export default function DocumentsPage() {
           <textarea
             value={prompt}
             onChange={e => setPrompt(e.target.value)}
-            placeholder="توضیح دهید چه سندی میخواهید... مثال: یک ارائه ۱۰ اسلایدی درباره آینده AI"
+            placeholder="توضیح دهید چه سندی می‌خواهید... مثال: یک ارائه ۱۰ اسلایدی درباره آینده AI"
             rows={4}
             style={{
               width: '100%',
@@ -261,7 +261,7 @@ export default function DocumentsPage() {
             border: 'none',
             borderRadius: 'var(--radius-lg)',
             background: generating ? 'var(--border)' : 'var(--accent)',
-            color: '#fff',
+            color: 'var(--text-on-accent)',
             fontSize: '1.1rem',
             fontWeight: 600,
             cursor: generating ? 'not-allowed' : 'pointer',
@@ -332,7 +332,7 @@ export default function DocumentsPage() {
                 padding: '0.85rem',
                 borderRadius: 'var(--radius-md)',
                 background: 'var(--accent)',
-                color: '#fff',
+                color: 'var(--text-on-accent)',
                 fontWeight: 600,
                 textDecoration: 'none',
                 fontSize: '1rem',
@@ -354,7 +354,7 @@ export default function DocumentsPage() {
               هنوز سندی تولید نشده
             </p>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div className="flex flex-col gap-3">
               {history.map(doc => (
                 <div
                   key={doc.id}
@@ -368,7 +368,7 @@ export default function DocumentsPage() {
                     background: 'var(--surface)',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div className="flex items-center gap-3">
                     <span style={{ fontSize: '1.5rem' }}>
                       {DOC_TYPES.find(d => d.id === doc.type)?.icon}
                     </span>
@@ -379,7 +379,7 @@ export default function DocumentsPage() {
                       </div>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <div className="flex gap-2">
                     <a
                       href={`/v1/documents/${doc.id}/download`}
                       style={{
@@ -421,7 +421,7 @@ export default function DocumentsPage() {
           width: 18px;
           height: 18px;
           border: 2px solid rgba(255, 255, 255, 0.3);
-          border-top-color: #fff;
+          border-top-color: 'var(--text-on-accent)';
           border-radius: 50%;
           animation: spin 0.6s linear infinite;
         }

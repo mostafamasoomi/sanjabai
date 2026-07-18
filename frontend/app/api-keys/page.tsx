@@ -110,7 +110,7 @@ export default function ApiKeysPage() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
         <div className="apikeys-header-icon">
-          <Icon name="key" size={20} style={{ color: 'var(--accent)' }} />
+          <Icon name="key" size={20} className="text-accent" />
         </div>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>کلیدهای API</h1>
@@ -121,7 +121,7 @@ export default function ApiKeysPage() {
       {/* Generate new key */}
       <div className="card apikeys-generate-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-          <Icon name="plus" size={16} style={{ color: 'var(--accent)' }} />
+          <Icon name="plus" size={16} className="text-accent" />
           <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>ساخت کلید جدید</h2>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -129,8 +129,7 @@ export default function ApiKeysPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="نام کلید (مثلاً Production)"
-            className="input"
-            style={{ flex: 1 }}
+            className="input flex-1"
           />
           <button onClick={generateKey} disabled={loading} className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             {loading ? (
@@ -148,15 +147,15 @@ export default function ApiKeysPage() {
         <div className="card apikeys-newkey-card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <div className="apikeys-success-icon">
-              <Icon name="check" size={16} style={{ color: 'var(--positive)' }} />
+              <Icon name="check" size={16} className="text-positive" />
             </div>
             <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--positive)' }}>کلید جدید ساخته شد</h2>
           </div>
           <p style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 12, paddingRight: 28 }}>
-            ⚠️ این کلید فقط یک بار نمایش داده میشود. همین حالا کپی کنید.
+            ⚠️ این کلید فقط یک بار نمایش داده می‌شود. همین حالا کپی کنید.
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
-            <code className="apikeys-code-block" style={{ flex: 1 }}>
+            <code className="apikeys-code-block flex-1">
               {newKey}
             </code>
             <button onClick={() => copyKey(newKey)} className="btn btn-secondary btn-sm apikeys-copy-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -171,7 +170,7 @@ export default function ApiKeysPage() {
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Icon name="key" size={16} style={{ color: 'var(--accent)' }} />
+            <Icon name="key" size={16} className="text-accent" />
             <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>کلیدهای شما</h2>
             {keys.length > 0 && (
               <span className="badge badge-accent">{keys.length}</span>
@@ -182,7 +181,7 @@ export default function ApiKeysPage() {
         {keys.length === 0 ? (
           <div className="apikeys-empty">
             <div className="apikeys-empty-icon">
-              <Icon name="key" size={28} style={{ color: 'var(--text-muted)' }} />
+              <Icon name="key" size={28} className="text-muted" />
             </div>
             <p style={{ color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 4 }}>هنوز کلیدی نساختهاید</p>
             <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>از فرم بالا اولین کلید API خود را بسازید</p>
@@ -195,7 +194,7 @@ export default function ApiKeysPage() {
               return (
                 <div key={k.id} className={`apikeys-key-card ${!k.active ? 'apikeys-key-disabled' : ''}`}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="flex-1 min-w-0">
                       {/* Key name + status */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                         <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{k.name}</span>
@@ -273,7 +272,7 @@ export default function ApiKeysPage() {
       {/* API Docs */}
       <div className="card" style={{ marginTop: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
-          <Icon name="code" size={16} style={{ color: 'var(--accent)' }} />
+          <Icon name="code" size={16} className="text-accent" />
           <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>نحوه استفاده</h2>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

@@ -53,7 +53,7 @@ export default function SignupPage() {
       await signup(email.trim(), password, captchaToken, captchaAnswer)
       router.push('/onboarding')
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'خطا در ثبتنام')
+      setError(err instanceof Error ? err.message : 'خطا در ثبت‌نام')
       fetchCaptcha()
     } finally {
       setBusy(false)
@@ -68,7 +68,7 @@ export default function SignupPage() {
           <div className="aurora-signup-logo w-14 h-14 rounded-xl flex items-center justify-center mx-auto mb-4" style={{background: 'linear-gradient(135deg, #6366f1, #a855f7)', boxShadow: '0 0 32px rgba(99,102,241,0.4), 0 0 64px rgba(99,102,241,0.15)'}}>
             <Icon name="sparkles" size={28} className="text-white" />
           </div>
-          <h1 className="text-xl font-extrabold mb-1 text-gradient">ثبتنام در Multiai</h1>
+          <h1 className="text-xl font-extrabold mb-1 text-gradient">ثبت‌نام در Multiai</h1>
           <p className="text-sm text-[var(--text-dim)]">دسترسی به همه مدلهای هوش مصنوعی</p>
         </div>
 
@@ -157,14 +157,14 @@ export default function SignupPage() {
             {busy ? (
               <span className="flex items-center gap-2">
                 <span className="aurora-spinner" />
-                در حال ثبتنام...
+                در حال ثبت‌نام...
               </span>
-            ) : 'ثبتنام'}
+            ) : 'ثبت‌نام'}
           </button>
         </form>
 
         <p className="text-center text-sm text-[var(--text-dim)] mt-5">
-          قبلاً ثبتنام کردهاید؟{' '}
+          قبلاً ثبت‌نام کردهاید؟{' '}
           <Link href="/login" className="text-[var(--accent)] hover:underline">ورود</Link>
         </p>
 

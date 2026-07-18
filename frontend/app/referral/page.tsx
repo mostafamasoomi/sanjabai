@@ -48,7 +48,7 @@ export default function ReferralPage() {
             justifyContent: 'center',
           }}
         >
-          <Icon name="referral" size={20} style={{ color: 'var(--accent)' }} />
+          <Icon name="referral" size={20} className="text-accent" />
         </div>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>دعوت از دوستان</h1>
@@ -61,7 +61,7 @@ export default function ReferralPage() {
         <div style={{ marginBottom: '1rem' }}>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>کد دعوت شما</span>
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+        <div className="flex gap-2 items-center">
           <code
             style={{
               flex: 1,
@@ -88,13 +88,13 @@ export default function ReferralPage() {
       {/* How it works */}
       <div className="card">
         <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '1rem' }}>نحوه کار</h2>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <div className="flex flex-col gap-3">
           {[
             { step: '۱', text: 'لینک دعوت خود را با دوستان به اشتراک بگذارید' },
-            { step: '۲', text: 'دوست شما ثبتنام و اولین شارژ را انجام میدهد' },
-            { step: '۳', text: 'هر دوی شما پاداش اعتباری دریافت میکنید' },
+            { step: '۲', text: 'دوست شما ثبت‌نام و اولین شارژ را انجام می‌دهد' },
+            { step: '۳', text: 'هر دوی شما پاداش اعتباری دریافت می‌کنید' },
           ].map((item) => (
-            <div key={item.step} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div key={item.step} className="flex items-center gap-3">
               <div
                 style={{
                   width: '2rem',

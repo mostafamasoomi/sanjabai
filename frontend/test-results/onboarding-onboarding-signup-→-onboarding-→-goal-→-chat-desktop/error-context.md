@@ -147,7 +147,7 @@ waiting for navigation until "load"
   32 |       await Promise.all([
 > 33 |         page.waitForURL(/\/onboarding/, { timeout: 20000 }),
      |              ^ TimeoutError: page.waitForURL: Timeout 20000ms exceeded.
-  34 |         page.getByRole('button', { name: 'ثبتنام' }).click(),
+  34 |         page.getByRole('button', { name: 'ثبت‌نام' }).click(),
   35 |       ])
   36 |     } catch (e) {
   37 |       const html = await page.content()
@@ -161,7 +161,7 @@ waiting for navigation until "load"
   45 |     // signup triggers an SPA navigation to /onboarding.
   46 |     await Promise.all([
   47 |       page.waitForURL(/\/onboarding/),
-  48 |       page.getByRole('button', { name: 'ثبتنام' }).click(),
+  48 |       page.getByRole('button', { name: 'ثبت‌نام' }).click(),
   49 |     ])
   50 | 
   51 |     // 1) signup redirects to onboarding

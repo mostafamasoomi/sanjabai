@@ -102,10 +102,10 @@ function StatCardSkeleton() {
 
 function LedgerSkeleton() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+    <div className="flex flex-col gap-3">
       {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div key={i} className="flex justify-between items-center">
+          <div className="flex items-center gap-3">
             <div className="skeleton" style={{ width: '2rem', height: '2rem', borderRadius: 'var(--radius-sm)' }} />
             <div>
               <div className="skeleton" style={{ width: '6rem', height: '0.75rem', marginBottom: '0.375rem' }} />
@@ -204,7 +204,7 @@ function QuickAction({
       >
         <Icon name={icon} size={18} className="text-[var(--accent)]" />
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div className="flex-1 min-w-0">
         <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)' }}>{label}</div>
         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>{description}</div>
       </div>
@@ -411,7 +411,7 @@ export default function DashboardPage() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1.5rem' }}>
         <Icon name="security" size={48} className="text-[var(--text-muted)]" />
-        <div style={{ textAlign: 'center' }}>
+        <div className="text-center">
           <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>وارد شوید</h2>
           <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>برای مشاهده داشبورد، ابتدا وارد حساب کاربری خود شوید.</p>
         </div>
@@ -426,9 +426,9 @@ export default function DashboardPage() {
   /* ─── Loading state ─── */
   if (authLoading || loading) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      <div className="flex flex-col gap-6">
         {/* Header skeleton */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="flex justify-between items-center">
           <div>
             <div className="skeleton" style={{ width: '12rem', height: '1.75rem', marginBottom: '0.5rem' }} />
             <div className="skeleton" style={{ width: '8rem', height: '0.875rem' }} />
@@ -474,7 +474,7 @@ export default function DashboardPage() {
   const planName = subscriptionPlan?.name_fa || planLabels[plan] || plan
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div className="flex flex-col gap-6">
       {/* ─── Header ─── */}
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
@@ -485,7 +485,7 @@ export default function DashboardPage() {
             خوش آمدید به داشبورد مولتیای
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div className="flex items-center gap-3">
           <span className={planBadgeClass[plan] || 'badge'}>
             {planLabels[plan] || plan}
           </span>
@@ -538,8 +538,8 @@ export default function DashboardPage() {
         />
 
         {/* ─── Subscription Status Card ─── */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="card flex flex-col gap-3">
+          <div className="flex items-center justify-between">
             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>وضعیت اشتراک</span>
             <div
               style={{
@@ -562,7 +562,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Status badge */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div className="flex items-center gap-2">
             <span
               style={{
                 display: 'inline-block',
@@ -639,9 +639,9 @@ export default function DashboardPage() {
         }}
       >
         {/* Recent Activity / Ledger */}
-        <div className="card" style={{ overflow: 'hidden' }}>
+        <div className="card overflow-hidden">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div className="flex items-center gap-2">
               <span className="text-[var(--accent)]">
                 <Icon name="history" size={18} />
               </span>
@@ -671,7 +671,7 @@ export default function DashboardPage() {
               </button>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div className="flex flex-col">
               {recentLedger.map((entry) => (
                 <LedgerRow key={entry.id} entry={entry} />
               ))}
@@ -680,7 +680,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Right column: Quick Actions + Account + PAYG */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+        <div className="flex flex-col gap-6">
           {/* Quick Actions */}
           <div className="card">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
@@ -689,7 +689,7 @@ export default function DashboardPage() {
               </span>
               <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>دسترسی سریع</h2>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div className="flex flex-col gap-3">
               <QuickAction
                 icon="chat"
                 label="شروع مکالمه"
@@ -734,7 +734,7 @@ export default function DashboardPage() {
               </span>
               <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>اطلاعات حساب</h2>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div className="flex flex-col gap-3">
               <InfoRow icon="profile" label="ایمیل" value={profile?.email || '—'} />
               {profile?.username && <InfoRow icon="profile" label="نام کاربری" value={profile.username} />}
               {profile?.phone && <InfoRow icon="notification" label="تلفن" value={profile.phone} />}
@@ -846,10 +846,9 @@ export default function DashboardPage() {
                     }}
                   />
                   <button
-                    className="btn btn-sm"
+                    className="btn btn-sm shrink-0"
                     onClick={setHardLimit}
                     disabled={hardLimitLoading}
-                    style={{ flexShrink: 0 }}
                   >
                     {hardLimitLoading ? '...' : 'ذخیره'}
                   </button>

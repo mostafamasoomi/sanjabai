@@ -33,7 +33,7 @@ function CardSkeleton() {
       className="card"
       style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <div className="flex items-center gap-2">
         <div className="skeleton" style={{ width: '2.5rem', height: '2.5rem', borderRadius: 'var(--radius-md)' }} />
         <div className="skeleton" style={{ width: '8rem', height: '1.25rem' }} />
       </div>
@@ -79,7 +79,7 @@ function AssistantCard({ assistant, onClick }: { assistant: Assistant; onClick: 
         >
           <Icon name={(assistant.icon as IconName) || 'sparkles'} size={20} className="text-white" />
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="flex-1 min-w-0">
           <h3 style={{
             fontSize: '0.9375rem',
             fontWeight: 700,
@@ -250,7 +250,7 @@ export default function AssistantsPage() {
           }}
         >
           <Icon name="sparkles" size={48} className="text-[var(--text-muted)]" style={{ opacity: 0.3 }} />
-          <div style={{ textAlign: 'center' }}>
+          <div className="text-center">
             <h3 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
               دستیاری یافت نشد
             </h3>

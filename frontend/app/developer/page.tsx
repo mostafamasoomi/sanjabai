@@ -209,7 +209,7 @@ export default function DeveloperPage() {
           background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <Icon name="code" size={20} style={{ color: '#fff' }} />
+          <Icon name="code" size={20} style={{ color: 'var(--text-on-accent)' }} />
         </div>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
@@ -224,7 +224,7 @@ export default function DeveloperPage() {
       {/* API Info Card */}
       <div className="card" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-          <Icon name="external" size={16} style={{ color: '#8b5cf6' }} />
+          <Icon name="external" size={16} className="text-accent" />
           <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>اطلاعات API</h2>
         </div>
 
@@ -235,12 +235,12 @@ export default function DeveloperPage() {
           marginBottom: 16,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <Icon name="info" size={14} style={{ color: '#8b5cf6' }} />
+            <Icon name="info" size={14} className="text-accent" />
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Endpoint</span>
           </div>
           <code style={{
             display: 'block', direction: 'ltr', fontFamily: 'monospace',
-            fontSize: 15, fontWeight: 700, color: '#8b5cf6',
+            fontSize: 15, fontWeight: 700, color: 'var(--accent)',
           }}>
             https://multiai.ir/v1
           </code>
@@ -251,7 +251,7 @@ export default function DeveloperPage() {
 
         {/* Rate Limits */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
-          <Icon name="chart" size={14} style={{ color: 'var(--text-muted)' }} />
+          <Icon name="chart" size={14} className="text-muted" />
           <h3 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>محدودیت‌های نرخی بر اساس پلن</h3>
         </div>
         <div style={{ overflowX: 'auto' }}>
@@ -280,7 +280,7 @@ export default function DeveloperPage() {
       {user && (
         <div className="card" style={{ marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <Icon name="key" size={16} style={{ color: '#8b5cf6' }} />
+            <Icon name="key" size={16} className="text-accent" />
             <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>کلیدهای API</h2>
             {keys.length > 0 && <span className="badge badge-accent">{keys.length}</span>}
           </div>
@@ -288,11 +288,10 @@ export default function DeveloperPage() {
           {/* Create new key */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
             <input
-              className="input"
+              className="input flex-1"
               value={newKeyName}
               onChange={(e) => setNewKeyName(e.target.value)}
               placeholder="نام کلید (مثلاً Development)"
-              style={{ flex: 1 }}
               onKeyDown={(e) => e.key === 'Enter' && createKey()}
             />
             <button
@@ -318,7 +317,7 @@ export default function DeveloperPage() {
               border: '1px solid rgba(16, 185, 129, 0.2)',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                <Icon name="check" size={14} style={{ color: 'var(--positive)' }} />
+                <Icon name="check" size={14} className="text-positive" />
                 <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--positive)' }}>کلید ساخته شد</span>
               </div>
               <p style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 8 }}>
@@ -383,8 +382,7 @@ export default function DeveloperPage() {
                       <button
                         onClick={() => revokeKey(k.id)}
                         disabled={revokingId === k.id}
-                        className="btn btn-ghost btn-sm"
-                        style={{ color: 'var(--danger)' }}
+                        className="btn btn-ghost btn-sm text-danger"
                         title="غیرفعال کردن"
                       >
                         {revokingId === k.id ? (
@@ -405,7 +403,7 @@ export default function DeveloperPage() {
       {/* Code Examples */}
       <div className="card" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-          <Icon name="code" size={16} style={{ color: '#8b5cf6' }} />
+          <Icon name="code" size={16} className="text-accent" />
           <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>نمونه کد</h2>
         </div>
 
@@ -435,8 +433,7 @@ export default function DeveloperPage() {
                 </code>
                 <button
                   onClick={() => copyText(CODE_EXAMPLES[activeTab as keyof typeof CODE_EXAMPLES].install!)}
-                  className="btn btn-ghost btn-sm"
-                  style={{ flexShrink: 0 }}
+                  className="btn btn-ghost btn-sm shrink-0"
                 >
                   <Icon name="copy" size={13} />
                 </button>
@@ -445,7 +442,7 @@ export default function DeveloperPage() {
           )}
 
           {/* Code block */}
-          <div style={{ position: 'relative' }}>
+          <div className="relative">
             <pre style={{
               padding: '16px 18px', borderRadius: 10,
               background: 'var(--bg-surface, var(--bg-elev))',
@@ -472,7 +469,7 @@ export default function DeveloperPage() {
       {/* Endpoint Documentation */}
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-          <Icon name="external" size={16} style={{ color: '#8b5cf6' }} />
+          <Icon name="external" size={16} className="text-accent" />
           <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>مستندات endpoint‌ها</h2>
         </div>
 

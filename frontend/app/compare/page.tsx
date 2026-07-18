@@ -220,7 +220,7 @@ export default function ComparePage() {
           ) : (
             <div className="compare-placeholder">
               <Icon name="compare" size={24} className="text-[var(--text-muted)]" />
-              <span className="text-sm text-[var(--text-muted)]">پاسخ مدل در اینجا نمایش داده میشود</span>
+              <span className="text-sm text-[var(--text-muted)]">پاسخ مدل در اینجا نمایش داده می‌شود</span>
             </div>
           )}
         </div>
@@ -329,7 +329,7 @@ export default function ComparePage() {
         <EmptyState
           icon="compare"
           title="مدلی برای مقایسه نیست"
-          description="فهرست مدلها خالی است؛ پس از بارگذاری مدلها میتوانید آنها را مقایسه کنید."
+          description="فهرست مدلها خالی است؛ پس از بارگذاری مدلها می‌توانید آنها را مقایسه کنید."
         />
       )}
 

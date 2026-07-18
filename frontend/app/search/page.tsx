@@ -91,7 +91,7 @@ function ConversationCard({ conv, onClick }: { conv: Conversation; onClick: () =
         transition: 'all var(--motion-fast) ease',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+      <div className="flex items-center justify-between gap-2">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', minWidth: 0, flex: 1 }}>
           <Icon name="chat" size={18} className="text-[var(--accent)] shrink-0" />
           <span
@@ -115,7 +115,7 @@ function ConversationCard({ conv, onClick }: { conv: Conversation; onClick: () =
         </span>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+      <div className="flex items-center gap-3 flex-wrap">
         {conv.model && (
           <span
             className="badge badge-accent"
@@ -255,7 +255,7 @@ export default function SearchPage() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1.5rem' }}>
         <Icon name="security" size={48} className="text-[var(--text-muted)]" />
-        <div style={{ textAlign: 'center' }}>
+        <div className="text-center">
           <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
             وارد شوید
           </h2>
@@ -276,9 +276,9 @@ export default function SearchPage() {
   const isLoading = loading || searching
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div className="flex flex-col gap-6">
       {/* ── Header ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+      <div className="flex items-center gap-3">
         <div
           style={{
             width: '2.5rem',
@@ -364,7 +364,7 @@ export default function SearchPage() {
 
       {/* ── Loading skeletons ── */}
       {isLoading && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <div className="flex flex-col gap-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <CardSkeleton key={i} />
           ))}
@@ -373,7 +373,7 @@ export default function SearchPage() {
 
       {/* ── Results ── */}
       {!isLoading && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <div className="flex flex-col gap-3">
           {displayList.length > 0 ? (
             displayList.map((conv) => (
               <ConversationCard
@@ -400,7 +400,7 @@ export default function SearchPage() {
                 className="text-[var(--text-muted)]"
                 style={{ opacity: 0.4 }}
               />
-              <div style={{ textAlign: 'center' }}>
+              <div className="text-center">
                 <h3
                   style={{
                     fontSize: '1rem',

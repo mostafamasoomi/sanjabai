@@ -253,7 +253,7 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
             {selected ? (
               <>
                 <span className="model-picker-trigger-ctx" dir="ltr">{formatContextWindow(selected.contextWindow)} ctx</span>
-                <span className={`model-working-dot ${working ? 'model-working-dot-yes' : 'model-working-dot-warn'}`} title={working ? 'کار میکند' : 'ممکن است محدود باشد'}>
+                <span className={`model-working-dot ${working ? 'model-working-dot-yes' : 'model-working-dot-warn'}`} title={working ? 'کار می‌کند' : 'ممکن است محدود باشد'}>
                   {working ? '✅' : '⚠️'}
                 </span>
               </>
@@ -269,7 +269,7 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
 
       {open && (
         <>
-          <div className="model-picker-overlay" onClick={() => setOpen(false)} />
+          <div role="button" tabIndex={0} className="model-picker-overlay" onClick={() => setOpen(false)} />
           <div
             className="model-picker-dropdown"
             role="dialog"
@@ -424,7 +424,7 @@ function ModelCard({ model: m, isSelected, isFocused, isWorking, focusIdx, onCli
           </div>
         </div>
         <span className={`model-working-badge ${isWorking ? 'model-working-yes' : 'model-working-warn'}`}>
-          {isWorking ? '✅ کار میکند' : '⚠️ محدود'}
+          {isWorking ? '✅ کار می‌کند' : '⚠️ محدود'}
         </span>
       </div>
 

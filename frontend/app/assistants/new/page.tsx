@@ -119,7 +119,7 @@ export default function CreateAssistantPage() {
           {/* Name */}
           <div>
             <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-              نام دستیار <span style={{ color: 'var(--danger)' }}>*</span>
+              نام دستیار <span className="text-danger">*</span>
             </label>
             <input
               type="text"
@@ -151,7 +151,7 @@ export default function CreateAssistantPage() {
           {/* System Prompt */}
           <div>
             <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-              پرامپت سیستم <span style={{ color: 'var(--danger)' }}>*</span>
+              پرامپت سیستم <span className="text-danger">*</span>
             </label>
             <textarea
               className="input"
@@ -196,7 +196,7 @@ export default function CreateAssistantPage() {
           </div>
 
           {/* Public toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div className="flex items-center gap-3">
             <label className="smart-mode-toggle" title={isPublic ? 'عمومی' : 'خصوصی'}>
               <input
                 type="checkbox"
@@ -235,7 +235,7 @@ export default function CreateAssistantPage() {
             disabled={submitting}
           >
             {submitting ? (
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span className="flex items-center gap-2">
                 <span className="animate-spin" style={{ width: '1rem', height: '1rem', border: '2px solid var(--border)', borderTopColor: 'currentColor', borderRadius: '50%', display: 'inline-block' }} />
                 در حال ساخت...
               </span>

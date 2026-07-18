@@ -342,7 +342,7 @@ export default function UsagePage() {
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
         <div className="card" style={{ textAlign: 'center', padding: '48px 32px', maxWidth: 400 }}>
           <div style={{ width: 56, height: 56, borderRadius: 'var(--radius-full)', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-            <Icon name="chart" size={28} style={{ color: 'var(--accent)' }} />
+            <Icon name="chart" size={28} className="text-accent" />
           </div>
           <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>گزارش مصرف</h2>
           <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>برای مشاهده گزارش مصرف، ابتدا وارد حساب خود شوید.</p>
@@ -371,7 +371,7 @@ export default function UsagePage() {
       <div className="usage-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-full)', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name="chart" size={18} style={{ color: 'var(--accent)' }} />
+            <Icon name="chart" size={18} className="text-accent" />
           </div>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>گزارش مصرف</h1>
@@ -403,7 +403,7 @@ export default function UsagePage() {
 
       {/* Controls: date range */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
-        <Icon name="calendar" size={16} style={{ color: 'var(--text-muted)' }} />
+        <Icon name="calendar" size={16} className="text-muted" />
         <div style={{ display: 'inline-flex', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-full)', padding: 4 }}>
           {(['week', 'month', 'all'] as RangeKey[]).map((k) => (
             <button
@@ -543,7 +543,7 @@ export default function UsagePage() {
             {/* Donut: model cost distribution */}
             <FadeInCard className="card" delay={260} style={{ padding: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                <Icon name="chart" size={16} style={{ color: 'var(--accent)' }} />
+                <Icon name="chart" size={16} className="text-accent" />
                 <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>توزیع هزینه مدل‌ها</h2>
               </div>
               {modelStats.length > 0 ? (
@@ -587,7 +587,7 @@ export default function UsagePage() {
             <FadeInCard className="card" delay={320} style={{ padding: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Icon name="calendar" size={16} style={{ color: 'var(--accent)' }} />
+                  <Icon name="calendar" size={16} className="text-accent" />
                   <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>مصرف روزانه</h2>
                 </div>
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>۳۰ روز گذشته</span>
@@ -633,7 +633,7 @@ export default function UsagePage() {
           {(data?.per_model_breakdown.length ?? 0) > 0 && (
             <FadeInCard className="card" delay={380} style={{ marginBottom: 16, overflow: 'hidden' }}>
               <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Icon name="models" size={16} style={{ color: 'var(--accent)' }} />
+                <Icon name="models" size={16} className="text-accent" />
                 <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>مصرف به تفکیک مدل</h2>
               </div>
 
@@ -656,7 +656,7 @@ export default function UsagePage() {
                       <div style={{ display: 'flex', gap: 16, marginTop: 6, fontSize: 11, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
                         <span>ورودی: {fmtTokens(m.input_tokens)}</span>
                         <span>خروجی: {fmtTokens(m.output_tokens)}</span>
-                        <span style={{ color: 'var(--accent)' }}>
+                        <span className="text-accent">
                           <Icon name="compare" size={11} style={{ display: 'inline', verticalAlign: -1, marginInlineStart: 3 }} />
                           میانگین: {fmtTokens(Math.round(m.avgTokensPerCall))} توکن/درخواست
                         </span>
@@ -670,9 +670,9 @@ export default function UsagePage() {
           )}
 
           {/* Recent events table */}
-          <FadeInCard className="card" delay={440} style={{ overflow: 'hidden' }}>
+          <FadeInCard className="card overflow-hidden" delay={440}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Icon name="chart" size={16} style={{ color: 'var(--accent)' }} />
+              <Icon name="chart" size={16} className="text-accent" />
               <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>تاریخچه مصرف</h2>
               <span style={{ fontSize: 11, color: 'var(--text-muted)', marginInlineStart: 'auto' }}>{rangedEvents.length} مورد</span>
             </div>

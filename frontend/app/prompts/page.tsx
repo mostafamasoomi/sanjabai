@@ -151,7 +151,7 @@ export default function PromptsPage() {
       <div className="prompts-header">
         <div className="prompts-header-title">
           <div className="prompts-header-icon">
-            <Icon name="sparkles" size={22} style={{ color: 'var(--accent)' }} />
+            <Icon name="sparkles" size={22} className="text-accent" />
           </div>
           <div>
             <h1 className="prompts-title">کتابخانه پرامپت</h1>

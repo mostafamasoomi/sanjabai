@@ -333,7 +333,7 @@ export default function OnboardingPage() {
               <div className="fade-in slide-up">
                 <h2 className="text-2xl sm:text-3xl font-bold text-center mb-2">قصد دارید چه کاری کنید؟</h2>
                 <p className="text-center text-[var(--text-secondary)] mb-6">
-                  بر اساس انتخاب شما، بهترین مدل را پیشنهاد میدهیم.
+                  بر اساس انتخاب شما، بهترین مدل را پیشنهاد می‌دهیم.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {GOALS.map((g) => {
@@ -483,7 +483,7 @@ export default function OnboardingPage() {
                 <p className="text-center text-[var(--text-secondary)] mb-6">
                   {favoriteIds.length > 0
                     ? 'بر اساس مدل‌های مورد علاقه و هدف شما، این مدل پیشنهاد می‌شود.'
-                    : 'این مدل برای نیاز شما بهینه شده — هر وقت خواستید میتوانید عوضش کنید.'}
+                    : 'این مدل برای نیاز شما بهینه شده — هر وقت خواستید می‌توانید عوضش کنید.'}
                 </p>
 
                 <div className="card p-6 border-[var(--accent)]/40 bg-[var(--accent-dim)]/30">

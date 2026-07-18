@@ -117,7 +117,7 @@ export default function LoginPage() {
           <button className="btn btn-primary w-full" type="submit" disabled={busy}>
             {busy ? (
               <span className="flex items-center gap-2">
-                <span className="animate-spin" style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block' }} />
+                <span className="animate-spin" style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'var(--text-on-accent)', borderRadius: '50%', display: 'inline-block' }} />
                 در حال ورود...
               </span>
             ) : 'ورود'}
@@ -129,7 +129,7 @@ export default function LoginPage() {
         </p>
         <p className="text-center text-sm text-[var(--text-muted)] mt-2">
           حساب کاربری ندارید؟{' '}
-          <Link href="/signup" className="text-[var(--accent)] hover:underline">ثبتنام</Link>
+          <Link href="/signup" className="text-[var(--accent)] hover:underline">ثبت‌نام</Link>
         </p>
 
         {/* Trust signals */}

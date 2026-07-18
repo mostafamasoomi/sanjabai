@@ -16,14 +16,14 @@ import { type ModelCatalogItem, type CatalogResponse } from '@/types/catalog'
 const FEATURES = [
   { icon: 'models' as const, title: 'همه مدلها، یک پنل', desc: getClaim('workspace_promise') },
   { icon: 'dashboard' as const, title: 'مدیریت هوشمند مصرف', desc: 'داشبورد لحظهای، سقف مصرف و هشدار — کنترل کامل روی بودجه' },
-  { icon: 'pricing' as const, title: 'قیمتگذاری شفاف', desc: getClaim('currency_transparency') },
+  { icon: 'pricing' as const, title: 'قیمت‌گذاری شفاف', desc: getClaim('currency_transparency') },
   { icon: 'security' as const, title: 'امن و مستقل', desc: 'سرورهای اختصاصی، بدون وابستگی به تحریم — دادههای شما محفوظ است' },
   { icon: 'code' as const, title: 'API آماده', desc: 'OpenAI-compatible — در ۲ دقیقه کلید API بسازید و متصل شوید' },
   { icon: 'chat' as const, title: 'فارسی واقعی', desc: 'رابط کاملاً فارسی، پشتیبانی از زبان فارسی در تمام مدلها' },
 ]
 
 const STEPS = [
-  { icon: 'profile' as const, title: 'ثبتنام', desc: 'در ۳۰ ثانیه حساب بسازید' },
+  { icon: 'profile' as const, title: 'ثبت‌نام', desc: 'در ۳۰ ثانیه حساب بسازید' },
   { icon: 'wallet' as const, title: 'شارژ', desc: 'کیف پول ریالی خود را شارژ کنید' },
   { icon: 'chat' as const, title: 'چت', desc: 'با بهترین مدلها گفتگو کنید' },
   { icon: 'dashboard' as const, title: 'مدیریت', desc: 'مصرف و هزینه را پیگیری کنید' },
@@ -38,10 +38,10 @@ const STATS = [
 
 const FAQ = [
   { q: 'Multiai چه فرقی با ChatGPT دارد؟', a: 'Multiai یک پلتفرم یکپارچه است — به بهترین مدلهای هوش مصنوعی دنیا از یک پنل دسترسی دارید، با قیمت ریالی و بدون نیاز به VPN.' },
-  { q: 'آیا نیاز به VPN دارم؟', a: 'خیر. تمام ارتباطات از طریق زیرساخت اختصاصی و داخلی مسیریابی میشود.' },
+  { q: 'آیا نیاز به VPN دارم؟', a: 'خیر. تمام ارتباطات از طریق زیرساخت اختصاصی و داخلی مسیریابی می‌شود.' },
   { q: 'هزینه استفاده چقدر است؟', a: 'تعرفهها بر اساس مدل متفاوت است. هزینه دقیق را قبل از ارسال هر درخواست میبینید.' },
   { q: 'اطلاعات من امن است؟', a: 'بله. تمام ارتباطات رمزنگاری شده و دادهها روی سرورهای اختصاصی ذخیره میشوند. ما به حریم خصوصی شما احترام میگذاریم.' },
-  { q: 'چطور API key بسازم؟', a: 'بعد از ثبتنام، از بخش «کلید API» یک کلید جدید بسازید. endpoint ما با OpenAI-compatible است و کد نمونه برای cURL، Python و JavaScript آماده داریم.' },
+  { q: 'چطور API key بسازم؟', a: 'بعد از ثبت‌نام، از بخش «کلید API» یک کلید جدید بسازید. endpoint ما با OpenAI-compatible است و کد نمونه برای cURL، Python و JavaScript آماده داریم.' },
 ]
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -164,7 +164,7 @@ function Features() {
       <div className="text-center mb-12">
         <h2 className="aurora-section-title text-2xl md:text-3xl font-bold">چرا Multiai؟</h2>
         <p className="text-[var(--text-secondary)] mt-3 max-w-md mx-auto">
-          پلتفرمی که تجربه کار با هوش مصنوعی را برای کاربران ایرانی متحول میکند
+          پلتفرمی که تجربه کار با هوش مصنوعی را برای کاربران ایرانی متحول می‌کند
         </p>
       </div>
       <div className="aurora-features-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -228,7 +228,7 @@ function CTABanner({ isLoggedIn }: { isLoggedIn: boolean }) {
         <div className="relative z-10">
           <h2 className="text-2xl md:text-3xl font-bold mb-3">آماده شروع هستید؟</h2>
           <p className="text-[var(--text-secondary)] mb-6 max-w-md mx-auto">
-            همین حالا ثبتنام کنید و به پیشرفتهترین مدلهای هوش مصنوعی دسترسی پیدا کنید.
+            همین حالا ثبت‌نام کنید و به پیشرفتهترین مدلهای هوش مصنوعی دسترسی پیدا کنید.
           </p>
           <Link href={isLoggedIn ? '/chat' : '/signup'} className="aurora-cta-glow btn btn-primary btn-lg text-base px-8">
             {isLoggedIn ? 'رفتن به چت' : 'شروع رایگان'}

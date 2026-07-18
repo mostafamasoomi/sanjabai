@@ -291,7 +291,7 @@ export default function TasksPage() {
             background: 'linear-gradient(135deg, var(--accent), var(--accent-hover, var(--accent)))',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <Icon name="calendar" size={20} style={{ color: '#fff' }} />
+            <Icon name="calendar" size={20} style={{ color: 'var(--text-on-accent)' }} />
           </div>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
@@ -315,7 +315,7 @@ export default function TasksPage() {
         background: 'linear-gradient(135deg, var(--bg-elev), var(--bg-surface, var(--bg-elev)))',
         border: '1px solid var(--border)',
       }}>
-        <Icon name="info" size={18} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+        <Icon name="info" size={18} className="text-accent shrink-0" />
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.7 }}>
           تسک‌ها به صورت خودکار طبق زمان‌بندی اجرا می‌شوند و نتیجه در داشبورد نمایش داده می‌شود.
         </p>
@@ -373,7 +373,7 @@ export default function TasksPage() {
                   >
                     <span style={{
                       width: 18, height: 18, borderRadius: '50%',
-                      background: '#fff', position: 'absolute', top: 3,
+                      background: 'var(--text-on-accent)', position: 'absolute', top: 3,
                       left: task.is_active ? 3 : 23,
                       transition: 'left 0.2s',
                       boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
@@ -505,7 +505,7 @@ export default function TasksPage() {
           {/* Title */}
           <div>
             <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
-              عنوان <span style={{ color: 'var(--danger)' }}>*</span>
+              عنوان <span className="text-danger">*</span>
             </label>
             <input
               className="input"
@@ -533,7 +533,7 @@ export default function TasksPage() {
           {/* Prompt */}
           <div>
             <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
-              پرامپت <span style={{ color: 'var(--danger)' }}>*</span>
+              پرامپت <span className="text-danger">*</span>
             </label>
             <textarea
               className="input"
@@ -554,10 +554,9 @@ export default function TasksPage() {
               مدل
             </label>
             <select
-              className="input"
+              className="input cursor-pointer"
               value={form.model}
               onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
-              style={{ cursor: 'pointer' }}
             >
               {MODELS.map((m) => (
                 <option key={m} value={m}>{m}</option>

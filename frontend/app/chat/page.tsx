@@ -72,7 +72,7 @@ function TrashIcon({ size = 14 }: { size?: number }) {
 const PRESETS = [
   { icon: 'code' as const, label: 'کدنویسی', description: 'نوشتن و دیباگ کد', prompt: 'یک تابع در ' },
   { icon: 'chat' as const, label: 'ترجمه', description: 'ترجمه متن به فارسی', prompt: 'متن زیر را به فارسی روان ترجمه کن:\n\n' },
-  { icon: 'search' as const, label: 'خلاصهسازی', description: 'خلاصه کردن متن طولانی', prompt: 'متن زیر را خلاصه کن:\n\n' },
+  { icon: 'search' as const, label: 'خلاصه‌سازی', description: 'خلاصه کردن متن طولانی', prompt: 'متن زیر را خلاصه کن:\n\n' },
   { icon: 'dashboard' as const, label: 'تحلیل', description: 'تحلیل دادهها و اطلاعات', prompt: 'دادههای زیر را تحلیل کن:\n\n' },
 ]
 
@@ -172,7 +172,7 @@ export default function ChatPage() {
   const { user, token } = useAuth()
   const { models, loading, error: catalogError } = useCatalog()
   const [messages, setMessages] = useState<Message[]>(() => [
-    { id: 'welcome', role: 'assistant', content: 'سلام! به Multiai خوش آمدید. چطور میتوانم کمک کنید؟' }
+    { id: 'welcome', role: 'assistant', content: 'سلام! به Multiai خوش آمدید. چطور می‌توانم کمک کنید؟' }
   ])
   const [model, setModel] = useState<ModelCatalogItem | null>(null);
   const [input, setInput] = useState('')
@@ -327,7 +327,7 @@ export default function ChatPage() {
         setMessages(loaded)
         setShowPresets(false)
       } else {
-        setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Multiai خوش آمدید. چطور میتوانم کمک کنید؟' }])
+        setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Multiai خوش آمدید. چطور می‌توانم کمک کنید؟' }])
         setShowPresets(true)
       }
       // Set model from conversation if possible
@@ -389,7 +389,7 @@ export default function ChatPage() {
         setConversations(prev => prev.filter(c => c.id !== id))
         if (activeConversationId === id) {
           setActiveConversationId(null)
-          setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Multiai خوش آمدید. چطور میتوانم کمک کنید؟' }])
+          setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Multiai خوش آمدید. چطور می‌توانم کمک کنید؟' }])
           setShowPresets(true)
         }
       }
@@ -404,7 +404,7 @@ export default function ChatPage() {
 
   const startNewChat = useCallback(() => {
     setActiveConversationId(null)
-    setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Multiai خوش آمدید. چطور میتوانم کمک کنید؟' }])
+    setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Multiai خوش آمدید. چطور می‌توانم کمک کنید؟' }])
     setShowPresets(true)
     setError('')
     setMobileDrawerOpen(false)
@@ -848,7 +848,7 @@ export default function ChatPage() {
     <>
       {/* Mobile overlay */}
       {isMobile && mobileDrawerOpen && (
-        <div className="conv-drawer-overlay" onClick={() => setMobileDrawerOpen(false)} />
+        <div role="button" tabIndex={0} className="conv-drawer-overlay" onClick={() => setMobileDrawerOpen(false)} />
       )}
 
       <div className={`chat-page ${!isMobile && sidebarOpen ? 'chat-page-with-sidebar' : ''}`}>
@@ -926,9 +926,8 @@ export default function ChatPage() {
               {/* Compare button */}
               <Link
                 href="/compare"
-                className="conv-toggle-btn"
+                className="conv-toggle-btn no-underline"
                 title="مقایسه مدلها"
-                style={{ textDecoration: 'none' }}
               >
                 <Icon name="compare" size={16} />
               </Link>
@@ -1006,7 +1005,7 @@ export default function ChatPage() {
                   >
                     <Icon name={(activeAssistant.icon as IconName) || 'sparkles'} size={16} className="text-white" />
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="flex-1 min-w-0">
                     <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                       {activeAssistant.name}
                     </div>

@@ -99,7 +99,7 @@ function getAverageRating(s: Skill): number {
 function DetailSkeleton() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '1rem 0' }}>
-      <div style={{ display: 'flex', gap: '0.5rem' }}>
+      <div className="flex gap-2">
         <div className="skeleton" style={{ width: '4rem', height: '1.25rem', borderRadius: 'var(--radius-full)' }} />
         <div className="skeleton" style={{ width: '6rem', height: '1rem' }} />
       </div>
@@ -235,7 +235,7 @@ export default function SkillDetailPage() {
         }}
       >
         <Icon name="warning" size={48} className="text-[var(--text-muted)]" style={{ opacity: 0.4 }} />
-        <div style={{ textAlign: 'center' }}>
+        <div className="text-center">
           <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
             اسکیل یافت نشد
           </h2>
@@ -440,7 +440,7 @@ export default function SkillDetailPage() {
             disabled={executing}
           >
             {executing ? (
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span className="flex items-center gap-2">
                 <span className="animate-spin" style={{ width: '1rem', height: '1rem', border: '2px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', display: 'inline-block' }} />
                 در حال اجرا...
               </span>
@@ -510,9 +510,9 @@ export default function SkillDetailPage() {
         <h3 style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
           امتیازدهی
         </h3>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div className="flex items-center gap-3">
           <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>امتیاز شما:</span>
-          <div style={{ display: 'flex', gap: '0.25rem' }}>
+          <div className="flex gap-1">
             {[1, 2, 3, 4, 5].map((r) => (
               <button
                 key={r}

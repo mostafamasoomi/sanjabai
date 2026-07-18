@@ -230,7 +230,7 @@ export default function MemoryPage() {
             justifyContent: 'center',
           }}
         >
-          <Icon name="sparkles" size={20} style={{ color: 'var(--accent)' }} />
+          <Icon name="sparkles" size={20} className="text-accent" />
         </div>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
@@ -277,7 +277,7 @@ export default function MemoryPage() {
               display: 'flex',
             }}
           >
-            <Icon name="close" size={14} style={{ color: 'var(--text-muted)' }} />
+            <Icon name="close" size={14} className="text-muted" />
           </button>
         )}
       </div>
@@ -326,7 +326,7 @@ export default function MemoryPage() {
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Icon name="sparkles" size={16} style={{ color: 'var(--accent)' }} />
+                <Icon name="sparkles" size={16} className="text-accent" />
                 <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
                   حافظه جدید
                 </h3>
@@ -442,7 +442,7 @@ export default function MemoryPage() {
               margin: '0 auto 16px',
             }}
           >
-            <Icon name="sparkles" size={28} style={{ color: 'var(--text-muted)' }} />
+            <Icon name="sparkles" size={28} className="text-muted" />
           </div>
           <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
             هنوز حافظه‌ای ذخیره نشده
@@ -552,7 +552,7 @@ export default function MemoryPage() {
                     ))}
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div className="flex items-center justify-between">
                     <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                         <Icon name="calendar" size={11} />

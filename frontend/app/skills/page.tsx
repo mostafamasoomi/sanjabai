@@ -117,7 +117,7 @@ function CardSkeleton() {
       className="card"
       style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <div className="flex items-center gap-2">
         <div className="skeleton" style={{ width: '4rem', height: '1.25rem', borderRadius: 'var(--radius-sm)' }} />
         <div className="skeleton" style={{ width: '3rem', height: '1rem' }} />
       </div>
@@ -153,7 +153,7 @@ function SkillCard({ skill, onUse }: { skill: Skill; onUse: (s: Skill) => void }
       }}
     >
       {/* Header: category badge + usage */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div className="flex items-center justify-between">
         <span
           className={`badge ${CATEGORY_BADGES[skill.category] || 'aurora-cap-default'}`}
           style={{ fontSize: '0.6875rem' }}
@@ -209,7 +209,7 @@ function SkillCard({ skill, onUse }: { skill: Skill; onUse: (s: Skill) => void }
 
       {/* Rating + action */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.25rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+        <div className="flex items-center gap-1">
           {renderStars(avg, 12)}
           {skill.rating_count > 0 && (
             <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginRight: '0.25rem' }}>
@@ -308,7 +308,7 @@ function UseSkillModal({
   if (!open || !skill) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div role="button" tabIndex={0} className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
         className="relative bg-[var(--bg-elevated)] border border-[var(--border-strong)] rounded-[var(--radius-xl)] p-6 max-w-lg w-full shadow-xl fade-in overflow-y-auto max-h-[90vh]"
@@ -339,11 +339,11 @@ function UseSkillModal({
 
         {/* Stats */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+          <span className="flex items-center gap-1">
             <Icon name="user" size={12} />
             {faNumber(skill.usage_count)} استفاده
           </span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+          <span className="flex items-center gap-1">
             {renderStars(getAverageRating(skill), 12)}
             ({faNumber(skill.rating_count)})
           </span>
@@ -419,7 +419,7 @@ function UseSkillModal({
           style={{ marginBottom: '1rem' }}
         >
           {loading ? (
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span className="flex items-center gap-2">
               <span className="animate-spin" style={{ width: '1rem', height: '1rem', border: '2px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', display: 'inline-block' }} />
               در حال اجرا...
             </span>
@@ -475,9 +475,9 @@ function UseSkillModal({
         )}
 
         {/* Rating */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div className="flex items-center gap-3">
           <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>امتیاز شما:</span>
-          <div style={{ display: 'flex', gap: '0.25rem' }}>
+          <div className="flex gap-1">
             {[1, 2, 3, 4, 5].map((r) => (
               <button
                 key={r}
@@ -598,7 +598,7 @@ function CreateSkillModal({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div role="button" tabIndex={0} className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
         className="relative bg-[var(--bg-elevated)] border border-[var(--border-strong)] rounded-[var(--radius-xl)] p-6 max-w-lg w-full shadow-xl fade-in overflow-y-auto max-h-[90vh]"
@@ -796,7 +796,7 @@ function CreateSkillModal({
           disabled={loading || !titleFa.trim() || !promptTemplate.trim()}
         >
           {loading ? (
-            <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span className="flex items-center gap-2">
               <span className="animate-spin" style={{ width: '1rem', height: '1rem', border: '2px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', display: 'inline-block' }} />
               در حال ذخیره...
             </span>
@@ -867,7 +867,7 @@ export default function SkillsPage() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1.5rem' }}>
         <Icon name="sparkles" size={48} className="text-[var(--text-muted)]" style={{ opacity: 0.4 }} />
-        <div style={{ textAlign: 'center' }}>
+        <div className="text-center">
           <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
             وارد شوید
           </h2>
@@ -884,10 +884,10 @@ export default function SkillsPage() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div className="flex flex-col gap-6">
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div className="flex items-center gap-3">
           <div
             style={{
               width: '2.5rem',
@@ -921,7 +921,7 @@ export default function SkillsPage() {
       </div>
 
       {/* ── Search + Sort ── */}
-      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div className="flex gap-3 items-center flex-wrap">
         <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
           <Icon name="search" size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
           <input
@@ -1015,7 +1015,7 @@ export default function SkillsPage() {
           }}
         >
           <Icon name="sparkles" size={48} className="text-[var(--text-muted)]" style={{ opacity: 0.4 }} />
-          <div style={{ textAlign: 'center' }}>
+          <div className="text-center">
             <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.375rem' }}>
               اسکیلی یافت نشد
             </h3>

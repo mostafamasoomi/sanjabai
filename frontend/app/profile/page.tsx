@@ -444,7 +444,7 @@ export default function ProfilePage() {
           </div>
           <div className="profile-input-group">
             <label className="profile-input-label">{isFa ? 'بیوگرافی' : 'Bio'}</label>
-            <textarea
+            <textarea dir="rtl"
               value={bio}
               onChange={(e) => setBio(e.target.value)}
               placeholder={isFa ? 'درباره خودتان بنویسید...' : 'Tell us about yourself...'}
@@ -506,7 +506,7 @@ export default function ProfilePage() {
             <label className="profile-input-label">
               {isFa ? 'شخصیت / دستورالعمل هوش مصنوعی' : 'AI Personality / Instructions'}
             </label>
-            <textarea
+            <textarea dir="rtl"
               value={aiPersonality}
               onChange={(e) => setAiPersonality(e.target.value)}
               placeholder={isFa

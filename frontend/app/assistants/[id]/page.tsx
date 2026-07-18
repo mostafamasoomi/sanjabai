@@ -317,7 +317,7 @@ export default function AssistantDetailPage() {
               <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
                 پرامپت سیستم <span className="text-danger">*</span>
               </label>
-              <textarea
+              <textarea dir="rtl"
                 className="input"
                 value={systemPrompt}
                 onChange={(e) => setSystemPrompt(e.target.value)}

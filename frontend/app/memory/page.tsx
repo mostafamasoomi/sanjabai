@@ -336,7 +336,7 @@ export default function MemoryPage() {
               </button>
             </div>
 
-            <textarea
+            <textarea dir="rtl"
               value={newContent}
               onChange={(e) => setNewContent(e.target.value)}
               placeholder="محتوای حافظه (مثلاً: زبان برنامه‌نویسی ترجیحی من Python است)"
@@ -466,7 +466,7 @@ export default function MemoryPage() {
               {isEditing(m.id) ? (
                 /* Edit mode */
                 <div>
-                  <textarea
+                  <textarea dir="rtl"
                     value={editingContent}
                     onChange={(e) => setEditingContent(e.target.value)}
                     className="input"

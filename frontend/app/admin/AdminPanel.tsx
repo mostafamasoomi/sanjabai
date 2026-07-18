@@ -1234,7 +1234,7 @@ export default function AdminPage() {
                     </Field>
                   </div>
                   <Field label="توضیحات">
-                    <textarea className="input w-full min-h-[80px] resize-y" value={ftDesc} onChange={(e) => setFtDesc(e.target.value)} />
+                    <textarea dir="rtl" className="input w-full min-h-[80px] resize-y" value={ftDesc} onChange={(e) => setFtDesc(e.target.value)} />
                   </Field>
                   <div className="grid grid-cols-2 gap-4">
                     <Field label="ترتیب نمایش">
@@ -1345,7 +1345,7 @@ export default function AdminPage() {
                     <input className="input w-full" value={abTitle} onChange={(e) => setAbTitle(e.target.value)} placeholder="درباره Multiai" />
                   </Field>
                   <Field label="متن">
-                    <textarea
+                    <textarea dir="rtl"
                       className="input w-full min-h-[200px] resize-y leading-relaxed"
                       value={abBody}
                       onChange={(e) => setAbBody(e.target.value)}

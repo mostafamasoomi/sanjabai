@@ -126,7 +126,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       {user && (
       <aside className="layout-sidebar hidden md:flex sidebar-glass">
         <div className="flex items-center gap-2 px-4 py-3.5">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{background: 'linear-gradient(135deg, #6366f1, #a855f7)', boxShadow: '0 0 16px rgba(99,102,241,0.3)'}}>
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{background: 'var(--accent-gradient)', boxShadow: 'var(--shadow-glow)'}}>
             <span className="text-white text-sm font-extrabold tracking-tight">M</span>
           </div>
           <Link href="/" className="text-lg font-extrabold text-gradient tracking-tight">Multiai</Link>

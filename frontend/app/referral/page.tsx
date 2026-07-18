@@ -69,7 +69,7 @@ export default function ReferralPage() {
               borderRadius: 'var(--radius-md)',
               background: 'var(--bg-elevated)',
               fontSize: '0.875rem',
-              fontFamily: 'monospace',
+              fontFamily: 'var(--font-mono)',
               color: 'var(--text-primary)',
               direction: 'ltr',
               textAlign: 'center',

@@ -634,7 +634,7 @@ function CreateSkillModal({
           <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
             توضیحات
           </label>
-          <textarea
+          <textarea dir="rtl"
             className="input"
             value={descriptionFa}
             onChange={(e) => setDescriptionFa(e.target.value)}
@@ -668,7 +668,7 @@ function CreateSkillModal({
           <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
             الگوی پرامپت *
           </label>
-          <textarea
+          <textarea dir="rtl"
             className="input"
             value={promptTemplate}
             onChange={(e) => setPromptTemplate(e.target.value)}

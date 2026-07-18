@@ -239,7 +239,7 @@ export default function DeveloperPage() {
             <span className="text-sm font-bold text-primary">Endpoint</span>
           </div>
           <code style={{
-            display: 'block', direction: 'ltr', fontFamily: 'monospace',
+            display: 'block', direction: 'ltr', fontFamily: 'var(--font-mono)',
             fontSize: 15, fontWeight: 700, color: 'var(--accent)',
           }}>
             https://multiai.ir/v1
@@ -301,7 +301,7 @@ export default function DeveloperPage() {
               className="inline-flex items-center gap-1.5"
             >
               {keyLoading ? (
-                <span style={{ width: 14, height: 14, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                <span style={{ width: 14, height: 14, border: '2px solid var(--text-on-accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
               ) : (
                 <Icon name="plus" size={14} />
               )}
@@ -327,7 +327,7 @@ export default function DeveloperPage() {
                 <code style={{
                   flex: 1, padding: '8px 12px', borderRadius: 8,
                   background: 'var(--bg-elev)', fontSize: 13,
-                  direction: 'ltr', fontFamily: 'monospace',
+                  direction: 'ltr', fontFamily: 'var(--font-mono)',
                   overflow: 'auto', whiteSpace: 'nowrap',
                 }}>
                   {newKey}
@@ -426,7 +426,7 @@ export default function DeveloperPage() {
                 <code style={{
                   flex: 1, padding: '8px 14px', borderRadius: 8,
                   background: 'var(--bg-surface, var(--bg-elev))',
-                  fontSize: 13, direction: 'ltr', fontFamily: 'monospace',
+                  fontSize: 13, direction: 'ltr', fontFamily: 'var(--font-mono)',
                   color: 'var(--text-primary)',
                 }}>
                   $ {CODE_EXAMPLES[activeTab as keyof typeof CODE_EXAMPLES].install}
@@ -448,7 +448,7 @@ export default function DeveloperPage() {
               background: 'var(--bg-surface, var(--bg-elev))',
               border: '1px solid var(--border)',
               fontSize: 13, direction: 'ltr', textAlign: 'left',
-              fontFamily: 'monospace', lineHeight: 1.7,
+              fontFamily: 'var(--font-mono)', lineHeight: 1.7,
               overflow: 'auto', color: 'var(--text-primary)',
               maxHeight: 400,
             }}>
@@ -482,13 +482,13 @@ export default function DeveloperPage() {
               <div className="flex items-center gap-2.5 mb-2">
                 <span style={{
                   padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700,
-                  fontFamily: 'monospace',
+                  fontFamily: 'var(--font-mono)',
                   background: ep.method === 'POST' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.1)',
                   color: ep.method === 'POST' ? 'var(--positive)' : '#3b82f6',
                 }}>
                   {ep.method}
                 </span>
-                <code style={{ fontSize: 14, fontWeight: 600, direction: 'ltr', fontFamily: 'monospace', color: 'var(--text-primary)' }}>
+                <code style={{ fontSize: 14, fontWeight: 600, direction: 'ltr', fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
                   {ep.path}
                 </code>
               </div>
@@ -501,7 +501,7 @@ export default function DeveloperPage() {
                     padding: '10px 14px', borderRadius: 8,
                     background: 'var(--bg-surface, var(--bg-elev))',
                     fontSize: 12, direction: 'ltr', textAlign: 'left',
-                    fontFamily: 'monospace', lineHeight: 1.6, overflow: 'auto',
+                    fontFamily: 'var(--font-mono)', lineHeight: 1.6, overflow: 'auto',
                     color: 'var(--text-secondary)',
                   }}>
                     <code>{ep.body}</code>

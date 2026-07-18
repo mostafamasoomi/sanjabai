@@ -918,7 +918,7 @@ export default function ChatPage() {
                 <span className="text-xs text-[var(--text-secondary)] select-none">Smart Mode</span>
               </label>
               {smartMode && smartModel && (
-                <span className="badge badge-accent text-[9px]" dir="ltr" title="مدل انتخابی توسط Smart Mode">
+                <span className="badge badge-accent text-[10px]" dir="ltr" title="مدل انتخابی توسط Smart Mode">
                   🧠 {smartModel}
                 </span>
               )}
@@ -1148,7 +1148,7 @@ export default function ChatPage() {
               >
                 <Icon name="globe" size={18} />
               </button>
-              <textarea
+              <textarea dir="rtl"
                 ref={inputRef}
                 value={input}
                 onChange={e => setInput(e.target.value)}

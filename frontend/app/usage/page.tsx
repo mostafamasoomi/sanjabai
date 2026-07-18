@@ -420,7 +420,7 @@ export default function UsagePage() {
                 background: range === k ? 'var(--accent)' : 'transparent',
                 color: range === k ? 'var(--text-on-accent)' : 'var(--text-secondary)',
                 transition: 'background 0.2s ease, color 0.2s ease',
-                fontFamily: 'inherit',
+                fontFamily: 'var(--font-sans)',
               }}
             >
               {rangeLabels[k]}

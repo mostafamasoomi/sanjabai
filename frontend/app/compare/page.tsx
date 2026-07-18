@@ -287,7 +287,7 @@ export default function ComparePage() {
 
         {/* Prompt input */}
         <div className="compare-input-row">
-          <textarea
+          <textarea dir="rtl"
             className="input flex-1"
             rows={2}
             placeholder="prompt خود را بنویسید... (Ctrl+Enter برای ارسال)"

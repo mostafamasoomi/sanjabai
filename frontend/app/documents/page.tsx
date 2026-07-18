@@ -211,7 +211,7 @@ export default function DocumentsPage() {
         {/* Prompt input */}
         <div className="card" className="mb-6">
           <div className="card-header">توضیحات سند</div>
-          <textarea
+          <textarea dir="rtl"
             value={prompt}
             onChange={e => setPrompt(e.target.value)}
             placeholder="توضیح دهید چه سندی می‌خواهید... مثال: یک ارائه ۱۰ اسلایدی درباره آینده AI"
@@ -225,7 +225,7 @@ export default function DocumentsPage() {
               color: 'var(--text)',
               fontSize: '1rem',
               resize: 'vertical',
-              fontFamily: 'inherit',
+              fontFamily: 'var(--font-sans)',
             }}
           />
 

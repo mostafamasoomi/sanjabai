@@ -387,7 +387,7 @@ export default function TasksPage() {
                     <Icon name="clock" size={12} />
                     {describeCron(task.cron_expression)}
                   </span>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', direction: 'ltr', fontFamily: 'monospace' }}>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', direction: 'ltr', fontFamily: 'var(--font-mono)' }}>
                     {task.cron_expression}
                   </span>
                   <span className="badge" style={{
@@ -439,7 +439,7 @@ export default function TasksPage() {
                     className="inline-flex items-center gap-1"
                   >
                     {runningTaskId === task.id ? (
-                      <span style={{ width: 12, height: 12, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                      <span style={{ width: 12, height: 12, border: '2px solid var(--text-on-accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
                     ) : (
                       <Icon name="send" size={13} />
                     )}
@@ -482,7 +482,7 @@ export default function TasksPage() {
                     marginTop: 12, padding: '10px 14px', borderRadius: 8,
                     background: 'var(--bg-surface, var(--bg-elev))',
                     fontSize: 12, color: 'var(--text-secondary)',
-                    fontFamily: 'monospace', direction: 'ltr', textAlign: 'left',
+                    fontFamily: 'var(--font-mono)', direction: 'ltr', textAlign: 'left',
                     maxHeight: 60, overflow: 'hidden', lineHeight: 1.6,
                     whiteSpace: 'pre-wrap', wordBreak: 'break-all',
                   }}>
@@ -520,7 +520,7 @@ export default function TasksPage() {
             <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
               توضیحات
             </label>
-            <textarea
+            <textarea dir="rtl"
               className="input"
               rows={2}
               value={form.description}
@@ -535,13 +535,13 @@ export default function TasksPage() {
             <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
               پرامپت <span className="text-danger">*</span>
             </label>
-            <textarea
+            <textarea dir="rtl"
               className="input"
               rows={5}
               value={form.prompt}
               onChange={(e) => setForm((f) => ({ ...f, prompt: e.target.value }))}
               placeholder="پرامپتی که قرار است اجرا شود...&#10;از {variable} برای متغیرها استفاده کنید"
-              style={{ resize: 'vertical', direction: 'ltr', textAlign: 'left', fontFamily: 'monospace' }}
+              style={{ resize: 'vertical', direction: 'ltr', textAlign: 'left', fontFamily: 'var(--font-mono)' }}
             />
             <p className="text-[11px] text-muted mt-1">
               از {'{variable}'} برای جایگذاری متغیرها در زمان اجرا استفاده کنید.
@@ -587,7 +587,7 @@ export default function TasksPage() {
               value={form.cron_expression}
               onChange={(e) => setForm((f) => ({ ...f, cron_expression: e.target.value }))}
               placeholder="0 9 * * *"
-              style={{ direction: 'ltr', textAlign: 'left', fontFamily: 'monospace' }}
+              style={{ direction: 'ltr', textAlign: 'left', fontFamily: 'var(--font-mono)' }}
             />
             <p className="text-[11px] text-muted mt-1">
               فرمت: دقیقه ساعت روز ماه ماه روز_هفته — مثال: <code>0 9 * * *</code> = هر روز ساعت ۹ صبح
@@ -623,7 +623,7 @@ export default function TasksPage() {
             className="inline-flex items-center justify-center gap-1.5 mt-1"
           >
             {saving ? (
-              <span style={{ width: 16, height: 16, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+              <span style={{ width: 16, height: 16, border: '2px solid var(--text-on-accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
             ) : (
               <Icon name="check" size={16} />
             )}
@@ -659,14 +659,14 @@ export default function TasksPage() {
                     </span>
                   </div>
                   {ex.error && (
-                    <p style={{ fontSize: 12, color: 'var(--danger)', margin: '4px 0', direction: 'ltr', fontFamily: 'monospace' }}>
+                    <p style={{ fontSize: 12, color: 'var(--danger)', margin: '4px 0', direction: 'ltr', fontFamily: 'var(--font-mono)' }}>
                       {ex.error}
                     </p>
                   )}
                   {ex.result && (
                     <div style={{
                       fontSize: 12, color: 'var(--text-secondary)', direction: 'ltr', textAlign: 'left',
-                      fontFamily: 'monospace', maxHeight: 60, overflow: 'hidden',
+                      fontFamily: 'var(--font-mono)', maxHeight: 60, overflow: 'hidden',
                       lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-all',
                     }}>
                       {ex.result.slice(0, 200)}{ex.result.length > 200 ? '...' : ''}

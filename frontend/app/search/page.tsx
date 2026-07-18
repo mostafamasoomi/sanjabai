@@ -397,8 +397,7 @@ export default function SearchPage() {
               <Icon
                 name={hasQuery ? 'search' : 'chat'}
                 size={48}
-                className="text-[var(--text-muted)]"
-                className="opacity-40"
+                className="text-[var(--text-muted)] opacity-40"
               />
               <div className="text-center">
                 <h3

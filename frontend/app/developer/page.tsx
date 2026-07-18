@@ -297,8 +297,7 @@ export default function DeveloperPage() {
             <button
               onClick={createKey}
               disabled={keyLoading}
-              className="btn btn-primary"
-              className="inline-flex items-center gap-1.5"
+              className="btn btn-primary inline-flex items-center gap-1.5"
             >
               {keyLoading ? (
                 <span style={{ width: 14, height: 14, border: '2px solid var(--text-on-accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
@@ -334,8 +333,7 @@ export default function DeveloperPage() {
                 </code>
                 <button
                   onClick={() => copyText(newKey)}
-                  className="btn btn-ghost btn-sm"
-                  className="inline-flex items-center gap-1"
+                  className="btn btn-ghost btn-sm inline-flex items-center gap-1"
                 >
                   <Icon name="copy" size={13} />
                   کپی

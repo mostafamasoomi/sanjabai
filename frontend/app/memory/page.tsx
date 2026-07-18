@@ -313,8 +313,7 @@ export default function MemoryPage() {
         {!showAddForm ? (
           <button
             onClick={() => setShowAddForm(true)}
-            className="btn btn-primary"
-            className="inline-flex items-center gap-1.5"
+            className="btn btn-primary inline-flex items-center gap-1.5"
           >
             <Icon name="plus" size={14} />
             افزودن حافظه
@@ -349,8 +348,7 @@ export default function MemoryPage() {
               <select
                 value={newCategory}
                 onChange={(e) => setNewCategory(e.target.value)}
-                className="input"
-                className="flex-1 text-[13px]"
+                className="input flex-1 text-[13px]"
               >
                 {CATEGORIES.filter((c) => c.key).map((c) => (
                   <option key={c.key} value={c.key}>{c.label}</option>
@@ -370,8 +368,7 @@ export default function MemoryPage() {
               <button
                 onClick={addMemory}
                 disabled={saving || !newContent.trim()}
-                className="btn btn-primary btn-sm"
-                className="inline-flex items-center gap-1"
+                className="btn btn-primary btn-sm inline-flex items-center gap-1"
               >
                 {saving ? (
                   <span style={{ width: 14, height: 14, border: '2px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.6s linear infinite', display: 'inline-block' }} />
@@ -452,8 +449,7 @@ export default function MemoryPage() {
           </p>
           <button
             onClick={() => setShowAddForm(true)}
-            className="btn btn-primary btn-sm"
-            className="inline-flex items-center gap-1.5"
+            className="btn btn-primary btn-sm inline-flex items-center gap-1.5"
           >
             <Icon name="plus" size={14} />
             افزودن حافظه
@@ -477,8 +473,7 @@ export default function MemoryPage() {
                     <select
                       value={editingCategory}
                       onChange={(e) => setEditingCategory(e.target.value)}
-                      className="input"
-                      className="flex-1 text-[13px]"
+                      className="input flex-1 text-[13px]"
                     >
                       {CATEGORIES.filter((c) => c.key).map((c) => (
                         <option key={c.key} value={c.key}>{c.label}</option>

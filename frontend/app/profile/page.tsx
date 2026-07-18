@@ -793,8 +793,7 @@ export default function ProfilePage() {
           <button
             onClick={handleLinkTelegram}
             disabled={linkingTelegram || !telegramId}
-            className="btn btn-secondary"
-            className="inline-flex items-center gap-1.5"
+            className="btn btn-secondary inline-flex items-center gap-1.5"
           >
             {linkingTelegram ? (
               <span className="apikeys-spinner" />
@@ -838,8 +837,7 @@ export default function ProfilePage() {
                     navigator.clipboard.writeText(user.referral_code || '')
                     toast(isFa ? 'کد کپی شد' : 'Code copied', 'success')
                   }}
-                  className="btn btn-secondary btn-sm"
-                  className="inline-flex items-center gap-1"
+                  className="btn btn-secondary btn-sm inline-flex items-center gap-1"
                 >
                   <Icon name="copy" size={14} />
                   {isFa ? 'کپی' : 'Copy'}
@@ -857,8 +855,7 @@ export default function ProfilePage() {
                     navigator.clipboard.writeText(`${window.location.origin}/signup?ref=${user.referral_code}`)
                     toast(isFa ? 'لینک کپی شد' : 'Link copied', 'success')
                   }}
-                  className="btn btn-secondary btn-sm"
-                  className="inline-flex items-center gap-1"
+                  className="btn btn-secondary btn-sm inline-flex items-center gap-1"
                 >
                   <Icon name="copy" size={14} />
                   {isFa ? 'کپی' : 'Copy'}

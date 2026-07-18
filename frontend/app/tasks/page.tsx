@@ -435,8 +435,7 @@ export default function TasksPage() {
                   <button
                     onClick={() => runTask(task)}
                     disabled={runningTaskId === task.id}
-                    className="btn btn-primary btn-sm"
-                    className="inline-flex items-center gap-1"
+                    className="btn btn-primary btn-sm inline-flex items-center gap-1"
                   >
                     {runningTaskId === task.id ? (
                       <span style={{ width: 12, height: 12, border: '2px solid var(--text-on-accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
@@ -447,16 +446,14 @@ export default function TasksPage() {
                   </button>
                   <button
                     onClick={() => showHistory(task)}
-                    className="btn btn-ghost btn-sm"
-                    className="inline-flex items-center gap-1"
+                    className="btn btn-ghost btn-sm inline-flex items-center gap-1"
                   >
                     <Icon name="history" size={13} />
                     تاریخچه
                   </button>
                   <button
                     onClick={() => openEdit(task)}
-                    className="btn btn-ghost btn-sm"
-                    className="inline-flex items-center gap-1"
+                    className="btn btn-ghost btn-sm inline-flex items-center gap-1"
                   >
                     <Icon name="settings" size={13} />
                     ویرایش
@@ -464,8 +461,7 @@ export default function TasksPage() {
                   <button
                     onClick={() => deleteTask(task)}
                     disabled={deletingId === task.id}
-                    className="btn btn-ghost btn-sm"
-                    className="inline-flex items-center gap-1 text-danger"
+                    className="btn btn-ghost btn-sm inline-flex items-center gap-1 text-danger"
                   >
                     {deletingId === task.id ? (
                       <span style={{ width: 12, height: 12, border: '2px solid var(--danger)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
@@ -619,8 +615,7 @@ export default function TasksPage() {
           <button
             onClick={saveTask}
             disabled={saving || !form.title.trim() || !form.prompt.trim()}
-            className="btn btn-primary w-full"
-            className="inline-flex items-center justify-center gap-1.5 mt-1"
+            className="btn btn-primary w-full inline-flex items-center justify-center gap-1.5 mt-1"
           >
             {saving ? (
               <span style={{ width: 16, height: 16, border: '2px solid var(--text-on-accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />

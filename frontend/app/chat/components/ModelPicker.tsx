@@ -414,8 +414,8 @@ function ModelCard({ model: m, isSelected, isFocused, isWorking, focusIdx, onCli
       role="option"
       aria-selected={isSelected}
     >
-      {isSelected && <span className="model-card-check" aria-hidden><Icon name="check" size={12} /></span>}
-      <div className="model-card-header">
+      {isSelected && <span className="model-card-check model-card-header" aria-hidden><Icon name="check" size={12} /></span>}
+      <div >
         <div className="model-card-title-row">
           <span className="model-card-icon" aria-hidden>{icon}</span>
           <div className="model-card-title-col">

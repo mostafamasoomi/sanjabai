@@ -1017,8 +1017,7 @@ export default function ChatPage() {
                   </div>
                   <a
                     href={`/assistants/${activeAssistant.id}`}
-                    className="btn btn-ghost btn-sm"
-                    className="text-[11px] shrink-0"
+                    className="btn btn-ghost btn-sm text-[11px] shrink-0"
                   >
                     <Icon name="settings" size={12} />
                     تنظیمات

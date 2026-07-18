@@ -574,21 +574,51 @@ async def captcha_image(request: Request):
     
     # Store answer in redis for 5 minutes
     token = base64.urlsafe_b64encode(f"{random.getrandbits(64)}".encode()).decode()[:12]
-    await rds.setex(f"captcha:{token}", 300, answer)
+    await rds.setex(f"captcha:{token}", 300, str(answer))
     
-    # Generate image
-    img = Image.new("RGB", (200, 60), (30, 30, 40))
+    # Generate image — larger, more readable
+    W, H = 280, 80
+    img = Image.new("RGB", (W, H), (24, 24, 36))
     draw = ImageDraw.Draw(img)
-    # Add noise
-    for _ in range(50):
-        x = random.randint(0, 199)
-        y = random.randint(0, 59)
-        draw.point((x, y), fill=(random.randint(100, 200), random.randint(100, 200), random.randint(100, 200)))
-    try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
-    except Exception:
-        font = ImageFont.load_default()
-    draw.text((15, 12), text, fill=(200, 200, 255), font=font)
+    
+    # Background noise lines (subtle)
+    for _ in range(8):
+        x1, y1 = random.randint(0, W), random.randint(0, H)
+        x2, y2 = random.randint(0, W), random.randint(0, H)
+        draw.line([(x1, y1), (x2, y2)], fill=(random.randint(40, 80), random.randint(40, 80), random.randint(60, 100)), width=1)
+    
+    # Noise dots
+    for _ in range(80):
+        x, y = random.randint(0, W-1), random.randint(0, H-1)
+        draw.point((x, y), fill=(random.randint(80, 160), random.randint(80, 160), random.randint(100, 180)))
+    
+    # Load font with fallback chain
+    font = None
+    for font_path in [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+    ]:
+        try:
+            font = ImageFont.truetype(font_path, 36)
+            break
+        except Exception:
+            continue
+    if font is None:
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
+        except Exception:
+            font = ImageFont.load_default()
+    
+    # Center text
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    x = (W - tw) // 2
+    y = (H - th) // 2 - bbox[1]
+    
+    # Draw text with slight shadow for depth
+    draw.text((x+1, y+1), text, fill=(60, 60, 80), font=font)
+    draw.text((x, y), text, fill=(220, 220, 255), font=font)
     
     buf = io.BytesIO()
     img.save(buf, "PNG")

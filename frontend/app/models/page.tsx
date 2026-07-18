@@ -176,7 +176,7 @@ export default function ModelsPage() {
             <div key={m.id} className="aurora-model-card card card-interactive" style={{ animationDelay: `${i * 50}ms` }}>
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <h3 className="font-bold text-base">{m.displayName}</h3>
+                  <h3 className="font-bold text-base text-[var(--text-primary)]">{m.displayName}</h3>
                   <p className="text-xs text-[var(--text-muted)]">{m.provider}</p>
                 </div>
                 <div className="flex items-center gap-2">

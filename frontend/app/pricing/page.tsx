@@ -143,26 +143,6 @@ export default function PricingPage() {
         </p>
       </div>
 
-      {/* Exchange Rate Banner */}
-      {exchangeRate && (
-        <div className="card" style={{ padding: '14px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, background: 'linear-gradient(135deg, rgba(124,111,247,0.06) 0%, rgba(103,232,249,0.03) 100%)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Icon name="refresh" size={18} className="text-accent" />
-            <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>نرخ ارز:</span>
-            <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>
-              ۱ دلار = {exchangeRate.toLocaleString('fa-IR')} تومان
-            </span>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)', background: 'var(--bg-hover)', padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>
-            </span>
-          </div>
-          {cachedAt && (
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', direction: 'ltr' }}>
-              بروزرسانی: {new Date(cachedAt).toLocaleTimeString('fa-IR')}
-            </span>
-          )}
-        </div>
-      )}
-
       {/* Balance card (if logged in) */}
       {user && balance !== null && (
         <div className="card" style={{ padding: '16px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
@@ -181,11 +161,9 @@ export default function PricingPage() {
       {/* Pricing Table */}
       <div className="card" style={{ overflow: 'hidden', marginBottom: 32 }}>
         {/* Table Header */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 130px 130px 130px 90px', gap: 8, padding: '14px 16px', borderBottom: '2px solid var(--border)', background: 'var(--bg-hover)', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 130px 90px', gap: 8, padding: '14px 16px', borderBottom: '2px solid var(--border)', background: 'var(--bg-hover)', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
           <div role="button" tabIndex={0} className="cursor-pointer" onClick={() => setSortBy('name')}>مدل {sortBy === 'name' && '↕'}</div>
-          <div role="button" tabIndex={0} style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setSortBy('input')}>ورودی/1M (USD) {sortBy === 'input' && '↕'}</div>
           <div role="button" tabIndex={0} style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setSortBy('input')}>ورودی/1M (تومان) {sortBy === 'input' && '↕'}</div>
-          <div role="button" tabIndex={0} style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setSortBy('output')}>خروجی/1M (USD) {sortBy === 'output' && '↕'}</div>
           <div role="button" tabIndex={0} style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setSortBy('output')}>خروجی/1M (تومان) {sortBy === 'output' && '↕'}</div>
           <div className="text-center">سطح</div>
         </div>
@@ -223,7 +201,7 @@ export default function PricingPage() {
                 key={model.id}
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '1fr 130px 130px 130px 130px 90px',
+                  gridTemplateColumns: '1fr 130px 130px 90px',
                   gap: 8,
                   padding: '12px 16px',
                   borderBottom: idx < sortedModels.length - 1 ? '1px solid var(--border)' : 'none',
@@ -242,22 +220,12 @@ export default function PricingPage() {
                   </div>
                 </div>
 
-                {/* Input price USD */}
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', fontFeatureSettings: '"tnum"', direction: 'ltr' }}>{fmtUSD(usdInput)}</div>
-                </div>
-
                 {/* Input price Toman */}
                 <div style={{ textAlign: 'left' }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"', direction: 'ltr' }}>{fmtIRR(model.pricing.inputPerMillion)}</div>
                   <div style={{ marginTop: 3, height: 3, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
                     <div style={{ width: `${inputPct}%`, height: '100%', borderRadius: 2, background: 'var(--accent)', opacity: 0.5 }} />
                   </div>
-                </div>
-
-                {/* Output price USD */}
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', fontFeatureSettings: '"tnum"', direction: 'ltr' }}>{fmtUSD(usdOutput)}</div>
                 </div>
 
                 {/* Output price Toman */}
@@ -286,7 +254,7 @@ export default function PricingPage() {
             <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>واحد قیمت</span>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-            قیمتها به <strong>تومان</strong> و <strong>دلار</strong> به ازای هر <strong>۱ میلیون توکن</strong> هستند. یک پیام معمولی حدود ۵۰۰-۲۰۰۰ توکن مصرف می‌کند.
+            قیمتها به <strong>تومان</strong> به ازای هر <strong>۱ میلیون توکن</strong> هستند. یک پیام معمولی حدود ۵۰۰-۲۰۰۰ توکن مصرف میکند.
           </p>
         </div>
         <div className="card" style={{ padding: 20 }}>

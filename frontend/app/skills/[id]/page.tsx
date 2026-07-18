@@ -110,7 +110,7 @@ function DetailSkeleton() {
       <div className="divider" />
       <div className="skeleton" style={{ width: '100%', height: '2rem' }} />
       <div className="skeleton" style={{ width: '100%', height: '8rem' }} />
- <div className="skeleton w-full h-10 rounded-md" />
+      <div className="skeleton" style={{ width: '100%', height: '2.5rem', borderRadius: 'var(--radius-md)' }} />
     </div>
   )
 }
@@ -234,12 +234,12 @@ export default function SkillDetailPage() {
           gap: '1.5rem',
         }}
       >
- <Icon name="warning" size={48} className="text-[var(--text-muted)] opacity-40" />
+        <Icon name="warning" size={48} className="text-[var(--text-muted)]" style={{ opacity: 0.4 }} />
         <div className="text-center">
-          <h2 className="text-xl font-bold text-primary mb-2">
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
             اسکیل یافت نشد
           </h2>
-          <p className="text-sm text-muted">
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
             اسکیل مورد نظر وجود ندارد یا حذف شده است.
           </p>
         </div>
@@ -259,23 +259,23 @@ export default function SkillDetailPage() {
       <button
         className="btn btn-ghost btn-sm"
         onClick={() => router.push('/skills')}
-        className="mb-4 text-[13px]"
+        style={{ marginBottom: '1rem', fontSize: '0.8125rem' }}
       >
         <Icon name="arrowLeft" size={14} />
         بازگشت به مارکتپلیس
       </button>
 
       {/* ── Header ── */}
-      <div className="mb-6">
-        <div className="flex items-center gap-2 mb-2">
+      <div style={{ marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
           <span
             className={`badge ${CATEGORY_BADGES[skill.category] || 'aurora-cap-default'}`}
-            className="text-[11px]"
+            style={{ fontSize: '0.6875rem' }}
           >
             {CATEGORY_LABELS[skill.category] || skill.category}
           </span>
           {skill.is_featured && (
- <span className="badge badge-accent text-[11px]" >
+            <span className="badge badge-accent" style={{ fontSize: '0.6875rem' }}>
               <Icon name="sparkles" size={10} />
               ویژه
             </span>
@@ -284,7 +284,7 @@ export default function SkillDetailPage() {
             {new Date(skill.created_at).toLocaleDateString('fa-IR')}
           </span>
         </div>
-        <h1 className="text-2xl font-bold text-primary leading-normal mb-2">
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.4, marginBottom: '0.5rem' }}>
           {skill.title_fa || skill.title}
         </h1>
         <p style={{ fontSize: '0.9375rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
@@ -306,21 +306,21 @@ export default function SkillDetailPage() {
           flexWrap: 'wrap',
         }}
       >
-        <div className="flex items-center gap-1.5">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
           {renderStars(avg, 16)}
           <span style={{ fontSize: '0.875rem', color: 'var(--text-primary)', fontWeight: 600, marginRight: '0.25rem' }}>
             {avg > 0 ? avg.toFixed(1) : '—'}
           </span>
-          <span className="text-xs text-muted">
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
             ({faNumber(skill.rating_count)} نظر)
           </span>
         </div>
         <div style={{ width: '1px', height: '1.25rem', background: 'var(--border)' }} />
-        <div className="flex items-center gap-1.5 text-sm text-muted">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
           <Icon name="user" size={14} />
           {faNumber(skill.usage_count)} استفاده
         </div>
-        <div className="flex items-center gap-1.5 text-sm text-muted">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
           <Icon name="key" size={14} />
           {skill.default_model || '—'}
         </div>
@@ -336,7 +336,7 @@ export default function SkillDetailPage() {
 
       {/* ── Tags ── */}
       {skill.tags && skill.tags.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-6">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.5rem' }}>
           {skill.tags.map((tag) => (
             <span
               key={tag}
@@ -369,7 +369,7 @@ export default function SkillDetailPage() {
             marginBottom: '1.5rem',
           }}
         >
-          <p className="text-sm text-secondary mb-3">
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
             برای استفاده از این اسکیل، ابتدا وارد حساب کاربری خود شوید.
           </p>
           <a href="/login" className="btn btn-primary btn-sm">
@@ -390,12 +390,12 @@ export default function SkillDetailPage() {
             marginBottom: '1.5rem',
           }}
         >
-          <h3 className="text-base font-semibold text-primary mb-4">
+          <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '1rem' }}>
             اجرای اسکیل
           </h3>
 
           {/* Model */}
-          <div className="mb-4">
+          <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
               مدل
             </label>
@@ -405,14 +405,14 @@ export default function SkillDetailPage() {
               value={model}
               onChange={(e) => setModel(e.target.value)}
               placeholder="نام مدل"
-              className="w-full text-sm"
+              style={{ width: '100%', fontSize: '0.875rem' }}
             />
           </div>
 
           {/* Variables */}
           {skill.variables && skill.variables.length > 0 && (
-            <div className="flex flex-col gap-3 mb-4">
-              <label className="text-[13px] font-semibold text-primary">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
+              <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                 متغیرها
               </label>
               {skill.variables.map((v) => (
@@ -426,7 +426,7 @@ export default function SkillDetailPage() {
                     value={variables[v.name] || ''}
                     onChange={(e) => setVariables({ ...variables, [v.name]: e.target.value })}
                     placeholder={v.name}
-                    className="w-full text-sm"
+                    style={{ width: '100%', fontSize: '0.875rem' }}
                   />
                 </div>
               ))}
@@ -463,8 +463,8 @@ export default function SkillDetailPage() {
                 padding: '1rem',
               }}
             >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-muted">خروجی</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>خروجی</span>
                 <button
                   className="btn btn-ghost btn-sm"
                   onClick={() => {
@@ -489,7 +489,7 @@ export default function SkillDetailPage() {
               >
                 {result.rendered_prompt}
               </pre>
-              <div className="text-[11px] text-muted mt-2">
+              <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
                 مدل: {result.model}
               </div>
             </div>
@@ -511,7 +511,7 @@ export default function SkillDetailPage() {
           امتیازدهی
         </h3>
         <div className="flex items-center gap-3">
-          <span className="text-[13px] text-secondary">امتیاز شما:</span>
+          <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>امتیاز شما:</span>
           <div className="flex gap-1">
             {[1, 2, 3, 4, 5].map((r) => (
               <button

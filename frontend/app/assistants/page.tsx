@@ -39,7 +39,7 @@ function CardSkeleton() {
       </div>
       <div className="skeleton" style={{ width: '100%', height: '0.625rem' }} />
       <div className="skeleton" style={{ width: '75%', height: '0.625rem' }} />
-      <div className="flex gap-2 mt-1">
+      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
         <div className="skeleton" style={{ width: '4rem', height: '1.25rem', borderRadius: 'var(--radius-full)' }} />
       </div>
     </div>
@@ -92,7 +92,7 @@ function AssistantCard({ assistant, onClick }: { assistant: Assistant; onClick: 
             {assistant.name}
           </h3>
           {assistant.model_id && (
-            <span className="text-[11px] text-muted" dir="ltr">
+            <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }} dir="ltr">
               {assistant.model_id}
             </span>
           )}
@@ -115,14 +115,14 @@ function AssistantCard({ assistant, onClick }: { assistant: Assistant; onClick: 
       )}
 
       {/* Badge */}
-      <div className="flex items-center gap-2 mt-1">
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
         {assistant.is_public ? (
- <span className="badge aurora-cap-green text-[10px]" >
+          <span className="badge aurora-cap-green" style={{ fontSize: '0.625rem' }}>
             <Icon name="eye" size={10} />
             عمومی
           </span>
         ) : (
- <span className="badge aurora-cap-default text-[10px]" >
+          <span className="badge aurora-cap-default" style={{ fontSize: '0.625rem' }}>
             <Icon name="lock" size={10} />
             خصوصی
           </span>
@@ -201,12 +201,12 @@ export default function AssistantsPage() {
   return (
     <div style={{ maxWidth: '64rem', margin: '0 auto', padding: '1rem 0' }}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
             دستیارها
           </h1>
-          <p className="text-sm text-muted">
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
             دستیارهای هوشمند خود را بسازید و مدیریت کنید
           </p>
         </div>
@@ -226,7 +226,7 @@ export default function AssistantsPage() {
             key={f.key}
             className={`btn btn-sm ${filter === f.key ? 'btn-primary' : 'btn-ghost'}`}
             onClick={() => setFilter(f.key)}
-            className="text-[13px]"
+            style={{ fontSize: '0.8125rem' }}
           >
             {f.label}
           </button>
@@ -254,7 +254,7 @@ export default function AssistantsPage() {
             <h3 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
               دستیاری یافت نشد
             </h3>
-            <p className="text-sm text-muted mb-4">
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
               {filter === 'mine'
                 ? 'هنوز دستیاری نساخته‌اید. یک دستیار جدید بسازید!'
                 : 'دستیاری در این دسته‌بندی وجود ندارد.'}

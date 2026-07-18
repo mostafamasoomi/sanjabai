@@ -143,7 +143,7 @@ export default function ComparePage() {
         {/* Panel header */}
         <div className="compare-panel-header">
           <div className="flex items-center gap-2 min-w-0">
- <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 bg-accent-dim" >
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'var(--accent-dim)' }}>
               <Icon name="models" size={16} className="text-[var(--accent)]" />
             </div>
             <div className="min-w-0">

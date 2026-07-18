@@ -213,7 +213,7 @@ export default function PromptsPage() {
       {/* Prompt Grid */}
       {filteredPrompts.length === 0 ? (
         <div className="prompts-empty">
-          <Icon name="search" size={32} className="text-muted mb-3" />
+          <Icon name="search" size={32} style={{ color: 'var(--text-muted)', marginBottom: 12 }} />
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>پرامپتی با این مشخصات یافت نشد</p>
           <button className="btn btn-ghost" onClick={() => { setSearch(''); setActiveCategory('all') }}>
             پاک کردن فیلترها

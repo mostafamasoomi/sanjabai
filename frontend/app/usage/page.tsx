@@ -159,7 +159,7 @@ function DonutChart({
           </div>
         )}
         {centerLabel && (
-          <div className="text-[11px] text-muted">{centerLabel}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{centerLabel}</div>
         )}
       </div>
     </div>
@@ -339,14 +339,14 @@ export default function UsagePage() {
 
   if (!user) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh]">
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
         <div className="card" style={{ textAlign: 'center', padding: '48px 32px', maxWidth: 400 }}>
           <div style={{ width: 56, height: 56, borderRadius: 'var(--radius-full)', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
             <Icon name="chart" size={28} className="text-accent" />
           </div>
-          <h2 className="text-xl font-bold text-primary mb-2">گزارش مصرف</h2>
-          <p className="text-muted mb-6">برای مشاهده گزارش مصرف، ابتدا وارد حساب خود شوید.</p>
- <Link href="/login" className="btn btn-lg btn-primary inline-flex items-center gap-2" >
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>گزارش مصرف</h2>
+          <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>برای مشاهده گزارش مصرف، ابتدا وارد حساب خود شوید.</p>
+          <Link href="/login" className="btn btn-lg btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             ورود
             <Icon name="arrowLeft" size={16} />
           </Link>
@@ -368,22 +368,22 @@ export default function UsagePage() {
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: '32px 20px 64px' }} className="usage-page">
       {/* Header */}
- <div className="usage-header flex items-center justify-between mb-6 gap-3 flex-wrap" >
-        <div className="flex items-center gap-2.5">
+      <div className="usage-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-full)', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Icon name="chart" size={18} className="text-accent" />
           </div>
           <div>
-            <h1 className="text-[22px] font-bold text-primary leading-tight">گزارش مصرف</h1>
-            <p className="text-xs text-muted">تحلیل هزینه، توکن و عملکرد مدل‌ها</p>
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>گزارش مصرف</h1>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>تحلیل هزینه، توکن و عملکرد مدل‌ها</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button
-            className="btn btn-sm btn-secondary inline-flex items-center gap-1.5"
+            className="btn btn-sm btn-secondary"
             onClick={exportCsv}
             disabled={!hasAnyData}
-            
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
             aria-label="خروجی CSV"
           >
             <Icon name="external" size={14} />
@@ -393,7 +393,7 @@ export default function UsagePage() {
             className="btn btn-sm btn-secondary"
             onClick={() => fetchUsage(true)}
             disabled={refreshing}
-            className="inline-flex items-center gap-1.5"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >
             <Icon name="refresh" size={14} className={refreshing ? 'spin' : ''} />
             بروزرسانی
@@ -402,7 +402,7 @@ export default function UsagePage() {
       </div>
 
       {/* Controls: date range */}
-      <div className="flex items-center gap-2 mb-6 flex-wrap">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
         <Icon name="calendar" size={16} className="text-muted" />
         <div style={{ display: 'inline-flex', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-full)', padding: 4 }}>
           {(['week', 'month', 'all'] as RangeKey[]).map((k) => (
@@ -427,7 +427,7 @@ export default function UsagePage() {
             </button>
           ))}
         </div>
-        <span className="text-xs text-muted">
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
           {rangedEvents.length} رویداد در بازه انتخابی
         </span>
       </div>
@@ -436,14 +436,14 @@ export default function UsagePage() {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 16 }}>
             {[1, 2, 3, 4].map(i => (
- <div key={i} className="card p-5" >
-                <Skeleton width={100} height={12} className="mb-3" />
-                <Skeleton width={140} height={28} className="mb-2" />
+              <div key={i} className="card" style={{ padding: 20 }}>
+                <Skeleton width={100} height={12} style={{ marginBottom: 12 }} />
+                <Skeleton width={140} height={28} style={{ marginBottom: 8 }} />
                 <Skeleton width={80} height={10} />
               </div>
             ))}
           </div>
- <div className="card mb-4" >
+          <div className="card" style={{ marginBottom: 16 }}>
             <Skeleton width={160} height={18} style={{ margin: 20 }} />
             <Skeleton width="100%" height={200} style={{ margin: '0 20px 20px' }} />
           </div>
@@ -463,7 +463,7 @@ export default function UsagePage() {
           <p style={{ color: 'var(--text-muted)', fontSize: 14, maxWidth: 360, margin: '0 auto 24px' }}>
             با ارسال اولین پیام در چت، گزارش‌های دقیق مصرف توکن و هزینه اینجا نمایش داده می‌شود.
           </p>
- <Link href="/chat" className="btn btn-lg btn-primary inline-flex items-center gap-2" >
+          <Link href="/chat" className="btn btn-lg btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             <Icon name="chat" size={16} />
             شروع چت
           </Link>
@@ -473,9 +473,9 @@ export default function UsagePage() {
           {/* Summary Cards */}
           <div className="usage-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 16 }}>
             {/* Balance */}
- <FadeInCard className="card p-5 relative overflow-hidden" delay={0} >
+            <FadeInCard className="card" delay={0} style={{ padding: 20, position: 'relative', overflow: 'hidden' }}>
               <div style={{ position: 'absolute', top: 0, insetInlineStart: 0, insetInlineEnd: 0, height: 3, background: 'var(--accent)' }} />
-              <div className="text-xs text-muted font-medium mb-2">
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 }}>
                 <Icon name="wallet" size={12} style={{ display: 'inline', verticalAlign: -1, marginInlineStart: 4 }} />
                 موجودی فعلی
               </div>
@@ -484,35 +484,35 @@ export default function UsagePage() {
             </FadeInCard>
 
             {/* Spent this month */}
- <FadeInCard className="card p-5" delay={60} >
-              <div className="text-xs text-muted font-medium mb-2">
+            <FadeInCard className="card" delay={60} style={{ padding: 20 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 }}>
                 <Icon name="payment" size={12} style={{ display: 'inline', verticalAlign: -1, marginInlineStart: 4 }} />
                 مصرف {rangeLabels[range]}
               </div>
               <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{fmtToman(rangedEvents.reduce((s, e) => s + e.cost, 0))}</div>
-              <div className="text-[11px] text-muted mt-2">{fmtIRR(rangedEvents.length)} درخواست</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>{fmtIRR(rangedEvents.length)} درخواست</div>
             </FadeInCard>
 
             {/* Total tokens */}
- <FadeInCard className="card p-5" delay={120} >
-              <div className="text-xs text-muted font-medium mb-2">
+            <FadeInCard className="card" delay={120} style={{ padding: 20 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 }}>
                 <Icon name="sparkles" size={12} style={{ display: 'inline', verticalAlign: -1, marginInlineStart: 4 }} />
                 کل توکن‌های مصرفی
               </div>
               <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{fmtTokens(rangedEvents.reduce((s, e) => s + e.input_tokens + e.output_tokens, 0))}</div>
-              <div className="text-[11px] text-muted mt-2">
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
                 ورودی: {fmtTokens(rangedEvents.reduce((s, e) => s + e.input_tokens, 0))} | خروجی: {fmtTokens(rangedEvents.reduce((s, e) => s + e.output_tokens, 0))}
               </div>
             </FadeInCard>
 
             {/* Models used */}
- <FadeInCard className="card p-5" delay={180} >
-              <div className="text-xs text-muted font-medium mb-2">
+            <FadeInCard className="card" delay={180} style={{ padding: 20 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 }}>
                 <Icon name="models" size={12} style={{ display: 'inline', verticalAlign: -1, marginInlineStart: 4 }} />
                 مدل‌های استفاده شده
               </div>
               <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{new Set(rangedEvents.map((e) => e.model)).size}</div>
-              <div className="text-[11px] text-muted mt-2">مدل فعال بازه انتخابی</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>مدل فعال بازه انتخابی</div>
             </FadeInCard>
           </div>
 
@@ -521,14 +521,14 @@ export default function UsagePage() {
             <FadeInCard className="card" delay={220} style={{ marginBottom: 16, padding: 20, background: 'linear-gradient(135deg, rgba(99,102,241,0.10), rgba(139,92,246,0.04))', border: '1px solid var(--border-strong)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
                 <div style={{ width: 44, height: 44, borderRadius: 'var(--radius-md)', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Icon name="warning" size={22} className="text-warning" />
+                  <Icon name="warning" size={22} style={{ color: 'var(--warning)' }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 160 }}>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 2 }}>گران‌ترین درخواست</div>
-                  <div className="text-[15px] font-bold text-primary">{modelName(mostExpensive.model)}</div>
-                  <div className="text-[11px] text-muted">{fmtDate(mostExpensive.created_at)}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{modelName(mostExpensive.model)}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{fmtDate(mostExpensive.created_at)}</div>
                 </div>
-                <div className="text-start">
+                <div style={{ textAlign: 'left' }}>
                   <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{fmtIRR(mostExpensive.cost)}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFeatureSettings: '"tnum"' }}>
                     {fmtTokens(mostExpensive.input_tokens)} ورودی / {fmtTokens(mostExpensive.output_tokens)} خروجی
@@ -541,10 +541,10 @@ export default function UsagePage() {
           {/* Charts row: donut + sparkline */}
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.2fr)', gap: 16, marginBottom: 16 }} className="usage-charts">
             {/* Donut: model cost distribution */}
- <FadeInCard className="card p-5" delay={260} >
-              <div className="flex items-center gap-2 mb-4">
+            <FadeInCard className="card" delay={260} style={{ padding: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                 <Icon name="chart" size={16} className="text-accent" />
-                <h2 className="text-base font-bold text-primary">توزیع هزینه مدل‌ها</h2>
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>توزیع هزینه مدل‌ها</h2>
               </div>
               {modelStats.length > 0 ? (
                 <>
@@ -553,7 +553,7 @@ export default function UsagePage() {
                     centerValue={fmtIRR(totalModelCost)}
                     centerLabel="تومان"
                   />
-                  <div className="mt-4 flex flex-col gap-2">
+                  <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {modelStats.map((m, i) => (
                       <div
                         key={m.model}
@@ -571,7 +571,7 @@ export default function UsagePage() {
                         }}
                       >
                         <div style={{ width: 10, height: 10, borderRadius: 'var(--radius-full)', background: m.color, flexShrink: 0 }} />
-                        <span className="flex-1 text-secondary font-semibold">{m.name}</span>
+                        <span style={{ flex: 1, color: 'var(--text-secondary)', fontWeight: 600 }}>{m.name}</span>
                         <span style={{ color: 'var(--text-muted)', fontFeatureSettings: '"tnum"' }}>{fmtPct(m.cost / totalModelCost)}</span>
                         <span style={{ color: 'var(--text-primary)', fontWeight: 700, fontFeatureSettings: '"tnum"', minWidth: 72, textAlign: 'left' }}>{fmtIRR(m.cost)}</span>
                       </div>
@@ -579,18 +579,18 @@ export default function UsagePage() {
                   </div>
                 </>
               ) : (
-                <div className="p-10 text-center text-muted text-[13px]">داده‌ای برای نمایش نمودار وجود ندارد</div>
+                <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>داده‌ای برای نمایش نمودار وجود ندارد</div>
               )}
             </FadeInCard>
 
             {/* Sparkline: daily usage (last 30 days) */}
- <FadeInCard className="card p-5" delay={320} >
-              <div className="flex items-center justify-between gap-2 mb-4">
-                <div className="flex items-center gap-2">
+            <FadeInCard className="card" delay={320} style={{ padding: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Icon name="calendar" size={16} className="text-accent" />
-                  <h2 className="text-base font-bold text-primary">مصرف روزانه</h2>
+                  <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>مصرف روزانه</h2>
                 </div>
-                <span className="text-[11px] text-muted">۳۰ روز گذشته</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>۳۰ روز گذشته</span>
               </div>
               <div
                 style={{
@@ -631,10 +631,10 @@ export default function UsagePage() {
 
           {/* Per-model breakdown with token efficiency */}
           {(data?.per_model_breakdown.length ?? 0) > 0 && (
- <FadeInCard className="card mb-4 overflow-hidden" delay={380} >
+            <FadeInCard className="card" delay={380} style={{ marginBottom: 16, overflow: 'hidden' }}>
               <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Icon name="models" size={16} className="text-accent" />
-                <h2 className="text-base font-bold text-primary">مصرف به تفکیک مدل</h2>
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>مصرف به تفکیک مدل</h2>
               </div>
 
               <div style={{ padding: '20px 20px 8px' }}>
@@ -643,10 +643,10 @@ export default function UsagePage() {
                   return (
                     <div key={m.model} style={{ marginBottom: 18 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
-                        <div className="flex items-center gap-2">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <div style={{ width: 8, height: 8, borderRadius: 'var(--radius-full)', background: m.color, flexShrink: 0 }} />
-                          <span className="text-[13px] font-semibold text-primary">{m.name}</span>
-                          <span className="text-[11px] text-muted">({m.calls} درخواست)</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{m.name}</span>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>({m.calls} درخواست)</span>
                         </div>
                         <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{fmtToman(m.cost)}</span>
                       </div>
@@ -673,14 +673,14 @@ export default function UsagePage() {
           <FadeInCard className="card overflow-hidden" delay={440}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Icon name="chart" size={16} className="text-accent" />
-              <h2 className="text-base font-bold text-primary">تاریخچه مصرف</h2>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>تاریخچه مصرف</h2>
               <span style={{ fontSize: 11, color: 'var(--text-muted)', marginInlineStart: 'auto' }}>{rangedEvents.length} مورد</span>
             </div>
 
             {rangedEvents.length === 0 ? (
-              <div className="p-12 text-center">
-                <Icon name="info" size={32} className="text-muted mb-3" />
-                <p className="text-muted text-sm">رویدادی در بازه انتخابی یافت نشد</p>
+              <div style={{ padding: 48, textAlign: 'center' }}>
+                <Icon name="info" size={32} style={{ color: 'var(--text-muted)', marginBottom: 12 }} />
+                <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>رویدادی در بازه انتخابی یافت نشد</p>
               </div>
             ) : (
               <>
@@ -709,11 +709,11 @@ export default function UsagePage() {
                       }}
                       className="usage-row"
                     >
-                      <div className="font-medium text-primary">{modelName(evt.model)}</div>
+                      <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{modelName(evt.model)}</div>
                       <div style={{ color: 'var(--text-secondary)', fontFeatureSettings: '"tnum"' }}>{fmtTokens(evt.input_tokens)}</div>
                       <div style={{ color: 'var(--text-secondary)', fontFeatureSettings: '"tnum"' }}>{fmtTokens(evt.output_tokens)}</div>
                       <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{fmtIRR(evt.cost)}</div>
-                      <div className="text-[11px] text-muted">{fmtDate(evt.created_at)}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{fmtDate(evt.created_at)}</div>
                     </div>
                   ))}
                 </div>

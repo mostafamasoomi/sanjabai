@@ -262,12 +262,12 @@ export default function TasksPage() {
 
   if (authLoading || (!user && !authLoading)) {
     return (
-      <div className="py-6">
+      <div style={{ padding: '24px 0' }}>
         {authLoading ? (
           <div>
             <Skeleton height="2rem" width="200px" className="mb-4" />
             {[1, 2, 3].map((i) => (
- <div key={i} className="card mb-3 p-5" >
+              <div key={i} className="card" style={{ marginBottom: 12, padding: 20 }}>
                 <Skeleton height="1.2rem" className="mb-3" />
                 <Skeleton height="0.9rem" width="60%" className="mb-2" />
                 <Skeleton height="0.9rem" width="40%" />
@@ -282,27 +282,27 @@ export default function TasksPage() {
   }
 
   return (
-    <div className="py-6">
+    <div style={{ padding: '24px 0' }}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-2.5">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
             width: 40, height: 40, borderRadius: 12,
             background: 'linear-gradient(135deg, var(--accent), var(--accent-hover, var(--accent)))',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <Icon name="calendar" size={20} className="text-[var(--text-on-accent)]" />
+            <Icon name="calendar" size={20} style={{ color: 'var(--text-on-accent)' }} />
           </div>
           <div>
-            <h1 className="text-[22px] font-bold text-primary leading-tight">
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
               تسک‌های زمان‌بندی شده
             </h1>
-            <p className="text-[13px] text-muted mt-0.5">
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
               اجرای خودکار پرامپت‌ها طبق زمان‌بندی
             </p>
           </div>
         </div>
- <button onClick={openCreate} className="btn btn-primary inline-flex items-center gap-1.5" >
+        <button onClick={openCreate} className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <Icon name="plus" size={16} />
           ایجاد تسک جدید
         </button>
@@ -325,8 +325,8 @@ export default function TasksPage() {
       {loading ? (
         <div>
           {[1, 2, 3].map((i) => (
- <div key={i} className="card mb-3 p-5" >
-              <div className="flex justify-between items-center mb-3">
+            <div key={i} className="card" style={{ marginBottom: 12, padding: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <Skeleton height="1.2rem" width="200px" />
                 <Skeleton height="1.5rem" width="50px" />
               </div>
@@ -342,7 +342,7 @@ export default function TasksPage() {
           description="اولین تسک زمان‌بندی شده خود را بسازید تا پرامپت‌ها به صورت خودکار اجرا شوند."
         />
       ) : (
-        <div className="flex flex-col gap-3">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {tasks.map((task) => {
             const ch = DELIVERY_CHANNELS[task.delivery_channel] || DELIVERY_CHANNELS.dashboard
             return (
@@ -353,11 +353,11 @@ export default function TasksPage() {
               }}>
                 {/* Top row: title + toggle */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                  <div className="flex items-center gap-2.5 min-w-0">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
                     <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {task.title}
                     </h3>
- <span className="badge badge-accent text-[11px] shrink-0" >
+                    <span className="badge badge-accent" style={{ fontSize: 11, flexShrink: 0 }}>
                       {task.model}
                     </span>
                   </div>
@@ -383,7 +383,7 @@ export default function TasksPage() {
 
                 {/* Cron + badges */}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10, alignItems: 'center' }}>
-                  <span className="inline-flex items-center gap-1 text-xs text-muted">
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
                     <Icon name="clock" size={12} />
                     {describeCron(task.cron_expression)}
                   </span>
@@ -411,19 +411,19 @@ export default function TasksPage() {
                 )}
 
                 {/* Stats row */}
-                <div className="flex flex-wrap gap-4 text-xs text-muted mb-3">
-                  <span className="inline-flex items-center gap-1">
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                     <Icon name="history" size={12} />
                     اجرا: {task.run_count.toLocaleString('fa-IR')} بار
                   </span>
                   {task.last_run_at && (
-                    <span className="inline-flex items-center gap-1">
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <Icon name="clock" size={12} />
                       آخرین اجرا: {formatDateTime(task.last_run_at)}
                     </span>
                   )}
                   {task.next_run_at && (
-                    <span className="inline-flex items-center gap-1">
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <Icon name="calendar" size={12} />
                       اجرای بعدی: {formatDateTime(task.next_run_at)}
                     </span>
@@ -431,14 +431,15 @@ export default function TasksPage() {
                 </div>
 
                 {/* Action buttons */}
-                <div className="flex gap-2 flex-wrap">
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button
                     onClick={() => runTask(task)}
                     disabled={runningTaskId === task.id}
-                    className="btn btn-primary btn-sm inline-flex items-center gap-1"
+                    className="btn btn-primary btn-sm"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
                   >
                     {runningTaskId === task.id ? (
-                      <span style={{ width: 12, height: 12, border: '2px solid var(--text-on-accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                      <span style={{ width: 12, height: 12, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
                     ) : (
                       <Icon name="send" size={13} />
                     )}
@@ -446,14 +447,16 @@ export default function TasksPage() {
                   </button>
                   <button
                     onClick={() => showHistory(task)}
-                    className="btn btn-ghost btn-sm inline-flex items-center gap-1"
+                    className="btn btn-ghost btn-sm"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
                   >
                     <Icon name="history" size={13} />
                     تاریخچه
                   </button>
                   <button
                     onClick={() => openEdit(task)}
-                    className="btn btn-ghost btn-sm inline-flex items-center gap-1"
+                    className="btn btn-ghost btn-sm"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
                   >
                     <Icon name="settings" size={13} />
                     ویرایش
@@ -461,7 +464,8 @@ export default function TasksPage() {
                   <button
                     onClick={() => deleteTask(task)}
                     disabled={deletingId === task.id}
-                    className="btn btn-ghost btn-sm inline-flex items-center gap-1 text-danger"
+                    className="btn btn-ghost btn-sm"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--danger)' }}
                   >
                     {deletingId === task.id ? (
                       <span style={{ width: 12, height: 12, border: '2px solid var(--danger)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
@@ -497,7 +501,7 @@ export default function TasksPage() {
         onClose={() => setModalOpen(false)}
         title={editingTask ? 'ویرایش تسک' : 'ایجاد تسک جدید'}
       >
-        <div className="flex flex-col gap-4">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Title */}
           <div>
             <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
@@ -539,7 +543,7 @@ export default function TasksPage() {
               placeholder="پرامپتی که قرار است اجرا شود...&#10;از {variable} برای متغیرها استفاده کنید"
               style={{ resize: 'vertical', direction: 'ltr', textAlign: 'left', fontFamily: 'var(--font-mono)' }}
             />
-            <p className="text-[11px] text-muted mt-1">
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
               از {'{variable}'} برای جایگذاری متغیرها در زمان اجرا استفاده کنید.
             </p>
           </div>
@@ -565,14 +569,14 @@ export default function TasksPage() {
             <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
               زمان‌بندی (Cron Expression)
             </label>
-            <div className="flex flex-wrap gap-1.5 mb-2">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
               {CRON_PRESETS.map((preset) => (
                 <button
                   key={preset.value}
                   type="button"
                   className={`btn btn-sm ${form.cron_expression === preset.value ? 'btn-primary' : 'btn-ghost'}`}
                   onClick={() => setForm((f) => ({ ...f, cron_expression: preset.value }))}
-                  className="text-[11px]"
+                  style={{ fontSize: 11 }}
                 >
                   {preset.label}
                 </button>
@@ -585,7 +589,7 @@ export default function TasksPage() {
               placeholder="0 9 * * *"
               style={{ direction: 'ltr', textAlign: 'left', fontFamily: 'var(--font-mono)' }}
             />
-            <p className="text-[11px] text-muted mt-1">
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
               فرمت: دقیقه ساعت روز ماه ماه روز_هفته — مثال: <code>0 9 * * *</code> = هر روز ساعت ۹ صبح
             </p>
           </div>
@@ -595,14 +599,14 @@ export default function TasksPage() {
             <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
               کانال ارسال نتیجه
             </label>
-            <div className="flex gap-2">
+            <div style={{ display: 'flex', gap: 8 }}>
               {Object.entries(DELIVERY_CHANNELS).map(([key, ch]) => (
                 <button
                   key={key}
                   type="button"
                   className={`btn btn-sm ${form.delivery_channel === key ? 'btn-primary' : 'btn-ghost'}`}
                   onClick={() => setForm((f) => ({ ...f, delivery_channel: key }))}
-                  className="inline-flex items-center gap-1"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
                 >
                   <Icon name={ch.icon} size={14} />
                   {ch.label}
@@ -615,10 +619,11 @@ export default function TasksPage() {
           <button
             onClick={saveTask}
             disabled={saving || !form.title.trim() || !form.prompt.trim()}
-            className="btn btn-primary w-full inline-flex items-center justify-center gap-1.5 mt-1"
+            className="btn btn-primary w-full"
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 4 }}
           >
             {saving ? (
-              <span style={{ width: 16, height: 16, border: '2px solid var(--text-on-accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+              <span style={{ width: 16, height: 16, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
             ) : (
               <Icon name="check" size={16} />
             )}
@@ -635,11 +640,11 @@ export default function TasksPage() {
       >
         {executions.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted)' }}>
-            <Icon name="history" size={32} className="mb-2" />
+            <Icon name="history" size={32} style={{ marginBottom: 8 }} />
             <p>هنوز اجرایی ثبت نشده است</p>
           </div>
         ) : (
-          <div className="flex flex-col gap-2.5">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {executions.map((ex) => {
               const st = STATUS_MAP[ex.status] || { label: ex.status, color: 'badge-accent' }
               return (
@@ -648,8 +653,8 @@ export default function TasksPage() {
                   border: '1px solid var(--border)',
                 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <span className={`badge ${st.color}`} className="text-[11px]">{st.label}</span>
-                    <span className="text-[11px] text-muted">
+                    <span className={`badge ${st.color}`} style={{ fontSize: 11 }}>{st.label}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                       {formatDateTime(ex.started_at)}
                     </span>
                   </div>

@@ -205,7 +205,7 @@ function QuickAction({
         <Icon name={icon} size={18} className="text-[var(--accent)]" />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold text-primary">{label}</div>
+        <div style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)' }}>{label}</div>
         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>{description}</div>
       </div>
       <span className="shrink-0 text-[var(--text-muted)]">
@@ -409,11 +409,11 @@ export default function DashboardPage() {
   /* ─── Not authenticated ─── */
   if (!authLoading && !user) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1.5rem' }}>
         <Icon name="security" size={48} className="text-[var(--text-muted)]" />
         <div className="text-center">
-          <h2 className="text-xl font-bold text-primary mb-2">وارد شوید</h2>
-          <p className="text-sm text-muted">برای مشاهده داشبورد، ابتدا وارد حساب کاربری خود شوید.</p>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>وارد شوید</h2>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>برای مشاهده داشبورد، ابتدا وارد حساب کاربری خود شوید.</p>
         </div>
         <button className="btn" onClick={() => router.push('/login')}>
           <Icon name="profile" size={16} />
@@ -476,12 +476,12 @@ export default function DashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       {/* ─── Header ─── */}
-      <header className="flex justify-between items-start flex-wrap gap-4">
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 className="text-2xl font-extrabold text-primary tracking-tight leading-snug">
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.03em', lineHeight: 1.3 }}>
             سلام، {displayName}
           </h1>
-          <p className="text-[13px] text-muted mt-1">
+          <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
             خوش آمدید به داشبورد مولتیای
           </p>
         </div>
@@ -494,7 +494,7 @@ export default function DashboardPage() {
             onClick={() => fetchData(true)}
             disabled={refreshing}
             title="بروزرسانی"
-            className="flex items-center gap-1.5"
+            style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}
           >
             <span className={refreshing ? 'animate-spin' : ''}>
               <Icon name="refresh" size={14} />
@@ -540,7 +540,7 @@ export default function DashboardPage() {
         {/* ─── Subscription Status Card ─── */}
         <div className="card flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-secondary font-medium">وضعیت اشتراک</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>وضعیت اشتراک</span>
             <div
               style={{
                 width: '2rem',
@@ -581,7 +581,7 @@ export default function DashboardPage() {
           {tokenQuota > 0 && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                <span className="text-[11px] text-muted">
+                <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
                   توکن مصرف شده
                 </span>
                 <span style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', fontFeatureSettings: '"tnum"' }}>
@@ -612,7 +612,7 @@ export default function DashboardPage() {
 
           {/* Ends at */}
           {subscription?.ends_at && (
-            <div className="text-[11px] text-muted">
+            <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
               تاریخ پایان: {faDate(subscription.ends_at)}
             </div>
           )}
@@ -621,7 +621,7 @@ export default function DashboardPage() {
           <button
             className="btn btn-sm"
             onClick={() => router.push('/pricing')}
-            className="w-full flex items-center justify-center gap-1.5 mt-1"
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.375rem', marginTop: '0.25rem' }}
           >
             <Icon name="payment" size={14} />
             تغییر پلن
@@ -640,17 +640,17 @@ export default function DashboardPage() {
       >
         {/* Recent Activity / Ledger */}
         <div className="card overflow-hidden">
-          <div className="flex items-center justify-between mb-4">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
             <div className="flex items-center gap-2">
               <span className="text-[var(--accent)]">
                 <Icon name="history" size={18} />
               </span>
-              <h2 className="text-base font-semibold text-primary">فعالیت اخیر</h2>
+              <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>فعالیت اخیر</h2>
             </div>
             <button
               className="btn btn-sm"
               onClick={() => router.push('/wallet')}
-              className="flex items-center gap-1 text-xs"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem' }}
             >
               مشاهده همه
               <Icon name="arrowLeft" size={12} />
@@ -662,7 +662,7 @@ export default function DashboardPage() {
               <span className="text-[var(--text-muted)] opacity-50">
                 <Icon name="history" size={32} />
               </span>
-              <p className="text-[13px] text-muted text-center">
+              <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', textAlign: 'center' }}>
                 هنوز تراکنشی ثبت نشده است
               </p>
               <button className="btn btn-sm" onClick={() => router.push('/wallet')}>
@@ -683,11 +683,11 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-6">
           {/* Quick Actions */}
           <div className="card">
-            <div className="flex items-center gap-2 mb-4">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
               <span className="text-[var(--accent)]">
                 <Icon name="dashboard" size={18} />
               </span>
-              <h2 className="text-base font-semibold text-primary">دسترسی سریع</h2>
+              <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>دسترسی سریع</h2>
             </div>
             <div className="flex flex-col gap-3">
               <QuickAction
@@ -728,11 +728,11 @@ export default function DashboardPage() {
 
           {/* Account Info */}
           <div className="card">
-            <div className="flex items-center gap-2 mb-4">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
               <span className="text-[var(--accent)]">
                 <Icon name="profile" size={18} />
               </span>
-              <h2 className="text-base font-semibold text-primary">اطلاعات حساب</h2>
+              <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>اطلاعات حساب</h2>
             </div>
             <div className="flex flex-col gap-3">
               <InfoRow icon="profile" label="ایمیل" value={profile?.email || '—'} />
@@ -749,7 +749,7 @@ export default function DashboardPage() {
             <button
               className="btn btn-sm"
               onClick={() => router.push('/profile')}
-              className="w-full flex items-center justify-center gap-1.5"
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.375rem' }}
             >
               <Icon name="settings" size={14} />
               مدیریت حساب
@@ -758,11 +758,11 @@ export default function DashboardPage() {
 
           {/* ─── PAYG Toggle Section ─── */}
           <div className="card" id="payg-section">
-            <div className="flex items-center gap-2 mb-4">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
               <span className="text-[var(--accent)]">
                 <Icon name="payment" size={18} />
               </span>
-              <h2 className="text-base font-semibold text-primary">پرداخت به ازای مصرف</h2>
+              <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>پرداخت به ازای مصرف</h2>
             </div>
 
             {/* Toggle row */}
@@ -775,10 +775,10 @@ export default function DashboardPage() {
               }}
             >
               <div>
-                <div className="text-[13px] font-medium text-primary">
+                <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text-primary)' }}>
                   پرداخت به ازای مصرف (PAYG)
                 </div>
-                <div className="text-[11px] text-muted mt-1">
+                <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
                   {billingSettings?.payg_enabled ? 'فعال' : 'غیرفعال'}
                 </div>
               </div>
@@ -817,8 +817,8 @@ export default function DashboardPage() {
 
             {/* Hard limit display */}
             <div style={{ padding: '0.5rem 0', borderTop: '1px solid var(--border)' }}>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-secondary">سقف هزینه</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>سقف هزینه</span>
                 <span style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>
                   {billingSettings?.payg_hard_limit != null
                     ? `${faNum(billingSettings.payg_hard_limit)} تومان`
@@ -827,7 +827,7 @@ export default function DashboardPage() {
                 </span>
               </div>
               {showHardLimitInput ? (
-                <div className="flex gap-2 mt-2">
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
                   <input
                     type="number"
                     value={hardLimitValue}
@@ -864,7 +864,7 @@ export default function DashboardPage() {
                 <button
                   className="btn btn-sm"
                   onClick={() => setShowHardLimitInput(true)}
-                  className="w-full flex items-center justify-center gap-1.5 mt-1"
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.375rem', marginTop: '0.25rem' }}
                 >
                   <Icon name="settings" size={14} />
                   تنظیم سقف هزینه
@@ -875,7 +875,7 @@ export default function DashboardPage() {
             {/* Notify percentage */}
             {billingSettings?.notify_on_usage_pct != null && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0', borderTop: '1px solid var(--border)' }}>
-                <span className="text-xs text-secondary">اعلام درصد مصرف</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>اعلام درصد مصرف</span>
                 <span style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>
                   {faNum(billingSettings.notify_on_usage_pct)}٪
                 </span>

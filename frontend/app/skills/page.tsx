@@ -119,13 +119,13 @@ function CardSkeleton() {
     >
       <div className="flex items-center gap-2">
         <div className="skeleton" style={{ width: '4rem', height: '1.25rem', borderRadius: 'var(--radius-sm)' }} />
- <div className="skeleton w-12 h-4" />
+        <div className="skeleton" style={{ width: '3rem', height: '1rem' }} />
       </div>
       <div className="skeleton" style={{ width: '70%', height: '1rem' }} />
       <div className="skeleton" style={{ width: '100%', height: '0.625rem', marginBottom: '0.25rem' }} />
       <div className="skeleton" style={{ width: '85%', height: '0.625rem', marginBottom: '0.25rem' }} />
       <div className="skeleton" style={{ width: '60%', height: '0.625rem' }} />
-      <div className="flex gap-2 mt-1">
+      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
         <div className="skeleton" style={{ width: '3rem', height: '1.25rem', borderRadius: 'var(--radius-full)' }} />
         <div className="skeleton" style={{ width: '3.5rem', height: '1.25rem', borderRadius: 'var(--radius-full)' }} />
       </div>
@@ -156,11 +156,11 @@ function SkillCard({ skill, onUse }: { skill: Skill; onUse: (s: Skill) => void }
       <div className="flex items-center justify-between">
         <span
           className={`badge ${CATEGORY_BADGES[skill.category] || 'aurora-cap-default'}`}
-          className="text-[11px]"
+          style={{ fontSize: '0.6875rem' }}
         >
           {CATEGORY_LABELS[skill.category] || skill.category}
         </span>
-        <span className="text-xs text-muted flex items-center gap-1">
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
           <Icon name="user" size={12} />
           {faNumber(skill.usage_count)} استفاده
         </span>
@@ -188,7 +188,7 @@ function SkillCard({ skill, onUse }: { skill: Skill; onUse: (s: Skill) => void }
 
       {/* Tags */}
       {skill.tags && skill.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem' }}>
           {skill.tags.slice(0, 4).map((tag) => (
             <span
               key={tag}
@@ -208,7 +208,7 @@ function SkillCard({ skill, onUse }: { skill: Skill; onUse: (s: Skill) => void }
       )}
 
       {/* Rating + action */}
-      <div className="flex items-center justify-between mt-1">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.25rem' }}>
         <div className="flex items-center gap-1">
           {renderStars(avg, 12)}
           {skill.rating_count > 0 && (
@@ -338,7 +338,7 @@ function UseSkillModal({
         </p>
 
         {/* Stats */}
-        <div className="flex items-center gap-4 mb-4 text-xs text-muted">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
           <span className="flex items-center gap-1">
             <Icon name="user" size={12} />
             {faNumber(skill.usage_count)} استفاده
@@ -351,7 +351,7 @@ function UseSkillModal({
 
         {/* Tags */}
         {skill.tags && skill.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-4">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', marginBottom: '1rem' }}>
             {skill.tags.map((tag) => (
               <span
                 key={tag}
@@ -373,7 +373,7 @@ function UseSkillModal({
         <div className="divider" style={{ margin: '1rem 0' }} />
 
         {/* Model selector */}
-        <div className="mb-4">
+        <div style={{ marginBottom: '1rem' }}>
           <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
             مدل
           </label>
@@ -383,14 +383,14 @@ function UseSkillModal({
             value={model}
             onChange={(e) => setModel(e.target.value)}
             placeholder="نام مدل (مثلاً gpt-4)"
-            className="w-full text-sm"
+            style={{ width: '100%', fontSize: '0.875rem' }}
           />
         </div>
 
         {/* Variables */}
         {skill.variables && skill.variables.length > 0 && (
-          <div className="flex flex-col gap-3 mb-4">
-            <label className="text-[13px] font-semibold text-primary">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
+            <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>
               متغیرها
             </label>
             {skill.variables.map((v) => (
@@ -404,7 +404,7 @@ function UseSkillModal({
                   value={variables[v.name] || ''}
                   onChange={(e) => setVariables({ ...variables, [v.name]: e.target.value })}
                   placeholder={v.name}
-                  className="w-full text-sm"
+                  style={{ width: '100%', fontSize: '0.875rem' }}
                 />
               </div>
             ))}
@@ -413,10 +413,10 @@ function UseSkillModal({
 
         {/* Action button */}
         <button
-          className="btn btn-primary w-full mb-4"
+          className="btn btn-primary w-full"
           onClick={handleUse}
           disabled={loading}
-          
+          style={{ marginBottom: '1rem' }}
         >
           {loading ? (
             <span className="flex items-center gap-2">
@@ -442,8 +442,8 @@ function UseSkillModal({
               marginBottom: '1rem',
             }}
           >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-muted">خروجی</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>خروجی</span>
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={() => {
@@ -468,7 +468,7 @@ function UseSkillModal({
             >
               {result.rendered_prompt}
             </pre>
-            <div className="text-[11px] text-muted mt-2">
+            <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
               مدل: {result.model}
             </div>
           </div>
@@ -476,7 +476,7 @@ function UseSkillModal({
 
         {/* Rating */}
         <div className="flex items-center gap-3">
-          <span className="text-[13px] text-secondary">امتیاز شما:</span>
+          <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>امتیاز شما:</span>
           <div className="flex gap-1">
             {[1, 2, 3, 4, 5].map((r) => (
               <button
@@ -605,7 +605,7 @@ function CreateSkillModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
           <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--text-primary)' }}>
             ایجاد اسکیل جدید
           </h2>
@@ -615,7 +615,7 @@ function CreateSkillModal({
         </div>
 
         {/* Title */}
-        <div className="mb-4">
+        <div style={{ marginBottom: '1rem' }}>
           <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
             عنوان *
           </label>
@@ -625,12 +625,12 @@ function CreateSkillModal({
             value={titleFa}
             onChange={(e) => setTitleFa(e.target.value)}
             placeholder="عنوان اسکیل را وارد کنید"
-            className="w-full text-sm"
+            style={{ width: '100%', fontSize: '0.875rem' }}
           />
         </div>
 
         {/* Description */}
-        <div className="mb-4">
+        <div style={{ marginBottom: '1rem' }}>
           <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
             توضیحات
           </label>
@@ -645,7 +645,7 @@ function CreateSkillModal({
         </div>
 
         {/* Category */}
-        <div className="mb-4">
+        <div style={{ marginBottom: '1rem' }}>
           <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
             دسته‌بندی
           </label>
@@ -653,7 +653,7 @@ function CreateSkillModal({
             className="input"
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="w-full text-sm"
+            style={{ width: '100%', fontSize: '0.875rem' }}
           >
             {CATEGORIES.filter((c) => c.key !== 'all').map((c) => (
               <option key={c.key} value={c.key}>
@@ -664,7 +664,7 @@ function CreateSkillModal({
         </div>
 
         {/* Prompt Template */}
-        <div className="mb-4">
+        <div style={{ marginBottom: '1rem' }}>
           <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
             الگوی پرامپت *
           </label>
@@ -679,9 +679,9 @@ function CreateSkillModal({
         </div>
 
         {/* Variables */}
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-[13px] font-semibold text-primary">
+        <div style={{ marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+            <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>
               متغیرها
             </label>
             <button
@@ -694,14 +694,14 @@ function CreateSkillModal({
             </button>
           </div>
           {variables.map((v, i) => (
-            <div key={i} className="flex gap-2 mb-2 items-center">
+            <div key={i} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
               <input
                 type="text"
                 className="input"
                 value={v.name}
                 onChange={(e) => updateVariable(i, 'name', e.target.value)}
                 placeholder="نام متغیر"
-                className="flex-1 text-[13px]"
+                style={{ flex: 1, fontSize: '0.8125rem' }}
               />
               <input
                 type="text"
@@ -724,7 +724,7 @@ function CreateSkillModal({
         </div>
 
         {/* Default Model */}
-        <div className="mb-4">
+        <div style={{ marginBottom: '1rem' }}>
           <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
             مدل پیش‌فرض
           </label>
@@ -734,12 +734,12 @@ function CreateSkillModal({
             value={defaultModel}
             onChange={(e) => setDefaultModel(e.target.value)}
             placeholder="نام مدل (اختیاری)"
-            className="w-full text-sm"
+            style={{ width: '100%', fontSize: '0.875rem' }}
           />
         </div>
 
         {/* Tags */}
-        <div className="mb-4">
+        <div style={{ marginBottom: '1rem' }}>
           <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
             برچسب‌ها (با کاما جدا کنید)
           </label>
@@ -749,12 +749,12 @@ function CreateSkillModal({
             value={tagsInput}
             onChange={(e) => setTagsInput(e.target.value)}
             placeholder="برچسب۱, برچسب۲, ..."
-            className="w-full text-sm"
+            style={{ width: '100%', fontSize: '0.875rem' }}
           />
         </div>
 
         {/* Public toggle */}
-        <div className="flex items-center gap-3 mb-6">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
           <button
             onClick={() => setIsPublic(!isPublic)}
             style={{
@@ -784,7 +784,7 @@ function CreateSkillModal({
               }}
             />
           </button>
-          <span className="text-[13px] text-secondary">
+          <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
             {isPublic ? 'عمومی — برای همه قابل مشاهده' : 'خصوصی — فقط برای شما'}
           </span>
         </div>
@@ -865,13 +865,13 @@ export default function SkillsPage() {
   // Not authenticated state
   if (!authLoading && !user) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
- <Icon name="sparkles" size={48} className="text-[var(--text-muted)] opacity-40" />
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1.5rem' }}>
+        <Icon name="sparkles" size={48} className="text-[var(--text-muted)]" style={{ opacity: 0.4 }} />
         <div className="text-center">
-          <h2 className="text-xl font-bold text-primary mb-2">
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
             وارد شوید
           </h2>
-          <p className="text-sm text-muted">
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
             برای استفاده از مارکتپلیس اسکیل‌ها، ابتدا وارد حساب کاربری خود شوید.
           </p>
         </div>
@@ -886,7 +886,7 @@ export default function SkillsPage() {
   return (
     <div className="flex flex-col gap-6">
       {/* ── Header ── */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
         <div className="flex items-center gap-3">
           <div
             style={{
@@ -905,7 +905,7 @@ export default function SkillsPage() {
             <h1 style={{ fontSize: '1.375rem', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
               مارکتپلیس اسکیل‌ها
             </h1>
-            <p className="text-[13px] text-muted">
+            <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
               اسکیل‌های آماده رو کشف کن و استفاده کن
             </p>
           </div>
@@ -913,7 +913,7 @@ export default function SkillsPage() {
         <button
           className="btn btn-primary"
           onClick={() => setShowCreateModal(true)}
-          className="text-sm"
+          style={{ fontSize: '0.875rem' }}
         >
           <Icon name="plus" size={16} />
           ایجاد اسکیل جدید
@@ -973,7 +973,7 @@ export default function SkillsPage() {
             key={cat.key}
             onClick={() => setCategory(cat.key)}
             className={`btn btn-sm ${category === cat.key ? 'btn-primary' : 'btn-ghost'}`}
-            className="whitespace-nowrap text-[13px]"
+            style={{ whiteSpace: 'nowrap', fontSize: '0.8125rem' }}
           >
             {cat.label}
           </button>
@@ -982,7 +982,7 @@ export default function SkillsPage() {
 
       {/* ── Results count ── */}
       {!loading && (
-        <p className="text-xs text-muted">
+        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
           {faNumber(skills.length)} اسکیل
         </p>
       )}
@@ -1014,12 +1014,12 @@ export default function SkillsPage() {
             gap: '1rem',
           }}
         >
- <Icon name="sparkles" size={48} className="text-[var(--text-muted)] opacity-40" />
+          <Icon name="sparkles" size={48} className="text-[var(--text-muted)]" style={{ opacity: 0.4 }} />
           <div className="text-center">
             <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.375rem' }}>
               اسکیلی یافت نشد
             </h3>
-            <p className="text-[13px] text-muted">
+            <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
               {search.trim()
                 ? 'عبارت جستجو را تغییر دهید یا فیلترها را بررسی کنید.'
                 : 'هنوز اسکیلی ایجاد نشده است. اولین اسکیل را شما ایجاد کنید!'}

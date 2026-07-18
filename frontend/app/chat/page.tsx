@@ -918,7 +918,7 @@ export default function ChatPage() {
                 <span className="text-xs text-[var(--text-secondary)] select-none">Smart Mode</span>
               </label>
               {smartMode && smartModel && (
-                <span className="badge badge-accent text-[10px]" dir="ltr" title="مدل انتخابی توسط Smart Mode">
+                <span className="badge badge-accent text-[9px]" dir="ltr" title="مدل انتخابی توسط Smart Mode">
                   🧠 {smartModel}
                 </span>
               )}
@@ -1006,7 +1006,7 @@ export default function ChatPage() {
                     <Icon name={(activeAssistant.icon as IconName) || 'sparkles'} size={16} className="text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-semibold text-primary">
+                    <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                       {activeAssistant.name}
                     </div>
                     {activeAssistant.description && (
@@ -1017,7 +1017,8 @@ export default function ChatPage() {
                   </div>
                   <a
                     href={`/assistants/${activeAssistant.id}`}
-                    className="btn btn-ghost btn-sm text-[11px] shrink-0"
+                    className="btn btn-ghost btn-sm"
+                    style={{ fontSize: '0.6875rem', flexShrink: 0 }}
                   >
                     <Icon name="settings" size={12} />
                     تنظیمات

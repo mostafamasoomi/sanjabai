@@ -151,13 +151,13 @@ export default function DocumentsPage() {
   // Auth gate — documents require login
   if (!token) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh]" dir="rtl">
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }} dir="rtl">
         <div className="card" style={{ textAlign: 'center', padding: '48px 32px', maxWidth: 400 }}>
-          <h2 className="text-xl font-bold mb-2">سندساز</h2>
-          <p className="text-muted mb-6">
+          <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>سندساز</h2>
+          <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>
             برای ساخت پاورپوینت، ورد یا اسلاید با هوش مصنوعی، ابتدا وارد حساب خود شوید.
           </p>
- <a href="/login" className="btn btn-lg btn-primary inline-flex items-center gap-2" >
+          <a href="/login" className="btn btn-lg btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             ورود / ثبت‌نام
           </a>
         </div>
@@ -179,7 +179,7 @@ export default function DocumentsPage() {
         </div>
 
         {/* Format selector */}
- <div className="card mb-6" >
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
           <div className="card-header">نوع سند</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
             {DOC_TYPES.map(dt => (
@@ -209,7 +209,7 @@ export default function DocumentsPage() {
         </div>
 
         {/* Prompt input */}
- <div className="card mb-6" >
+        <div className="card" style={{ marginBottom: '1.5rem' }}>
           <div className="card-header">توضیحات سند</div>
           <textarea dir="rtl"
             value={prompt}
@@ -305,7 +305,7 @@ export default function DocumentsPage() {
               background: 'var(--accent)08',
             }}
           >
-            <div className="flex items-center gap-4 mb-4">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
               <span style={{ fontSize: '2.5rem' }}>
                 {DOC_TYPES.find(d => d.id === result.type)?.icon}
               </span>
@@ -369,11 +369,11 @@ export default function DocumentsPage() {
                   }}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">
+                    <span style={{ fontSize: '1.5rem' }}>
                       {DOC_TYPES.find(d => d.id === doc.type)?.icon}
                     </span>
                     <div>
-                      <div className="font-medium">{doc.title}</div>
+                      <div style={{ fontWeight: 500 }}>{doc.title}</div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                         {formatDate(doc.created_at)} · {formatSize(doc.file_size)}
                       </div>

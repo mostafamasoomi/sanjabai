@@ -218,7 +218,7 @@ export default function MemoryPage() {
   return (
     <div style={{ maxWidth: 800, margin: '0 auto', padding: '0 16px' }}>
       {/* Header */}
-      <div className="flex items-center gap-2.5 mb-6">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
         <div
           style={{
             width: 40,
@@ -233,17 +233,17 @@ export default function MemoryPage() {
           <Icon name="sparkles" size={20} className="text-accent" />
         </div>
         <div>
-          <h1 className="text-[22px] font-bold text-primary leading-tight">
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
             حافظه هوشمند
           </h1>
-          <p className="text-[13px] text-muted mt-0.5">
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
             اطلاعات و ترجیحات شما برای چت‌های بهتر
           </p>
         </div>
       </div>
 
       {/* Search bar */}
-      <div className="relative mb-4">
+      <div style={{ position: 'relative', marginBottom: 16 }}>
         <Icon
           name="search"
           size={16}
@@ -309,11 +309,12 @@ export default function MemoryPage() {
       </div>
 
       {/* Add memory button + form */}
-      <div className="mb-5">
+      <div style={{ marginBottom: 20 }}>
         {!showAddForm ? (
           <button
             onClick={() => setShowAddForm(true)}
-            className="btn btn-primary inline-flex items-center gap-1.5"
+            className="btn btn-primary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >
             <Icon name="plus" size={14} />
             افزودن حافظه
@@ -323,10 +324,10 @@ export default function MemoryPage() {
             className="card"
             style={{ borderColor: 'var(--accent)', borderWidth: 1 }}
           >
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-1.5">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Icon name="sparkles" size={16} className="text-accent" />
-                <h3 className="text-sm font-semibold text-primary">
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
                   حافظه جدید
                 </h3>
               </div>
@@ -348,7 +349,8 @@ export default function MemoryPage() {
               <select
                 value={newCategory}
                 onChange={(e) => setNewCategory(e.target.value)}
-                className="input flex-1 text-[13px]"
+                className="input"
+                style={{ flex: 1, fontSize: 13 }}
               >
                 {CATEGORIES.filter((c) => c.key).map((c) => (
                   <option key={c.key} value={c.key}>{c.label}</option>
@@ -364,11 +366,12 @@ export default function MemoryPage() {
               />
             </div>
 
-            <div className="flex gap-2">
+            <div style={{ display: 'flex', gap: 8 }}>
               <button
                 onClick={addMemory}
                 disabled={saving || !newContent.trim()}
-                className="btn btn-primary btn-sm inline-flex items-center gap-1"
+                className="btn btn-primary btn-sm"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
               >
                 {saving ? (
                   <span style={{ width: 14, height: 14, border: '2px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.6s linear infinite', display: 'inline-block' }} />
@@ -395,8 +398,8 @@ export default function MemoryPage() {
           borderWidth: 1,
         }}
       >
-        <div className="flex gap-2.5 items-start">
-          <Icon name="info" size={16} className="text-accent mt-0.5 shrink-0" />
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <Icon name="info" size={16} style={{ color: 'var(--accent)', marginTop: 2, flexShrink: 0 }} />
           <div>
             <h4 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
               حافظه خودکار
@@ -411,7 +414,7 @@ export default function MemoryPage() {
 
       {/* Memory list */}
       {loading ? (
-        <div className="flex flex-col gap-2.5">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {[1, 2, 3].map((i) => (
             <div key={i} className="card">
               <div className="skeleton" style={{ height: 14, width: '70%', marginBottom: 8 }} />
@@ -444,21 +447,22 @@ export default function MemoryPage() {
           <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
             هنوز حافظه‌ای ذخیره نشده
           </p>
-          <p className="text-[13px] text-muted mb-4">
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
             اولین حافظه خود را اضافه کنید یا اجازه دهید سیستم به‌صورت خودکار اطلاعات شما را یاد بگیرد.
           </p>
           <button
             onClick={() => setShowAddForm(true)}
-            className="btn btn-primary btn-sm inline-flex items-center gap-1.5"
+            className="btn btn-primary btn-sm"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >
             <Icon name="plus" size={14} />
             افزودن حافظه
           </button>
         </div>
       ) : (
-        <div className="flex flex-col gap-2.5">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {memories.map((m) => (
- <div key={m.id} className="card p-4" >
+            <div key={m.id} className="card" style={{ padding: 16 }}>
               {isEditing(m.id) ? (
                 /* Edit mode */
                 <div>
@@ -473,7 +477,8 @@ export default function MemoryPage() {
                     <select
                       value={editingCategory}
                       onChange={(e) => setEditingCategory(e.target.value)}
-                      className="input flex-1 text-[13px]"
+                      className="input"
+                      style={{ flex: 1, fontSize: 13 }}
                     >
                       {CATEGORIES.filter((c) => c.key).map((c) => (
                         <option key={c.key} value={c.key}>{c.label}</option>
@@ -487,8 +492,8 @@ export default function MemoryPage() {
                       style={{ flex: 2, fontSize: 13 }}
                     />
                   </div>
-                  <div className="flex gap-2">
- <button onClick={saveEdit} className="btn btn-primary btn-sm inline-flex items-center gap-1" >
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={saveEdit} className="btn btn-primary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <Icon name="check" size={14} />
                       ذخیره
                     </button>
@@ -548,20 +553,20 @@ export default function MemoryPage() {
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <div className="flex gap-3 text-[11px] text-muted">
-                      <span className="inline-flex items-center gap-1">
+                    <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                         <Icon name="calendar" size={11} />
                         {formatDate(m.created_at)}
                       </span>
                       {m.updated_at !== m.created_at && (
-                        <span className="inline-flex items-center gap-1">
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                           <Icon name="refresh" size={11} />
                           ویرایش: {formatDate(m.updated_at)}
                         </span>
                       )}
                     </div>
 
-                    <div className="flex gap-1">
+                    <div style={{ display: 'flex', gap: 4 }}>
                       <button
                         onClick={() => startEdit(m)}
                         className="btn btn-ghost btn-sm"

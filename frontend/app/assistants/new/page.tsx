@@ -77,8 +77,8 @@ export default function CreateAssistantPage() {
       <div style={{ maxWidth: '40rem', margin: '0 auto', padding: '1rem 0' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <div className="skeleton" style={{ width: '10rem', height: '1.5rem' }} />
- <div className="skeleton w-full h-10 rounded-md" />
- <div className="skeleton w-full h-10 rounded-md" />
+          <div className="skeleton" style={{ width: '100%', height: '2.5rem', borderRadius: 'var(--radius-md)' }} />
+          <div className="skeleton" style={{ width: '100%', height: '2.5rem', borderRadius: 'var(--radius-md)' }} />
           <div className="skeleton" style={{ width: '100%', height: '10rem', borderRadius: 'var(--radius-md)' }} />
         </div>
       </div>
@@ -91,7 +91,7 @@ export default function CreateAssistantPage() {
       <button
         className="btn btn-ghost btn-sm"
         onClick={() => router.push('/assistants')}
-        className="mb-4 text-[13px]"
+        style={{ marginBottom: '1rem', fontSize: '0.8125rem' }}
       >
         <Icon name="arrowLeft" size={14} />
         بازگشت به دستیارها
@@ -100,7 +100,7 @@ export default function CreateAssistantPage() {
       <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
         ساخت دستیار جدید
       </h1>
-      <p className="text-sm text-muted mb-6">
+      <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
         یک دستیار هوشمند با پرامپت سیستم سفارشی بسازید
       </p>
 
@@ -127,7 +127,7 @@ export default function CreateAssistantPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="مثال: دستیار برنامه‌نویسی"
-              className="w-full text-sm"
+              style={{ width: '100%', fontSize: '0.875rem' }}
               maxLength={100}
             />
           </div>
@@ -143,7 +143,7 @@ export default function CreateAssistantPage() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="توضیح کوتاه درباره دستیار"
-              className="w-full text-sm"
+              style={{ width: '100%', fontSize: '0.875rem' }}
               maxLength={500}
             />
           </div>
@@ -161,7 +161,7 @@ export default function CreateAssistantPage() {
               style={{ width: '100%', fontSize: '0.875rem', minHeight: '10rem', resize: 'vertical' }}
               rows={6}
             />
-            <p className="text-[11px] text-muted mt-1">
+            <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
               این پرامپت در ابتدای هر مکالمه به مدل ارسال می‌شود
             </p>
           </div>
@@ -172,14 +172,14 @@ export default function CreateAssistantPage() {
               مدل پیش‌فرض
             </label>
             {modelsLoading ? (
- <div className="skeleton w-full h-10 rounded-md" />
+              <div className="skeleton" style={{ width: '100%', height: '2.5rem', borderRadius: 'var(--radius-md)' }} />
             ) : (
               <div className="model-select-wrapper" dir="ltr">
                 <select
                   className="input"
                   value={modelId}
                   onChange={(e) => setModelId(e.target.value)}
-                  className="w-full text-sm"
+                  style={{ width: '100%', fontSize: '0.875rem' }}
                 >
                   <option value="">بدون مدل پیش‌فرض (استفاده از مدل انتخابی کاربر)</option>
                   {models.map((m) => (
@@ -190,7 +190,7 @@ export default function CreateAssistantPage() {
                 </select>
               </div>
             )}
-            <p className="text-[11px] text-muted mt-1">
+            <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
               در صورت انتخاب، هنگام شروع گفتگو با این دستیار، این مدل استفاده می‌شود
             </p>
           </div>
@@ -209,10 +209,10 @@ export default function CreateAssistantPage() {
               </span>
             </label>
             <div>
-              <span className="text-[13px] font-semibold text-primary">
+              <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                 {isPublic ? 'عمومی' : 'خصوصی'}
               </span>
-              <p className="text-[11px] text-muted">
+              <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
                 {isPublic ? 'همه کاربران می‌توانند از این دستیار استفاده کنند' : 'فقط شما به این دستیار دسترسی دارید'}
               </p>
             </div>

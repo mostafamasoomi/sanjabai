@@ -67,7 +67,7 @@ const statusLabel: Record<string, { text: string; badge: string }> = {
 // ─── Skeleton Components ────────────────────────────────────────────────────
 function BalanceSkeleton() {
   return (
- <div className="card wallet-balance-card min-h-[200px]" >
+    <div className="card wallet-balance-card" style={{ minHeight: 200 }}>
       <div className="skeleton" style={{ width: 100, height: 14, borderRadius: 'var(--radius-sm)', marginBottom: 16 }} />
       <div className="skeleton" style={{ width: 260, height: 48, borderRadius: 'var(--radius-md)', marginBottom: 12 }} />
       <div className="skeleton" style={{ width: 140, height: 14, borderRadius: 'var(--radius-sm)' }} />
@@ -77,11 +77,11 @@ function BalanceSkeleton() {
 
 function TopupSkeleton() {
   return (
- <div className="card min-h-[200px]" >
+    <div className="card" style={{ minHeight: 200 }}>
       <div className="skeleton" style={{ width: 80, height: 14, borderRadius: 'var(--radius-sm)', marginBottom: 16 }} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
         {[1, 2, 3, 4].map((i) => (
- <div key={i} className="skeleton h-12 rounded-md" />
+          <div key={i} className="skeleton" style={{ height: 48, borderRadius: 'var(--radius-md)' }} />
         ))}
       </div>
       <div className="skeleton" style={{ width: '100%', height: 44, borderRadius: 'var(--radius-md)', marginTop: 12 }} />
@@ -94,9 +94,9 @@ function TableSkeleton() {
     <div className="card">
       <div className="skeleton" style={{ width: 120, height: 18, borderRadius: 'var(--radius-sm)', marginBottom: 20 }} />
       {[1, 2, 3, 4, 5].map((i) => (
-        <div key={i} className="flex gap-4 mb-3">
- <div className="skeleton flex-1 h-4 rounded-sm" />
- <div className="skeleton w-20 h-4 rounded-sm" />
+        <div key={i} style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
+          <div className="skeleton" style={{ flex: 1, height: 16, borderRadius: 'var(--radius-sm)' }} />
+          <div className="skeleton" style={{ width: 80, height: 16, borderRadius: 'var(--radius-sm)' }} />
           <div className="skeleton" style={{ width: 100, height: 16, borderRadius: 'var(--radius-sm)' }} />
         </div>
       ))}
@@ -106,7 +106,7 @@ function TableSkeleton() {
 
 function PackagesSkeleton() {
   return (
- <div className="card mb-6" >
+    <div className="card" style={{ marginBottom: 24 }}>
       <div className="skeleton" style={{ width: 160, height: 18, borderRadius: 'var(--radius-sm)', marginBottom: 20 }} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
         {[1, 2, 3, 4].map((i) => (
@@ -125,7 +125,7 @@ function EmptyStateIcon({ icon, title, desc }: { icon: string; title: string; de
         <Icon name={icon as IconName} size={28} className="text-accent" />
       </div>
       <p style={{ color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 4, fontSize: 15 }}>{title}</p>
-      <p className="text-muted text-[13px]">{desc}</p>
+      <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>{desc}</p>
     </div>
   )
 }
@@ -297,14 +297,14 @@ export default function WalletPage() {
 
   if (!user) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh]">
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
         <div className="card" style={{ textAlign: 'center', padding: '48px 32px', maxWidth: 400 }}>
- <div className="wallet-empty-icon-wrap mb-5" >
+          <div className="wallet-empty-icon-wrap" style={{ marginBottom: 20 }}>
             <Icon name="wallet" size={32} className="text-accent" />
           </div>
-          <h2 className="text-xl font-bold text-primary mb-2">کیف پول</h2>
-          <p className="text-muted mb-6">برای مشاهده کیف پول، ابتدا وارد حساب خود شوید.</p>
- <Link href="/login" className="btn btn-lg btn-primary inline-flex items-center gap-2" >
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>کیف پول</h2>
+          <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>برای مشاهده کیف پول، ابتدا وارد حساب خود شوید.</p>
+          <Link href="/login" className="btn btn-lg btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             ورود
             <Icon name="arrowLeft" size={16} />
           </Link>
@@ -317,11 +317,11 @@ export default function WalletPage() {
   if (loading) {
     return (
       <div className="wallet-page">
-        <div className="flex items-center gap-2.5 mb-6">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
           <div className="wallet-header-icon">
             <Icon name="wallet" size={20} className="text-accent" />
           </div>
-          <h1 className="text-[22px] font-bold text-primary">کیف پول</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>کیف پول</h1>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 24 }}>
           <BalanceSkeleton />
@@ -337,18 +337,18 @@ export default function WalletPage() {
   return (
     <div className="wallet-page">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-2.5">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div className="wallet-header-icon">
             <Icon name="wallet" size={20} className="text-accent" />
           </div>
-          <h1 className="text-[22px] font-bold text-primary">کیف پول</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>کیف پول</h1>
         </div>
         <button
           className="btn btn-sm btn-secondary"
           onClick={() => fetchData(true)}
           disabled={refreshing}
-          className="inline-flex items-center gap-1.5"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
           title="بروزرسانی"
         >
           <Icon name="refresh" size={14} className={refreshing ? 'spin' : ''} />
@@ -366,28 +366,28 @@ export default function WalletPage() {
           <div className="relative">
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
               <Icon name="wallet" size={14} className="text-muted" />
-              <span className="text-[13px] text-muted font-medium">موجودی فعلی</span>
+              <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>موجودی فعلی</span>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 8, marginBottom: 4 }}>
               <span className="wallet-balance-amount">
                 {fmtIRR(balance ?? 0)}
               </span>
-              <span className="text-sm text-muted font-medium">ریال</span>
+              <span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 500 }}>ریال</span>
             </div>
 
-            <p className="text-[13px] text-secondary mb-4">
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
               <Icon name="payment" size={12} style={{ display: 'inline', verticalAlign: -2, marginRight: 4 }} />
               معادل {fmtToman(balance ?? 0)}
             </p>
 
             <div className="divider" style={{ margin: '12px 0' }} />
 
-            <div className="flex items-center gap-2">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button
                 className={`btn btn-sm btn-secondary ${copied ? 'wallet-copy-success' : ''}`}
                 onClick={copyBalance}
-                className="inline-flex items-center gap-1"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
               >
                 <Icon name={copied ? 'check' : 'copy'} size={14} />
                 {copied ? 'کپی شد' : 'کپی'}
@@ -398,11 +398,11 @@ export default function WalletPage() {
 
         {/* ── Topup Card ───────────────────────────────────────────── */}
         <div className="card wallet-topup-card">
-          <div className="flex items-center gap-1.5 mb-4">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
             <div className="wallet-topup-icon">
               <Icon name="plus" size={14} className="text-accent" />
             </div>
-            <span className="text-[13px] text-secondary font-semibold">شارژ حساب</span>
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>شارژ حساب</span>
           </div>
 
           {/* Preset buttons */}
@@ -422,7 +422,7 @@ export default function WalletPage() {
           </div>
 
           {/* Custom amount input */}
-          <div className="relative mb-3">
+          <div style={{ position: 'relative', marginBottom: 12 }}>
             <Icon
               name="payment"
               size={16}
@@ -445,7 +445,7 @@ export default function WalletPage() {
           </div>
 
           {effectiveAmount > 0 && effectiveAmount < MIN_TOPUP && (
-            <p className="text-[11px] text-danger mb-2">
+            <p style={{ fontSize: 11, color: 'var(--danger)', marginBottom: 8 }}>
               حداقل مبلغ: {fmtIRR(MIN_TOPUP)} ریال
             </p>
           )}
@@ -470,10 +470,10 @@ export default function WalletPage() {
       </div>
 
       {/* ── Credit Packages Section ────────────────────────────────── */}
- <div className="card mb-6" >
-        <div className="flex items-center gap-1.5 mb-4">
+      <div className="card" style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
           <Icon name="gift" size={16} className="text-accent" />
-          <h2 className="text-base font-bold text-primary">بسته‌های اعتباری</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>بسته‌های اعتباری</h2>
           {creditPackages.length > 0 && (
             <span className="badge badge-accent" style={{ marginLeft: 4 }}>{fmtIRR(creditPackages.length)}</span>
           )}
@@ -524,23 +524,23 @@ export default function WalletPage() {
                   <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
                     {pkg.name_fa}
                   </h3>
-                  <p className="text-xs text-muted mb-4">
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
                     {pkg.name_en}
                   </p>
 
                   <div className="flex-1">
                     <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 4, fontFeatureSettings: '"tnum"' }}>
-                      {fmtIRR(pkg.total_credits)} <span className="text-[13px] font-medium text-muted">ریال</span>
+                      {fmtIRR(pkg.total_credits)} <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)' }}>ریال</span>
                     </div>
                     <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>
                       شما {baseToman} تومان پرداخت می‌کنید
                     </p>
                     {bonusToman && (
-                      <p className="text-xs text-positive mb-2">
+                      <p style={{ fontSize: 12, color: 'var(--positive)', marginBottom: 8 }}>
                         + {bonusToman} تومان بونوس
                       </p>
                     )}
-                    <p className="text-[11px] text-muted">
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                       معادل {fmtToman(pkg.total_credits)}
                     </p>
                   </div>
@@ -570,11 +570,11 @@ export default function WalletPage() {
       </div>
 
       {/* ── Ledger Section ─────────────────────────────────────────── */}
- <div className="card mb-6" >
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-          <div className="flex items-center gap-1.5">
+      <div className="card" style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon name="history" size={16} className="text-accent" />
-            <h2 className="text-base font-bold text-primary">تاریخچه تراکنشها</h2>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>تاریخچه تراکنشها</h2>
             <span className="badge badge-accent" style={{ marginLeft: 4 }}>{fmtIRR(ledger.length)}</span>
           </div>
 
@@ -609,8 +609,8 @@ export default function WalletPage() {
                 <tr>
                   <th>تاریخ</th>
                   <th>شرح</th>
-                  <th className="text-start">مبلغ</th>
-                  <th className="text-start">مانده</th>
+                  <th style={{ textAlign: 'left' }}>مبلغ</th>
+                  <th style={{ textAlign: 'left' }}>مانده</th>
                 </tr>
               </thead>
               <tbody>
@@ -622,7 +622,7 @@ export default function WalletPage() {
                         {fmtDate(l.created_at)}
                       </td>
                       <td style={{ padding: '12px', color: 'var(--text-primary)', fontWeight: 500 }}>
-                        <span className="inline-flex items-center gap-1.5">
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                           <span className={`wallet-amount-dot ${isCredit ? 'positive' : 'negative'}`} />
                           {l.reason}
                         </span>
@@ -646,9 +646,9 @@ export default function WalletPage() {
 
       {/* ── Payment History Section ────────────────────────────────── */}
       <div className="card">
-        <div className="flex items-center gap-1.5 mb-4">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
           <Icon name="payment" size={16} className="text-accent" />
-          <h2 className="text-base font-bold text-primary">تاریخچه پرداختها</h2>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>تاریخچه پرداختها</h2>
         </div>
 
         {payments.length === 0 ? (
@@ -660,7 +660,7 @@ export default function WalletPage() {
                 <tr>
                   <th>تاریخ</th>
                   <th>شناسه</th>
-                  <th className="text-start">مبلغ</th>
+                  <th style={{ textAlign: 'left' }}>مبلغ</th>
                   <th>وضعیت</th>
                 </tr>
               </thead>
@@ -694,7 +694,7 @@ export default function WalletPage() {
       {showConfirm && (
         <div role="button" tabIndex={0} className="wallet-modal-overlay" onClick={() => setShowConfirm(false)}>
           <div role="button" tabIndex={0} className="card wallet-modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="text-center mb-5">
+            <div style={{ textAlign: 'center', marginBottom: 20 }}>
               <div className="wallet-modal-icon">
                 <Icon name="wallet" size={28} className="text-accent" />
               </div>
@@ -705,10 +705,10 @@ export default function WalletPage() {
               <p className="wallet-modal-amount">
                 {fmtIRR(effectiveAmount)} ریال
               </p>
-              <p className="text-muted text-[13px]">اطمینان دارید؟</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>اطمینان دارید؟</p>
             </div>
 
-            <div className="flex gap-2">
+            <div style={{ display: 'flex', gap: 8 }}>
               <button
                 className="btn btn-secondary flex-1"
                 onClick={() => setShowConfirm(false)}
@@ -716,10 +716,10 @@ export default function WalletPage() {
                 انصراف
               </button>
               <button
-                className="btn btn-lg btn-primary flex-1 inline-flex items-center justify-center gap-1.5"
+                className="btn btn-lg btn-primary"
                 onClick={confirmTopup}
                 disabled={busy}
-                
+                style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
               >
                 <Icon name="check" size={16} />
                 {busy ? 'در حال پردازش...' : 'تایید و پرداخت'}

@@ -255,9 +255,8 @@ export default function AssistantDetailPage() {
       {/* Start chat button for non-owners or quick access */}
       {!isOwner && (
         <button
-          className="btn btn-primary"
+          className="btn btn-primary mb-6 mt-4"
           onClick={() => router.push(`/chat?assistant=${assistant.id}`)}
-          className="mb-6 mt-4"
         >
           <Icon name="chat" size={16} />
           شروع گفتگو

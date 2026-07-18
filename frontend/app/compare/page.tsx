@@ -287,7 +287,7 @@ export default function ComparePage() {
 
         {/* Prompt input */}
         <div className="compare-input-row">
-          <textarea dir="rtl"
+          <textarea dir="auto"
             className="input flex-1"
             rows={2}
             placeholder="prompt خود را بنویسید... (Ctrl+Enter برای ارسال)"
@@ -295,7 +295,6 @@ export default function ComparePage() {
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={busy}
-            dir="auto"
           />
           <button
             className="btn btn-primary compare-submit-btn"

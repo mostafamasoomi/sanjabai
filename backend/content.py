@@ -551,19 +551,17 @@ async def web_search(request: Request):
         query = body.get("query", "").strip()
         if not query:
             return JSONResponse({"detail": "query is required"}, status_code=400)
-        import httpx
+        import urllib.request, urllib.parse
         proxy_url = os.getenv("HTTP_PROXY", "http://10.10.11.2:8888")
-        async with httpx.AsyncClient(timeout=15, proxy=proxy_url) as c:
-            r = await c.get(
-                "https://api.duckduckgo.com/",
-                params={"q": query, "format": "json", "no_html": 1, "skip_disambig": 1},
-                headers={"User-Agent": "Mozilla/5.0"}
-            )
-            data = r.json()
-            results = []
-            for item in data.get("RelatedTopics", [])[:8]:
-                if "Text" in item and "FirstURL" in item:
-                    results.append({"title": item["Text"].split(" - ")[0], "url": item["FirstURL"], "snippet": item["Text"]})
+        proxy = urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url})
+        opener = urllib.request.build_opener(proxy)
+        params = urllib.parse.urlencode({"q": query, "format": "json", "no_html": 1, "skip_disambig": 1})
+        r = opener.open("https://api.duckduckgo.com/?" + params, timeout=15)
+        data = json.loads(r.read().decode())
+        results = []
+        for item in data.get("RelatedTopics", [])[:8]:
+            if "Text" in item and "FirstURL" in item:
+                results.append({"title": item["Text"].split(" - ")[0], "url": item["FirstURL"], "snippet": item["Text"]})
             return JSONResponse({"results": results, "query": query})
     except Exception as e:
         return JSONResponse({"detail": str(e)[:200]}, status_code=500)

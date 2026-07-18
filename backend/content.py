@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import json
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
@@ -648,27 +649,37 @@ async def test_models():
 @router.get("/admin/test-models")
 async def test_all_models(request: Request):
     """Ping every model with a quick test, return status for each."""
-    import httpx
-    results = []
+    import concurrent.futures, urllib.request, json as _json, time as _time
+    
     async with async_session() as session:
         res = await session.execute(sqlalchemy.text(
             "SELECT provider_model_id, display_name FROM model_catalog WHERE availability='available'"
         ))
         rows = res.fetchall()
     
-    async with httpx.AsyncClient(timeout=15) as client:
-        for row in rows:
-            mid = row.provider_model_id
-            name = row.display_name
-            try:
-                r = await client.post(
-                    f"{LITELLM_HOST}/v1/chat/completions",
-                    json={"model": mid, "messages": [{"role":"user","content":"hi"}], "max_tokens": 5},
-                    headers={}
-                )
-                results.append({"id": mid, "name": name, "ok": r.status_code == 200, "status": r.status_code, "ms": r.elapsed.total_seconds() * 1000})
-            except Exception as e:
-                results.append({"id": mid, "name": name, "ok": False, "error": str(e)[:100]})
+    def _ping(mid, name):
+        t0 = _time.monotonic()
+        try:
+            req = urllib.request.Request(
+                f"{LITELLM_HOST}/v1/chat/completions",
+                data=_json.dumps({"model": mid, "messages": [{"role":"user","content":"hi"}], "max_tokens": 5}).encode(),
+                headers={"Content-Type": "application/json"}
+            )
+            # Bypass proxy by using a custom opener
+            proxy_handler = urllib.request.ProxyHandler({})
+            opener = urllib.request.build_opener(proxy_handler)
+            resp = opener.open(req, timeout=15)
+            ms = (_time.monotonic() - t0) * 1000
+            return {"id": mid, "name": name, "ok": resp.status == 200, "status": resp.status, "ms": ms}
+        except Exception as e:
+            ms = (_time.monotonic() - t0) * 1000
+            return {"id": mid, "name": name, "ok": False, "error": str(e)[:100], "ms": ms}
+    
+    loop = asyncio.get_running_loop()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
+        futures = [loop.run_in_executor(pool, _ping, r.provider_model_id, r.display_name) for r in rows]
+        results = await asyncio.gather(*futures)
+    
     return JSONResponse({"results": results, "total": len(results), "ok": sum(1 for r in results if r["ok"])})
 
 # ponytail: image captcha generator

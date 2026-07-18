@@ -195,7 +195,7 @@ export default function PricingPage() {
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
               <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '14px 0', borderBottom: i < 9 ? '1px solid var(--border)' : 'none' }}>
                 <div className="skeleton" style={{ width: 36, height: 36, borderRadius: 'var(--radius-full)' }} />
-                <div className="flex-1 skeletskeleton" style={{ width: 140, height: 16, borderRadius: 'var(--radius-sm)' }} /></div>
+                <div className="flex-1"><div className="skeleton" style={{ width: 140, height: 16, borderRadius: 'var(--radius-sm)' }} /></div>
                 <div className="skeleton" style={{ width: 80, height: 16, borderRadius: 'var(--radius-sm)' }} />
                 <div className="skeleton" style={{ width: 80, height: 16, borderRadius: 'var(--radius-sm)' }} />
                 <div className="skeleton" style={{ width: 80, height: 16, borderRadius: 'var(--radius-sm)' }} />

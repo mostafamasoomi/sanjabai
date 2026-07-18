@@ -618,7 +618,7 @@ async def admin_refresh_pricing(request: Request) -> JSONResponse:
     return JSONResponse(jsonable_encoder(result))
 
 # --- Model Test Endpoint ---
-@router.get("/api/models/test")
+@router.get("/admin/models/test")
 async def test_models():
     """Test all models and return status (ok/error/timeout)."""
     import asyncio
@@ -645,7 +645,7 @@ async def test_models():
 
 
 # ponytail: test all models endpoint
-@router.get("/api/admin/test-models")
+@router.get("/admin/test-models")
 async def test_all_models(request: Request):
     """Ping every model with a quick test, return status for each."""
     import httpx

@@ -46,7 +46,7 @@ const MAX_TOPUP = 100_000_000_000
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 const fmtIRR = (n: number) => n.toLocaleString('fa-IR')
-const fmtToman = (n: number) => `${(n / 10).toLocaleString('fa-IR')} تومان`
+const fmtToman = (n: number) => `${n.toLocaleString('fa-IR')} تومان`
 const fmtDate = (s: string) =>
   new Date(s).toLocaleDateString('fa-IR', {
     year: 'numeric',
@@ -209,8 +209,8 @@ export default function WalletPage() {
 
   const initiateTopup = () => {
     const amount = effectiveAmount
-    if (!amount || amount < MIN_TOPUP) return toast(`حداقل مبلغ شارژ ${fmtIRR(MIN_TOPUP)} ریال است`, 'error')
-    if (amount > MAX_TOPUP) return toast(`حداکثر مبلغ شارژ ${fmtIRR(MAX_TOPUP)} ریال است`, 'error')
+    if (!amount || amount < MIN_TOPUP) return toast(`حداقل مبلغ شارژ ${fmtIRR(MIN_TOPUP)} تومان است`, 'error')
+    if (amount > MAX_TOPUP) return toast(`حداکثر مبلغ شارژ ${fmtIRR(MAX_TOPUP)} تومان است`, 'error')
     setShowConfirm(true)
   }
 
@@ -373,13 +373,10 @@ export default function WalletPage() {
               <span className="wallet-balance-amount">
                 {fmtIRR(balance ?? 0)}
               </span>
-              <span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 500 }}>ریال</span>
+              <span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 500 }}>تومان</span>
             </div>
 
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
-              <Icon name="payment" size={12} style={{ display: 'inline', verticalAlign: -2, marginRight: 4 }} />
-              معادل {fmtToman(balance ?? 0)}
-            </p>
+
 
             <div className="divider" style={{ margin: '12px 0' }} />
 
@@ -415,7 +412,7 @@ export default function WalletPage() {
               >
                 {p.label}
                 <span className="wallet-preset-sub">
-                  {fmtIRR(p.value)} ریال
+                  {fmtIRR(p.value)} تومان
                 </span>
               </button>
             ))}

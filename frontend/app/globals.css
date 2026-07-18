@@ -2202,6 +2202,16 @@ img, svg { display: block; max-width: 100%; }
   border-color: var(--accent-dim);
 }
 
+/* Model names are forced to the OPPOSITE of the page theme so they stay
+   genuinely visible on the card surface regardless of --text-primary.
+   Dark page  -> white names; Light page -> black names. */
+.aurora-model-card .aurora-model-name {
+  color: #ffffff;
+}
+[data-theme="light"] .aurora-model-card .aurora-model-name {
+  color: #000000;
+}
+
 .aurora-skeleton-card {
   animation: auroraFadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
 }

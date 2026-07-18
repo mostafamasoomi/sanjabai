@@ -1,0 +1,38 @@
+[
+  {
+    "name": "Login",
+    "status": 200,
+    "ok": true,
+    "data": "{'token': 'Iwx5CjBDyBQaeMIDDxGSnTlVdQq_gZv3JE0AeXq-ufM', 'user': {'id': 28, 'email': 'demo@test.ir'}}"
+  },
+  {
+    "name": "Health",
+    "status": 200,
+    "ok": true,
+    "data": "{'status': 'ok', 'uptime': 0.0, 'db': 'ok', 'redis': 'ok'}"
+  },
+  {
+    "name": "Rate",
+    "status": 200,
+    "ok": true,
+    "data": "{'usd_to_irt': 188600, 'usd_to_irr': 1886000, 'markup_pct': 0, 'source': 'tgju.org'}"
+  },
+  {
+    "name": "Wallet",
+    "status": 200,
+    "ok": true,
+    "data": "{'balance': 0}"
+  },
+  {
+    "name": "Chat",
+    "status": 0,
+    "ok": false,
+    "error": "HTTP Error 429: Too Many Requests"
+  },
+  {
+    "name": "Conversations",
+    "status": 200,
+    "ok": true,
+    "data": "{'items': [], 'total': 0, 'page': 1, 'limit': 20}"
+  }
+]

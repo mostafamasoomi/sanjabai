@@ -47,11 +47,15 @@ class AuthSignup(BaseModel):
     email: str
     password: str
     ref: str | None = None
+    captcha_token: str | None = None
+    captcha_answer: str | None = None
 
 
 class AuthLogin(BaseModel):
     email: str
     password: str
+    captcha_token: str | None = None
+    captcha_answer: str | None = None
 
 
 class ChangePasswordRequest(BaseModel):
@@ -131,6 +135,13 @@ async def admin_logout(request: Request) -> JSONResponse:
 @router.post('/auth/signup')
 async def signup(payload: AuthSignup) -> JSONResponse:
     from security import validate_email, validate_password
+    # Verify captcha
+    if not payload.captcha_token or not payload.captcha_answer:
+        return JSONResponse({"detail": "کپچا الزامی است"}, status_code=400)
+    stored = await rds.get(f"captcha:{payload.captcha_token}")
+    if not stored or str(stored) != str(payload.captcha_answer):
+        return JSONResponse({"detail": "کپچا اشتباه است"}, status_code=400)
+    await rds.delete(f"captcha:{payload.captcha_token}")
     valid, err = validate_email(payload.email)
     if not valid:
         return JSONResponse({'detail': err}, status_code=400)
@@ -181,6 +192,13 @@ async def signup(payload: AuthSignup) -> JSONResponse:
 
 @router.post('/auth/login')
 async def login(payload: AuthLogin) -> JSONResponse:
+    # Verify captcha
+    if not payload.captcha_token or not payload.captcha_answer:
+        return JSONResponse({"detail": "کپچا الزامی است"}, status_code=400)
+    stored = await rds.get(f"captcha:{payload.captcha_token}")
+    if not stored or str(stored) != str(payload.captcha_answer):
+        return JSONResponse({"detail": "کپچا اشتباه است"}, status_code=400)
+    await rds.delete(f"captcha:{payload.captcha_token}")
     """Authenticate user with email/password. Includes account lockout protection."""
     if async_session is None:
         return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)

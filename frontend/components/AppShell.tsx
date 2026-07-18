@@ -95,6 +95,13 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(href + '/')
 
+  // Redirect unauthenticated users to login for protected pages
+  const PUBLIC_ROUTES = ['/login', '/signup', '/forgot-password', '/onboarding', '/pricing', '/']
+  if (!loading && !user && !PUBLIC_ROUTES.some(p => pathname === p || pathname?.startsWith(p + '/'))) {
+    router.push('/login')
+    return null
+  }
+
   const NavItemLink = ({ item }: { item: NavItem }) => (
     <Link
       key={item.href}
@@ -115,7 +122,8 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="layout-shell" onClick={() => userMenuOpen && setUserMenuOpen(false)}>
-      {/* ── Desktop Sidebar ─────────────────────────────────── */}
+      {/* ── Desktop Sidebar — hidden when not logged in ── */}
+      {user && (
       <aside className="layout-sidebar hidden md:flex sidebar-glass">
         <div className="flex items-center gap-2 px-4 py-3.5">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{background: 'linear-gradient(135deg, #6366f1, #a855f7)', boxShadow: '0 0 16px rgba(99,102,241,0.3)'}}>
@@ -129,7 +137,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           {sections.map((section) => (
             <div key={section.key} className="mb-4">
               <div className="sidebar-section-label">{section.label}</div>
-              {NAV.filter((n) => n.section === section.key).map((item) => (
+              {NAV.filter((n) => n.section === section.key && (!n.admin || user?.is_admin)).map((item) => (
                 <NavItemLink key={item.href} item={item} />
               ))}
             </div>
@@ -171,10 +179,14 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               )}
             </div>
           ) : (
-            <Link href="/login" className="btn btn-primary w-full text-sm">ورود / ثبتنام</Link>
+            <div className="flex flex-col gap-2">
+              <Link href="/login" className="btn btn-primary w-full text-sm">ورود</Link>
+              <Link href="/signup" className="btn btn-secondary w-full text-sm">ثبتنام</Link>
+            </div>
           )}
         </div>
       </aside>
+      )}
 
       {/* ── Main Area ──────────────────────────────────────── */}
       <div className="layout-main">
@@ -210,7 +222,8 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         {/* Content */}
         <main className="layout-content">{children}</main>
 
-        {/* Mobile bottom nav */}
+        {/* Mobile bottom nav — hidden when not logged in */}
+        {user && (
         <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[var(--bg-surface)]/95 backdrop-blur border-t border-[var(--border)] flex justify-around py-2 z-20 safe-bottom">
           {NAV.filter((n) => n.section === 'main').slice(0, 4).map((item) => (
             <Link
@@ -232,6 +245,8 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
             <span className="text-[10px]">بیشتر</span>
           </button>
         </nav>
+        )}
+
         <div className="md:hidden h-14" />
       </div>
 
@@ -249,7 +264,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               </button>
           </div>
           <nav className="p-2">
-            {NAV.map((item) => (
+            {NAV.filter((n) => !n.admin || user?.is_admin).map((item) => (
               <Link
                 key={item.href}
                 href={item.href}

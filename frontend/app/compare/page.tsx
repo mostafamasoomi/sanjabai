@@ -59,6 +59,8 @@ export default function ComparePage() {
   const { models, loading: catalogLoading, error: catalogError } = useCatalog()
   const [modelA, setModelA] = useState<ModelCatalogItem | null>(null)
   const [modelB, setModelB] = useState<ModelCatalogItem | null>(null)
+  const [comparedModelA, setComparedModelA] = useState<ModelCatalogItem | null>(null)
+  const [comparedModelB, setComparedModelB] = useState<ModelCatalogItem | null>(null)
   const [prompt, setPrompt] = useState('')
   const [busy, setBusy] = useState(false)
   const [results, setResults] = useState<CompareResponse | null>(null)
@@ -87,6 +89,8 @@ export default function ComparePage() {
     setBusy(true)
     setResults(null)
     setError('')
+    setComparedModelA(modelA)
+    setComparedModelB(modelB)
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (token) headers['Authorization'] = `Bearer ${token}`
@@ -331,8 +335,8 @@ export default function ComparePage() {
 
       {/* Results — split view */}
       <div className="compare-results">
-        {renderResultPanel('a', modelA, results?.model_a ?? null)}
-        {renderResultPanel('b', modelB, results?.model_b ?? null)}
+        {renderResultPanel('a', comparedModelA || modelA, results?.model_a ?? null)}
+        {renderResultPanel('b', comparedModelB || modelB, results?.model_b ?? null)}
       </div>
     </div>
   )

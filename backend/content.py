@@ -4,6 +4,7 @@ exchange rate, org default model.
 """
 from __future__ import annotations
 
+import os
 import json
 from datetime import datetime, timezone
 from typing import Any
@@ -13,6 +14,16 @@ from fastapi import APIRouter, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
+
+# Provider display names (moved to catalog response)
+_PROVIDER_DISPLAY = {
+    "bynara": "byNara",
+    "google": "Google",
+    "freellmapi": "FreeLLMAPI",
+    "openrouter": "OpenRouter",
+    "anthropic": "Anthropic",
+    "openai": "OpenAI",
+}
 from database import async_session, rds, _http, LITELLM_HOST, ADMIN_TOKEN
 from models import AboutContent, Feature, Discount, ProxyConfig, Pricing
 from dependencies import admin_required
@@ -49,8 +60,6 @@ def _catalog_row_to_item(m: dict[str, Any], rate_irt: float = 126488, markup_pct
                 'inputPerMillion': float(m.get('usd_input_per_million') or 0),
                 'outputPerMillion': float(m.get('usd_output_per_million') or 0),
             },
-            'exchangeRate': rate_irt,
-            'markupPct': markup_pct,
         },
         'availability': m.get('availability') or 'available',
         'audience': m.get('audience') or ['consumer', 'developer'],
@@ -148,8 +157,6 @@ async def list_models(request: Request) -> dict[str, Any]:
                                 'inputPerMillion': usd_in,
                                 'outputPerMillion': usd_out,
                             },
-                            'exchangeRate': rate_irt,
-                            'markupPct': markup_pct,
                         },
                     })
         except Exception:
@@ -183,8 +190,6 @@ async def catalog_models(request: Request) -> JSONResponse:
         'data': data,
         'generatedAt': datetime.now(timezone.utc),
         'source': source,
-        'exchangeRate': rate_irt,
-        'markupPct': markup_pct,
     })
     await rds.setex('cache:catalog:models', 120, json.dumps(result))
     return JSONResponse(result)
@@ -311,15 +316,9 @@ async def api_exchange_rate() -> JSONResponse:
 
 
 async def _get_exchange_rate() -> tuple[float, int]:
-    """Helper to get current USD→IRT rate and markup. Returns (rate_irt, markup_pct)."""
-    cached = await rds.get('exchange_rate:usd_irt')
-    if cached:
-        data = json.loads(cached)
-        return float(data.get('usd_to_irt', 126_488)), int(data.get('markup_pct', 20))
-    # Trigger fetch
-    resp = await api_exchange_rate()
-    data = json.loads(resp.body)
-    return float(data.get('usd_to_irt', 126_488)), int(data.get('markup_pct', 20))
+    """Return fixed USD→IRT rate. No API call."""
+    # ponytail: hardcoded rate, remove API dependency
+    return 80000.0, 0
 
 
 @router.get('/pricing-table')
@@ -360,7 +359,6 @@ async def api_pricing(request: Request) -> JSONResponse:
         })
 
     result = jsonable_encoder({
-        'data': models_out, 'exchangeRate': rate_irt, 'margin': markup_pct / 100,
         'generatedAt': datetime.now(timezone.utc).isoformat(),
     })
     await rds.setex('cache:api:pricing', 120, json.dumps(result))
@@ -534,3 +532,66 @@ async def test_models():
     results = await asyncio.gather(*[test_one(m) for m in models])
     return JSONResponse({"results": results, "total": len(results)})
 
+
+# ponytail: test all models endpoint
+@router.get("/api/admin/test-models")
+async def test_all_models(request: Request):
+    """Ping every model with a quick test, return status for each."""
+    import httpx
+    results = []
+    async with async_session() as session:
+        res = await session.execute(sqlalchemy.text(
+            "SELECT provider_model_id, display_name FROM model_catalog WHERE availability='available'"
+        ))
+        rows = res.fetchall()
+    
+    async with httpx.AsyncClient(timeout=15) as client:
+        for row in rows:
+            mid = row.provider_model_id
+            name = row.display_name
+            try:
+                r = await client.post(
+                    f"{LITELLM_HOST}/v1/chat/completions",
+                    json={"model": mid, "messages": [{"role":"user","content":"hi"}], "max_tokens": 5},
+                    headers={}
+                )
+                results.append({"id": mid, "name": name, "ok": r.status_code == 200, "status": r.status_code, "ms": r.elapsed.total_seconds() * 1000})
+            except Exception as e:
+                results.append({"id": mid, "name": name, "ok": False, "error": str(e)[:100]})
+    return JSONResponse({"results": results, "total": len(results), "ok": sum(1 for r in results if r["ok"])})
+
+# ponytail: image captcha generator
+import io, random, base64
+from PIL import Image, ImageDraw, ImageFont
+
+@router.get("/api/captcha")
+async def captcha_image(request: Request):
+    """Generate a simple math captcha image."""
+    a = random.randint(1, 15)
+    b = random.randint(1, 15)
+    answer = a + b
+    text = f"{a} + {b} = ?"
+    
+    # Store answer in redis for 5 minutes
+    token = base64.urlsafe_b64encode(f"{random.getrandbits(64)}".encode()).decode()[:12]
+    await rds.setex(f"captcha:{token}", 300, answer)
+    
+    # Generate image
+    img = Image.new("RGB", (200, 60), (30, 30, 40))
+    draw = ImageDraw.Draw(img)
+    # Add noise
+    for _ in range(50):
+        x = random.randint(0, 199)
+        y = random.randint(0, 59)
+        draw.point((x, y), fill=(random.randint(100, 200), random.randint(100, 200), random.randint(100, 200)))
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
+    except:
+        font = ImageFont.load_default()
+    draw.text((15, 12), text, fill=(200, 200, 255), font=font)
+    
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    
+    return JSONResponse({"captcha": f"data:image/png;base64,{b64}", "token": token})

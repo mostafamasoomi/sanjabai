@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { Icon } from '@/components/ui/Icon'
@@ -9,30 +9,52 @@ import Link from 'next/link'
 export default function SignupPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [password2, setPassword2] = useState('')
+  const [captchaImg, setCaptchaImg] = useState('')
+  const [captchaToken, setCaptchaToken] = useState('')
+  const [captchaAnswer, setCaptchaAnswer] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [emailTouched, setEmailTouched] = useState(false)
   const [passwordTouched, setPasswordTouched] = useState(false)
+  const [password2Touched, setPassword2Touched] = useState(false)
+  const [captchaTouched, setCaptchaTouched] = useState(false)
   const { signup } = useAuth()
   const router = useRouter()
 
+  const fetchCaptcha = async () => {
+    try {
+      const r = await fetch('/api/captcha')
+      const d = await r.json()
+      setCaptchaImg(d.captcha)
+      setCaptchaToken(d.token)
+    } catch {}
+  }
+
+  useEffect(() => { fetchCaptcha() }, [])
+
   const emailValid = !emailTouched || !email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
   const passwordValid = !passwordTouched || !password || password.length >= 8
+  const password2Valid = !password2Touched || !password2 || password === password2
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setEmailTouched(true)
     setPasswordTouched(true)
+    setPassword2Touched(true)
     if (!email.trim() || !password) return setError('ایمیل و رمز عبور را وارد کنید')
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError('ایمیل معتبر وارد کنید')
     if (password.length < 8) return setError('رمز عبور حداقل ۸ کاراکتر باشد')
+    if (password !== password2) return setError('رمزهای عبور یکسان نیستند')
+    if (!captchaAnswer.trim()) return setError('پاسخ کپچا را وارد کنید')
     setBusy(true)
     setError('')
     try {
-      await signup(email.trim(), password)
+      await signup(email.trim(), password, captchaToken, captchaAnswer)
       router.push('/onboarding')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'خطا در ثبتنام')
+      fetchCaptcha()
     } finally {
       setBusy(false)
     }
@@ -93,12 +115,43 @@ export default function SignupPage() {
                 رمز عبور حداقل ۸ کاراکتر باشد
               </p>
             )}
-            {passwordTouched && passwordValid && password.length >= 8 && (
-              <p className="text-xs text-[var(--positive)] mt-1 flex items-center gap-1">
-                <Icon name="check" size={10} />
-                رمز عبور مناسب است
+          </div>
+          <div>
+            <label className="text-xs text-[var(--text-dim)] mb-1.5 block">تکرار رمز عبور</label>
+            <input
+              className={`input ${password2Touched && !password2Valid ? 'aurora-input-error' : ''}`}
+              type="password"
+              placeholder="رمز عبور را دوباره وارد کنید"
+              value={password2}
+              onChange={(e) => setPassword2(e.target.value)}
+              onBlur={() => setPassword2Touched(true)}
+              dir="ltr"
+            />
+            {password2Touched && !password2Valid && (
+              <p className="text-xs text-[var(--danger)] mt-1 flex items-center gap-1">
+                <Icon name="close" size={10} />
+                رمزهای عبور یکسان نیستند
               </p>
             )}
+            {password2Touched && password2Valid && password2.length > 0 && (
+              <p className="text-xs text-[var(--positive)] mt-1 flex items-center gap-1">
+                <Icon name="check" size={10} />
+                مطابقت دارد
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="text-xs text-[var(--text-dim)] mb-1.5 block">کپچا</label>
+            {captchaImg && <img src={captchaImg} alt="captcha" className="mb-2 rounded" style={{maxWidth:200,height:60}} onClick={fetchCaptcha} />}
+            <input
+              className="input"
+              type="text"
+              placeholder="پاسخ را وارد کنید"
+              value={captchaAnswer}
+              onChange={(e) => setCaptchaAnswer(e.target.value)}
+              dir="ltr"
+            />
+            <button type="button" onClick={fetchCaptcha} className="text-xs text-[var(--accent)] mt-1">تصویر جدید</button>
           </div>
           <button className="aurora-signup-btn btn btn-primary w-full" type="submit" disabled={busy}>
             {busy ? (

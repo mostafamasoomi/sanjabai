@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { Icon } from '@/components/ui/Icon'
@@ -11,19 +11,35 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [captchaImg, setCaptchaImg] = useState('')
+  const [captchaToken, setCaptchaToken] = useState('')
+  const [captchaAnswer, setCaptchaAnswer] = useState('')
   const { login } = useAuth()
   const router = useRouter()
+
+  const fetchCaptcha = async () => {
+    try {
+      const r = await fetch('/api/captcha')
+      const d = await r.json()
+      setCaptchaImg(d.captcha)
+      setCaptchaToken(d.token)
+    } catch {}
+  }
+
+  useEffect(() => { fetchCaptcha() }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email.trim() || !password) return setError('ایمیل و رمز عبور را وارد کنید')
+    if (!captchaAnswer.trim()) return setError('پاسخ کپچا را وارد کنید')
     setBusy(true)
     setError('')
     try {
-      await login(email.trim(), password)
+      await login(email.trim(), password, captchaToken, captchaAnswer)
       router.push('/chat')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'خطا در ورود')
+      fetchCaptcha()
     } finally {
       setBusy(false)
     }
@@ -84,6 +100,19 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               dir="ltr"
             />
+          </div>
+          <div>
+            <label className="text-xs text-[var(--text-secondary)] mb-1.5 block font-medium">کپچا</label>
+            {captchaImg && <img src={captchaImg} alt="captcha" className="mb-2 rounded" style={{maxWidth:200,height:60}} onClick={fetchCaptcha} />}
+            <input
+              className="input"
+              type="text"
+              placeholder="پاسخ را وارد کنید"
+              value={captchaAnswer}
+              onChange={(e) => setCaptchaAnswer(e.target.value)}
+              dir="ltr"
+            />
+            <button type="button" onClick={fetchCaptcha} className="text-xs text-[var(--accent)] mt-1">تصویر جدید</button>
           </div>
           <button className="btn btn-primary w-full" type="submit" disabled={busy}>
             {busy ? (

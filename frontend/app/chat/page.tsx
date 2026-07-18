@@ -174,27 +174,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>(() => [
     { id: 'welcome', role: 'assistant', content: 'سلام! به Multiai خوش آمدید. چطور میتوانم کمک کنید؟' }
   ])
-  const [model, setModel] = useState<ModelCatalogItem | null>({
-    id: 'tencent-hy3',
-    providerModelId: 'tencent-hy3',
-    provider: 'bynara',
-    displayName: 'Tencent HY3',
-    modalities: { input: ['text'], output: ['text'] },
-    capabilities: ['chat'],
-    recommendedFor: ['general', 'common'],
-    contextWindow: 1000000,
-    pricing: {
-      currency: 'IRT',
-      inputPerMillion: 500,
-      outputPerMillion: 1000,
-      priceVersion: 'v1',
-      effectiveFrom: '2025-01-01T00:00:00Z',
-    },
-    availability: 'available',
-    audience: ['consumer'],
-    lastVerifiedAt: '2025-01-01T00:00:00Z',
-    provenance: 'fallback',
-  });
+  const [model, setModel] = useState<ModelCatalogItem | null>(null);
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState('')
@@ -243,7 +223,7 @@ export default function ChatPage() {
   const preSendEstimate = useMemo(() => {
     if (!model || !input.trim()) return null
     const estimatedTokens = Math.max(1, Math.round(input.length / 4))
-    const costPerMillion = model.pricing.inputPerMillion
+    const costPerMillion = (model.pricing?.inputPerMillion ?? 0)
     const estimatedCost = (estimatedTokens / 1_000_000) * costPerMillion
     return { tokens: estimatedTokens, cost: estimatedCost }
   }, [input, model])

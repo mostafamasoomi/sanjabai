@@ -527,7 +527,7 @@ export default function DashboardPage() {
         <StatCard
           icon="chat"
           label="تعداد مکالمات"
-          value={faNum(usage?.event_count_this_month ?? 0)}
+          value={faNum((usage as any)?.event_count_this_month ?? 0)}
           sub="مکالمه"
         />
         <StatCard

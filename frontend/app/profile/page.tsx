@@ -407,9 +407,9 @@ export default function ProfilePage() {
           <div className="profile-stat-card">
             <Icon name="chart" size={18} style={{ color: 'var(--positive)' }} />
             <div>
-              <span className="profile-stat-label">{isFa ? 'مصرف امروز' : 'Today usage'}</span>
+              <span className="profile-stat-label">{isFa ? 'مصرف ماهانه' : 'Monthly usage'}</span>
               <span className="profile-stat-value">
-                {usage ? `${(usage.used_today || 0).toLocaleString(isFa ? 'fa-IR' : 'en-US')} / ${(usage.daily_limit || 0).toLocaleString(isFa ? 'fa-IR' : 'en-US')} ${isFa ? 'توکن' : 'tokens'}` : '—'}
+                {usage?.monthly ? `${(usage.monthly.inp + usage.monthly.out || 0).toLocaleString(isFa ? 'fa-IR' : 'en-US')} ${isFa ? 'توکن' : 'tokens'}` : '—'}
               </span>
             </div>
           </div>

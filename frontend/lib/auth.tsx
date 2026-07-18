@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 
 type User = {
-  id: number; email: string; created_at?: string; referral_code?: string
+  id: number; email: string; is_admin?: boolean; created_at?: string; referral_code?: string
   display_name?: string; avatar_url?: string; bio?: string
   preferences?: Record<string, any>
   timezone?: string; language?: string
@@ -13,8 +13,8 @@ type AuthCtx = {
   user: User | null
   token: string | null
   loading: boolean
-  login: (email: string, password: string) => Promise<void>
-  signup: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string, captchaToken?: string, captchaAnswer?: string) => Promise<void>
+  signup: (email: string, password: string, captchaToken?: string, captchaAnswer?: string) => Promise<void>
   logout: () => void
 }
 
@@ -52,10 +52,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string, captchaToken?: string, captchaAnswer?: string) => {
+    const body: any = { email, password }
+    if (captchaToken && captchaAnswer) { body.captcha_token = captchaToken; body.captcha_answer = captchaAnswer }
     const res = await fetch('/api/auth/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(body),
     })
     if (!res.ok) throw new Error((await res.json()).detail || 'login failed')
     const data = await res.json()
@@ -64,10 +66,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user)
   }, [])
 
-  const signup = useCallback(async (email: string, password: string) => {
+  const signup = useCallback(async (email: string, password: string, captchaToken?: string, captchaAnswer?: string) => {
+    const body: any = { email, password }
+    if (captchaToken && captchaAnswer) { body.captcha_token = captchaToken; body.captcha_answer = captchaAnswer }
     const res = await fetch('/api/auth/signup', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(body),
     })
     if (!res.ok) throw new Error((await res.json()).detail || 'signup failed')
     const data = await res.json()

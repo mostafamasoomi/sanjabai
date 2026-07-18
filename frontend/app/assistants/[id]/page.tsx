@@ -31,12 +31,12 @@ type Assistant = {
 function DetailSkeleton() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '1rem 0' }}>
-      <div className="skeleton skeleton w-full h-10 rounded-md"skeleton"skeleton w-full h-10 rounded-md"skeleton w-full h-10 rounded-md"skeleton" style={{ width: '8rem', height: '1.25rem' }} />
-      <div  style={{ width: '60%', height: '1.5rem' }} />
- <div  />
- <div  />
-      <div  style={{ width: '100%', height: '10rem', borderRadius: 'var(--radius-md)' }} />
- <div  />
+      <div className="skeleton" style={{ width: '8rem', height: '1.25rem' }} />
+      <div className="skeleton" style={{ width: '60%', height: '1.5rem' }} />
+      <div className="skeleton" style={{ width: '100%', height: '2.5rem', borderRadius: 'var(--radius-md)' }} />
+      <div className="skeleton" style={{ width: '100%', height: '2.5rem', borderRadius: 'var(--radius-md)' }} />
+      <div className="skeleton" style={{ width: '100%', height: '10rem', borderRadius: 'var(--radius-md)' }} />
+      <div className="skeleton" style={{ width: '100%', height: '2.5rem', borderRadius: 'var(--radius-md)' }} />
     </div>
   )
 }
@@ -196,12 +196,12 @@ export default function AssistantDetailPage() {
           gap: '1.5rem',
         }}
       >
- <Icon name="warning" size={48} className="text-[var(--text-muted)] opacity-40 text-sm text-muted"text-xl font-bold text-primary mb-2"text-center" />
-        <div >
-          <h2 >
+        <Icon name="warning" size={48} className="text-[var(--text-muted)]" style={{ opacity: 0.4 }} />
+        <div className="text-center">
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
             دستیار یافت نشد
           </h2>
-          <p >
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
             دستیار مورد نظر وجود ندارد یا حذف شده است.
           </p>
         </div>
@@ -217,8 +217,9 @@ export default function AssistantDetailPage() {
     <div style={{ maxWidth: '40rem', margin: '0 auto', padding: '1rem 0' }}>
       {/* Back button */}
       <button
-        className="btn btn-ghost btn-sm mb-4 text-[13px]"
+        className="btn btn-ghost btn-sm"
         onClick={() => router.push('/assistants')}
+        style={{ marginBottom: '1rem', fontSize: '0.8125rem' }}
       >
         <Icon name="arrowLeft" size={14} />
         بازگشت به دستیارها
@@ -238,14 +239,14 @@ export default function AssistantDetailPage() {
             flexShrink: 0,
           }}
         >
-          <Icon name={(assistant.icon as IconName) || 'sparkles'} size={20} className="text-white text-2xl font-bold text-primary leading-normal" />
+          <Icon name={(assistant.icon as IconName) || 'sparkles'} size={20} className="text-white" />
         </div>
         <div>
-          <h1 >
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.4 }}>
             {isOwner ? 'ویرایش دستیار' : assistant.name}
           </h1>
           {!isOwner && (
-            <p className="text-xs text-muted">
+            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
               ساخته شده در {new Date(assistant.created_at).toLocaleDateString('fa-IR')}
             </p>
           )}
@@ -255,8 +256,9 @@ export default function AssistantDetailPage() {
       {/* Start chat button for non-owners or quick access */}
       {!isOwner && (
         <button
-          className="btn btn-primary mb-6 mt-4"
+          className="btn btn-primary"
           onClick={() => router.push(`/chat?assistant=${assistant.id}`)}
+          style={{ marginBottom: '1.5rem', marginTop: '1rem' }}
         >
           <Icon name="chat" size={16} />
           شروع گفتگو
@@ -285,10 +287,11 @@ export default function AssistantDetailPage() {
               </label>
               <input
                 type="text"
-                className="input w-full text-sm"
+                className="input"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="مثال: دستیار برنامهنویسی"
+                placeholder="مثال: دستیار برنامه‌نویسی"
+                style={{ width: '100%', fontSize: '0.875rem' }}
                 maxLength={100}
               />
             </div>
@@ -300,11 +303,11 @@ export default function AssistantDetailPage() {
               </label>
               <input
                 type="text"
-                className="input w-full text-sm"
+                className="input"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="توضیح کوتاه درباره دستیار"
-                
+                style={{ width: '100%', fontSize: '0.875rem' }}
                 maxLength={500}
               />
             </div>
@@ -315,14 +318,14 @@ export default function AssistantDetailPage() {
                 پرامپت سیستم <span className="text-danger">*</span>
               </label>
               <textarea dir="rtl"
-                
+                className="input"
                 value={systemPrompt}
                 onChange={(e) => setSystemPrompt(e.target.value)}
                 placeholder="تو یک دستیار متخصص در... هستی. وظیفه تو..."
                 style={{ width: '100%', fontSize: '0.875rem', minHeight: '10rem', resize: 'vertical' }}
                 rows={6}
               />
-              <p className="text-[11px] text-muted mt-1">
+              <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
                 این پرامپت در ابتدای هر مکالمه به مدل ارسال می‌شود
               </p>
             </div>
@@ -333,13 +336,14 @@ export default function AssistantDetailPage() {
                 مدل پیش‌فرض
               </label>
               {modelsLoading ? (
- <div className="skeleton w-full h-10 rounded-md" />
+                <div className="skeleton" style={{ width: '100%', height: '2.5rem', borderRadius: 'var(--radius-md)' }} />
               ) : (
-                <div dir="ltr">
+                <div className="model-select-wrapper" dir="ltr">
                   <select
                     className="input"
                     value={modelId}
                     onChange={(e) => setModelId(e.target.value)}
+                    style={{ width: '100%', fontSize: '0.875rem' }}
                   >
                     <option value="">بدون مدل پیش‌فرض (استفاده از مدل انتخابی کاربر)</option>
                     {models.map((m) => (
@@ -353,23 +357,23 @@ export default function AssistantDetailPage() {
             </div>
 
             {/* Public toggle */}
-            <div className="flex items-center gap-3 smart-mode-toggle">
-              <label title={isPublic ? 'عمومی' : 'خصوصی'}>
+            <div className="flex items-center gap-3">
+              <label className="smart-mode-toggle" title={isPublic ? 'عمومی' : 'خصوصی'}>
                 <input
                   type="checkbox"
                   checked={isPublic}
                   onChange={() => setIsPublic(!isPublic)}
-                  className="sr-only smart-mode-knob"
+                  className="sr-only"
                 />
                 <span className={`smart-mode-switch ${isPublic ? 'smart-mode-on' : ''}`}>
-                  <span  />
+                  <span className="smart-mode-knob" />
                 </span>
               </label>
               <div>
-                <span className="text-[13px] font-semibold text-primary text-[11px] text-muted">
+                <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                   {isPublic ? 'عمومی' : 'خصوصی'}
                 </span>
-                <p >
+                <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
                   {isPublic ? 'همه کاربران می‌توانند از این دستیار استفاده کنند' : 'فقط شما به این دستیار دسترسی دارید'}
                 </p>
               </div>
@@ -380,14 +384,14 @@ export default function AssistantDetailPage() {
           <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem', justifyContent: 'space-between' }}>
             <button
               type="button"
-              className="btn btn-ghost text-[var(--danger)] text-[13px]"
+              className="btn btn-ghost text-[var(--danger)]"
               onClick={handleDelete}
               disabled={deleting}
-              
+              style={{ fontSize: '0.8125rem' }}
             >
               {deleting ? (
-                <span className="flex items-center gap-1.5 animate-spin">
-                  <span  style={{ width: '0.875rem', height: '0.875rem', border: '2px solid var(--border)', borderTopColor: 'var(--danger)', borderRadius: '50%', display: 'inline-block' }} />
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                  <span className="animate-spin" style={{ width: '0.875rem', height: '0.875rem', border: '2px solid var(--border)', borderTopColor: 'var(--danger)', borderRadius: '50%', display: 'inline-block' }} />
                   در حال حذف...
                 </span>
               ) : confirmDelete ? (
@@ -403,10 +407,10 @@ export default function AssistantDetailPage() {
               )}
             </button>
 
-            <div className="flex gap-3 btn btn-primary">
+            <div className="flex gap-3">
               <button
                 type="button"
-                
+                className="btn btn-primary"
                 onClick={() => router.push(`/chat?assistant=${assistant.id}`)}
               >
                 <Icon name="chat" size={16} />
@@ -414,12 +418,12 @@ export default function AssistantDetailPage() {
               </button>
               <button
                 type="submit"
-                className="btn btn-primary animate-spin"flex items-center gap-2"
+                className="btn btn-primary"
                 disabled={submitting}
               >
                 {submitting ? (
-                  <span >
-                    <span  style={{ width: '1rem', height: '1rem', border: '2px solid var(--border)', borderTopColor: 'currentColor', borderRadius: '50%', display: 'inline-block' }} />
+                  <span className="flex items-center gap-2">
+                    <span className="animate-spin" style={{ width: '1rem', height: '1rem', border: '2px solid var(--border)', borderTopColor: 'currentColor', borderRadius: '50%', display: 'inline-block' }} />
                     در حال ذخیره...
                   </span>
                 ) : (

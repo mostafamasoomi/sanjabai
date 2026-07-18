@@ -11,8 +11,7 @@ const AdminPanel = dynamic(() => import('./AdminPanel'), {
   ssr: false,
   loading: () => (
     <div
-      className="min-h-screen flex items-center justify-center"
-      className="bg-base"
+      className="min-h-screen flex items-center justify-center bg-base"
     >
       <span
         className="w-6 h-6 border-2 border-white/20 rounded-full animate-spin"

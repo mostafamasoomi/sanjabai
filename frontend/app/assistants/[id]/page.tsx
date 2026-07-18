@@ -31,12 +31,12 @@ type Assistant = {
 function DetailSkeleton() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '1rem 0' }}>
-      <div className="skeleton" style={{ width: '8rem', height: '1.25rem' }} />
-      <div className="skeleton" style={{ width: '60%', height: '1.5rem' }} />
- <div className="skeleton w-full h-10 rounded-md" />
- <div className="skeleton w-full h-10 rounded-md" />
-      <div className="skeleton" style={{ width: '100%', height: '10rem', borderRadius: 'var(--radius-md)' }} />
- <div className="skeleton w-full h-10 rounded-md" />
+      <div className="skeleton skeleton w-full h-10 rounded-md"skeleton"skeleton w-full h-10 rounded-md"skeleton w-full h-10 rounded-md"skeleton" style={{ width: '8rem', height: '1.25rem' }} />
+      <div  style={{ width: '60%', height: '1.5rem' }} />
+ <div  />
+ <div  />
+      <div  style={{ width: '100%', height: '10rem', borderRadius: 'var(--radius-md)' }} />
+ <div  />
     </div>
   )
 }
@@ -196,12 +196,12 @@ export default function AssistantDetailPage() {
           gap: '1.5rem',
         }}
       >
- <Icon name="warning" size={48} className="text-[var(--text-muted)] opacity-40" />
-        <div className="text-center">
-          <h2 className="text-xl font-bold text-primary mb-2">
+ <Icon name="warning" size={48} className="text-[var(--text-muted)] opacity-40 text-sm text-muted"text-xl font-bold text-primary mb-2"text-center" />
+        <div >
+          <h2 >
             دستیار یافت نشد
           </h2>
-          <p className="text-sm text-muted">
+          <p >
             دستیار مورد نظر وجود ندارد یا حذف شده است.
           </p>
         </div>
@@ -238,10 +238,10 @@ export default function AssistantDetailPage() {
             flexShrink: 0,
           }}
         >
-          <Icon name={(assistant.icon as IconName) || 'sparkles'} size={20} className="text-white" />
+          <Icon name={(assistant.icon as IconName) || 'sparkles'} size={20} className="text-white text-2xl font-bold text-primary leading-normal" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-primary leading-normal">
+          <h1 >
             {isOwner ? 'ویرایش دستیار' : assistant.name}
           </h1>
           {!isOwner && (
@@ -285,11 +285,10 @@ export default function AssistantDetailPage() {
               </label>
               <input
                 type="text"
-                className="input"
+                className="input w-full text-sm"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="مثال: دستیار برنامه‌نویسی"
-                className="w-full text-sm"
+                placeholder="مثال: دستیار برنامهنویسی"
                 maxLength={100}
               />
             </div>
@@ -301,11 +300,11 @@ export default function AssistantDetailPage() {
               </label>
               <input
                 type="text"
-                className="input"
+                className="input w-full text-sm"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="توضیح کوتاه درباره دستیار"
-                className="w-full text-sm"
+                
                 maxLength={500}
               />
             </div>
@@ -316,7 +315,7 @@ export default function AssistantDetailPage() {
                 پرامپت سیستم <span className="text-danger">*</span>
               </label>
               <textarea dir="rtl"
-                className="input"
+                
                 value={systemPrompt}
                 onChange={(e) => setSystemPrompt(e.target.value)}
                 placeholder="تو یک دستیار متخصص در... هستی. وظیفه تو..."
@@ -336,12 +335,11 @@ export default function AssistantDetailPage() {
               {modelsLoading ? (
  <div className="skeleton w-full h-10 rounded-md" />
               ) : (
-                <div className="model-select-wrapper" dir="ltr">
+                <div dir="ltr">
                   <select
                     className="input"
                     value={modelId}
                     onChange={(e) => setModelId(e.target.value)}
-                    className="w-full text-sm"
                   >
                     <option value="">بدون مدل پیش‌فرض (استفاده از مدل انتخابی کاربر)</option>
                     {models.map((m) => (
@@ -355,23 +353,23 @@ export default function AssistantDetailPage() {
             </div>
 
             {/* Public toggle */}
-            <div className="flex items-center gap-3">
-              <label className="smart-mode-toggle" title={isPublic ? 'عمومی' : 'خصوصی'}>
+            <div className="flex items-center gap-3 smart-mode-toggle">
+              <label title={isPublic ? 'عمومی' : 'خصوصی'}>
                 <input
                   type="checkbox"
                   checked={isPublic}
                   onChange={() => setIsPublic(!isPublic)}
-                  className="sr-only"
+                  className="sr-only smart-mode-knob"
                 />
                 <span className={`smart-mode-switch ${isPublic ? 'smart-mode-on' : ''}`}>
-                  <span className="smart-mode-knob" />
+                  <span  />
                 </span>
               </label>
               <div>
-                <span className="text-[13px] font-semibold text-primary">
+                <span className="text-[13px] font-semibold text-primary text-[11px] text-muted">
                   {isPublic ? 'عمومی' : 'خصوصی'}
                 </span>
-                <p className="text-[11px] text-muted">
+                <p >
                   {isPublic ? 'همه کاربران می‌توانند از این دستیار استفاده کنند' : 'فقط شما به این دستیار دسترسی دارید'}
                 </p>
               </div>
@@ -388,8 +386,8 @@ export default function AssistantDetailPage() {
               
             >
               {deleting ? (
-                <span className="flex items-center gap-1.5">
-                  <span className="animate-spin" style={{ width: '0.875rem', height: '0.875rem', border: '2px solid var(--border)', borderTopColor: 'var(--danger)', borderRadius: '50%', display: 'inline-block' }} />
+                <span className="flex items-center gap-1.5 animate-spin">
+                  <span  style={{ width: '0.875rem', height: '0.875rem', border: '2px solid var(--border)', borderTopColor: 'var(--danger)', borderRadius: '50%', display: 'inline-block' }} />
                   در حال حذف...
                 </span>
               ) : confirmDelete ? (
@@ -405,10 +403,10 @@ export default function AssistantDetailPage() {
               )}
             </button>
 
-            <div className="flex gap-3">
+            <div className="flex gap-3 btn btn-primary">
               <button
                 type="button"
-                className="btn btn-primary"
+                
                 onClick={() => router.push(`/chat?assistant=${assistant.id}`)}
               >
                 <Icon name="chat" size={16} />
@@ -416,12 +414,12 @@ export default function AssistantDetailPage() {
               </button>
               <button
                 type="submit"
-                className="btn btn-primary"
+                className="btn btn-primary animate-spin"flex items-center gap-2"
                 disabled={submitting}
               >
                 {submitting ? (
-                  <span className="flex items-center gap-2">
-                    <span className="animate-spin" style={{ width: '1rem', height: '1rem', border: '2px solid var(--border)', borderTopColor: 'currentColor', borderRadius: '50%', display: 'inline-block' }} />
+                  <span >
+                    <span  style={{ width: '1rem', height: '1rem', border: '2px solid var(--border)', borderTopColor: 'currentColor', borderRadius: '50%', display: 'inline-block' }} />
                     در حال ذخیره...
                   </span>
                 ) : (

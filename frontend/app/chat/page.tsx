@@ -572,7 +572,7 @@ export default function ChatPage() {
     }
 
     try {
-      const chatUrl = (smartMode && !attachedFile) ? '/api/v1/smart-chat' : '/api/chat'
+      const chatUrl = (smartMode && !attachedFile) ? '/api/v1/smart-chat' : '/api/v1/chat/completions'
       let res: Response
       if (attachedFile) {
         const fd = new FormData()
@@ -582,7 +582,7 @@ export default function ChatPage() {
         fd.append('stream', 'true')
         const fh: Record<string, string> = {}
         if (token) fh['Authorization'] = `Bearer ${token}`
-        res = await fetch('/api/chat/with-file', { method: 'POST', headers: fh, body: fd, signal: controller.signal })
+        res = await fetch('/api/v1/chat/with-file', { method: 'POST', headers: fh, body: fd, signal: controller.signal })
         setAttachedFile(null)
       } else {
         res = await fetch(chatUrl, {

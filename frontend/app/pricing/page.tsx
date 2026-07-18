@@ -171,7 +171,7 @@ export default function PricingPage() {
             <span className="text-sm text-secondary">موجودی کیف پول:</span>
             <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{fmtToman(balance)}</span>
           </div>
-          <Link href="/wallet" className="btn btn-sm btn-primary" className="inline-flex items-center gap-1.5">
+ <Link href="/wallet" className="btn btn-sm btn-primary inline-flex items-center gap-1.5" >
             <Icon name="plus" size={14} />
             شارژ کیف پول
           </Link>
@@ -179,7 +179,7 @@ export default function PricingPage() {
       )}
 
       {/* Pricing Table */}
-      <div className="card" className="overflow-hidden mb-8">
+ <div className="card overflow-hidden mb-8" >
         {/* Table Header */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 130px 130px 130px 90px', gap: 8, padding: '14px 16px', borderBottom: '2px solid var(--border)', background: 'var(--bg-hover)', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
           <div role="button" tabIndex={0} className="cursor-pointer" onClick={() => setSortBy('name')}>مدل {sortBy === 'name' && '↕'}</div>
@@ -195,11 +195,11 @@ export default function PricingPage() {
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
               <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '14px 0', borderBottom: i < 9 ? '1px solid var(--border)' : 'none' }}>
                 <div className="skeleton" style={{ width: 36, height: 36, borderRadius: 'var(--radius-full)' }} />
-                <div className="flex-1"><div className="skeleton" style={{ width: 140, height: 16, borderRadius: 'var(--radius-sm)' }} /></div>
-                <div className="skeleton" className="w-20 h-4 rounded-sm" />
-                <div className="skeleton" className="w-20 h-4 rounded-sm" />
-                <div className="skeleton" className="w-20 h-4 rounded-sm" />
-                <div className="skeleton" className="w-20 h-4 rounded-sm" />
+ <div className="flex-1 skeleton"><div style={{ width: 140, height: 16, borderRadius: 'var(--radius-sm)' }} /></div>
+ <div className="skeleton w-20 h-4 rounded-sm" />
+ <div className="skeleton w-20 h-4 rounded-sm" />
+ <div className="skeleton w-20 h-4 rounded-sm" />
+ <div className="skeleton w-20 h-4 rounded-sm" />
                 <div className="skeleton" style={{ width: 60, height: 20, borderRadius: 'var(--radius-full)' }} />
               </div>
             ))}
@@ -280,7 +280,7 @@ export default function PricingPage() {
 
       {/* Info notes */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 40 }}>
-        <div className="card" className="p-5">
+ <div className="card p-5" >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <Icon name="info" size={16} className="text-accent" />
             <span className="text-sm font-semibold text-primary">واحد قیمت</span>
@@ -289,7 +289,7 @@ export default function PricingPage() {
             قیمتها به <strong>تومان</strong> و <strong>دلار</strong> به ازای هر <strong>۱ میلیون توکن</strong> هستند. یک پیام معمولی حدود ۵۰۰-۲۰۰۰ توکن مصرف می‌کند.
           </p>
         </div>
-        <div className="card" className="p-5">
+ <div className="card p-5" >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <Icon name="wallet" size={16} className="text-accent" />
             <span className="text-sm font-semibold text-primary">شارژ کیف پول</span>
@@ -298,7 +298,7 @@ export default function PricingPage() {
             کیف پول خود را شارژ کنید و به ازای مصرف واقعی هر پیام، هزینه از موجودی کسر می‌شود. بدون اشتراک ماهانه!
           </p>
         </div>
-        <div className="card" className="p-5">
+ <div className="card p-5" >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <Icon name="sparkles" size={16} className="text-accent" />
             <span className="text-sm font-semibold text-primary">مدل هوشمند</span>

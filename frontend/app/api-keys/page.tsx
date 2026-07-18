@@ -131,7 +131,7 @@ export default function ApiKeysPage() {
             placeholder="نام کلید (مثلاً Production)"
             className="input flex-1"
           />
-          <button onClick={generateKey} disabled={loading} className="btn btn-primary" className="inline-flex items-center gap-1.5">
+ <button onClick={generateKey} disabled={loading} className="btn btn-primary inline-flex items-center gap-1.5" >
             {loading ? (
               <span className="apikeys-spinner" />
             ) : (
@@ -158,7 +158,7 @@ export default function ApiKeysPage() {
             <code className="apikeys-code-block flex-1">
               {newKey}
             </code>
-            <button onClick={() => copyKey(newKey)} className="btn btn-secondary btn-sm apikeys-copy-btn" className="inline-flex items-center gap-1">
+ <button onClick={() => copyKey(newKey)} className="btn btn-secondary btn-sm apikeys-copy-btn inline-flex items-center gap-1" >
               <Icon name="copy" size={14} />
               کپی
             </button>
@@ -270,7 +270,7 @@ export default function ApiKeysPage() {
       </div>
 
       {/* API Docs */}
-      <div className="card" className="mt-4">
+ <div className="card mt-4" >
         <div className="flex items-center gap-1.5 mb-4">
           <Icon name="code" size={16} className="text-accent" />
           <h2 className="text-[15px] font-bold text-primary">نحوه استفاده</h2>

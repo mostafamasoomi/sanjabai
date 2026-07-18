@@ -346,7 +346,7 @@ export default function UsagePage() {
           </div>
           <h2 className="text-xl font-bold text-primary mb-2">گزارش مصرف</h2>
           <p className="text-muted mb-6">برای مشاهده گزارش مصرف، ابتدا وارد حساب خود شوید.</p>
-          <Link href="/login" className="btn btn-lg btn-primary" className="inline-flex items-center gap-2">
+ <Link href="/login" className="btn btn-lg btn-primary inline-flex items-center gap-2" >
             ورود
             <Icon name="arrowLeft" size={16} />
           </Link>
@@ -368,7 +368,7 @@ export default function UsagePage() {
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: '32px 20px 64px' }} className="usage-page">
       {/* Header */}
-      <div className="usage-header" className="flex items-center justify-between mb-6 gap-3 flex-wrap">
+ <div className="usage-header flex items-center justify-between mb-6 gap-3 flex-wrap" >
         <div className="flex items-center gap-2.5">
           <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-full)', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Icon name="chart" size={18} className="text-accent" />
@@ -436,14 +436,14 @@ export default function UsagePage() {
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 16 }}>
             {[1, 2, 3, 4].map(i => (
-              <div key={i} className="card" className="p-5">
+ <div key={i} className="card p-5" >
                 <Skeleton width={100} height={12} className="mb-3" />
                 <Skeleton width={140} height={28} className="mb-2" />
                 <Skeleton width={80} height={10} />
               </div>
             ))}
           </div>
-          <div className="card" className="mb-4">
+ <div className="card mb-4" >
             <Skeleton width={160} height={18} style={{ margin: 20 }} />
             <Skeleton width="100%" height={200} style={{ margin: '0 20px 20px' }} />
           </div>
@@ -463,7 +463,7 @@ export default function UsagePage() {
           <p style={{ color: 'var(--text-muted)', fontSize: 14, maxWidth: 360, margin: '0 auto 24px' }}>
             با ارسال اولین پیام در چت، گزارش‌های دقیق مصرف توکن و هزینه اینجا نمایش داده می‌شود.
           </p>
-          <Link href="/chat" className="btn btn-lg btn-primary" className="inline-flex items-center gap-2">
+ <Link href="/chat" className="btn btn-lg btn-primary inline-flex items-center gap-2" >
             <Icon name="chat" size={16} />
             شروع چت
           </Link>
@@ -473,7 +473,7 @@ export default function UsagePage() {
           {/* Summary Cards */}
           <div className="usage-cards" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 16 }}>
             {/* Balance */}
-            <FadeInCard className="card" delay={0} className="p-5 relative overflow-hidden">
+ <FadeInCard className="card p-5 relative overflow-hidden" delay={0} >
               <div style={{ position: 'absolute', top: 0, insetInlineStart: 0, insetInlineEnd: 0, height: 3, background: 'var(--accent)' }} />
               <div className="text-xs text-muted font-medium mb-2">
                 <Icon name="wallet" size={12} style={{ display: 'inline', verticalAlign: -1, marginInlineStart: 4 }} />
@@ -484,7 +484,7 @@ export default function UsagePage() {
             </FadeInCard>
 
             {/* Spent this month */}
-            <FadeInCard className="card" delay={60} className="p-5">
+ <FadeInCard className="card p-5" delay={60} >
               <div className="text-xs text-muted font-medium mb-2">
                 <Icon name="payment" size={12} style={{ display: 'inline', verticalAlign: -1, marginInlineStart: 4 }} />
                 مصرف {rangeLabels[range]}
@@ -494,7 +494,7 @@ export default function UsagePage() {
             </FadeInCard>
 
             {/* Total tokens */}
-            <FadeInCard className="card" delay={120} className="p-5">
+ <FadeInCard className="card p-5" delay={120} >
               <div className="text-xs text-muted font-medium mb-2">
                 <Icon name="sparkles" size={12} style={{ display: 'inline', verticalAlign: -1, marginInlineStart: 4 }} />
                 کل توکن‌های مصرفی
@@ -506,7 +506,7 @@ export default function UsagePage() {
             </FadeInCard>
 
             {/* Models used */}
-            <FadeInCard className="card" delay={180} className="p-5">
+ <FadeInCard className="card p-5" delay={180} >
               <div className="text-xs text-muted font-medium mb-2">
                 <Icon name="models" size={12} style={{ display: 'inline', verticalAlign: -1, marginInlineStart: 4 }} />
                 مدل‌های استفاده شده
@@ -541,7 +541,7 @@ export default function UsagePage() {
           {/* Charts row: donut + sparkline */}
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.2fr)', gap: 16, marginBottom: 16 }} className="usage-charts">
             {/* Donut: model cost distribution */}
-            <FadeInCard className="card" delay={260} className="p-5">
+ <FadeInCard className="card p-5" delay={260} >
               <div className="flex items-center gap-2 mb-4">
                 <Icon name="chart" size={16} className="text-accent" />
                 <h2 className="text-base font-bold text-primary">توزیع هزینه مدل‌ها</h2>
@@ -584,7 +584,7 @@ export default function UsagePage() {
             </FadeInCard>
 
             {/* Sparkline: daily usage (last 30 days) */}
-            <FadeInCard className="card" delay={320} className="p-5">
+ <FadeInCard className="card p-5" delay={320} >
               <div className="flex items-center justify-between gap-2 mb-4">
                 <div className="flex items-center gap-2">
                   <Icon name="calendar" size={16} className="text-accent" />
@@ -631,7 +631,7 @@ export default function UsagePage() {
 
           {/* Per-model breakdown with token efficiency */}
           {(data?.per_model_breakdown.length ?? 0) > 0 && (
-            <FadeInCard className="card" delay={380} className="mb-4 overflow-hidden">
+ <FadeInCard className="card mb-4 overflow-hidden" delay={380} >
               <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Icon name="models" size={16} className="text-accent" />
                 <h2 className="text-base font-bold text-primary">مصرف به تفکیک مدل</h2>

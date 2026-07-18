@@ -117,12 +117,12 @@ function AssistantCard({ assistant, onClick }: { assistant: Assistant; onClick: 
       {/* Badge */}
       <div className="flex items-center gap-2 mt-1">
         {assistant.is_public ? (
-          <span className="badge aurora-cap-green" className="text-[10px]">
+ <span className="badge aurora-cap-green text-[10px]" >
             <Icon name="eye" size={10} />
             عمومی
           </span>
         ) : (
-          <span className="badge aurora-cap-default" className="text-[10px]">
+ <span className="badge aurora-cap-default text-[10px]" >
             <Icon name="lock" size={10} />
             خصوصی
           </span>

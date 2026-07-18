@@ -462,7 +462,7 @@ export default function MemoryPage() {
       ) : (
         <div className="flex flex-col gap-2.5">
           {memories.map((m) => (
-            <div key={m.id} className="card" className="p-4">
+ <div key={m.id} className="card p-4" >
               {isEditing(m.id) ? (
                 /* Edit mode */
                 <div>
@@ -493,7 +493,7 @@ export default function MemoryPage() {
                     />
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={saveEdit} className="btn btn-primary btn-sm" className="inline-flex items-center gap-1">
+ <button onClick={saveEdit} className="btn btn-primary btn-sm inline-flex items-center gap-1" >
                       <Icon name="check" size={14} />
                       ذخیره
                     </button>

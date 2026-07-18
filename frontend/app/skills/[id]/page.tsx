@@ -110,7 +110,7 @@ function DetailSkeleton() {
       <div className="divider" />
       <div className="skeleton" style={{ width: '100%', height: '2rem' }} />
       <div className="skeleton" style={{ width: '100%', height: '8rem' }} />
-      <div className="skeleton" className="w-full h-10 rounded-md" />
+ <div className="skeleton w-full h-10 rounded-md" />
     </div>
   )
 }
@@ -234,7 +234,7 @@ export default function SkillDetailPage() {
           gap: '1.5rem',
         }}
       >
-        <Icon name="warning" size={48} className="text-[var(--text-muted)]" className="opacity-40" />
+ <Icon name="warning" size={48} className="text-[var(--text-muted)] opacity-40" />
         <div className="text-center">
           <h2 className="text-xl font-bold text-primary mb-2">
             اسکیل یافت نشد
@@ -275,7 +275,7 @@ export default function SkillDetailPage() {
             {CATEGORY_LABELS[skill.category] || skill.category}
           </span>
           {skill.is_featured && (
-            <span className="badge badge-accent" className="text-[11px]">
+ <span className="badge badge-accent text-[11px]" >
               <Icon name="sparkles" size={10} />
               ویژه
             </span>

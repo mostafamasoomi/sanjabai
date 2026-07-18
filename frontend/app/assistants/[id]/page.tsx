@@ -33,10 +33,10 @@ function DetailSkeleton() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '1rem 0' }}>
       <div className="skeleton" style={{ width: '8rem', height: '1.25rem' }} />
       <div className="skeleton" style={{ width: '60%', height: '1.5rem' }} />
-      <div className="skeleton" className="w-full h-10 rounded-md" />
-      <div className="skeleton" className="w-full h-10 rounded-md" />
+ <div className="skeleton w-full h-10 rounded-md" />
+ <div className="skeleton w-full h-10 rounded-md" />
       <div className="skeleton" style={{ width: '100%', height: '10rem', borderRadius: 'var(--radius-md)' }} />
-      <div className="skeleton" className="w-full h-10 rounded-md" />
+ <div className="skeleton w-full h-10 rounded-md" />
     </div>
   )
 }
@@ -196,7 +196,7 @@ export default function AssistantDetailPage() {
           gap: '1.5rem',
         }}
       >
-        <Icon name="warning" size={48} className="text-[var(--text-muted)]" className="opacity-40" />
+ <Icon name="warning" size={48} className="text-[var(--text-muted)] opacity-40" />
         <div className="text-center">
           <h2 className="text-xl font-bold text-primary mb-2">
             دستیار یافت نشد
@@ -336,7 +336,7 @@ export default function AssistantDetailPage() {
                 مدل پیش‌فرض
               </label>
               {modelsLoading ? (
-                <div className="skeleton" className="w-full h-10 rounded-md" />
+ <div className="skeleton w-full h-10 rounded-md" />
               ) : (
                 <div className="model-select-wrapper" dir="ltr">
                   <select

@@ -57,7 +57,7 @@ export default function ReferralPage() {
       </div>
 
       {/* Referral Code Card */}
-      <div className="card" className="mb-4">
+ <div className="card mb-4" >
         <div className="mb-4">
           <span className="text-xs text-secondary font-medium">کد دعوت شما</span>
         </div>
@@ -78,7 +78,7 @@ export default function ReferralPage() {
           >
             {user.referral_code || 'در حال بارگذاری...'}
           </code>
-          <button className="btn btn-primary btn-sm" onClick={copyLink} className="flex items-center gap-1.5">
+ <button className="btn btn-primary btn-sm flex items-center gap-1.5" onClick={copyLink} >
             <Icon name="copy" size={14} />
             کپی
           </button>

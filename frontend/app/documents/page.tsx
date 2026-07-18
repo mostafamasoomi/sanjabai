@@ -157,7 +157,7 @@ export default function DocumentsPage() {
           <p className="text-muted mb-6">
             برای ساخت پاورپوینت، ورد یا اسلاید با هوش مصنوعی، ابتدا وارد حساب خود شوید.
           </p>
-          <a href="/login" className="btn btn-lg btn-primary" className="inline-flex items-center gap-2">
+ <a href="/login" className="btn btn-lg btn-primary inline-flex items-center gap-2" >
             ورود / ثبت‌نام
           </a>
         </div>
@@ -179,7 +179,7 @@ export default function DocumentsPage() {
         </div>
 
         {/* Format selector */}
-        <div className="card" className="mb-6">
+ <div className="card mb-6" >
           <div className="card-header">نوع سند</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
             {DOC_TYPES.map(dt => (
@@ -209,7 +209,7 @@ export default function DocumentsPage() {
         </div>
 
         {/* Prompt input */}
-        <div className="card" className="mb-6">
+ <div className="card mb-6" >
           <div className="card-header">توضیحات سند</div>
           <textarea dir="rtl"
             value={prompt}

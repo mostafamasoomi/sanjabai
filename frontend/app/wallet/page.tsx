@@ -67,7 +67,7 @@ const statusLabel: Record<string, { text: string; badge: string }> = {
 // ─── Skeleton Components ────────────────────────────────────────────────────
 function BalanceSkeleton() {
   return (
-    <div className="card wallet-balance-card" className="min-h-[200px]">
+ <div className="card wallet-balance-card min-h-[200px]" >
       <div className="skeleton" style={{ width: 100, height: 14, borderRadius: 'var(--radius-sm)', marginBottom: 16 }} />
       <div className="skeleton" style={{ width: 260, height: 48, borderRadius: 'var(--radius-md)', marginBottom: 12 }} />
       <div className="skeleton" style={{ width: 140, height: 14, borderRadius: 'var(--radius-sm)' }} />
@@ -77,11 +77,11 @@ function BalanceSkeleton() {
 
 function TopupSkeleton() {
   return (
-    <div className="card" className="min-h-[200px]">
+ <div className="card min-h-[200px]" >
       <div className="skeleton" style={{ width: 80, height: 14, borderRadius: 'var(--radius-sm)', marginBottom: 16 }} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="skeleton" className="h-12 rounded-md" />
+ <div key={i} className="skeleton h-12 rounded-md" />
         ))}
       </div>
       <div className="skeleton" style={{ width: '100%', height: 44, borderRadius: 'var(--radius-md)', marginTop: 12 }} />
@@ -95,8 +95,8 @@ function TableSkeleton() {
       <div className="skeleton" style={{ width: 120, height: 18, borderRadius: 'var(--radius-sm)', marginBottom: 20 }} />
       {[1, 2, 3, 4, 5].map((i) => (
         <div key={i} className="flex gap-4 mb-3">
-          <div className="skeleton" className="flex-1 h-4 rounded-sm" />
-          <div className="skeleton" className="w-20 h-4 rounded-sm" />
+ <div className="skeleton flex-1 h-4 rounded-sm" />
+ <div className="skeleton w-20 h-4 rounded-sm" />
           <div className="skeleton" style={{ width: 100, height: 16, borderRadius: 'var(--radius-sm)' }} />
         </div>
       ))}
@@ -106,7 +106,7 @@ function TableSkeleton() {
 
 function PackagesSkeleton() {
   return (
-    <div className="card" className="mb-6">
+ <div className="card mb-6" >
       <div className="skeleton" style={{ width: 160, height: 18, borderRadius: 'var(--radius-sm)', marginBottom: 20 }} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
         {[1, 2, 3, 4].map((i) => (
@@ -299,12 +299,12 @@ export default function WalletPage() {
     return (
       <div className="flex justify-center items-center min-h-[60vh]">
         <div className="card" style={{ textAlign: 'center', padding: '48px 32px', maxWidth: 400 }}>
-          <div className="wallet-empty-icon-wrap" className="mb-5">
+ <div className="wallet-empty-icon-wrap mb-5" >
             <Icon name="wallet" size={32} className="text-accent" />
           </div>
           <h2 className="text-xl font-bold text-primary mb-2">کیف پول</h2>
           <p className="text-muted mb-6">برای مشاهده کیف پول، ابتدا وارد حساب خود شوید.</p>
-          <Link href="/login" className="btn btn-lg btn-primary" className="inline-flex items-center gap-2">
+ <Link href="/login" className="btn btn-lg btn-primary inline-flex items-center gap-2" >
             ورود
             <Icon name="arrowLeft" size={16} />
           </Link>
@@ -470,7 +470,7 @@ export default function WalletPage() {
       </div>
 
       {/* ── Credit Packages Section ────────────────────────────────── */}
-      <div className="card" className="mb-6">
+ <div className="card mb-6" >
         <div className="flex items-center gap-1.5 mb-4">
           <Icon name="gift" size={16} className="text-accent" />
           <h2 className="text-base font-bold text-primary">بسته‌های اعتباری</h2>
@@ -570,7 +570,7 @@ export default function WalletPage() {
       </div>
 
       {/* ── Ledger Section ─────────────────────────────────────────── */}
-      <div className="card" className="mb-6">
+ <div className="card mb-6" >
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div className="flex items-center gap-1.5">
             <Icon name="history" size={16} className="text-accent" />

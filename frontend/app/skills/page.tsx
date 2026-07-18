@@ -119,7 +119,7 @@ function CardSkeleton() {
     >
       <div className="flex items-center gap-2">
         <div className="skeleton" style={{ width: '4rem', height: '1.25rem', borderRadius: 'var(--radius-sm)' }} />
-        <div className="skeleton" className="w-12 h-4" />
+ <div className="skeleton w-12 h-4" />
       </div>
       <div className="skeleton" style={{ width: '70%', height: '1rem' }} />
       <div className="skeleton" style={{ width: '100%', height: '0.625rem', marginBottom: '0.25rem' }} />
@@ -866,7 +866,7 @@ export default function SkillsPage() {
   if (!authLoading && !user) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
-        <Icon name="sparkles" size={48} className="text-[var(--text-muted)]" className="opacity-40" />
+ <Icon name="sparkles" size={48} className="text-[var(--text-muted)] opacity-40" />
         <div className="text-center">
           <h2 className="text-xl font-bold text-primary mb-2">
             وارد شوید
@@ -1014,7 +1014,7 @@ export default function SkillsPage() {
             gap: '1rem',
           }}
         >
-          <Icon name="sparkles" size={48} className="text-[var(--text-muted)]" className="opacity-40" />
+ <Icon name="sparkles" size={48} className="text-[var(--text-muted)] opacity-40" />
           <div className="text-center">
             <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.375rem' }}>
               اسکیلی یافت نشد

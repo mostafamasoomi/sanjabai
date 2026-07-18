@@ -555,10 +555,10 @@ export default function AdminPage() {
 
   if (!authed) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4" className="bg-base">
+ <div className="min-h-screen flex items-center justify-center p-4 bg-base" >
         <div className="card w-full max-w-sm">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4" className="bg-accent-dim">
+ <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4 bg-accent-dim" >
               <Icon name="settings" size={28} className="text-accent" />
             </div>
             <h1 className="text-xl font-bold text-primary">پنل مدیریت</h1>
@@ -606,7 +606,7 @@ export default function AdminPage() {
   return (
     <div className="admin-layout min-h-screen" dir="rtl">
       {/* Mobile Header */}
-      <div className="lg:hidden flex items-center justify-between p-4 border-b" className="border-border bg-surface">
+ <div className="lg:hidden flex items-center justify-between p-4 border-b border-border bg-surface" >
         <button className="btn btn-icon btn-sm" onClick={() => setSidebarOpen(!sidebarOpen)}>
           <Icon name={sidebarOpen ? 'close' : 'menu'} size={20} />
         </button>
@@ -632,9 +632,9 @@ export default function AdminPage() {
           }}
         >
           {/* Logo */}
-          <div className="p-5 border-b" className="border-border">
+ <div className="p-5 border-b border-border" >
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" className="bg-accent-dim">
+ <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-accent-dim" >
                 <Icon name="settings" size={18} className="text-accent" />
               </div>
               <div>
@@ -675,7 +675,7 @@ export default function AdminPage() {
           </nav>
 
           {/* Sidebar Footer */}
-          <div className="absolute bottom-0 right-0 left-0 p-3 border-t" className="border-border">
+ <div className="absolute bottom-0 right-0 left-0 p-3 border-t border-border" >
             <button
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-muted"
               onClick={logout}
@@ -692,7 +692,7 @@ export default function AdminPage() {
         )}
 
         {/* ─── Main Content ────────────────────────────────────────────── */}
-        <main className="admin-main flex-1 min-w-0 p-4 lg:p-8 overflow-y-auto" className="bg-base">
+ <main className="admin-main flex-1 min-w-0 p-4 lg:p-8 overflow-y-auto bg-base" >
           {/* Refresh Button */}
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -895,7 +895,7 @@ export default function AdminPage() {
                     </div>
                     <div className="flex gap-2 mt-5">
                       <button className="btn flex-1" onClick={saveUserEdit}>ذخیره</button>
-                      <button className="btn btn-sm" className="bg-elevated" onClick={() => setEditingUser(null)}>انصراف</button>
+ <button className="btn btn-sm bg-elevated" onClick={() => setEditingUser(null)}>انصراف</button>
                     </div>
                   </div>
                 </div>
@@ -914,7 +914,7 @@ export default function AdminPage() {
               </div>
 
               {loadingDetail && !userDetail && (
-                <div className="admin-card"><div className="skeleton h-40 w-full rounded" /></div>
+ <div className="admin-card skeleton h-40 w-full rounded"><div /></div>
               )}
 
               {userDetail && (
@@ -932,22 +932,22 @@ export default function AdminPage() {
                   {/* User Info Card */}
                   <div className="admin-card">
                     <div className="flex items-start gap-4">
-                      <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold" className="bg-accent-dim text-accent">
+ <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold bg-accent-dim text-accent" >
                         {(userDetail.user.display_name || userDetail.user.email || '?')[0].toUpperCase()}
                       </div>
                       <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-                        <div><span className="text-muted">نام</span><p className="font-medium">{userDetail.user.display_name || '—'}</p></div>
-                        <div><span className="text-muted">ایمیل</span><p className="font-medium">{userDetail.user.email || '—'}</p></div>
-                        <div><span className="text-muted">تلگرام</span><p className="font-medium">{userDetail.user.telegram_id || '—'}</p></div>
-                        <div><span className="text-muted">تلفن</span><p className="font-medium">{userDetail.user.phone || '—'}</p></div>
-                        <div><span className="text-muted">کیف پول</span><p className="font-medium">{userDetail.wallet.balance.toLocaleString('fa-IR')} (رزرو: {userDetail.wallet.reserved.toLocaleString('fa-IR')})</p></div>
-                        <div><span className="text-muted">سهمیه روزانه</span><p className="font-medium">{userDetail.quota?.daily_limit?.toLocaleString('fa-IR') || '—'}</p></div>
-                        <div><span className="text-muted">مصرف امروز</span><p className="font-medium">{userDetail.quota?.used_today?.toLocaleString('fa-IR') || '0'}</p></div>
-                        <div><span className="text-muted">عضویت</span><p className="font-medium">{new Date(userDetail.user.created_at).toLocaleDateString('fa-IR')}</p></div>
+ <div><span className="text-muted font-medium">نام</span><p >{userDetail.user.display_name || '—'}</p></div>
+ <div><span className="text-muted font-medium">ایمیل</span><p >{userDetail.user.email || '—'}</p></div>
+ <div><span className="text-muted font-medium">تلگرام</span><p >{userDetail.user.telegram_id || '—'}</p></div>
+ <div><span className="text-muted font-medium">تلفن</span><p >{userDetail.user.phone || '—'}</p></div>
+ <div><span className="text-muted font-medium">کیف پول</span><p >{userDetail.wallet.balance.toLocaleString('fa-IR')} (رزرو: {userDetail.wallet.reserved.toLocaleString('fa-IR')})</p></div>
+ <div><span className="text-muted font-medium">سهمیه روزانه</span><p >{userDetail.quota?.daily_limit?.toLocaleString('fa-IR') || '—'}</p></div>
+ <div><span className="text-muted font-medium">مصرف امروز</span><p >{userDetail.quota?.used_today?.toLocaleString('fa-IR') || '0'}</p></div>
+ <div><span className="text-muted font-medium">عضویت</span><p >{new Date(userDetail.user.created_at).toLocaleDateString('fa-IR')}</p></div>
                       </div>
                     </div>
                     {String(userDetail.user.preferences?.ai_personality || '') && (
-                      <div className="mt-3 p-3 rounded-lg text-xs" className="bg-elevated">
+ <div className="mt-3 p-3 rounded-lg text-xs bg-elevated" >
                         <span className="font-bold text-accent">🧠 Soul: </span>
                         <span className="text-secondary">{String(userDetail.user.preferences.ai_personality)}</span>
                       </div>
@@ -955,7 +955,7 @@ export default function AdminPage() {
                   </div>
 
                   {/* Tabs */}
-                  <div className="flex gap-1 border-b" className="border-border">
+ <div className="flex gap-1 border-b border-border" >
                     {(['overview', 'conversations', 'usage', 'ledger', 'payments'] as UserDetailTab[]).map(tab => (
                       <button
                         key={tab}
@@ -980,8 +980,8 @@ export default function AdminPage() {
                       <div className="overflow-x-auto">
                         <table className="admin-table w-full text-sm">
                           <thead><tr>
-                            <th className="text-right p-2">شناسه</th><th className="text-right p-2">عنوان</th>
-                            <th className="text-right p-2">مدل</th><th className="text-right p-2">پیامها</th>
+ <th className="text-right p-2 text-right p-2">شناسه</th><th >عنوان</th>
+ <th className="text-right p-2 text-right p-2">مدل</th><th >پیامها</th>
                             <th className="text-right p-2">تاریخ</th>
                           </tr></thead>
                           <tbody>
@@ -989,7 +989,7 @@ export default function AdminPage() {
                               <tr key={c.id}>
                                 <td className="p-2 text-xs font-mono">{c.id}</td>
                                 <td className="p-2 text-xs">{c.title}</td>
-                                <td className="p-2 text-xs"><span className="badge badge-accent">{c.model || '—'}</span></td>
+ <td className="p-2 text-xs badge badge-accent"><span >{c.model || '—'}</span></td>
                                 <td className="p-2 text-xs">{c.msg_count || '—'}</td>
                                 <td className="p-2 text-xs">{new Date(c.updated_at).toLocaleDateString('fa-IR')}</td>
                               </tr>
@@ -1006,9 +1006,9 @@ export default function AdminPage() {
                         <h3 className="text-sm font-bold text-primary">مصرف بر اساس مدل</h3>
                         <table className="admin-table w-full text-sm">
                           <thead><tr>
-                            <th className="text-right p-2">مدل</th><th className="text-right p-2">درخواست</th>
-                            <th className="text-right p-2">ورودی</th><th className="text-right p-2">خروجی</th>
-                            <th className="text-right p-2">هزینه</th><th className="text-right p-2">آخرین استفاده</th>
+ <th className="text-right p-2 text-right p-2">مدل</th><th >درخواست</th>
+ <th className="text-right p-2 text-right p-2">ورودی</th><th >خروجی</th>
+ <th className="text-right p-2 text-right p-2">هزینه</th><th >آخرین استفاده</th>
                           </tr></thead>
                           <tbody>
                             {(userTabData?.by_model || []).map((m: any, i: number) => (
@@ -1029,8 +1029,8 @@ export default function AdminPage() {
                       <div className="overflow-x-auto">
                         <table className="admin-table w-full text-sm">
                           <thead><tr>
-                            <th className="text-right p-2">شناسه</th><th className="text-right p-2">مبلغ</th>
-                            <th className="text-right p-2">مانده</th><th className="text-right p-2">شرح</th>
+ <th className="text-right p-2 text-right p-2">شناسه</th><th >مبلغ</th>
+ <th className="text-right p-2 text-right p-2">مانده</th><th >شرح</th>
                             <th className="text-right p-2">تاریخ</th>
                           </tr></thead>
                           <tbody>
@@ -1055,9 +1055,9 @@ export default function AdminPage() {
                         <h3 className="text-sm font-bold text-primary">پرداختها</h3>
                         <table className="admin-table w-full text-sm">
                           <thead><tr>
-                            <th className="text-right p-2">شناسه</th><th className="text-right p-2">مبلغ</th>
-                            <th className="text-right p-2">وضعیت</th><th className="text-right p-2">نوع</th>
-                            <th className="text-right p-2">کد مرجع</th><th className="text-right p-2">تاریخ</th>
+ <th className="text-right p-2 text-right p-2">شناسه</th><th >مبلغ</th>
+ <th className="text-right p-2 text-right p-2">وضعیت</th><th >نوع</th>
+ <th className="text-right p-2 text-right p-2">کد مرجع</th><th >تاریخ</th>
                           </tr></thead>
                           <tbody>
                             {(userTabData?.payments || []).map((p: any) => (
@@ -1077,8 +1077,8 @@ export default function AdminPage() {
                             <h3 className="text-sm font-bold text-primary">اشتراکها</h3>
                             <table className="admin-table w-full text-sm">
                               <thead><tr>
-                                <th className="text-right p-2">پلن</th><th className="text-right p-2">وضعیت</th>
-                                <th className="text-right p-2">شروع</th><th className="text-right p-2">پایان</th>
+ <th className="text-right p-2 text-right p-2">پلن</th><th >وضعیت</th>
+ <th className="text-right p-2 text-right p-2">شروع</th><th >پایان</th>
                                 <th className="text-right p-2">مبلغ</th>
                               </tr></thead>
                               <tbody>
@@ -1134,7 +1134,7 @@ export default function AdminPage() {
                           <td className="p-3 text-sm font-mono font-medium text-primary">{p.model}</td>
                           <td className="p-3 text-xs">{p.input_per_million.toLocaleString('fa-IR')}</td>
                           <td className="p-3 text-xs">{p.output_per_million.toLocaleString('fa-IR')}</td>
-                          <td className="p-3"><span className="badge">{p.currency}</span></td>
+ <td className="p-3 badge"><span >{p.currency}</span></td>
                           <td className="p-3">
                             <button className="btn btn-sm" onClick={() => { setPzModel(p.model); setPzIn(String(p.input_per_million)); setPzOut(String(p.output_per_million)); setPzCur(p.currency) }}>
                               <Icon name="settings" size={14} />
@@ -1171,7 +1171,7 @@ export default function AdminPage() {
                     <span>ذخیره</span>
                   </button>
                   {pzModel && (
-                    <button className="btn btn-sm" className="bg-elevated" onClick={() => { setPzModel(''); setPzIn(''); setPzOut(''); setPzCur('IRT') }}>
+ <button className="btn btn-sm bg-elevated" onClick={() => { setPzModel(''); setPzIn(''); setPzOut(''); setPzCur('IRT') }}>
                       انصراف
                     </button>
                   )}
@@ -1196,7 +1196,7 @@ export default function AdminPage() {
                 {features.map((f) => (
                   <div key={f.id} className="admin-card flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm" className="bg-elevated">
+ <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm bg-elevated" >
                         {f.icon || '—'}
                       </div>
                       <div>
@@ -1254,7 +1254,7 @@ export default function AdminPage() {
                     <span>{ftId ? 'بروزرسانی' : 'افزودن'}</span>
                   </button>
                   {ftId && (
-                    <button className="btn btn-sm" className="bg-elevated" onClick={resetFeatureForm}>
+ <button className="btn btn-sm bg-elevated" onClick={resetFeatureForm}>
                       انصراف
                     </button>
                   )}
@@ -1279,7 +1279,7 @@ export default function AdminPage() {
                 {discounts.map((d) => (
                   <div key={d.id} className="admin-card flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="px-3 py-1.5 rounded-lg font-mono text-sm font-bold" className="bg-accent-dim text-accent">
+ <div className="px-3 py-1.5 rounded-lg font-mono text-sm font-bold bg-accent-dim text-accent" >
                         {d.code}
                       </div>
                       <span className="text-sm text-primary">{d.percent}%</span>
@@ -1323,7 +1323,7 @@ export default function AdminPage() {
                     <span>{dcId ? 'بروزرسانی' : 'افزودن'}</span>
                   </button>
                   {dcId && (
-                    <button className="btn btn-sm" className="bg-elevated" onClick={resetDiscountForm}>
+ <button className="btn btn-sm bg-elevated" onClick={resetDiscountForm}>
                       انصراف
                     </button>
                   )}
@@ -1411,7 +1411,7 @@ export default function AdminPage() {
               {/* Org Default Model */}
               <div className="admin-card">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center" className="bg-accent-dim">
+ <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-accent-dim" >
                     <Icon name="models" size={16} className="text-accent" />
                   </div>
                   <div>
@@ -1448,7 +1448,7 @@ export default function AdminPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {models.map((m) => (
                     <div key={m} className="admin-card flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center" className="bg-accent-dim">
+ <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-accent-dim" >
                         <Icon name="models" size={16} className="text-accent" />
                       </div>
                       <span className="text-sm font-mono text-primary">{m}</span>
@@ -1798,7 +1798,7 @@ export default function AdminPage() {
 
                 {/* Pagination */}
                 {auditTotal > 50 && (
-                  <div className="flex items-center justify-between mt-4 pt-3 border-t" className="border-border">
+ <div className="flex items-center justify-between mt-4 pt-3 border-t border-border" >
                     <span className="text-xs text-muted">
                       صفحه {auditPage} از {Math.ceil(auditTotal / 50)}
                     </span>

@@ -324,7 +324,7 @@ export default function ProfilePage() {
   if (loadingProfile) {
     return (
       <div className="profile-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
-        <div className="apikeys-spinner" className="w-8 h-8" />
+ <div className="apikeys-spinner w-8 h-8" />
       </div>
     )
   }
@@ -366,7 +366,7 @@ export default function ProfilePage() {
               border: '2px solid var(--bg-card, #1a1a2e)',
             }}>
               {avatarUploading ? (
-                <div className="apikeys-spinner" className="w-3 h-3" />
+ <div className="apikeys-spinner w-3 h-3" />
               ) : (
                 <Icon name="camera" size={12} className="text-[var(--text-on-accent)]" />
               )}
@@ -849,7 +849,7 @@ export default function ProfilePage() {
             <div>
               <label className="profile-input-label">{isFa ? 'لینک دعوت' : 'Referral Link'}</label>
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                <code className="apikeys-code-block" className="flex-1 text-[11px]">
+ <code className="apikeys-code-block flex-1 text-[11px]" >
                   {typeof window !== 'undefined' ? `${window.location.origin}/signup?ref=${user.referral_code}` : ''}
                 </code>
                 <button
@@ -882,7 +882,7 @@ export default function ProfilePage() {
             ? 'حذف حساب کاربری غیرقابل بازگشت است. تمام دادهها و تاریخچه شما حذف خواهد شد.'
             : 'Account deletion is permanent. All your data and history will be removed.'}
         </p>
-        <button className="btn btn-danger" disabled className="inline-flex items-center gap-1.5">
+ <button className="btn btn-danger inline-flex items-center gap-1.5" disabled >
           <Icon name="trash" size={14} />
           {isFa ? 'حذف حساب (بهزودی)' : 'Delete Account (coming soon)'}
         </button>

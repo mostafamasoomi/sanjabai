@@ -267,7 +267,7 @@ export default function TasksPage() {
           <div>
             <Skeleton height="2rem" width="200px" className="mb-4" />
             {[1, 2, 3].map((i) => (
-              <div key={i} className="card" className="mb-3 p-5">
+ <div key={i} className="card mb-3 p-5" >
                 <Skeleton height="1.2rem" className="mb-3" />
                 <Skeleton height="0.9rem" width="60%" className="mb-2" />
                 <Skeleton height="0.9rem" width="40%" />
@@ -302,7 +302,7 @@ export default function TasksPage() {
             </p>
           </div>
         </div>
-        <button onClick={openCreate} className="btn btn-primary" className="inline-flex items-center gap-1.5">
+ <button onClick={openCreate} className="btn btn-primary inline-flex items-center gap-1.5" >
           <Icon name="plus" size={16} />
           ایجاد تسک جدید
         </button>
@@ -325,7 +325,7 @@ export default function TasksPage() {
       {loading ? (
         <div>
           {[1, 2, 3].map((i) => (
-            <div key={i} className="card" className="mb-3 p-5">
+ <div key={i} className="card mb-3 p-5" >
               <div className="flex justify-between items-center mb-3">
                 <Skeleton height="1.2rem" width="200px" />
                 <Skeleton height="1.5rem" width="50px" />
@@ -357,7 +357,7 @@ export default function TasksPage() {
                     <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {task.title}
                     </h3>
-                    <span className="badge badge-accent" className="text-[11px] shrink-0">
+ <span className="badge badge-accent text-[11px] shrink-0" >
                       {task.model}
                     </span>
                   </div>

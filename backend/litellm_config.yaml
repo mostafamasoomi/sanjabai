@@ -62,8 +62,6 @@ model_list:
 # ponytail: route FreeLLMAPI through S1
 - litellm_params:
     api_base: http://38.60.157.146:3001/v1
-- litellm_params:
-    api_base: http://38.60.157.146:3001/v1
     model: openai/deepseek-v4-pro
   model_name: deepseek-v4-pro-free
 - litellm_params:

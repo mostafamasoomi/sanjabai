@@ -222,7 +222,7 @@ export default function DeveloperPage() {
       </div>
 
       {/* API Info Card */}
-      <div className="card" className="mb-5">
+ <div className="card mb-5" >
         <div className="flex items-center gap-2 mb-4">
           <Icon name="external" size={16} className="text-accent" />
           <h2 className="text-[15px] font-bold text-primary">اطلاعات API</h2>
@@ -278,7 +278,7 @@ export default function DeveloperPage() {
 
       {/* API Keys Section */}
       {user && (
-        <div className="card" className="mb-5">
+ <div className="card mb-5" >
           <div className="flex items-center gap-2 mb-4">
             <Icon name="key" size={16} className="text-accent" />
             <h2 className="text-[15px] font-bold text-primary">کلیدهای API</h2>
@@ -360,9 +360,9 @@ export default function DeveloperPage() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                       <span className="font-semibold text-sm text-primary">{k.name}</span>
                       {k.active ? (
-                        <span className="badge badge-positive" className="text-[10px]">فعال</span>
+ <span className="badge badge-positive text-[10px]" >فعال</span>
                       ) : (
-                        <span className="badge badge-danger" className="text-[10px]">غیرفعال</span>
+ <span className="badge badge-danger text-[10px]" >غیرفعال</span>
                       )}
                     </div>
                     <div className="flex gap-3 text-[11px] text-muted">
@@ -401,7 +401,7 @@ export default function DeveloperPage() {
       )}
 
       {/* Code Examples */}
-      <div className="card" className="mb-5">
+ <div className="card mb-5" >
         <div className="flex items-center gap-2 mb-4">
           <Icon name="code" size={16} className="text-accent" />
           <h2 className="text-[15px] font-bold text-primary">نمونه کد</h2>

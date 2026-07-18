@@ -77,8 +77,8 @@ export default function CreateAssistantPage() {
       <div style={{ maxWidth: '40rem', margin: '0 auto', padding: '1rem 0' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           <div className="skeleton" style={{ width: '10rem', height: '1.5rem' }} />
-          <div className="skeleton" className="w-full h-10 rounded-md" />
-          <div className="skeleton" className="w-full h-10 rounded-md" />
+ <div className="skeleton w-full h-10 rounded-md" />
+ <div className="skeleton w-full h-10 rounded-md" />
           <div className="skeleton" style={{ width: '100%', height: '10rem', borderRadius: 'var(--radius-md)' }} />
         </div>
       </div>
@@ -172,7 +172,7 @@ export default function CreateAssistantPage() {
               مدل پیش‌فرض
             </label>
             {modelsLoading ? (
-              <div className="skeleton" className="w-full h-10 rounded-md" />
+ <div className="skeleton w-full h-10 rounded-md" />
             ) : (
               <div className="model-select-wrapper" dir="ltr">
                 <select

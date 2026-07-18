@@ -658,6 +658,7 @@ async def test_all_models(request: Request):
         rows = res.fetchall()
     
     def _ping(mid, name):
+        import sys as _sys, traceback as _tb
         t0 = _time.monotonic()
         try:
             req = urllib.request.Request(
@@ -673,6 +674,10 @@ async def test_all_models(request: Request):
             return {"id": mid, "name": name, "ok": resp.status == 200, "status": resp.status, "ms": ms}
         except Exception as e:
             ms = (_time.monotonic() - t0) * 1000
+            _sys.stderr.write(f"DEBUG _ping {mid}: {type(e).__name__}: {e}\n")
+            _sys.stderr.write(_tb.format_exc()[:500])
+            _sys.stderr.write("\n---\n")
+            _sys.stderr.flush()
             return {"id": mid, "name": name, "ok": False, "error": str(e)[:100], "ms": ms}
     
     loop = asyncio.get_running_loop()

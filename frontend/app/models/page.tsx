@@ -32,6 +32,9 @@ function getCapColor(cap: string): string {
 }
 
 export default function ModelsPage() {
+  const [testing, setTesting] = useState(false);
+  const [testResults, setTestResults] = useState([]);
+  const _original = () {
   const { models, loading, error } = useCatalog()
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')

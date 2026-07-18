@@ -25,7 +25,6 @@ type ModelPricing = {
       outputPerMillion: number
     }
     exchangeRate?: number
-    markupPct?: number
   }
   availability: string
 }
@@ -72,7 +71,6 @@ export default function PricingPage() {
   const [balance, setBalance] = useState<number | null>(null)
   const [sortBy, setSortBy] = useState<'name' | 'input' | 'output'>('name')
   const [exchangeRate, setExchangeRate] = useState<number | null>(null)
-  const [markupPct, setMarkupPct] = useState<number>(20)
   const [cachedAt, setCachedAt] = useState<string | null>(null)
 
   const fetchModels = useCallback(async () => {
@@ -86,7 +84,6 @@ export default function PricingPage() {
         )
         setModels(available)
         if (data.exchangeRate) setExchangeRate(data.exchangeRate)
-        if (data.markupPct) setMarkupPct(data.markupPct)
       }
     } catch {
       toast('خطا در دریافت اطلاعات مدلها', 'error')
@@ -101,7 +98,6 @@ export default function PricingPage() {
       if (res.ok) {
         const data = await res.json()
         setExchangeRate(data.usd_to_irt || null)
-        setMarkupPct(data.markup_pct || 20)
         setCachedAt(data.cached_at || null)
       }
     } catch { /* silent */ }
@@ -157,7 +153,6 @@ export default function PricingPage() {
               ۱ دلار = {exchangeRate.toLocaleString('fa-IR')} تومان
             </span>
             <span style={{ fontSize: 12, color: 'var(--text-muted)', background: 'var(--bg-hover)', padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>
-              {markupPct}%+ حاشیه
             </span>
           </div>
           {cachedAt && (

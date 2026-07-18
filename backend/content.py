@@ -24,7 +24,7 @@ EXCHANGE_RATE_CACHE_TTL = 3600  # 1 hour
 
 # ── Catalog helpers ─────────────────────────────────────────────
 
-def _catalog_row_to_item(m: dict[str, Any], rate_irt: float = 126488, markup_pct: int = 20) -> dict[str, Any]:
+def _catalog_row_to_item(m: dict[str, Any], rate_irt: float = 126488, markup_pct: int = 0) -> dict[str, Any]:
     """Map a model_catalog DB row to the camelCase catalog contract."""
     return {
         'id': m['id'],
@@ -511,3 +511,29 @@ async def admin_refresh_pricing(request: Request) -> JSONResponse:
         return JSONResponse({'detail': 'admin access required'}, status_code=403)
     result = await refresh_pricing()
     return JSONResponse(jsonable_encoder(result))
+
+# --- Model Test Endpoint ---
+@router.get("/api/models/test")
+async def test_models():
+    """Test all models and return status (ok/error/timeout)."""
+    import asyncio
+    results = []
+    models = [
+        "tencent-hy3", "mistral-large", "mistral-medium-3-5",
+        "deepseek-v4-pro", "deepseek-v4-flash", "agnes-2.0-flash",
+        "kimi-k2.7-code-free", "mimo-v2.5", "mimo-v2.5-pro",
+        "mimo-v2.5-pro-ultraspeed"
+    ]
+    async def test_one(model):
+        try:
+            r = await _http.post(
+                f"{LITELLM_HOST}/v1/chat/completions",
+                json={"model": model, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 5},
+                timeout=15
+            )
+            return {"model": model, "status": "ok" if r.status_code == 200 else "error", "code": r.status_code}
+        except Exception as e:
+            return {"model": model, "status": "timeout", "error": str(e)[:50]}
+    
+    results = await asyncio.gather(*[test_one(m) for m in models])
+    return JSONResponse({"results": results, "total": len(results)})

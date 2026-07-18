@@ -4209,3 +4209,32 @@ img, svg { display: block; max-width: 100%; }
     display: none;
   }
 }
+
+/* ── Utility classes for common inline style patterns ────────────────────── */
+/* Use these instead of inline style={{}} for consistency and performance */
+
+/* Layout helpers */
+.u-flex-row      { display: flex; align-items: center; gap: 8px; }
+.u-flex-row-sm   { display: flex; align-items: center; gap: 4px; }
+.u-flex-row-lg   { display: flex; align-items: center; gap: 16px; }
+.u-flex-col      { display: flex; flex-direction: column; gap: 8px; }
+.u-flex-between  { display: flex; align-items: center; justify-content: space-between; }
+.u-inline-flex   { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Spacing */
+.u-p-20          { padding: 20px; }
+.u-mb-16         { margin-bottom: 16px; }
+.u-mb-8          { margin-bottom: 8px; }
+.u-mb-4          { margin-bottom: 4px; }
+
+/* Typography */
+.u-text-label    { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
+.u-text-muted    { font-size: 12px; color: var(--text-muted); }
+.u-text-muted-sm { font-size: 11px; color: var(--text-muted); }
+.u-text-primary  { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.u-text-heading  { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.u-text-title    { font-weight: 600; font-size: 14px; color: var(--text-primary); }
+.u-text-num      { font-feature-settings: 'tnum'; }
+
+/* Card helpers */
+.u-card-pad      { padding: var(--space-6); }

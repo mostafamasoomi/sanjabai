@@ -96,7 +96,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   const isActive = (href: string) => pathname === href || pathname?.startsWith(href + '/')
 
   // Redirect unauthenticated users to login for protected pages
-  const PUBLIC_ROUTES = ['/login', '/signup', '/forgot-password', '/onboarding', '/pricing', '/']
+  const PUBLIC_ROUTES = ['/login', '/signup', '/forgot-password', '/onboarding', '/pricing', '/', '/models', '/search', '/developer']
   if (!loading && !user && !PUBLIC_ROUTES.some(p => pathname === p || pathname?.startsWith(p + '/'))) {
     router.push('/login')
     return null
@@ -264,7 +264,10 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               </button>
           </div>
           <nav className="p-2">
-            {NAV.filter((n) => !n.admin || user?.is_admin).map((item) => (
+            {(user
+              ? NAV.filter((n) => !n.admin || user?.is_admin)
+              : NAV.filter((n) => PUBLIC_ROUTES.includes(n.href))
+            ).map((item) => (
               <Link
                 key={item.href}
                 href={item.href}

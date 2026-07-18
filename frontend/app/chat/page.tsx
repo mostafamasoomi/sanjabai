@@ -10,64 +10,15 @@ import { Icon, type IconName } from '@/components/ui/Icon'
 import { Skeleton, EmptyState, toast } from '@/components/ui'
 import MarkdownRenderer from './components/MarkdownRenderer'
 import ModelPicker from './components/ModelPicker'
+import ChatMessageItem from './components/ChatMessageItem'
+import { CopyIcon, CheckIcon, TrashIcon } from './components/Icons'
+import type { Message, UsageStats, Conversation, ConversationDetail, Assistant } from './components/types'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Multiai Chat — Aurora v2 + Conversation History Sidebar
    Cancel, retry, model picker, cost preview, markdown, keyboard shortcuts.
    Sidebar: conversation CRUD, auto-save, mobile drawer, desktop collapse.
    ═══════════════════════════════════════════════════════════════════════════ */
-
-type Message = { role: 'user' | 'assistant' | 'system'; content: string; id: string }
-
-type UsageStats = { promptTokens: number; completionTokens: number; totalTokens: number; estimatedCost: number }
-
-type Conversation = {
-  id: string
-  title: string
-  model: string
-  created_at: string
-  updated_at: string
-}
-
-type ConversationDetail = Conversation & {
-  messages: { role: string; content: string }[]
-}
-
-type Assistant = {
-  id: number
-  name: string
-  description: string
-  system_prompt: string
-  model_id: string | null
-  icon: string | null
-  is_public: boolean
-  user_id: number
-}
-
-/* ── Icon helper (inline SVG for special cases) ──────────────────────── */
-function CopyIcon({ size = 12 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-    </svg>
-  )
-}
-
-function CheckIcon({ size = 12 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="20 6 9 17 4 12"/>
-    </svg>
-  )
-}
-
-function TrashIcon({ size = 14 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-    </svg>
-  )
-}
 
 const PRESETS = [
   { icon: 'code' as const, label: 'کدنویسی', description: 'نوشتن و دیباگ کد', prompt: 'یک تابع در ' },
@@ -98,75 +49,7 @@ function formatDate(dateStr: string): string {
   }
 }
 
-/* ── Memoized chat message item ─────────────────────────────────────── */
-type ChatMessageItemProps = {
-  msg: Message
-  index: number
-  isLast: boolean
-  streaming: boolean
-  userAvatar: string
-  copiedId: string | null
-  onCopy: (id: string, content: string) => void
-  onRetry: (index: number) => void
-}
-
-const ChatMessageItem = memo(function ChatMessageItem({
-  msg,
-  index,
-  isLast,
-  streaming,
-  userAvatar,
-  copiedId,
-  onCopy,
-  onRetry,
-}: ChatMessageItemProps) {
-  return (
-    <div className={`chat-row ${msg.role === 'user' ? 'chat-row-user' : 'chat-row-assistant'}`}>
-      {msg.role === 'assistant' && (
-        <div className="chat-avatar chat-avatar-ai">
-          <Icon name="models" size={16} />
-        </div>
-      )}
-      <div className={`chat-bubble ${msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}`}>
-        {msg.role === 'assistant' && streaming && isLast && !msg.content && (
-          <div className="chat-typing">
-            <span /><span /><span />
-          </div>
-        )}
-        {msg.role === 'assistant' ? (
-          <span className={streaming && isLast ? 'streaming-cursor' : ''}>
-            <MarkdownRenderer content={msg.content} />
-          </span>
-        ) : (
-          <div className="chat-bubble-content chat-bubble-plain">{msg.content}</div>
-        )}
-        {msg.role === 'assistant' && msg.content && !streaming && (
-          <div className="chat-actions">
-            <button
-              onClick={() => onCopy(msg.id, msg.content)}
-              className="chat-action-btn"
-              title="کپی"
-            >
-              {copiedId === msg.id ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
-              {copiedId === msg.id ? 'کپی شد' : 'کپی'}
-            </button>
-            {index > 0 && (
-              <button onClick={() => onRetry(index)} className="chat-action-btn" title="تلاش مجدد">
-                <Icon name="refresh" size={13} />
-                تلاش مجدد
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-      {msg.role === 'user' && userAvatar && (
-        <div className="chat-avatar chat-avatar-user">
-          {userAvatar}
-        </div>
-      )}
-    </div>
-  )
-})
+/* ── Main Chat Page ─────────────────────────────────────────────────── */
 
 export default function ChatPage() {
   const { user, token } = useAuth()

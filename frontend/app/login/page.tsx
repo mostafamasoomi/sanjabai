@@ -23,7 +23,7 @@ export default function LoginPage() {
       const d = await r.json()
       setCaptchaImg(d.captcha)
       setCaptchaToken(d.token)
-    } catch {}
+    } catch (err) { console.error('Failed to fetch captcha:', err) }
   }
 
   useEffect(() => { fetchCaptcha() }, [])

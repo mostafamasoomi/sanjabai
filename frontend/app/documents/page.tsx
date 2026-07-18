@@ -69,7 +69,7 @@ export default function DocumentsPage() {
     })
       .then(r => r.json())
       .then(d => setHistory(d.documents || []))
-      .catch(() => {})
+      .catch((err) => { console.error('Failed to fetch documents:', err) })
       .finally(() => setLoadingHistory(false))
   }, [token])
 

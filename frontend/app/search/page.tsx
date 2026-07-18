@@ -53,7 +53,7 @@ function truncate(str: string, len: number) {
 function CardSkeleton() {
   return (
     <div className="card" style={{ padding: '1.25rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+      <div className="flex items-center gap-3 mb-3">
         <div className="skeleton" style={{ width: '1.5rem', height: '1.5rem', borderRadius: 'var(--radius-sm)' }} />
         <div className="skeleton" style={{ width: '14rem', height: '1rem' }} />
       </div>
@@ -124,7 +124,7 @@ function ConversationCard({ conv, onClick }: { conv: Conversation; onClick: () =
             {conv.model}
           </span>
         )}
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+        <span className="text-xs text-muted">
           {faRelative(conv.updated_at || conv.created_at)}
         </span>
       </div>
@@ -253,13 +253,13 @@ export default function SearchPage() {
   // ── Not authenticated ──
   if (!authLoading && !user) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1.5rem' }}>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
         <Icon name="security" size={48} className="text-[var(--text-muted)]" />
         <div className="text-center">
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+          <h2 className="text-xl font-bold text-primary mb-2">
             وارد شوید
           </h2>
-          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+          <p className="text-sm text-muted">
             برای جستجوی مکالمات، ابتدا وارد حساب کاربری خود شوید.
           </p>
         </div>
@@ -296,7 +296,7 @@ export default function SearchPage() {
           <h1 style={{ fontSize: '1.375rem', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
             جستجوی مکالمات
           </h1>
-          <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+          <p className="text-[13px] text-muted">
             {hasQuery
               ? `${results.length.toLocaleString('fa-IR')} نتیجه یافت شد`
               : 'آخرین مکالمات شما'}
@@ -398,7 +398,7 @@ export default function SearchPage() {
                 name={hasQuery ? 'search' : 'chat'}
                 size={48}
                 className="text-[var(--text-muted)]"
-                style={{ opacity: 0.4 }}
+                className="opacity-40"
               />
               <div className="text-center">
                 <h3
@@ -411,7 +411,7 @@ export default function SearchPage() {
                 >
                   {hasQuery ? 'نتیجه‌ای یافت نشد' : 'هنوز مکالمه‌ای ندارید'}
                 </h3>
-                <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+                <p className="text-[13px] text-muted">
                   {hasQuery
                     ? 'عبارت جستجو را تغییر دهید یا فیلترها را بررسی کنید.'
                     : 'با شروع یک مکالمه جدید، مکالمات شما اینجا نمایش داده می‌شوند.'}

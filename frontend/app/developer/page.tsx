@@ -192,7 +192,7 @@ export default function DeveloperPage() {
 
   if (authLoading) {
     return (
-      <div style={{ padding: '24px 0' }}>
+      <div className="py-6">
         <Skeleton height="2rem" width="300px" className="mb-6" />
         <Skeleton height="180px" className="mb-4" />
         <Skeleton height="120px" className="mb-4" />
@@ -201,31 +201,31 @@ export default function DeveloperPage() {
   }
 
   return (
-    <div style={{ padding: '24px 0' }}>
+    <div className="py-6">
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+      <div className="flex items-center gap-2.5 mb-6">
         <div style={{
           width: 40, height: 40, borderRadius: 12,
           background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <Icon name="code" size={20} style={{ color: 'var(--text-on-accent)' }} />
+          <Icon name="code" size={20} className="text-[var(--text-on-accent)]" />
         </div>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+          <h1 className="text-[22px] font-bold text-primary leading-tight">
             پلتفرم توسعه‌دهندگان
           </h1>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
+          <p className="text-[13px] text-muted mt-0.5">
             API سازگار با OpenAI برای ادغام در اپلیکیشن‌های شما
           </p>
         </div>
       </div>
 
       {/* API Info Card */}
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+      <div className="card" className="mb-5">
+        <div className="flex items-center gap-2 mb-4">
           <Icon name="external" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>اطلاعات API</h2>
+          <h2 className="text-[15px] font-bold text-primary">اطلاعات API</h2>
         </div>
 
         <div style={{
@@ -234,9 +234,9 @@ export default function DeveloperPage() {
           border: '1px solid rgba(139,92,246,0.2)',
           marginBottom: 16,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+          <div className="flex items-center gap-2 mb-2">
             <Icon name="info" size={14} className="text-accent" />
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Endpoint</span>
+            <span className="text-sm font-bold text-primary">Endpoint</span>
           </div>
           <code style={{
             display: 'block', direction: 'ltr', fontFamily: 'monospace',
@@ -250,14 +250,14 @@ export default function DeveloperPage() {
         </div>
 
         {/* Rate Limits */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+        <div className="flex items-center gap-1.5 mb-3">
           <Icon name="chart" size={14} className="text-muted" />
-          <h3 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>محدودیت‌های نرخی بر اساس پلن</h3>
+          <h3 className="text-[13px] font-semibold text-secondary">محدودیت‌های نرخی بر اساس پلن</h3>
         </div>
-        <div style={{ overflowX: 'auto' }}>
+        <div className="overflow-x-auto">
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+              <tr className="border-b border-border">
                 <th style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 600 }}>پلن</th>
                 <th style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 600 }}>درخواست</th>
                 <th style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 600 }}>توکن</th>
@@ -265,7 +265,7 @@ export default function DeveloperPage() {
             </thead>
             <tbody>
               {RATE_LIMITS.map((r) => (
-                <tr key={r.plan} style={{ borderBottom: '1px solid var(--border)' }}>
+                <tr key={r.plan} className="border-b border-border">
                   <td style={{ padding: '8px 12px', color: 'var(--text-primary)', fontWeight: 600 }}>{r.plan}</td>
                   <td style={{ padding: '8px 12px', color: 'var(--text-secondary)' }}>{r.requests}</td>
                   <td style={{ padding: '8px 12px', color: 'var(--text-secondary)' }}>{r.tokens}</td>
@@ -278,15 +278,15 @@ export default function DeveloperPage() {
 
       {/* API Keys Section */}
       {user && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <div className="card" className="mb-5">
+          <div className="flex items-center gap-2 mb-4">
             <Icon name="key" size={16} className="text-accent" />
-            <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>کلیدهای API</h2>
+            <h2 className="text-[15px] font-bold text-primary">کلیدهای API</h2>
             {keys.length > 0 && <span className="badge badge-accent">{keys.length}</span>}
           </div>
 
           {/* Create new key */}
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <div className="flex gap-2 mb-4">
             <input
               className="input flex-1"
               value={newKeyName}
@@ -298,7 +298,7 @@ export default function DeveloperPage() {
               onClick={createKey}
               disabled={keyLoading}
               className="btn btn-primary"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              className="inline-flex items-center gap-1.5"
             >
               {keyLoading ? (
                 <span style={{ width: 14, height: 14, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
@@ -316,14 +316,14 @@ export default function DeveloperPage() {
               background: 'rgba(16, 185, 129, 0.08)',
               border: '1px solid rgba(16, 185, 129, 0.2)',
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+              <div className="flex items-center gap-1.5 mb-2">
                 <Icon name="check" size={14} className="text-positive" />
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--positive)' }}>کلید ساخته شد</span>
+                <span className="text-[13px] font-bold text-positive">کلید ساخته شد</span>
               </div>
-              <p style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 8 }}>
+              <p className="text-xs text-danger mb-2">
                 ⚠️ این کلید فقط یک بار نمایش داده می‌شود. همین حالا کپی کنید.
               </p>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div className="flex gap-2">
                 <code style={{
                   flex: 1, padding: '8px 12px', borderRadius: 8,
                   background: 'var(--bg-elev)', fontSize: 13,
@@ -335,7 +335,7 @@ export default function DeveloperPage() {
                 <button
                   onClick={() => copyText(newKey)}
                   className="btn btn-ghost btn-sm"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                  className="inline-flex items-center gap-1"
                 >
                   <Icon name="copy" size={13} />
                   کپی
@@ -348,7 +348,7 @@ export default function DeveloperPage() {
           {keys.length === 0 ? (
             <EmptyState icon="key" title="هنوز کلیدی نساخته‌اید" description="اولین کلید API خود را بسازید." />
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="flex flex-col gap-2">
               {keys.map((k) => (
                 <div key={k.id} style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -358,19 +358,19 @@ export default function DeveloperPage() {
                 }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{k.name}</span>
+                      <span className="font-semibold text-sm text-primary">{k.name}</span>
                       {k.active ? (
-                        <span className="badge badge-positive" style={{ fontSize: 10 }}>فعال</span>
+                        <span className="badge badge-positive" className="text-[10px]">فعال</span>
                       ) : (
-                        <span className="badge badge-danger" style={{ fontSize: 10 }}>غیرفعال</span>
+                        <span className="badge badge-danger" className="text-[10px]">غیرفعال</span>
                       )}
                     </div>
-                    <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)' }}>
+                    <div className="flex gap-3 text-[11px] text-muted">
                       <code style={{ direction: 'ltr' }}>{k.prefix}{'•'.repeat(20)}</code>
                       {k.created_at && <span>{formatDate(k.created_at)}</span>}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <div className="flex gap-1.5">
                     <button
                       onClick={() => copyText(`${k.prefix}...key_id`)}
                       className="btn btn-ghost btn-sm"
@@ -401,10 +401,10 @@ export default function DeveloperPage() {
       )}
 
       {/* Code Examples */}
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+      <div className="card" className="mb-5">
+        <div className="flex items-center gap-2 mb-4">
           <Icon name="code" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>نمونه کد</h2>
+          <h2 className="text-[15px] font-bold text-primary">نمونه کد</h2>
         </div>
 
         <Tabs
@@ -417,12 +417,12 @@ export default function DeveloperPage() {
           onChange={setActiveTab}
         />
 
-        <div style={{ marginTop: 16 }}>
+        <div className="mt-4">
           {/* Install command */}
           {CODE_EXAMPLES[activeTab as keyof typeof CODE_EXAMPLES].install && (
-            <div style={{ marginBottom: 12 }}>
+            <div className="mb-3">
               <span style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>نصب وابستگی:</span>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div className="flex gap-2 items-center">
                 <code style={{
                   flex: 1, padding: '8px 14px', borderRadius: 8,
                   background: 'var(--bg-surface, var(--bg-elev))',
@@ -468,18 +468,18 @@ export default function DeveloperPage() {
 
       {/* Endpoint Documentation */}
       <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <div className="flex items-center gap-2 mb-4">
           <Icon name="external" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>مستندات endpoint‌ها</h2>
+          <h2 className="text-[15px] font-bold text-primary">مستندات endpoint‌ها</h2>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="flex flex-col gap-4">
           {ENDPOINTS.map((ep) => (
             <div key={ep.path} style={{
               padding: '16px 18px', borderRadius: 10,
               border: '1px solid var(--border)',
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <div className="flex items-center gap-2.5 mb-2">
                 <span style={{
                   padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700,
                   fontFamily: 'monospace',

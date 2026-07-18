@@ -33,10 +33,10 @@ function DetailSkeleton() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', padding: '1rem 0' }}>
       <div className="skeleton" style={{ width: '8rem', height: '1.25rem' }} />
       <div className="skeleton" style={{ width: '60%', height: '1.5rem' }} />
-      <div className="skeleton" style={{ width: '100%', height: '2.5rem', borderRadius: 'var(--radius-md)' }} />
-      <div className="skeleton" style={{ width: '100%', height: '2.5rem', borderRadius: 'var(--radius-md)' }} />
+      <div className="skeleton" className="w-full h-10 rounded-md" />
+      <div className="skeleton" className="w-full h-10 rounded-md" />
       <div className="skeleton" style={{ width: '100%', height: '10rem', borderRadius: 'var(--radius-md)' }} />
-      <div className="skeleton" style={{ width: '100%', height: '2.5rem', borderRadius: 'var(--radius-md)' }} />
+      <div className="skeleton" className="w-full h-10 rounded-md" />
     </div>
   )
 }
@@ -196,12 +196,12 @@ export default function AssistantDetailPage() {
           gap: '1.5rem',
         }}
       >
-        <Icon name="warning" size={48} className="text-[var(--text-muted)]" style={{ opacity: 0.4 }} />
+        <Icon name="warning" size={48} className="text-[var(--text-muted)]" className="opacity-40" />
         <div className="text-center">
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+          <h2 className="text-xl font-bold text-primary mb-2">
             دستیار یافت نشد
           </h2>
-          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+          <p className="text-sm text-muted">
             دستیار مورد نظر وجود ندارد یا حذف شده است.
           </p>
         </div>
@@ -219,7 +219,7 @@ export default function AssistantDetailPage() {
       <button
         className="btn btn-ghost btn-sm"
         onClick={() => router.push('/assistants')}
-        style={{ marginBottom: '1rem', fontSize: '0.8125rem' }}
+        className="mb-4 text-[13px]"
       >
         <Icon name="arrowLeft" size={14} />
         بازگشت به دستیارها
@@ -242,11 +242,11 @@ export default function AssistantDetailPage() {
           <Icon name={(assistant.icon as IconName) || 'sparkles'} size={20} className="text-white" />
         </div>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.4 }}>
+          <h1 className="text-2xl font-bold text-primary leading-normal">
             {isOwner ? 'ویرایش دستیار' : assistant.name}
           </h1>
           {!isOwner && (
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+            <p className="text-xs text-muted">
               ساخته شده در {new Date(assistant.created_at).toLocaleDateString('fa-IR')}
             </p>
           )}
@@ -258,7 +258,7 @@ export default function AssistantDetailPage() {
         <button
           className="btn btn-primary"
           onClick={() => router.push(`/chat?assistant=${assistant.id}`)}
-          style={{ marginBottom: '1.5rem', marginTop: '1rem' }}
+          className="mb-6 mt-4"
         >
           <Icon name="chat" size={16} />
           شروع گفتگو
@@ -291,7 +291,7 @@ export default function AssistantDetailPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="مثال: دستیار برنامه‌نویسی"
-                style={{ width: '100%', fontSize: '0.875rem' }}
+                className="w-full text-sm"
                 maxLength={100}
               />
             </div>
@@ -307,7 +307,7 @@ export default function AssistantDetailPage() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="توضیح کوتاه درباره دستیار"
-                style={{ width: '100%', fontSize: '0.875rem' }}
+                className="w-full text-sm"
                 maxLength={500}
               />
             </div>
@@ -325,7 +325,7 @@ export default function AssistantDetailPage() {
                 style={{ width: '100%', fontSize: '0.875rem', minHeight: '10rem', resize: 'vertical' }}
                 rows={6}
               />
-              <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+              <p className="text-[11px] text-muted mt-1">
                 این پرامپت در ابتدای هر مکالمه به مدل ارسال می‌شود
               </p>
             </div>
@@ -336,14 +336,14 @@ export default function AssistantDetailPage() {
                 مدل پیش‌فرض
               </label>
               {modelsLoading ? (
-                <div className="skeleton" style={{ width: '100%', height: '2.5rem', borderRadius: 'var(--radius-md)' }} />
+                <div className="skeleton" className="w-full h-10 rounded-md" />
               ) : (
                 <div className="model-select-wrapper" dir="ltr">
                   <select
                     className="input"
                     value={modelId}
                     onChange={(e) => setModelId(e.target.value)}
-                    style={{ width: '100%', fontSize: '0.875rem' }}
+                    className="w-full text-sm"
                   >
                     <option value="">بدون مدل پیش‌فرض (استفاده از مدل انتخابی کاربر)</option>
                     {models.map((m) => (
@@ -370,10 +370,10 @@ export default function AssistantDetailPage() {
                 </span>
               </label>
               <div>
-                <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                <span className="text-[13px] font-semibold text-primary">
                   {isPublic ? 'عمومی' : 'خصوصی'}
                 </span>
-                <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
+                <p className="text-[11px] text-muted">
                   {isPublic ? 'همه کاربران می‌توانند از این دستیار استفاده کنند' : 'فقط شما به این دستیار دسترسی دارید'}
                 </p>
               </div>
@@ -387,10 +387,10 @@ export default function AssistantDetailPage() {
               className="btn btn-ghost text-[var(--danger)]"
               onClick={handleDelete}
               disabled={deleting}
-              style={{ fontSize: '0.8125rem' }}
+              className="text-[13px]"
             >
               {deleting ? (
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                <span className="flex items-center gap-1.5">
                   <span className="animate-spin" style={{ width: '0.875rem', height: '0.875rem', border: '2px solid var(--border)', borderTopColor: 'var(--danger)', borderRadius: '50%', display: 'inline-block' }} />
                   در حال حذف...
                 </span>

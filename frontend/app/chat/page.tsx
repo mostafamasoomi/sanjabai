@@ -1006,7 +1006,7 @@ export default function ChatPage() {
                     <Icon name={(activeAssistant.icon as IconName) || 'sparkles'} size={16} className="text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    <div className="text-[13px] font-semibold text-primary">
                       {activeAssistant.name}
                     </div>
                     {activeAssistant.description && (
@@ -1018,7 +1018,7 @@ export default function ChatPage() {
                   <a
                     href={`/assistants/${activeAssistant.id}`}
                     className="btn btn-ghost btn-sm"
-                    style={{ fontSize: '0.6875rem', flexShrink: 0 }}
+                    className="text-[11px] shrink-0"
                   >
                     <Icon name="settings" size={12} />
                     تنظیمات

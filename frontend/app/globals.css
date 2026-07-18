@@ -334,8 +334,7 @@ img, svg { display: block; max-width: 100%; }
   transition: all var(--motion-fast);
 }
 .card-glass {
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: none;
   background: rgba(255,255,255,0.03);
 }
 .card-interactive:hover {
@@ -1293,8 +1292,7 @@ img, svg { display: block; max-width: 100%; }
 }
 .chat-bubble-ai {
   background: rgba(12, 12, 20, 0.8);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: none;
   border: 1px solid rgba(255, 255, 255, 0.06);
   color: var(--text-primary);
   border-bottom-right-radius: 6px;
@@ -1642,8 +1640,7 @@ img, svg { display: block; max-width: 100%; }
 
 .sidebar-glass {
   background: rgba(8, 8, 16, 0.95);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: none;
   border-left: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -1798,8 +1795,7 @@ img, svg { display: block; max-width: 100%; }
   padding: var(--space-2) var(--space-4);
   border-bottom: 1px solid var(--border);
   background: rgba(5, 5, 10, 0.8);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: none;
   position: sticky;
   top: 0;
   z-index: 20;
@@ -2844,15 +2840,13 @@ img, svg { display: block; max-width: 100%; }
 /* ── Enhanced CTA card background ────────────────────────────────────────── */
 .aurora-cta-card {
   background: rgba(255,255,255,0.03);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: none;
 }
 
 /* ── Stats bar glass enhancement ─────────────────────────────────────────── */
 .aurora-stats-bar {
   background: rgba(255,255,255,0.03);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: none;
   border: 1px solid rgba(255,255,255,0.06);
 }
 
@@ -2883,22 +2877,19 @@ img, svg { display: block; max-width: 100%; }
 /* ── Conv sidebar premium style ──────────────────────────────────────────── */
 .conv-sidebar {
   background: rgba(8,8,16,0.95);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: none;
 }
 
 /* ── Mobile drawer premium ───────────────────────────────────────────────── */
 .mobile-drawer {
   background: rgba(8,8,16,0.98);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: none;
 }
 
 /* ── Topbar glass enhancement ────────────────────────────────────────────── */
 .topbar-glass {
   background: rgba(5, 5, 10, 0.85);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: none;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -3268,7 +3259,7 @@ img, svg { display: block; max-width: 100%; }
 .model-working-dot-warn { opacity: .85; }
 
 /* Overlay */
-.model-picker-overlay { position: fixed; inset:0; z-index: 50; background: rgba(0,0,0,0.35); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); animation: mpFadeIn 180ms ease; }
+.model-picker-overlay { position: fixed; inset:0; z-index: 50; background: rgba(0,0,0,0.35); backdrop-filter: none; animation: mpFadeIn 180ms ease; }
 @keyframes mpFadeIn { from{opacity:0} to{opacity:1}
 }
 

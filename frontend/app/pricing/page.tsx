@@ -133,7 +133,7 @@ export default function PricingPage() {
       <div style={{ textAlign: 'center', marginBottom: 48 }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 16px', borderRadius: 'var(--radius-full)', background: 'var(--accent-dim)', marginBottom: 20 }}>
           <Icon name="sparkles" size={16} className="text-accent" />
-          <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>تعرفه مدلها</span>
+          <span className="text-[13px] text-accent font-semibold">تعرفه مدلها</span>
         </div>
         <h1 style={{ fontSize: 32, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12, lineHeight: 1.4 }}>
           قیمت‌گذاری شفاف، پرداخت به ازای مصرف
@@ -146,9 +146,9 @@ export default function PricingPage() {
       {/* Exchange Rate Banner */}
       {exchangeRate && (
         <div className="card" style={{ padding: '14px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, background: 'linear-gradient(135deg, rgba(124,111,247,0.06) 0%, rgba(103,232,249,0.03) 100%)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div className="flex items-center gap-2.5">
             <Icon name="refresh" size={18} className="text-accent" />
-            <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>نرخ ارز:</span>
+            <span className="text-sm text-secondary">نرخ ارز:</span>
             <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>
               ۱ دلار = {exchangeRate.toLocaleString('fa-IR')} تومان
             </span>
@@ -166,12 +166,12 @@ export default function PricingPage() {
       {/* Balance card (if logged in) */}
       {user && balance !== null && (
         <div className="card" style={{ padding: '16px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div className="flex items-center gap-2.5">
             <Icon name="wallet" size={18} className="text-accent" />
-            <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>موجودی کیف پول:</span>
+            <span className="text-sm text-secondary">موجودی کیف پول:</span>
             <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{fmtToman(balance)}</span>
           </div>
-          <Link href="/wallet" className="btn btn-sm btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <Link href="/wallet" className="btn btn-sm btn-primary" className="inline-flex items-center gap-1.5">
             <Icon name="plus" size={14} />
             شارژ کیف پول
           </Link>
@@ -179,34 +179,34 @@ export default function PricingPage() {
       )}
 
       {/* Pricing Table */}
-      <div className="card" style={{ overflow: 'hidden', marginBottom: 32 }}>
+      <div className="card" className="overflow-hidden mb-8">
         {/* Table Header */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 130px 130px 130px 90px', gap: 8, padding: '14px 16px', borderBottom: '2px solid var(--border)', background: 'var(--bg-hover)', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
           <div role="button" tabIndex={0} className="cursor-pointer" onClick={() => setSortBy('name')}>مدل {sortBy === 'name' && '↕'}</div>
-          <div role="button" tabIndex={0} style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setSortBy('input')}>ورودی/1M (USD) {sortBy === 'input' && '↕'}</div>
-          <div role="button" tabIndex={0} style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setSortBy('input')}>ورودی/1M (تومان) {sortBy === 'input' && '↕'}</div>
-          <div role="button" tabIndex={0} style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setSortBy('output')}>خروجی/1M (USD) {sortBy === 'output' && '↕'}</div>
-          <div role="button" tabIndex={0} style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setSortBy('output')}>خروجی/1M (تومان) {sortBy === 'output' && '↕'}</div>
+          <div role="button" tabIndex={0} className="text-start cursor-pointer" onClick={() => setSortBy('input')}>ورودی/1M (USD) {sortBy === 'input' && '↕'}</div>
+          <div role="button" tabIndex={0} className="text-start cursor-pointer" onClick={() => setSortBy('input')}>ورودی/1M (تومان) {sortBy === 'input' && '↕'}</div>
+          <div role="button" tabIndex={0} className="text-start cursor-pointer" onClick={() => setSortBy('output')}>خروجی/1M (USD) {sortBy === 'output' && '↕'}</div>
+          <div role="button" tabIndex={0} className="text-start cursor-pointer" onClick={() => setSortBy('output')}>خروجی/1M (تومان) {sortBy === 'output' && '↕'}</div>
           <div className="text-center">سطح</div>
         </div>
 
         {loading ? (
-          <div style={{ padding: 20 }}>
+          <div className="p-5">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => (
               <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '14px 0', borderBottom: i < 9 ? '1px solid var(--border)' : 'none' }}>
                 <div className="skeleton" style={{ width: 36, height: 36, borderRadius: 'var(--radius-full)' }} />
                 <div className="flex-1"><div className="skeleton" style={{ width: 140, height: 16, borderRadius: 'var(--radius-sm)' }} /></div>
-                <div className="skeleton" style={{ width: 80, height: 16, borderRadius: 'var(--radius-sm)' }} />
-                <div className="skeleton" style={{ width: 80, height: 16, borderRadius: 'var(--radius-sm)' }} />
-                <div className="skeleton" style={{ width: 80, height: 16, borderRadius: 'var(--radius-sm)' }} />
-                <div className="skeleton" style={{ width: 80, height: 16, borderRadius: 'var(--radius-sm)' }} />
+                <div className="skeleton" className="w-20 h-4 rounded-sm" />
+                <div className="skeleton" className="w-20 h-4 rounded-sm" />
+                <div className="skeleton" className="w-20 h-4 rounded-sm" />
+                <div className="skeleton" className="w-20 h-4 rounded-sm" />
                 <div className="skeleton" style={{ width: 60, height: 20, borderRadius: 'var(--radius-full)' }} />
               </div>
             ))}
           </div>
         ) : models.length === 0 ? (
-          <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>
-            <Icon name="info" size={32} style={{ marginBottom: 12, color: 'var(--text-muted)' }} />
+          <div className="p-12 text-center text-muted">
+            <Icon name="info" size={32} className="mb-3 text-muted" />
             <p>مدلی یافت نشد</p>
           </div>
         ) : (
@@ -234,21 +234,21 @@ export default function PricingPage() {
                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
                 {/* Model name */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 22, lineHeight: 1 }}>{icon}</span>
+                <div className="flex items-center gap-2.5">
+                  <span className="text-[22px] leading-none">{icon}</span>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{model.displayName}</div>
+                    <div className="text-[13px] font-semibold text-primary">{model.displayName}</div>
                     <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFeatureSettings: '"tnum"', direction: 'ltr', textAlign: 'left' }}>{model.providerModelId}</div>
                   </div>
                 </div>
 
                 {/* Input price USD */}
-                <div style={{ textAlign: 'left' }}>
+                <div className="text-start">
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', fontFeatureSettings: '"tnum"', direction: 'ltr' }}>{fmtUSD(usdInput)}</div>
                 </div>
 
                 {/* Input price Toman */}
-                <div style={{ textAlign: 'left' }}>
+                <div className="text-start">
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"', direction: 'ltr' }}>{fmtIRR(model.pricing.inputPerMillion)}</div>
                   <div style={{ marginTop: 3, height: 3, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
                     <div style={{ width: `${inputPct}%`, height: '100%', borderRadius: 2, background: 'var(--accent)', opacity: 0.5 }} />
@@ -256,12 +256,12 @@ export default function PricingPage() {
                 </div>
 
                 {/* Output price USD */}
-                <div style={{ textAlign: 'left' }}>
+                <div className="text-start">
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', fontFeatureSettings: '"tnum"', direction: 'ltr' }}>{fmtUSD(usdOutput)}</div>
                 </div>
 
                 {/* Output price Toman */}
-                <div style={{ textAlign: 'left' }}>
+                <div className="text-start">
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"', direction: 'ltr' }}>{fmtIRR(model.pricing.outputPerMillion)}</div>
                   <div style={{ marginTop: 3, height: 3, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
                     <div style={{ width: `${outputPct}%`, height: '100%', borderRadius: 2, background: 'var(--warning)', opacity: 0.6 }} />
@@ -280,28 +280,28 @@ export default function PricingPage() {
 
       {/* Info notes */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 40 }}>
-        <div className="card" style={{ padding: 20 }}>
+        <div className="card" className="p-5">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <Icon name="info" size={16} className="text-accent" />
-            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>واحد قیمت</span>
+            <span className="text-sm font-semibold text-primary">واحد قیمت</span>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
             قیمتها به <strong>تومان</strong> و <strong>دلار</strong> به ازای هر <strong>۱ میلیون توکن</strong> هستند. یک پیام معمولی حدود ۵۰۰-۲۰۰۰ توکن مصرف می‌کند.
           </p>
         </div>
-        <div className="card" style={{ padding: 20 }}>
+        <div className="card" className="p-5">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <Icon name="wallet" size={16} className="text-accent" />
-            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>شارژ کیف پول</span>
+            <span className="text-sm font-semibold text-primary">شارژ کیف پول</span>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
             کیف پول خود را شارژ کنید و به ازای مصرف واقعی هر پیام، هزینه از موجودی کسر می‌شود. بدون اشتراک ماهانه!
           </p>
         </div>
-        <div className="card" style={{ padding: 20 }}>
+        <div className="card" className="p-5">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <Icon name="sparkles" size={16} className="text-accent" />
-            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>مدل هوشمند</span>
+            <span className="text-sm font-semibold text-primary">مدل هوشمند</span>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
             با حالت «Smart»، سیستم بهترین مدل را بر اساس پیام شما انتخاب می‌کند تا بهترین کیفیت و هزینه را داشته باشید.
@@ -317,14 +317,14 @@ export default function PricingPage() {
         borderRadius: 'var(--radius-lg)',
         border: '1px solid var(--border)',
       }}>
-        <Icon name="sparkles" size={28} style={{ color: 'var(--accent)', marginBottom: 12 }} />
+        <Icon name="sparkles" size={28} className="text-accent mb-3" />
         <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
           آماده شروع هستید؟
         </h3>
         <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 20, maxWidth: 400, margin: '0 auto 20px' }}>
           کیف پول خود را شارژ کنید و همین الان با هوش مصنوعی چت کنید.
         </p>
-        <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+        <div className="flex gap-3 justify-center flex-wrap">
           {!user ? (
             <Link href="/login" className="btn btn-primary" style={{ padding: '10px 28px', fontSize: 14, fontWeight: 600, borderRadius: 'var(--radius-md)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
               <Icon name="profile" size={16} />

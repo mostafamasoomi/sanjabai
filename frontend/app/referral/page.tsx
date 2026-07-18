@@ -36,7 +36,7 @@ export default function ReferralPage() {
   return (
     <div style={{ maxWidth: '40rem', margin: '0 auto', padding: '1rem 0' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+      <div className="flex items-center gap-3 mb-6">
         <div
           style={{
             width: '2.5rem',
@@ -51,15 +51,15 @@ export default function ReferralPage() {
           <Icon name="referral" size={20} className="text-accent" />
         </div>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>دعوت از دوستان</h1>
-          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>دوستان خود را دعوت کنید و پاداش بگیرید</p>
+          <h1 className="text-2xl font-bold text-primary">دعوت از دوستان</h1>
+          <p className="text-sm text-muted">دوستان خود را دعوت کنید و پاداش بگیرید</p>
         </div>
       </div>
 
       {/* Referral Code Card */}
-      <div className="card" style={{ marginBottom: '1rem' }}>
-        <div style={{ marginBottom: '1rem' }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>کد دعوت شما</span>
+      <div className="card" className="mb-4">
+        <div className="mb-4">
+          <span className="text-xs text-secondary font-medium">کد دعوت شما</span>
         </div>
         <div className="flex gap-2 items-center">
           <code
@@ -78,7 +78,7 @@ export default function ReferralPage() {
           >
             {user.referral_code || 'در حال بارگذاری...'}
           </code>
-          <button className="btn btn-primary btn-sm" onClick={copyLink} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+          <button className="btn btn-primary btn-sm" onClick={copyLink} className="flex items-center gap-1.5">
             <Icon name="copy" size={14} />
             کپی
           </button>
@@ -87,7 +87,7 @@ export default function ReferralPage() {
 
       {/* How it works */}
       <div className="card">
-        <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '1rem' }}>نحوه کار</h2>
+        <h2 className="text-base font-semibold text-primary mb-4">نحوه کار</h2>
         <div className="flex flex-col gap-3">
           {[
             { step: '۱', text: 'لینک دعوت خود را با دوستان به اشتراک بگذارید' },
@@ -112,7 +112,7 @@ export default function ReferralPage() {
               >
                 {item.step}
               </div>
-              <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>{item.text}</span>
+              <span className="text-sm text-secondary">{item.text}</span>
             </div>
           ))}
         </div>

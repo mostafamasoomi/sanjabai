@@ -555,10 +555,10 @@ export default function AdminPage() {
 
   if (!authed) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--bg-base)' }}>
+      <div className="min-h-screen flex items-center justify-center p-4" className="bg-base">
         <div className="card w-full max-w-sm">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4" style={{ background: 'var(--accent-dim)' }}>
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4" className="bg-accent-dim">
               <Icon name="settings" size={28} className="text-accent" />
             </div>
             <h1 className="text-xl font-bold text-primary">پنل مدیریت</h1>
@@ -606,7 +606,7 @@ export default function AdminPage() {
   return (
     <div className="admin-layout min-h-screen" dir="rtl">
       {/* Mobile Header */}
-      <div className="lg:hidden flex items-center justify-between p-4 border-b" style={{ borderColor: 'var(--border)', background: 'var(--bg-surface)' }}>
+      <div className="lg:hidden flex items-center justify-between p-4 border-b" className="border-border bg-surface">
         <button className="btn btn-icon btn-sm" onClick={() => setSidebarOpen(!sidebarOpen)}>
           <Icon name={sidebarOpen ? 'close' : 'menu'} size={20} />
         </button>
@@ -632,9 +632,9 @@ export default function AdminPage() {
           }}
         >
           {/* Logo */}
-          <div className="p-5 border-b" style={{ borderColor: 'var(--border)' }}>
+          <div className="p-5 border-b" className="border-border">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'var(--accent-dim)' }}>
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center" className="bg-accent-dim">
                 <Icon name="settings" size={18} className="text-accent" />
               </div>
               <div>
@@ -675,7 +675,7 @@ export default function AdminPage() {
           </nav>
 
           {/* Sidebar Footer */}
-          <div className="absolute bottom-0 right-0 left-0 p-3 border-t" style={{ borderColor: 'var(--border)' }}>
+          <div className="absolute bottom-0 right-0 left-0 p-3 border-t" className="border-border">
             <button
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-muted"
               onClick={logout}
@@ -692,7 +692,7 @@ export default function AdminPage() {
         )}
 
         {/* ─── Main Content ────────────────────────────────────────────── */}
-        <main className="admin-main flex-1 min-w-0 p-4 lg:p-8 overflow-y-auto" style={{ background: 'var(--bg-base)' }}>
+        <main className="admin-main flex-1 min-w-0 p-4 lg:p-8 overflow-y-auto" className="bg-base">
           {/* Refresh Button */}
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -784,7 +784,7 @@ export default function AdminPage() {
             <div className="space-y-4">
               <SectionHeader title="مدیریت کاربران" subtitle={`${users.length} کاربر ثبت‌نام شده`} />
               <div className="admin-card">
-                <div style={{ position: 'relative' }}>
+                <div className="relative">
                   <Icon name="search" size={16} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
                   <input
                     className="input w-full"
@@ -895,7 +895,7 @@ export default function AdminPage() {
                     </div>
                     <div className="flex gap-2 mt-5">
                       <button className="btn flex-1" onClick={saveUserEdit}>ذخیره</button>
-                      <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={() => setEditingUser(null)}>انصراف</button>
+                      <button className="btn btn-sm" className="bg-elevated" onClick={() => setEditingUser(null)}>انصراف</button>
                     </div>
                   </div>
                 </div>
@@ -932,7 +932,7 @@ export default function AdminPage() {
                   {/* User Info Card */}
                   <div className="admin-card">
                     <div className="flex items-start gap-4">
-                      <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
+                      <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold" className="bg-accent-dim text-accent">
                         {(userDetail.user.display_name || userDetail.user.email || '?')[0].toUpperCase()}
                       </div>
                       <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
@@ -947,7 +947,7 @@ export default function AdminPage() {
                       </div>
                     </div>
                     {String(userDetail.user.preferences?.ai_personality || '') && (
-                      <div className="mt-3 p-3 rounded-lg text-xs" style={{ background: 'var(--bg-elevated)' }}>
+                      <div className="mt-3 p-3 rounded-lg text-xs" className="bg-elevated">
                         <span className="font-bold text-accent">🧠 Soul: </span>
                         <span className="text-secondary">{String(userDetail.user.preferences.ai_personality)}</span>
                       </div>
@@ -955,7 +955,7 @@ export default function AdminPage() {
                   </div>
 
                   {/* Tabs */}
-                  <div className="flex gap-1 border-b" style={{ borderColor: 'var(--border)' }}>
+                  <div className="flex gap-1 border-b" className="border-border">
                     {(['overview', 'conversations', 'usage', 'ledger', 'payments'] as UserDetailTab[]).map(tab => (
                       <button
                         key={tab}
@@ -1171,7 +1171,7 @@ export default function AdminPage() {
                     <span>ذخیره</span>
                   </button>
                   {pzModel && (
-                    <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={() => { setPzModel(''); setPzIn(''); setPzOut(''); setPzCur('IRT') }}>
+                    <button className="btn btn-sm" className="bg-elevated" onClick={() => { setPzModel(''); setPzIn(''); setPzOut(''); setPzCur('IRT') }}>
                       انصراف
                     </button>
                   )}
@@ -1196,7 +1196,7 @@ export default function AdminPage() {
                 {features.map((f) => (
                   <div key={f.id} className="admin-card flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm" style={{ background: 'var(--bg-elevated)' }}>
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm" className="bg-elevated">
                         {f.icon || '—'}
                       </div>
                       <div>
@@ -1254,7 +1254,7 @@ export default function AdminPage() {
                     <span>{ftId ? 'بروزرسانی' : 'افزودن'}</span>
                   </button>
                   {ftId && (
-                    <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={resetFeatureForm}>
+                    <button className="btn btn-sm" className="bg-elevated" onClick={resetFeatureForm}>
                       انصراف
                     </button>
                   )}
@@ -1279,7 +1279,7 @@ export default function AdminPage() {
                 {discounts.map((d) => (
                   <div key={d.id} className="admin-card flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="px-3 py-1.5 rounded-lg font-mono text-sm font-bold" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
+                      <div className="px-3 py-1.5 rounded-lg font-mono text-sm font-bold" className="bg-accent-dim text-accent">
                         {d.code}
                       </div>
                       <span className="text-sm text-primary">{d.percent}%</span>
@@ -1323,7 +1323,7 @@ export default function AdminPage() {
                     <span>{dcId ? 'بروزرسانی' : 'افزودن'}</span>
                   </button>
                   {dcId && (
-                    <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={resetDiscountForm}>
+                    <button className="btn btn-sm" className="bg-elevated" onClick={resetDiscountForm}>
                       انصراف
                     </button>
                   )}
@@ -1411,7 +1411,7 @@ export default function AdminPage() {
               {/* Org Default Model */}
               <div className="admin-card">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--accent-dim)' }}>
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center" className="bg-accent-dim">
                     <Icon name="models" size={16} className="text-accent" />
                   </div>
                   <div>
@@ -1448,7 +1448,7 @@ export default function AdminPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {models.map((m) => (
                     <div key={m} className="admin-card flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--accent-dim)' }}>
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center" className="bg-accent-dim">
                         <Icon name="models" size={16} className="text-accent" />
                       </div>
                       <span className="text-sm font-mono text-primary">{m}</span>
@@ -1798,7 +1798,7 @@ export default function AdminPage() {
 
                 {/* Pagination */}
                 {auditTotal > 50 && (
-                  <div className="flex items-center justify-between mt-4 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+                  <div className="flex items-center justify-between mt-4 pt-3 border-t" className="border-border">
                     <span className="text-xs text-muted">
                       صفحه {auditPage} از {Math.ceil(auditTotal / 50)}
                     </span>

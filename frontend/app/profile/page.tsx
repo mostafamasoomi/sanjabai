@@ -324,7 +324,7 @@ export default function ProfilePage() {
   if (loadingProfile) {
     return (
       <div className="profile-page" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
-        <div className="apikeys-spinner" style={{ width: 32, height: 32 }} />
+        <div className="apikeys-spinner" className="w-8 h-8" />
       </div>
     )
   }
@@ -332,12 +332,12 @@ export default function ProfilePage() {
   return (
     <div className="profile-page">
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-2.5">
           <div className="profile-header-icon">
             <Icon name="user" size={20} className="text-accent" />
           </div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <h1 className="text-[22px] font-bold text-primary">
             {isFa ? 'پروفایل کاربری' : 'User Profile'}
           </h1>
         </div>
@@ -366,9 +366,9 @@ export default function ProfilePage() {
               border: '2px solid var(--bg-card, #1a1a2e)',
             }}>
               {avatarUploading ? (
-                <div className="apikeys-spinner" style={{ width: 12, height: 12 }} />
+                <div className="apikeys-spinner" className="w-3 h-3" />
               ) : (
-                <Icon name="camera" size={12} style={{ color: 'var(--text-on-accent)' }} />
+                <Icon name="camera" size={12} className="text-[var(--text-on-accent)]" />
               )}
             </div>
             <input
@@ -383,13 +383,13 @@ export default function ProfilePage() {
             <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
               {displayName || user?.email || (isFa ? 'کاربر' : 'User')}
             </h2>
-            <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+            <p className="text-[13px] text-muted">
               {isFa
                 ? `عضو از ${user?.created_at ? new Date(user.created_at).toLocaleDateString('fa-IR', { year: 'numeric', month: 'long' }) : '—'}`
                 : `Member since ${user?.created_at ? new Date(user.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : '—'}`
               }
             </p>
-            {bio && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>{bio}</p>}
+            {bio && <p className="text-[13px] text-muted mt-1">{bio}</p>}
           </div>
         </div>
 
@@ -413,7 +413,7 @@ export default function ProfilePage() {
             </div>
           </div>
           <div className="profile-stat-card">
-            <Icon name="mail" size={18} style={{ color: 'var(--info)' }} />
+            <Icon name="mail" size={18} className="text-info" />
             <div>
               <span className="profile-stat-label">{isFa ? 'ایمیل' : 'Email'}</span>
               <span className="profile-stat-value">{user?.email || '—'}</span>
@@ -424,13 +424,13 @@ export default function ProfilePage() {
 
       {/* ─── Profile Info Section ─── */}
       <div className="card profile-section-card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <div className="flex items-center gap-2 mb-4">
           <Icon name="user" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <h2 className="text-[15px] font-bold text-primary">
             {isFa ? 'اطلاعات شخصی' : 'Personal Info'}
           </h2>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="flex flex-col gap-3">
           <div className="profile-input-group">
             <label className="profile-input-label">{isFa ? 'نام نمایشی' : 'Display Name'}</label>
             <input
@@ -453,7 +453,7 @@ export default function ProfilePage() {
               maxLength={500}
               style={{ resize: 'vertical', minHeight: 80 }}
             />
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'left', display: 'block' }}>
+            <span className="text-[11px] text-muted text-start block">
               {bio.length}/500
             </span>
           </div>
@@ -475,13 +475,13 @@ export default function ProfilePage() {
 
       {/* ─── AI Preferences Section ─── */}
       <div className="card profile-section-card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <div className="flex items-center gap-2 mb-4">
           <Icon name="cpu" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <h2 className="text-[15px] font-bold text-primary">
             {isFa ? 'تنظیمات هوش مصنوعی' : 'AI Preferences'}
           </h2>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div className="flex flex-col gap-3">
           {/* Default Model */}
           <div className="profile-input-group">
             <label className="profile-input-label">{isFa ? 'مدل پیش‌فرض' : 'Default Model'}</label>
@@ -496,7 +496,7 @@ export default function ProfilePage() {
                 <option key={m} value={m}>{m}</option>
               ))}
             </select>
-            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+            <p className="text-[11px] text-muted mt-1">
               {isFa ? 'مدل پیش‌فرض برای چت‌های جدید' : 'Default model for new chats'}
             </p>
           </div>
@@ -517,7 +517,7 @@ export default function ProfilePage() {
               rows={4}
               style={{ resize: 'vertical', minHeight: 100 }}
             />
-            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+            <p className="text-[11px] text-muted mt-1">
               {isFa
                 ? 'این دستورالعمل به عنوان سیستم پرامپت در هر چت جدید ارسال می‌شود'
                 : 'This instruction is sent as a system prompt in every new chat'}
@@ -528,18 +528,18 @@ export default function ProfilePage() {
 
       {/* ─── Autonomy Level Section ─── */}
       <div className="card profile-section-card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <div className="flex items-center gap-2 mb-4">
           <Icon name="rocket" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <h2 className="text-[15px] font-bold text-primary">
             {isFa ? 'سطح خودمختاری' : 'Autonomy Level'}
           </h2>
         </div>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+        <p className="text-[13px] text-muted mb-4">
           {isFa
             ? 'سطح آزادی عمل هوش مصنوعی را تنظیم کنید. این تنظیم مشخص می‌کند هوش مصنوعی چقدر بدون تأیید شما عمل کند.'
             : 'Set how much freedom the AI has to act on your behalf. This controls when the AI asks for confirmation.'}
         </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="flex flex-col gap-2">
           {AUTONOMY_LEVELS.map((level) => (
             <div
               key={level.value}
@@ -569,7 +569,7 @@ export default function ProfilePage() {
                 <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', marginBottom: 4 }}>
                   {isFa ? level.label_fa : level.label_en}
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                <div className="text-xs text-muted leading-relaxed">
                   {isFa ? level.desc_fa : level.desc_en}
                 </div>
               </div>
@@ -580,22 +580,22 @@ export default function ProfilePage() {
 
       {/* ─── Appearance & Language Section ─── */}
       <div className="card profile-section-card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <div className="flex items-center gap-2 mb-4">
           <Icon name="palette" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <h2 className="text-[15px] font-bold text-primary">
             {isFa ? 'ظاهر و زبان' : 'Appearance & Language'}
           </h2>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {/* Theme toggle */}
           <div className="profile-toggle-row">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="flex items-center gap-2.5">
               <Icon name="moon" size={16} className="text-muted" />
               <div>
-                <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
+                <span className="font-semibold text-sm text-primary">
                   {isFa ? 'حالت تاریک' : 'Dark Mode'}
                 </span>
-                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                <p className="text-xs text-muted mt-0.5">
                   {isFa ? 'استفاده از تم تاریک' : 'Use dark theme'}
                 </p>
               </div>
@@ -612,18 +612,18 @@ export default function ProfilePage() {
 
           {/* Language selector */}
           <div className="profile-toggle-row">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="flex items-center gap-2.5">
               <Icon name="globe" size={16} className="text-muted" />
               <div>
-                <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
+                <span className="font-semibold text-sm text-primary">
                   {isFa ? 'زبان / Language' : 'Language / زبان'}
                 </span>
-                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                <p className="text-xs text-muted mt-0.5">
                   {isFa ? 'فارسی یا انگلیسی' : 'Persian or English'}
                 </p>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 4 }}>
+            <div className="flex gap-1">
               <button
                 className={`btn btn-sm ${language === 'fa' ? 'btn-primary' : 'btn-secondary'}`}
                 onClick={() => setLanguage('fa')}
@@ -645,21 +645,21 @@ export default function ProfilePage() {
 
       {/* ─── Notification Preferences ─── */}
       <div className="card profile-section-card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <div className="flex items-center gap-2 mb-4">
           <Icon name="bell" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <h2 className="text-[15px] font-bold text-primary">
             {isFa ? 'اعلان‌ها' : 'Notifications'}
           </h2>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <div className="profile-toggle-row">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="flex items-center gap-2.5">
               <Icon name="mail" size={16} className="text-muted" />
               <div>
-                <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
+                <span className="font-semibold text-sm text-primary">
                   {isFa ? 'اعلان ایمیلی' : 'Email Notifications'}
                 </span>
-                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                <p className="text-xs text-muted mt-0.5">
                   {isFa ? 'دریافت اعلانها از طریق ایمیل' : 'Receive notifications via email'}
                 </p>
               </div>
@@ -674,13 +674,13 @@ export default function ProfilePage() {
             </button>
           </div>
           <div className="profile-toggle-row">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="flex items-center gap-2.5">
               <Icon name="send" size={16} className="text-muted" />
               <div>
-                <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
+                <span className="font-semibold text-sm text-primary">
                   {isFa ? 'اعلان تلگرامی' : 'Telegram Notifications'}
                 </span>
-                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                <p className="text-xs text-muted mt-0.5">
                   {isFa ? 'دریافت اعلانها از طریق ربات تلگرام' : 'Receive notifications via Telegram bot'}
                 </p>
               </div>
@@ -698,7 +698,7 @@ export default function ProfilePage() {
       </div>
 
       {/* ─── Save Button ─── */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
+      <div className="flex justify-end mb-6">
         <button
           onClick={handleSaveProfile}
           disabled={saving}
@@ -716,13 +716,13 @@ export default function ProfilePage() {
 
       {/* Change password */}
       <div className="card profile-section-card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <div className="flex items-center gap-2 mb-4">
           <Icon name="lock" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <h2 className="text-[15px] font-bold text-primary">
             {isFa ? 'تغییر رمز عبور' : 'Change Password'}
           </h2>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className="flex flex-col gap-2.5">
           <div className="profile-input-group">
             <label className="profile-input-label">{isFa ? 'رمز عبور فعلی' : 'Current Password'}</label>
             <input
@@ -771,18 +771,18 @@ export default function ProfilePage() {
 
       {/* Telegram link */}
       <div className="card profile-section-card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <div className="flex items-center gap-2 mb-2">
           <Icon name="send" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <h2 className="text-[15px] font-bold text-primary">
             {isFa ? 'اتصال تلگرام' : 'Link Telegram'}
           </h2>
         </div>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+        <p className="text-[13px] text-muted mb-4">
           {isFa
             ? 'با اتصال حساب تلگرام می‌توانید از طریق ربات Multiai چت کنید و موجودی خود را ببینید.'
             : 'Link your Telegram account to chat via the Multiai bot and view your balance.'}
         </p>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="flex gap-2">
           <input
             type="number"
             value={telegramId}
@@ -794,7 +794,7 @@ export default function ProfilePage() {
             onClick={handleLinkTelegram}
             disabled={linkingTelegram || !telegramId}
             className="btn btn-secondary"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            className="inline-flex items-center gap-1.5"
           >
             {linkingTelegram ? (
               <span className="apikeys-spinner" />
@@ -804,7 +804,7 @@ export default function ProfilePage() {
             {isFa ? 'اتصال' : 'Link'}
           </button>
         </div>
-        <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+        <p className="text-[11px] text-muted mt-2 flex items-center gap-1">
           <Icon name="info" size={12} />
           {isFa
             ? 'برای دریافت شناسه تلگرام، به ربات @userinfobot پیام دهید.'
@@ -814,19 +814,19 @@ export default function ProfilePage() {
 
       {/* Referral */}
       <div className="card profile-section-card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <div className="flex items-center gap-2 mb-2">
           <Icon name="gift" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <h2 className="text-[15px] font-bold text-primary">
             {isFa ? 'دعوت دوستان' : 'Invite Friends'}
           </h2>
         </div>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+        <p className="text-[13px] text-muted mb-4">
           {isFa
             ? 'با دعوت دوستان به Multiai، به ازای هر ثبت‌نام موفق اعتبار هدیه دریافت کنید.'
             : 'Invite friends to Multiai and earn bonus credits for each successful signup.'}
         </p>
         {user?.referral_code && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="flex flex-col gap-3">
             <div>
               <label className="profile-input-label">{isFa ? 'کد دعوت شما' : 'Your Referral Code'}</label>
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
@@ -839,7 +839,7 @@ export default function ProfilePage() {
                     toast(isFa ? 'کد کپی شد' : 'Code copied', 'success')
                   }}
                   className="btn btn-secondary btn-sm"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                  className="inline-flex items-center gap-1"
                 >
                   <Icon name="copy" size={14} />
                   {isFa ? 'کپی' : 'Copy'}
@@ -849,7 +849,7 @@ export default function ProfilePage() {
             <div>
               <label className="profile-input-label">{isFa ? 'لینک دعوت' : 'Referral Link'}</label>
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                <code className="apikeys-code-block" style={{ flex: 1, fontSize: 11 }}>
+                <code className="apikeys-code-block" className="flex-1 text-[11px]">
                   {typeof window !== 'undefined' ? `${window.location.origin}/signup?ref=${user.referral_code}` : ''}
                 </code>
                 <button
@@ -858,7 +858,7 @@ export default function ProfilePage() {
                     toast(isFa ? 'لینک کپی شد' : 'Link copied', 'success')
                   }}
                   className="btn btn-secondary btn-sm"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                  className="inline-flex items-center gap-1"
                 >
                   <Icon name="copy" size={14} />
                   {isFa ? 'کپی' : 'Copy'}
@@ -871,18 +871,18 @@ export default function ProfilePage() {
 
       {/* Danger zone */}
       <div className="card profile-danger-card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <div className="flex items-center gap-2 mb-2">
           <Icon name="warning" size={16} className="text-danger" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--danger)' }}>
+          <h2 className="text-[15px] font-bold text-danger">
             {isFa ? 'منطقه خطر' : 'Danger Zone'}
           </h2>
         </div>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+        <p className="text-[13px] text-muted mb-4">
           {isFa
             ? 'حذف حساب کاربری غیرقابل بازگشت است. تمام دادهها و تاریخچه شما حذف خواهد شد.'
             : 'Account deletion is permanent. All your data and history will be removed.'}
         </p>
-        <button className="btn btn-danger" disabled style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <button className="btn btn-danger" disabled className="inline-flex items-center gap-1.5">
           <Icon name="trash" size={14} />
           {isFa ? 'حذف حساب (بهزودی)' : 'Delete Account (coming soon)'}
         </button>

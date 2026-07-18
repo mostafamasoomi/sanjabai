@@ -716,10 +716,10 @@ export default function WalletPage() {
                 انصراف
               </button>
               <button
-                className="btn btn-lg btn-primary"
+                className="btn btn-lg btn-primary flex-1 inline-flex items-center justify-center gap-1.5"
                 onClick={confirmTopup}
                 disabled={busy}
-                className="flex-1 inline-flex items-center justify-center gap-1.5"
+                
               >
                 <Icon name="check" size={16} />
                 {busy ? 'در حال پردازش...' : 'تایید و پرداخت'}

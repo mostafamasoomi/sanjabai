@@ -413,10 +413,10 @@ function UseSkillModal({
 
         {/* Action button */}
         <button
-          className="btn btn-primary w-full"
+          className="btn btn-primary w-full mb-4"
           onClick={handleUse}
           disabled={loading}
-          className="mb-4"
+          
         >
           {loading ? (
             <span className="flex items-center gap-2">

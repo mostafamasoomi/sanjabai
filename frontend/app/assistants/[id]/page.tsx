@@ -217,9 +217,8 @@ export default function AssistantDetailPage() {
     <div style={{ maxWidth: '40rem', margin: '0 auto', padding: '1rem 0' }}>
       {/* Back button */}
       <button
-        className="btn btn-ghost btn-sm"
+        className="btn btn-ghost btn-sm mb-4 text-[13px]"
         onClick={() => router.push('/assistants')}
-        className="mb-4 text-[13px]"
       >
         <Icon name="arrowLeft" size={14} />
         بازگشت به دستیارها
@@ -384,10 +383,10 @@ export default function AssistantDetailPage() {
           <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem', justifyContent: 'space-between' }}>
             <button
               type="button"
-              className="btn btn-ghost text-[var(--danger)]"
+              className="btn btn-ghost text-[var(--danger)] text-[13px]"
               onClick={handleDelete}
               disabled={deleting}
-              className="text-[13px]"
+              
             >
               {deleting ? (
                 <span className="flex items-center gap-1.5">

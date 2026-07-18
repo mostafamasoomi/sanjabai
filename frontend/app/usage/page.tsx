@@ -380,10 +380,10 @@ export default function UsagePage() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            className="btn btn-sm btn-secondary"
+            className="btn btn-sm btn-secondary inline-flex items-center gap-1.5"
             onClick={exportCsv}
             disabled={!hasAnyData}
-            className="inline-flex items-center gap-1.5"
+            
             aria-label="خروجی CSV"
           >
             <Icon name="external" size={14} />

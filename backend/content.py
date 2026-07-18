@@ -251,7 +251,7 @@ async def api_exchange_rate() -> JSONResponse:
     # 1. Check DB override first (market rate)
     rate_irt = None
     source = 'fallback'
-    markup_pct = 20
+    markup_pct = 0
     try:
         if async_session is not None:
             async with async_session() as session:
@@ -271,25 +271,20 @@ async def api_exchange_rate() -> JSONResponse:
     if rate_irt is None:
         rate_irr = None
         try:
-            import re, httpx as _hx
-            # Use a fresh client (trust_env=True) because the app client has trust_env=False
-            # which blocks Docker DNS resolution for some external hosts
+            import re, urllib.request as _ur
             proxy_url = os.getenv("HTTP_PROXY", "http://10.10.11.2:8888")
-            async with _hx.AsyncClient(timeout=_hx.Timeout(15, connect=10), proxy=proxy_url) as _c:
-                resp = await _c.get(
-                    'https://www.tgju.org/profile/price_dollar_rl',
-                    headers={'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'},
-                    follow_redirects=True,
-                )
-                resp.raise_for_status()
-                m = re.search(r'class="price"[^>]*>([\d,]+)<', resp.text)
-                if m:
-                    rate_irr = float(m.group(1).replace(',', ''))
-                    source = 'tgju.org'
+            _proxy = _ur.ProxyHandler({"http": proxy_url, "https": proxy_url})
+            _opener = _ur.build_opener(_proxy)
+            _resp = _opener.open("https://www.tgju.org/profile/price_dollar_rl", timeout=15)
+            _text = _resp.read().decode()
+            _m = re.search(r'class="price"[^>]*>([\d,]+)<', _text)
+            if _m:
+                rate_irr = float(_m.group(1).replace(",", ""))
+                source = "tgju.org"
         except Exception:
             pass
 
-        # 3. Fallback to open.er-api.com
+# 3. Fallback to open.er-api.com
         if rate_irr is None:
             try:
                 resp2 = await _http.get('https://open.er-api.com/v6/latest/USD', follow_redirects=True, timeout=10)
@@ -539,29 +534,3 @@ async def test_models():
     results = await asyncio.gather(*[test_one(m) for m in models])
     return JSONResponse({"results": results, "total": len(results)})
 
-# --- Web Search Endpoint ---
-@router.post("/api/search")
-async def web_search(request: Request):
-    """Search the web and return results. Requires auth."""
-    uid = await _get_user_id(request)
-    if not uid:
-        return JSONResponse({"detail": "لطفا وارد شوید"}, status_code=401)
-    try:
-        body = await request.json()
-        query = body.get("query", "").strip()
-        if not query:
-            return JSONResponse({"detail": "query is required"}, status_code=400)
-        import urllib.request, urllib.parse
-        proxy_url = os.getenv("HTTP_PROXY", "http://10.10.11.2:8888")
-        proxy = urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url})
-        opener = urllib.request.build_opener(proxy)
-        params = urllib.parse.urlencode({"q": query, "format": "json", "no_html": 1, "skip_disambig": 1})
-        r = opener.open("https://api.duckduckgo.com/?" + params, timeout=15)
-        data = json.loads(r.read().decode())
-        results = []
-        for item in data.get("RelatedTopics", [])[:8]:
-            if "Text" in item and "FirstURL" in item:
-                results.append({"title": item["Text"].split(" - ")[0], "url": item["FirstURL"], "snippet": item["Text"]})
-            return JSONResponse({"results": results, "query": query})
-    except Exception as e:
-        return JSONResponse({"detail": str(e)[:200]}, status_code=500)

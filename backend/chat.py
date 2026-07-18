@@ -69,28 +69,76 @@ class CompareRequest(BaseModel):
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB hard cap
 
-# Working model set — SINGLE SOURCE OF TRUTH (confirmed via live test 2026-07-16)
-# All 8 bynara models verified working. Removed kimi-k2 (disabled/429).
-_WORKING_SET = frozenset({
+# Working model set — now DYNAMIC from the model_catalog DB table.
+#
+# The single source of truth is model_catalog (availability='available'). When the
+# DB is unavailable we fall back to this verified hardcoded set so the service keeps
+# working. See get_working_models() / is_working_model() below.
+_HARDCODED_WORKING = frozenset({
     'tencent-hy3', 'mistral-large', 'mistral-medium-3-5',
     'deepseek-v4-pro', 'deepseek-v4-flash-bynara', 'deepseek-v4-pro-bynara',
     'mimo-v2.5-pro', 'mimo-v2.5-pro-ultraspeed',
 })
-WORKING_MODELS = _WORKING_SET  # alias — single source of truth
 
-# For validation we also allow provider prefixed variants e.g. bynara/tencent-hy3 ?
-# But portal sends bare ids, so check bare.
+# Cache of available model ids (refreshed on each call when DB is reachable).
+_WORKING_SET_CACHE: set[str] | None = None
+
+
+async def get_working_models() -> frozenset[str]:
+    """Return the set of model ids considered 'working' (available in catalog).
+
+    Reads from model_catalog (availability='available'). Falls back to the
+    hardcoded verified set when the DB is unreachable so the service degrades
+    gracefully instead of rejecting every request.
+    """
+    global _WORKING_SET_CACHE
+    if async_session is None:
+        return _HARDCODED_WORKING
+    try:
+        async with async_session() as session:
+            res = await session.execute(sqlalchemy.text(
+                "SELECT provider_model_id, id FROM model_catalog WHERE availability = 'available'"
+            ))
+            ids: set[str] = set()
+            for row in res.fetchall():
+                ids.add(str(row.provider_model_id))
+                ids.add(str(row.id))
+            if ids:
+                _WORKING_SET_CACHE = ids
+                return frozenset(ids)
+    except Exception as e:
+        logger.warning(f"get_working_models DB read failed: {e}")
+    return frozenset(_WORKING_SET_CACHE or _HARDCODED_WORKING)
+
+
+async def is_working_model(model_id: str) -> bool:
+    """True if the model is available in the live catalog (or the fallback set)."""
+    if not model_id:
+        return False
+    bare = model_id.split('/')[-1] if '/' in model_id else model_id
+    working = await get_working_models()
+    return bare in working or model_id in working
+
+
+# Backwards-compatible alias (deprecated — prefer is_working_model()).
+WORKING_MODELS = _HARDCODED_WORKING
 
 
 async def _is_model_allowed(model_id: str) -> bool:
-    """Check if model is in available catalog OR hardcoded working set."""
+    """Check if model is in the available catalog (dynamic from model_catalog).
+
+    The working set is now sourced from model_catalog (availability='available').
+    A model is allowed if it is present and available in the catalog, or if it
+    falls back to the verified hardcoded set when the DB is unreachable.
+    """
     if not model_id:
         return False
     # Strip provider prefix if present (e.g. bynara/tencent-hy3 -> tencent-hy3)
     bare = model_id.split('/')[-1] if '/' in model_id else model_id
-    # Fast-path hardcoded
-    if bare in WORKING_MODELS or model_id in WORKING_MODELS:
-        # Still verify DB if possible, but allow anyway
+    # Fast-path against the dynamic working set (DB-backed, hardcoded fallback)
+    working = await get_working_models()
+    if bare in working or model_id in working:
+        # Still verify DB availability if possible, but allow on cache lag / DB miss
         if async_session is None:
             return True
         try:
@@ -104,12 +152,12 @@ async def _is_model_allowed(model_id: str) -> bool:
                 row = res.fetchone()
                 if row:
                     return True
-                # If DB miss but in WORKING_MODELS, allow (cache lag)
-                return bare in WORKING_MODELS
+                # DB miss but in working set -> allow (cache lag)
+                return True
         except Exception as e:
             logger.warning(f"_is_model_allowed DB check failed model={model_id}: {e}")
-            return bare in WORKING_MODELS
-    # Not in hardcoded set -> must be in DB available
+            return True
+    # Not in working set -> must be in DB available
     if async_session is None:
         return False
     try:
@@ -204,72 +252,134 @@ async def _extract_file_text(upload: UploadFile) -> tuple[str, str]:
 
 
 async def _web_search(query: str, max_results: int = 5) -> str:
-    """Search DuckDuckGo HTML. Tries direct → backhaul HTTP proxy → SOCKS tunnel.
+    """Web search used to ground chat answers.
 
-    Returns formatted bullet list of results, or '' on total failure.
-    The SOCKS tunnel (multiai_tunnel) is often down, so it is tried LAST.
+    Strategy (most reliable first, with graceful fallback):
+      1. DuckDuckGo HTML endpoint (works in most environments, no API key).
+      2. Wikipedia open search API — always available, no bot challenges,
+         used as a fallback when DDG returns its anomaly/202 challenge page.
+
+    Returns a formatted bullet list of results, or '' on total failure.
+    Proxies are only used when explicitly configured via env vars; the old
+    hardcoded backhaul/SOCKS defaults are gone because they silently slow
+    every request down when those hosts don't exist.
     """
     import os as _os
     import httpx
-    from urllib.parse import unquote
+    from urllib.parse import unquote, quote
 
-    _socks_proxy = _os.getenv('WEB_SEARCH_PROXY', 'socks5://multiai_tunnel:9090')
-    _http_proxy = _os.getenv('HTTPS_PROXY') or _os.getenv('HTTP_PROXY') or 'http://10.10.11.2:8888'
-
-    # Order: direct first (works in most DCs), then backhaul, then socks tunnel
-    attempts: list[dict] = [
-        {'proxy': None},
-        {'proxy': _http_proxy},
-    ]
-    if _socks_proxy:
+    # Only honor a proxy when the operator explicitly set one. The dead
+    # hardcoded backhaul default is removed; we still try the env proxy
+    # (HTTPS_PROXY/HTTP_PROXY) as a *fallback* but never as the only path.
+    _env_proxy = _os.getenv('HTTPS_PROXY') or _os.getenv('HTTP_PROXY')
+    _socks_proxy = None
+    if _os.getenv('WEB_SEARCH_SOCKS'):
         try:
             import socksio  # noqa: F401
-            attempts.append({'proxy': _socks_proxy})
+            _socks_proxy = _os.getenv('WEB_SEARCH_SOCKS')
         except ImportError:
-            pass
+            logger.debug('_web_search: socksio not installed, skipping SOCKS proxy')
 
+    # Direct first (bypass any env proxy), then via the configured proxy.
+    # Explicitly passing proxy=None disables httpx's automatic env-proxy
+    # pickup, which would otherwise route everything through a dead host.
+    _attempts: list[dict] = [{'proxy': None}]
+    if _env_proxy:
+        _attempts.append({'proxy': _env_proxy})
+    if _socks_proxy:
+        _attempts.append({'proxy': _socks_proxy})
+
+    _headers = {
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://duckduckgo.com/',
+        'Content-Type': 'application/x-www-form-urlencoded',
+    }
+
+    _q = ' '.join((query or '').split())  # collapse internal whitespace
+    if not _q:
+        return ''
+
+    # ── 1) DuckDuckGo HTML ────────────────────────────────────────────────
     html = ''
-    for cfg in attempts:
+    for cfg in _attempts:
         try:
-            kwargs = {'timeout': 15, 'follow_redirects': True}
-            if cfg['proxy']:
-                kwargs['proxy'] = cfg['proxy']
+            # Explicitly set proxy (None = bypass env proxy) so the direct
+            # attempt never inherits a dead HTTPS_PROXY from the environment.
+            kwargs = {'timeout': 15, 'follow_redirects': True, 'proxy': cfg['proxy']}
             async with httpx.AsyncClient(**kwargs) as _sc:
                 r = await _sc.post(
                     'https://html.duckduckgo.com/html/',
-                    data={'q': query, 'b': ''},
-                    headers={'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'},
+                    data={'q': _q},
+                    headers=_headers,
                 )
+            # DDG returns HTTP 202 with an "anomaly" bot-challenge page when it
+            # blocks automation; only a real 200 with result markup counts.
             if r.status_code == 200 and 'result__a' in r.text:
                 html = r.text
                 break
         except Exception as e:
-            logger.debug(f"_web_search attempt proxy={cfg['proxy']} failed: {type(e).__name__}")
+            logger.debug(f"_web_search DDG attempt proxy={cfg['proxy']} failed: {type(e).__name__}")
             continue
 
-    if not html:
-        logger.warning(f"_web_search all attempts failed query={query[:80]}")
-        return ''
+    if html:
+        try:
+            links = _re.findall(r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.+?)</a>', html, _re.DOTALL)
+            snippets = _re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', html, _re.DOTALL)
+            if links:
+                lines = []
+                for i, (href, title) in enumerate(links[:max_results]):
+                    title = _re.sub(r'<[^>]+>', '', title).strip()
+                    snippet = _re.sub(r'<[^>]+>', '', snippets[i]).strip() if i < len(snippets) else ''
+                    actual_url = href
+                    if 'uddg=' in href:
+                        m = _re.search(r'uddg=([^&]+)', href)
+                        if m:
+                            actual_url = unquote(m.group(1))
+                    if title:
+                        lines.append(f'• {title}\n  {snippet}\n  {actual_url}')
+                if lines:
+                    return '\n'.join(lines)
+        except Exception as e:
+            logger.warning(f"_web_search DDG parse failed query={_q[:80]}: {e}")
 
-    try:
-        links = _re.findall(r'class="result__a"\s+href="([^"]+)"[^>]*>(.+?)</a>', html)
-        snippets = _re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', html, _re.DOTALL)
-        if not links:
-            return ''
-        lines = []
-        for i, (href, title) in enumerate(links[:max_results]):
-            title = _re.sub(r'<[^>]+>', '', title).strip()
-            snippet = _re.sub(r'<[^>]+>', '', snippets[i]).strip() if i < len(snippets) else ''
-            actual_url = href
-            if 'uddg=' in href:
-                m = _re.search(r'uddg=([^&]+)', href)
-                if m:
-                    actual_url = unquote(m.group(1))
-            lines.append(f'• {title}\n  {snippet}\n  {actual_url}')
-        return '\n'.join(lines)
-    except Exception as e:
-        logger.warning(f"_web_search parse failed query={query[:80]}: {e}")
-        return ''
+    # ── 2) Wikipedia fallback (always reachable, no challenge) ────────────
+    # Try direct (bypassing env proxy) first, then via the configured proxy.
+    for _wp_proxy in ([None] + ([_env_proxy] if _env_proxy else [])):
+        try:
+            kwargs = {'timeout': 15, 'follow_redirects': True, 'proxy': _wp_proxy}
+            async with httpx.AsyncClient(**kwargs) as _sc:
+                r = await _sc.get(
+                    'https://en.wikipedia.org/w/api.php',
+                    params={
+                        'action': 'query',
+                        'list': 'search',
+                        'srsearch': _q,
+                        'srlimit': max_results,
+                        'srprop': 'snippet',
+                        'format': 'json',
+                    },
+                    headers={'User-Agent': 'Multiai/1.0 (web search fallback)'},
+                )
+            if r.status_code == 200:
+                data = r.json()
+                results = (data.get('query') or {}).get('search') or []
+                lines = []
+                for item in results[:max_results]:
+                    title = item.get('title', '').strip()
+                    snippet = _re.sub(r'<[^>]+>', '', item.get('snippet', '')).strip()
+                    url = 'https://en.wikipedia.org/wiki/' + quote(title.replace(' ', '_'))
+                    if title:
+                        lines.append(f'• {title}\n  {snippet}\n  {url}')
+                if lines:
+                    logger.info(f"_web_search used Wikipedia fallback for query={_q[:80]}")
+                    return '\n'.join(lines)
+        except Exception as e:
+            logger.warning(f"_web_search Wikipedia fallback failed query={_q[:80]}: {e}")
+
+    logger.warning(f"_web_search all sources failed query={_q[:80]}")
+    return ''
 
 
 async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any], usage: dict[str, Any]) -> dict[str, Any]:
@@ -480,7 +590,7 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
             _repo = SqlBillingRepo(_bill_session)
             _bill_svc = BillingService(_repo)
             _model = payload_dict.get('model', '') or 'tencent-hy3'
-            _est_cost = 1000 if _model in _WORKING_SET else 5000
+            _est_cost = 1000 if await is_working_model(_model) else 5000
             reservation = await _bill_svc.reserve(
                 uid, Money(_est_cost),
                 idempotency_key=f"chat:{secrets.token_hex(8)}",
@@ -653,7 +763,7 @@ async def chat_with_file(
         async with async_session() as _bill_session:
             _repo = SqlBillingRepo(_bill_session)
             _bill_svc = BillingService(_repo)
-            _est_cost = 1000 if (model or 'tencent-hy3') in _WORKING_SET else 5000
+            _est_cost = 1000 if await is_working_model(model or 'tencent-hy3') else 5000
             reservation = await _bill_svc.reserve(
                 uid, Money(_est_cost),
                 idempotency_key=f"file:{secrets.token_hex(8)}",
@@ -1091,9 +1201,9 @@ def _select_smart_model(category: str, balance: int, plan: str) -> tuple[str, st
 
 
 
-def _select_smart_model_safe(category: str, balance: int, plan: str) -> tuple[str, str]:
+async def _select_smart_model_safe(category: str, balance: int, plan: str) -> tuple[str, str]:
     model, provider = _select_smart_model(category, balance, plan)
-    if model not in _WORKING_SET:
+    if not await is_working_model(model):
         return _DEFAULT_MODEL
     return model, provider
 
@@ -1142,7 +1252,7 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
             selected_model = force_model
             selected_provider = 'bynara2'
     else:
-        selected_model, selected_provider = _select_smart_model_safe(category, balance, plan)
+        selected_model, selected_provider = await _select_smart_model_safe(category, balance, plan)
 
     # P1: BillingService reserve (replaces _check_quota_pre with proper FOR UPDATE locking)
     # Fall back to legacy _check_quota_pre if BillingService fails
@@ -1151,7 +1261,7 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
         async with async_session() as _bill_session:
             _repo = SqlBillingRepo(_bill_session)
             _bill_svc = BillingService(_repo)
-            _est_cost = 1000 if selected_model in _WORKING_SET else 5000
+            _est_cost = 1000 if await is_working_model(selected_model) else 5000
             reservation = await _bill_svc.reserve(
                 uid, Money(_est_cost),
                 idempotency_key=f"smart:{secrets.token_hex(8)}",

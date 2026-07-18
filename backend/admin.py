@@ -950,6 +950,13 @@ async def me_usage(request: Request) -> JSONResponse:
             'total_input_tokens_this_month': int(monthly.inp),
             'total_output_tokens_this_month': int(monthly.out),
             'event_count_this_month': int(monthly.cnt),
+            # Convenience wrapper matching the frontend's legacy `usage.monthly` shape.
+            'monthly': {
+                'inp': int(monthly.inp),
+                'out': int(monthly.out),
+                'spent': float(monthly.spent),
+                'count': int(monthly.cnt),
+            },
             'per_model_breakdown': breakdown,
             'recent_events': events,
         })

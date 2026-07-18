@@ -2386,6 +2386,86 @@ img, svg { display: block; max-width: 100%; }
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
 }
 
+/* ── Conversation search box (Linear-style, RTL-aware) ──────────────────── */
+
+.conv-search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 0 var(--space-3) var(--space-2);
+}
+
+.conv-search-input {
+  width: 100%;
+  height: 38px;
+  padding: 0 38px;            /* room for icon (left) + clear (right) */
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: background var(--motion-fast), border-color var(--motion-fast),
+              box-shadow var(--motion-fast);
+}
+
+.conv-search-input::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+.conv-search-input:hover {
+  background: var(--bg-overlay);
+  border-color: var(--border-strong);
+}
+
+.conv-search-input:focus {
+  background: var(--bg-overlay);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim), var(--shadow-glow);
+}
+
+.conv-search-icon {
+  position: absolute;
+  left: 12px;                 /* visual left, regardless of RTL */
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  pointer-events: none;
+  transition: color var(--motion-fast);
+}
+
+.conv-search-wrapper:focus-within .conv-search-icon {
+  color: var(--accent);
+}
+
+.conv-search-clear {
+  position: absolute;
+  right: 8px;                 /* visual right, regardless of RTL */
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--motion-fast), color var(--motion-fast);
+}
+
+.conv-search-clear:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+}
+
 /* ── Conversation list ──────────────────────────────────────────────────── */
 
 .conv-list {

@@ -315,10 +315,74 @@ async def api_exchange_rate() -> JSONResponse:
     return JSONResponse(result)
 
 
+async def _fetch_tgju_rate() -> float | None:
+    """Fetch live USD→IRR market rate from tgju.org via the HTTP proxy.
+
+    Returns the rate in IRR (Rial); callers convert to IRT (Toman) by /10.
+    Returns None on any failure so callers can fall back.
+    """
+    try:
+        import re
+        import urllib.request as _ur
+        proxy_url = os.getenv("HTTP_PROXY", os.getenv("HTTPS_PROXY", "http://10.10.11.2:8888"))
+        _proxy = _ur.ProxyHandler({"http": proxy_url, "https": proxy_url})
+        _opener = _ur.build_opener(_proxy)
+        _resp = _opener.open("https://www.tgju.org/profile/price_dollar_rl", timeout=15)
+        _text = _resp.read().decode()
+        _m = re.search(r'class="price"[^>]*>([\d,]+)<', _text)
+        if _m:
+            return float(_m.group(1).replace(",", ""))
+    except Exception as e:
+        print(f"[warn] _fetch_tgju_rate failed: {e}")
+    return None
+
+
 async def _get_exchange_rate() -> tuple[float, int]:
-    """Return fixed USD→IRT rate. No API call."""
-    # ponytail: hardcoded rate, remove API dependency
-    return 80000.0, 0
+    """Return the live USD→IRT (Toman) rate and markup percentage.
+
+    Order of resolution:
+      1. A manual DB override (exchange_rate_overrides) if present.
+      2. Live tgju.org market rate (authoritative for IRT).
+      3. Fallback to open.er-api.com.
+      4. Hardcoded fallback constant.
+    """
+    markup_pct = 0
+    rate_irr = None
+
+    # 1. Manual DB override (highest priority)
+    try:
+        if async_session is not None:
+            async with async_session() as session:
+                res = await session.execute(sqlalchemy.text(
+                    "SELECT rate FROM exchange_rate_overrides "
+                    "WHERE from_currency='USD' AND to_currency='IRT' AND active=TRUE "
+                    "ORDER BY id DESC LIMIT 1"
+                ))
+                row = res.fetchone()
+                if row:
+                    # stored value is already IRT (Toman)
+                    return float(row.rate), markup_pct
+    except Exception:
+        pass
+
+    # 2. Live tgju.org
+    rate_irr = await _fetch_tgju_rate()
+
+    # 3. Fallback to open.er-api.com
+    if rate_irr is None:
+        try:
+            resp2 = await _http.get('https://open.er-api.com/v6/latest/USD', follow_redirects=True, timeout=10)
+            resp2.raise_for_status()
+            rate_irr = float(resp2.json()['rates']['IRR'])
+        except Exception:
+            pass
+
+    # 4. Hardcoded fallback
+    if rate_irr is None:
+        rate_irr = 1_264_884
+
+    rate_irt = rate_irr / 10  # IRR → IRT (Toman)
+    return rate_irt, markup_pct
 
 
 @router.get('/pricing-table')
@@ -431,49 +495,94 @@ async def public_discounts() -> JSONResponse:
 
 # ── Pricing refresh (admin or cron) ────────────────────────────
 
-# OpenRouter USD pricing per 1M tokens (source of truth)
-OPENROUTER_PRICES: dict[str, dict[str, float]] = {
-    'mimo-v2.5': {'input': 0.14, 'output': 0.28},
-    'mimo-v2.5-pro': {'input': 0.435, 'output': 0.87},
-    'gemini-3.5-flash': {'input': 1.50, 'output': 9.00},
-    'mistral-large': {'input': 2.00, 'output': 6.00},
-    'mistral-medium-3-5': {'input': 1.50, 'output': 7.50},
-    'tencent-hy3': {'input': 0.20, 'output': 0.80},
-    'agnes-2.0-flash': {'input': 0.028, 'output': 0.111},
-    'agnes-2.5-flash': {'input': 0.055, 'output': 0.277},
-    'mimo-v2.5-pro-ultraspeed': {'input': 0.130, 'output': 0.260},
-    'grok-4.5': {'input': 2.00, 'output': 6.00},
-    'glm-5.2-free': {'input': 0.0, 'output': 0.0},
-    'kimi-k2.7-code-free': {'input': 0.0, 'output': 0.0},
-}
+OPENROUTER_API = "https://openrouter.ai/api/v1/models"
+
+
+async def _fetch_openrouter_prices() -> dict[str, dict[str, float]]:
+    """Fetch live USD pricing per 1M tokens from the OpenRouter API.
+
+    Returns a map keyed by the bare model id published by OpenRouter, e.g.
+    ``tencent/hy3`` -> {'input': <usd/1M>, 'output': <usd/1M>}.
+    Falls back to {} on any network/parse failure.
+    """
+    try:
+        # _http is the shared httpx client (already proxy-aware).
+        resp = await _http.get(OPENROUTER_API, timeout=20.0, follow_redirects=True)
+        resp.raise_for_status()
+        data = resp.json().get("data", [])
+    except Exception as e:
+        print(f"[warn] _fetch_openrouter_prices failed: {e}")
+        return {}
+
+    prices: dict[str, dict[str, float]] = {}
+    for m in data:
+        mid = (m.get("id") or "").strip()
+        if not mid:
+            continue
+        p = m.get("pricing") or {}
+        try:
+            # OpenRouter exposes per-token USD; convert to per-million.
+            pin = float(p.get("prompt") or 0.0) * 1_000_000
+            pout = float(p.get("completion") or 0.0) * 1_000_000
+        except (TypeError, ValueError):
+            continue
+        # Normalise to a bare key for matching against model_catalog ids.
+        bare = mid.split("/")[-1] if "/" in mid else mid
+        prices[mid] = {"input": round(pin, 6), "output": round(pout, 6)}
+        prices[bare] = prices[mid]
+        prices[mid.replace("/", "-")] = prices[mid]
+    return prices
 
 
 async def refresh_pricing() -> dict[str, Any]:
-    """Refresh exchange rate and recalculate IRT prices for all models."""
-    # 1. Fetch fresh exchange rate
+    """Refresh exchange rate and recalculate IRT prices for all catalog models.
+
+    Live OpenRouter USD prices are fetched and stored per-model into
+    model_catalog; Toman (IRT) prices are derived from the live USD→IRT rate.
+    Models with no OpenRouter price are left untouched (existing values kept).
+    """
+    # 1. Fetch fresh exchange rate (now live from tgju)
     await rds.delete('exchange_rate:usd_irt')  # force refresh
     rate_irt, markup_pct = await _get_exchange_rate()
     multiplier = rate_irt * (1 + markup_pct / 100)
 
-    # 2. Update model_catalog with new IRT prices
+    # 2. Live USD prices from OpenRouter
+    or_prices = await _fetch_openrouter_prices()
+
+    # 3. Update model_catalog with new USD + IRT prices
     updated = 0
     if async_session is not None:
         try:
             async with async_session() as session:
-                for model_id, prices in OPENROUTER_PRICES.items():
-                    irt_input = round(prices['input'] * multiplier)
-                    irt_output = round(prices['output'] * multiplier)
+                res = await session.execute(sqlalchemy.text(
+                    "SELECT id, provider_model_id FROM model_catalog "
+                    "WHERE availability = 'available'"
+                ))
+                rows = res.fetchall()
+                for row in rows:
+                    mid = row.provider_model_id
+                    # Try the catalog id, then the provider_model_id (may contain '/')
+                    for key in (row.id, mid, mid.replace('/', '-')):
+                        price = or_prices.get(key)
+                        if price:
+                            break
+                    else:
+                        # No live OpenRouter price for this model — keep existing.
+                        continue
+                    irt_input = round(price['input'] * multiplier)
+                    irt_output = round(price['output'] * multiplier)
                     await session.execute(
                         sqlalchemy.text(
                             'UPDATE model_catalog SET '
                             'input_per_million = :inp, output_per_million = :out, '
-                            'usd_input_per_million = :usd_in, usd_output_per_million = :usd_out '
-                            'WHERE provider_model_id = :mid'
+                            'usd_input_per_million = :usd_in, usd_output_per_million = :usd_out, '
+                            'price_version = :pv, last_verified_at = now() '
+                            'WHERE id = :mid'
                         ),
                         {
                             'inp': irt_input, 'out': irt_output,
-                            'usd_in': prices['input'], 'usd_out': prices['output'],
-                            'mid': model_id,
+                            'usd_in': price['input'], 'usd_out': price['output'],
+                            'pv': 'v1', 'mid': row.id,
                         },
                     )
                     updated += 1
@@ -481,14 +590,16 @@ async def refresh_pricing() -> dict[str, Any]:
         except Exception as e:
             return {'status': 'error', 'detail': str(e)}
 
-    # 3. Invalidate caches
+    # 4. Invalidate caches
     for key in ['cache:catalog:models', 'cache:catalog:pricing', 'cache:api:pricing']:
         await rds.delete(key)
 
     return {
         'status': 'ok',
         'exchange_rate': rate_irt,
+        'exchange_source': 'tgju.org',
         'markup_pct': markup_pct,
+        'models_matched': len(or_prices) // 3,
         'models_updated': updated,
         'refreshed_at': datetime.now(timezone.utc).isoformat(),
     }

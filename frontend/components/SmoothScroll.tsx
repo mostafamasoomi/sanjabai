@@ -3,33 +3,41 @@
 import { useEffect } from 'react'
 
 /**
- * Lightweight smooth-scroll engine — the "motion.page" feel without a heavy dep.
- * Intercepts wheel/touch, lerps the scroll position toward a target each frame.
- * Falls back to native scroll for reduced-motion users and keyboard (anchors/space).
+ * Lightweight smooth-scroll engine — motion.page DNA.
+ * Intercepts wheel, lerps scroll position with HIGH ease for responsive feel.
+ * Falls back to native scroll for reduced-motion / touch / keyboard.
  */
 export default function SmoothScroll() {
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
     if (mq.matches) return
 
-    // Skip on touch-only devices (native momentum is better there)
+    // Skip on touch-only devices (native momentum is better)
     const coarse = window.matchMedia('(pointer: coarse)').matches
     if (coarse) return
 
     let target = window.scrollY
     let current = window.scrollY
+    let velocity = 0
     let raf = 0
     let running = false
-    const ease = 0.12
+
+    // High ease = responsive. Low friction = subtle momentum at end.
+    const ease = 0.22
+    const friction = 0.92
 
     const maxScroll = () =>
       Math.max(0, document.documentElement.scrollHeight - window.innerHeight)
 
     const loop = () => {
-      current += (target - current) * ease
-      if (Math.abs(target - current) < 0.4) {
+      const diff = target - current
+      velocity = velocity * friction + diff * ease
+      current += velocity
+
+      if (Math.abs(diff) < 0.5 && Math.abs(velocity) < 0.5) {
         current = target
         window.scrollTo({ top: current, behavior: 'auto' })
+        velocity = 0
         running = false
         return
       }
@@ -45,37 +53,27 @@ export default function SmoothScroll() {
     }
 
     const onWheel = (e: WheelEvent) => {
-      // let the browser handle zoom / horizontal
       if (e.ctrlKey) return
       e.preventDefault()
       const delta =
-        e.deltaMode === 1 ? e.deltaY * 24 : e.deltaY // line vs pixel
-      target = Math.min(maxScroll(), Math.max(0, target + delta))
+        e.deltaMode === 1 ? e.deltaY * 24 : e.deltaY
+      target = Math.min(maxScroll(), Math.max(0, target + delta * 1.1))
       start()
     }
 
-    let touchY = 0
-    const onTouchStart = (e: TouchEvent) => {
-      touchY = e.touches[0].clientY
+    // Sync on programmatic scroll (anchor links, back/forward)
+    const onPopState = () => {
       target = window.scrollY
       current = window.scrollY
+      velocity = 0
     }
-    const onTouchMove = (e: TouchEvent) => {
-      const y = e.touches[0].clientY
-      const delta = (touchY - y) * 1.6
-      touchY = y
-      target = Math.min(maxScroll(), Math.max(0, target + delta))
-      start()
-    }
+    window.addEventListener('popstate', onPopState)
 
     window.addEventListener('wheel', onWheel, { passive: false })
-    window.addEventListener('touchstart', onTouchStart, { passive: true })
-    window.addEventListener('touchmove', onTouchMove, { passive: true })
 
     return () => {
       window.removeEventListener('wheel', onWheel)
-      window.removeEventListener('touchstart', onTouchStart)
-      window.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('popstate', onPopState)
       cancelAnimationFrame(raf)
     }
   }, [])

@@ -89,8 +89,7 @@ export default function VortexParticles() {
           ctx!.fillStyle = `rgba(${c.r},${c.g},${c.b},0.16)`
           ctx!.fill()
         }
-        raf = requestAnimationFrame(frame)
-        return
+        return // stop the loop — static frame, no wasted rAF
       }
 
       // focus pull: nodes drift toward center as you scroll (vortex feel)

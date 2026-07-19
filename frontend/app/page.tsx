@@ -88,7 +88,7 @@ const CHIPS = [
 
 function Hero({ isLoggedIn, modelCount }: { isLoggedIn: boolean; modelCount: string }) {
   return (
-    <section className="hero">
+    <section className="hero" aria-label="Hero">
       <VortexParticles />
       <div className="hero-parallax" style={{ transform: 'translateY(calc(var(--scroll, 0) * 90px)) scale(calc(1 - var(--scroll, 0) * 0.05))', opacity: 'calc(1 - var(--scroll, 0) * 0.55)' }}>
         <div className="shell hero-grid">
@@ -122,7 +122,7 @@ function Hero({ isLoggedIn, modelCount }: { isLoggedIn: boolean; modelCount: str
           </div>
         </div>
 
-        <div className="stage entrance-item" aria-hidden="true">
+        <div className="stage entrance-item" aria-hidden="true" style={{ animationDelay: '0.92s' }}>
           <div className="stage-bar">
             <span className="stage-dot" />
             <span className="stage-dot" />
@@ -168,7 +168,7 @@ function Hero({ isLoggedIn, modelCount }: { isLoggedIn: boolean; modelCount: str
 function Marquee() {
   const items = [...MODELS_STRIP, ...MODELS_STRIP]
   return (
-    <div className="marquee" aria-hidden="true">
+    <div className="marquee" role="marquee" aria-label="Supported AI models">
       <div className="marquee-track">
         {items.map((m, i) => (
           <span key={`${m}-${i}`} className="marquee-item">{m}</span>
@@ -219,7 +219,7 @@ function ScrollRoutingStage({ isLoggedIn }: { isLoggedIn: boolean }) {
 function Constellation() {
   const { ref, on } = useReveal()
   return (
-    <section className="section" ref={ref}>
+    <section className="section" ref={ref} aria-label="Capabilities">
       <div className="shell">
         <div className={`section-head reveal ${on ? 'on' : ''}`}>
           <p className="eyebrow">کل جعبه ابزار</p>
@@ -338,7 +338,8 @@ function BentoTheater() {
           <article className="bento-card">
             <div className="bento-visual">
               <div className="hi">baseURL: /v1</div>
-              <div>Authorization: Bearer ***</div>
+              <div>Authorization: Bearer ***
+              </div>
               <div className="vi">chat.completions.create()</div>
             </div>
             <p className="eyebrow" style={{ marginBottom: 0 }}>API</p>
@@ -475,7 +476,7 @@ function ThreeDoors({ isLoggedIn }: { isLoggedIn: boolean }) {
 function FinalCta({ isLoggedIn }: { isLoggedIn: boolean }) {
   const { ref, on } = useReveal(0.2)
   return (
-    <section className="final" ref={ref}>
+    <section className="final" ref={ref} aria-label="Get started">
       <div className={`shell reveal ${on ? 'on' : ''}`}>
         <h2 className="display">شروع کن — مدل‌ها منتظرند.</h2>
         <p className="lede">

@@ -29,11 +29,11 @@ export default function SmoothScroll() {
       current += (target - current) * ease
       if (Math.abs(target - current) < 0.4) {
         current = target
-        window.scrollTo(0, current)
+        window.scrollTo({ top: current, behavior: 'auto' })
         running = false
         return
       }
-      window.scrollTo(0, current)
+      window.scrollTo({ top: current, behavior: 'auto' })
       raf = requestAnimationFrame(loop)
     }
 

@@ -47,6 +47,28 @@ function useScrollProgress(ref: React.RefObject<HTMLElement | null>) {
   return progress
 }
 
+/** Sets --scroll (0..1 over hero height) and --page-scroll (0..1 over doc) on <html>.
+ *  Drives VortexParticles focus + hero parallax. rAF-throttled. */
+function usePageScroll() {
+  useEffect(() => {
+    let frame = 0
+    const update = () => {
+      const y = window.scrollY
+      const hero = document.querySelector('.hero') as HTMLElement | null
+      const heroH = hero?.offsetHeight || window.innerHeight
+      const docRange = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1)
+      document.documentElement.style.setProperty('--scroll', String(Math.min(1, y / heroH)))
+      document.documentElement.style.setProperty('--page-scroll', String(Math.min(1, y / docRange)))
+      frame = 0
+    }
+    const onScroll = () => { if (!frame) frame = requestAnimationFrame(update) }
+    update()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll)
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll) }
+  }, [])
+}
+
 const MODELS_STRIP = [
   'DeepSeek V4', 'Mistral Large', 'Tencent HY-3', 'MiMo Pro',
   'Smart Mode', 'OpenAI API', 'RAG', 'Zarinpal',
@@ -67,12 +89,13 @@ function Hero({ isLoggedIn, modelCount }: { isLoggedIn: boolean; modelCount: str
   return (
     <section className="hero">
       <VortexParticles />
-      <div className="shell hero-grid">
-        <div className="hero-copy">
-          <div className="announcement">
-            <span className="chip">NEW</span>
-            Smart Mode — مدل مناسب را خودش انتخاب میکند
-          </div>
+      <div className="hero-parallax" style={{ transform: 'translateY(calc(var(--scroll, 0) * 90px)) scale(calc(1 - var(--scroll, 0) * 0.05))', opacity: 'calc(1 - var(--scroll, 0) * 0.55)' }}>
+        <div className="shell hero-grid">
+          <div className="hero-copy">
+            <div className="announcement">
+              <span className="chip">NEW</span>
+              Smart Mode — مدل مناسب را خودش انتخاب میکند
+            </div>
           <h1 className="display">
             یک درگاه.
             <br />
@@ -135,6 +158,7 @@ function Hero({ isLoggedIn, modelCount }: { isLoggedIn: boolean; modelCount: str
             </div>
           </div>
         </div>
+      </div>
       </div>
     </section>
   )
@@ -474,6 +498,8 @@ export default function LandingPage() {
   const isLoggedIn = !!user
   const [models, setModels] = useState<ModelCatalogItem[]>([])
   const [modelsLoaded, setModelsLoaded] = useState(false)
+
+  usePageScroll()
 
   useEffect(() => {
     let cancelled = false

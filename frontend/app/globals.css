@@ -4238,3 +4238,123 @@ img, svg { display: block; max-width: 100%; }
 
 /* Card helpers */
 .u-card-pad      { padding: var(--space-6); }
+
+/* ── Landing Page Animations (v2 Redesign) ───────────────────────────────── */
+/* Scroll-triggered reveal */
+.reveal-section {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 600ms cubic-bezier(0.23, 1, 0.32, 1), transform 600ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.reveal-section.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Stagger children */
+.reveal-stagger > * {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 500ms cubic-bezier(0.23, 1, 0.32, 1), transform 500ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.reveal-stagger.visible > *:nth-child(1) { transition-delay: 0ms; opacity: 1; transform: translateY(0); }
+.reveal-stagger.visible > *:nth-child(2) { transition-delay: 60ms; opacity: 1; transform: translateY(0); }
+.reveal-stagger.visible > *:nth-child(3) { transition-delay: 120ms; opacity: 1; transform: translateY(0); }
+.reveal-stagger.visible > *:nth-child(4) { transition-delay: 180ms; opacity: 1; transform: translateY(0); }
+.reveal-stagger.visible > *:nth-child(5) { transition-delay: 240ms; opacity: 1; transform: translateY(0); }
+.reveal-stagger.visible > *:nth-child(6) { transition-delay: 300ms; opacity: 1; transform: translateY(0); }
+
+/* Spring button hover */
+.btn-spring {
+  transition: transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 300ms ease;
+}
+.btn-spring:hover {
+  transform: scale(1.04);
+}
+.btn-spring:active {
+  transform: scale(0.97);
+}
+
+/* Hero orb animation */
+.hero-orb {
+  animation: orbFloat 6s ease-in-out infinite;
+}
+.hero-orb-2 {
+  animation: orbFloat 8s ease-in-out infinite 1s;
+}
+.hero-orb-3 {
+  animation: orbFloat 7s ease-in-out infinite 2s;
+}
+@keyframes orbFloat {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-20px) scale(1.05); }
+}
+
+/* Pulse ring */
+.pulse-ring {
+  animation: pulseRing 2s ease-out infinite;
+}
+@keyframes pulseRing {
+  0% { transform: scale(0.95); opacity: 0.7; }
+  50% { transform: scale(1.05); opacity: 0.3; }
+  100% { transform: scale(0.95); opacity: 0.7; }
+}
+
+/* Gradient text animation */
+.text-gradient-animated {
+  background: linear-gradient(135deg, #6366f1, #a855f7, #6366f1);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradientShift 4s ease infinite;
+}
+@keyframes gradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Grid background */
+.hero-grid-bg {
+  background-image:
+    linear-gradient(rgba(99,102,241,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(99,102,241,0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* Feature card hover */
+.feature-card-hover {
+  transition: transform 300ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 300ms ease, border-color 300ms ease;
+}
+.feature-card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 32px rgba(99,102,241,0.12);
+  border-color: rgba(99,102,241,0.2);
+}
+
+/* FAQ accordion spring */
+.faq-answer-spring {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 350ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.faq-answer-spring.open {
+  grid-template-rows: 1fr;
+}
+.faq-answer-spring > div {
+  overflow: hidden;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .reveal-section,
+  .reveal-stagger > *,
+  .hero-orb, .hero-orb-2, .hero-orb-3,
+  .pulse-ring,
+  .text-gradient-animated {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

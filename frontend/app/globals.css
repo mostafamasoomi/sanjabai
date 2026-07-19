@@ -4358,3 +4358,273 @@ img, svg { display: block; max-width: 100%; }
     transform: none !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Landing v5 — motion.page DNA
+   Key principles: deep navy canvas, confident typography, single accent,
+   minimal decoration, visual-first cards, staggered reveals.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Canvas ──────────────────────────────────────────────────────────── */
+.landing-v5 {
+  --landing-accent: #818cf8;
+  --landing-accent-dim: rgba(129, 140, 248, 0.08);
+  --landing-accent-glow: rgba(129, 140, 248, 0.15);
+  --landing-card-bg: rgba(255, 255, 255, 0.025);
+  --landing-card-border: rgba(255, 255, 255, 0.06);
+  --landing-text-muted: rgba(223, 225, 244, 0.5);
+  background: #030712;
+  color: #dfe1f4;
+}
+
+/* ── Typography scale ────────────────────────────────────────────────── */
+.landing-v5 .hero-headline {
+  font-size: clamp(2.5rem, 6vw, 5.5rem);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: #dfe1f4;
+}
+.landing-v5 .hero-headline .accent {
+  color: var(--landing-accent);
+  position: relative;
+}
+.landing-v5 .section-heading {
+  font-size: clamp(1.75rem, 3.5vw, 2.75rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: #dfe1f4;
+}
+.landing-v5 .section-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--landing-accent);
+  margin-bottom: 0.75rem;
+}
+
+/* ── Hero section ────────────────────────────────────────────────────── */
+.landing-v5 .hero-section {
+  min-height: 92vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(129, 140, 248, 0.08), transparent 50%),
+    radial-gradient(ellipse 40% 50% at 20% 80%, rgba(129, 140, 248, 0.04), transparent 50%),
+    #030712;
+}
+.landing-v5 .hero-section::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(129, 140, 248, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(129, 140, 248, 0.02) 1px, transparent 1px);
+  background-size: 80px 80px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 70%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 70%);
+}
+
+/* ── Platform marquee ────────────────────────────────────────────────── */
+.landing-v5 .platform-marquee {
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent, black 15%, black 85%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 15%, black 85%, transparent);
+}
+.landing-v5 .platform-marquee-inner {
+  display: flex;
+  gap: 2.5rem;
+  animation: platformScroll 25s linear infinite;
+  width: max-content;
+  padding: 1.5rem 0;
+}
+@keyframes platformScroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.landing-v5 .platform-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  background: var(--landing-card-bg);
+  border: 1px solid var(--landing-card-border);
+  font-size: 0.8rem;
+  color: var(--landing-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Capability cards ────────────────────────────────────────────────── */
+.landing-v5 .capability-card {
+  background: var(--landing-card-bg);
+  border: 1px solid var(--landing-card-border);
+  border-radius: 1rem;
+  padding: 1.75rem;
+  transition: border-color 300ms ease, transform 300ms ease, background 300ms ease;
+  position: relative;
+  overflow: hidden;
+}
+.landing-v5 .capability-card:hover {
+  border-color: rgba(129, 140, 248, 0.2);
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.035);
+}
+.landing-v5 .capability-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(129, 140, 248, 0.3), transparent);
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+.landing-v5 .capability-card:hover::before { opacity: 1; }
+.landing-v5 .capability-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.625rem;
+  background: var(--landing-accent-dim);
+  color: var(--landing-accent);
+  margin-bottom: 1rem;
+  font-size: 1.1rem;
+}
+
+/* ── CTA button ──────────────────────────────────────────────────────── */
+.landing-v5 .cta-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.875rem 2rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  background: var(--landing-accent);
+  color: #030712;
+  transition: transform 160ms ease-out, box-shadow 160ms ease;
+  box-shadow: 0 0 0 0 rgba(129, 140, 248, 0);
+}
+.landing-v5 .cta-primary:hover {
+  transform: scale(1.03);
+  box-shadow: 0 0 0 8px rgba(129, 140, 248, 0.1);
+}
+.landing-v5 .cta-primary:active { transform: scale(0.97); }
+.landing-v5 .cta-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.875rem 2rem;
+  border-radius: 9999px;
+  font-weight: 500;
+  font-size: 0.95rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #dfe1f4;
+  transition: border-color 200ms ease, background 200ms ease;
+}
+.landing-v5 .cta-secondary:hover {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* ── Number stat ─────────────────────────────────────────────────────── */
+.landing-v5 .stat-number {
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--landing-accent);
+  line-height: 1;
+}
+.landing-v5 .stat-label {
+  font-size: 0.85rem;
+  color: var(--landing-text-muted);
+  margin-top: 0.35rem;
+}
+
+/* ── Pricing card ────────────────────────────────────────────────────── */
+.landing-v5 .pricing-card {
+  background: var(--landing-card-bg);
+  border: 1px solid var(--landing-card-border);
+  border-radius: 1rem;
+  padding: 2rem;
+  transition: border-color 300ms ease;
+}
+.landing-v5 .pricing-card.featured {
+  border-color: rgba(129, 140, 248, 0.25);
+  background: rgba(129, 140, 248, 0.04);
+}
+.landing-v5 .pricing-card:hover {
+  border-color: rgba(129, 140, 248, 0.2);
+}
+
+/* ── FAQ accordion ───────────────────────────────────────────────────── */
+.landing-v5 .faq-item {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  transition: border-color 200ms ease;
+}
+.landing-v5 .faq-item:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.landing-v5 .faq-trigger {
+  width: 100%;
+  padding: 1.25rem 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  text-align: right;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #dfe1f4;
+  cursor: pointer;
+  background: none;
+  border: none;
+  transition: color 200ms ease;
+}
+.landing-v5 .faq-trigger:hover { color: var(--landing-accent); }
+.landing-v5 .faq-answer {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 300ms ease;
+}
+.landing-v5 .faq-answer.open {
+  grid-template-rows: 1fr;
+}
+.landing-v5 .faq-answer > div {
+  overflow: hidden;
+}
+.landing-v5 .faq-answer p {
+  padding: 0 0 1.25rem;
+  font-size: 0.9rem;
+  color: var(--landing-text-muted);
+  line-height: 1.7;
+}
+
+/* ── Reveal animation ────────────────────────────────────────────────── */
+.landing-v5 .reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 700ms cubic-bezier(0.23, 1, 0.32, 1),
+              transform 700ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.landing-v5 .reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Reduced motion ──────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .landing-v5 .platform-marquee-inner { animation: none; }
+  .landing-v5 .reveal { opacity: 1; transform: none; transition: none; }
+  .landing-v5 .cta-primary { transition: none; }
+}

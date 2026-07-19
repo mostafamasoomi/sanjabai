@@ -1,356 +1,357 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useAuth } from '@/lib/auth'
 import { Icon } from '@/components/ui/Icon'
-import { getClaim, modelCountLabel } from '@/lib/claims'
+import { modelCountLabel } from '@/lib/claims'
 import { type ModelCatalogItem, type CatalogResponse } from '@/types/catalog'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Multiai Landing — v3 Redesign
-   Asymmetric layout, scroll-triggered reveals, spring animations, dark aesthetic.
-   Design principles: Emil Kowalski (design-engineering) + Linear-inspired.
+   Multiai Landing v5 — motion.page DNA
+   Deep navy canvas, confident typography, single accent, minimal decoration.
+   Based on real platform capabilities (not marketing fluff).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const FEATURES = [
-  { icon: 'models' as const, title: 'همه مدلها، یک پنل', desc: getClaim('workspace_promise'), color: '#6366f1' },
-  { icon: 'dashboard' as const, title: 'مدیریت هوشمند مصرف', desc: 'داشبورد لحظهای، سقف مصرف و هشدار — کنترل کامل روی بودجه', color: '#8b5cf6' },
-  { icon: 'pricing' as const, title: 'قیمتگذاری شفاف', desc: getClaim('currency_transparency'), color: '#06b6d4' },
-  { icon: 'security' as const, title: 'امن و مستقل', desc: 'سرورهای اختصاصی، بدون وابستگی به تحریم — دادههای شما محفوظ است', color: '#10b981' },
-  { icon: 'code' as const, title: 'API آماده', desc: 'OpenAI-compatible — در ۲ دقیقه کلید API بسازید و متصل شوید', color: '#f59e0b' },
-  { icon: 'chat' as const, title: 'فارسی واقعی', desc: 'رابط کاملاً فارسی، پشتیبانی از زبان فارسی در تمام مدلها', color: '#ec4899' },
-]
+/* ── Reveal hook ──────────────────────────────────────────────────────── */
 
-const STEPS = [
-  { icon: 'profile' as const, title: 'ثبتنام', desc: 'در ۳۰ ثانیه حساب بسازید' },
-  { icon: 'wallet' as const, title: 'شارژ', desc: 'کیف پول ریالی' },
-  { icon: 'chat' as const, title: 'چت', desc: 'با بهترین مدلها' },
-  { icon: 'dashboard' as const, title: 'مدیریت', desc: 'پیگیری مصرف و هزینه' },
-]
-
-const FAQ = [
-  { q: 'Multiai چه فرقی با ChatGPT دارد؟', a: 'Multiai یک پلتفرم یکپارچه است — به بهترین مدلهای هوش مصنوعی دنیا از یک پنل دسترسی دارید، با قیمت ریالی و بدون نیاز به VPN.' },
-  { q: 'آیا نیاز به VPN دارم؟', a: 'خیر. تمام ارتباطات از طریق زیرساخت اختصاصی و داخلی مسیریابی میشود.' },
-  { q: 'هزینه استفاده چقدر است؟', a: 'تعرفهها بر اساس مدل متفاوت است. هزینه دقیق را قبل از ارسال هر درخواست میبینید.' },
-  { q: 'اطلاعات من امن است؟', a: 'بله. تمام ارتباطات رمزنگاری شده و دادهها روی سرورهای اختصاصی ذخیره میشوند.' },
-  { q: 'چطور API key بسازم؟', a: 'بعد از ثبتنام، از بخش «کلید API» یک کلید جدید بسازید. endpoint ما با OpenAI-compatible است.' },
-]
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   Scroll Reveal Hook
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-function useReveal() {
+function useReveal(threshold = 0.15) {
   const ref = useRef<HTMLDivElement>(null)
   const [visible, setVisible] = useState(false)
-
   useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const obs = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) setVisible(true) },
-      { threshold: 0.15, rootMargin: '0px 0px -40px 0px' }
-    )
-    obs.observe(el)
-    return () => obs.disconnect()
-  }, [])
-
+    const el = ref.current; if (!el) return
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setVisible(true) }, { threshold })
+    obs.observe(el); return () => obs.disconnect()
+  }, [threshold])
   return { ref, visible }
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Hero — Asymmetric: 3D orbs left, content right
-   ═══════════════════════════════════════════════════════════════════════════ */
+/* ── Platform marquee (duplicated for seamless loop) ──────────────────── */
 
-function Hero({ isLoggedIn, modelCount }: { isLoggedIn: boolean; modelCount: string }) {
+const PLATFORMS = [
+  'DeepSeek', 'Mistral', 'Tencent', 'GPT-4o', 'Claude', 'Gemini',
+  'Llama', 'Qwen', 'MiMo', 'Smart Mode', 'API Access', 'OpenAI Compatible',
+]
+
+function PlatformMarquee() {
   return (
-    <section className="relative min-h-[90vh] flex items-center overflow-hidden hero-grid-bg">
-      {/* Background orbs */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
-        <div className="hero-orb absolute -top-32 -right-32 w-[500px] h-[500px] rounded-full opacity-20"
-          style={{ background: 'radial-gradient(circle, rgba(99,102,241,0.4), transparent 70%)' }} />
-        <div className="hero-orb-2 absolute top-1/2 -left-32 w-[400px] h-[400px] rounded-full opacity-15"
-          style={{ background: 'radial-gradient(circle, rgba(168,85,247,0.4), transparent 70%)' }} />
-        <div className="hero-orb-3 absolute -bottom-32 right-1/4 w-[350px] h-[350px] rounded-full opacity-15"
-          style={{ background: 'radial-gradient(circle, rgba(6,182,212,0.3), transparent 70%)' }} />
-      </div>
-
-      <div className="relative z-10 w-full max-w-6xl mx-auto px-6 md:px-12 py-20 md:py-32">
-        <div className="flex flex-col items-center text-center">
-          {/* Status badge */}
-          <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full border border-[var(--border)] bg-[var(--bg-surface)]/80 backdrop-blur-sm mb-10">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="pulse-ring absolute inline-flex h-full w-full rounded-full bg-[var(--positive)]" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[var(--positive)]" />
-            </span>
-            <span className="text-sm text-[var(--text-secondary)]">{modelCount}</span>
-          </div>
-
-          {/* Headline */}
-          <h1 className="text-4xl sm:text-5xl md:text-7xl font-extrabold leading-[1.05] tracking-tight max-w-3xl">
-            <span className="text-gradient-animated">هوش مصنوعی</span>
-            <br />
-            <span className="text-[var(--text-primary)]">برای همه، به زبان فارسی</span>
-          </h1>
-
-          {/* Description */}
-          <p className="text-base sm:text-lg text-[var(--text-secondary)] mt-8 max-w-xl leading-relaxed">
-            {getClaim('workspace_promise')}
-          </p>
-
-          {/* CTAs */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mt-10">
-            <Link
-              href={isLoggedIn ? '/chat' : '/signup'}
-              className="btn-spring btn btn-primary btn-lg text-base px-12 py-4 rounded-xl font-semibold"
-              style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 4px 32px rgba(99,102,241,0.4), 0 0 64px rgba(99,102,241,0.15)' }}
-            >
-              {isLoggedIn ? 'شروع چت' : 'شروع رایگان'}
-              <Icon name="arrowRight" size={18} />
-            </Link>
-            <Link
-              href="/models"
-              className="btn-spring btn btn-secondary btn-lg text-base px-12 py-4 rounded-xl font-medium"
-              style={{ borderColor: 'rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.03)' }}
-            >
-              مشاهده مدلها
-            </Link>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   Stats Bar — with reveal animation
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-function StatsBar({ modelCount }: { modelCount: string }) {
-  const { ref, visible } = useReveal()
-  const stats = [
-    { value: modelCount, label: 'در دسترس هماکنون' },
-    { value: 'شفاف', label: 'قیمتگذاری ریالی' },
-    { value: 'بدون VPN', label: 'دسترسی مستقیم' },
-    { value: '< ۲ دقیقه', label: 'شروع استفاده' },
-  ]
-
-  return (
-    <div ref={ref} className={`reveal-section ${visible ? 'visible' : ''}`}>
-      <div className="max-w-4xl mx-auto px-6 py-12">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {stats.map((s, i) => (
-            <div key={i} className="text-center p-6 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)]/50">
-              <div className="text-2xl md:text-3xl font-bold text-[var(--text-primary)] mb-1">{s.value}</div>
-              <div className="text-xs text-[var(--text-muted)]">{s.label}</div>
-            </div>
-          ))}
-        </div>
+    <div className="platform-marquee">
+      <div className="platform-marquee-inner">
+        {[...PLATFORMS, ...PLATFORMS].map((p, i) => (
+          <span key={i} className="platform-chip">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--landing-accent)' }} />
+            {p}
+          </span>
+        ))}
       </div>
     </div>
   )
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Features — alternating layout with stagger reveal
-   ═══════════════════════════════════════════════════════════════════════════ */
+/* ── Hero ─────────────────────────────────────────────────────────────── */
 
-function Features() {
-  const { ref, visible } = useReveal()
-
+function Hero({ isLoggedIn, modelCount }: { isLoggedIn: boolean; modelCount: string }) {
   return (
-    <section ref={ref} className="py-20 md:py-28">
-      <div className="max-w-6xl mx-auto px-6 md:px-12">
-        <div className={`reveal-section ${visible ? 'visible' : ''}`}>
-          <h2 className="text-3xl md:text-4xl font-bold text-center text-[var(--text-primary)] mb-4">
-            چرا Multiai؟
-          </h2>
-          <p className="text-[var(--text-secondary)] text-center mb-16 max-w-lg mx-auto">
-            پلتفرمی که تجربه کار با هوش مصنوعی را برای کاربران ایرانی متحول میکند
-          </p>
+    <section className="hero-section">
+      <div className="relative z-10 w-full max-w-4xl mx-auto px-6 py-20 text-center">
+        {/* Badge */}
+        <div className="inline-flex mb-8">
+          <span className="platform-chip" style={{ borderColor: 'rgba(129,140,248,0.2)' }}>
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full rounded-full bg-[var(--landing-accent)] animate-ping opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--landing-accent)]" />
+            </span>
+            {modelCount}
+          </span>
         </div>
 
-        <div className={`reveal-stagger ${visible ? 'visible' : ''}`}>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {FEATURES.map((f) => (
-              <div key={f.title} className="feature-card-hover card p-6 rounded-2xl border border-[var(--border)] bg-[var(--bg-surface)]/60">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-5" style={{ background: `${f.color}15` }}>
-                  <Icon name={f.icon} size={24} style={{ color: f.color }} />
-                </div>
-                <h3 className="font-bold text-lg text-[var(--text-primary)] mb-2">{f.title}</h3>
-                <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{f.desc}</p>
-              </div>
-            ))}
-          </div>
+        {/* Headline */}
+        <h1 className="hero-headline mb-6">
+          پلتفرم کامل
+          <br />
+          <span className="accent">هوش مصنوعی فارسی</span>
+        </h1>
+
+        <p className="text-base sm:text-lg max-w-xl mx-auto leading-relaxed mb-10" style={{ color: 'var(--landing-text-muted)' }}>
+          دسترسی به پیشرفته‌ترین مدل‌های هوش مصنوعی دنیا،
+          پرداخت ریالی، بدون نیاز به VPN، با API سازگار با OpenAI.
+        </p>
+
+        {/* CTAs */}
+        <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <Link href={isLoggedIn ? '/chat' : '/signup'} className="cta-primary">
+            {isLoggedIn ? 'شروع چت' : 'شروع رایگان'}
+            <Icon name="arrowRight" size={16} />
+          </Link>
+          <Link href="/models" className="cta-secondary">
+            مشاهده مدل‌ها
+          </Link>
         </div>
       </div>
     </section>
   )
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Steps — Horizontal timeline with pulse
-   ═══════════════════════════════════════════════════════════════════════════ */
+/* ── Stats ────────────────────────────────────────────────────────────── */
 
-function Steps() {
+function Stats({ modelCount }: { modelCount: string }) {
   const { ref, visible } = useReveal()
-
   return (
-    <section ref={ref} className="py-20 md:py-28 bg-[var(--bg-surface)]/30">
-      <div className="max-w-4xl mx-auto px-6 md:px-12">
-        <div className={`reveal-section ${visible ? 'visible' : ''}`}>
-          <h2 className="text-3xl md:text-4xl font-bold text-center text-[var(--text-primary)] mb-4">
-            چطور شروع کنم؟
+    <div ref={ref} className="max-w-4xl mx-auto px-6 -mt-16 relative z-20">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { value: modelCount, label: 'مدل در دسترس' },
+          { value: 'پرداخت ریالی', label: 'تومان، بدون ارز' },
+          { value: 'بدون VPN', label: 'دسترسی مستقیم' },
+          { value: 'API آماده', label: 'OpenAI-compatible' },
+        ].map((s, i) => (
+          <div key={i} className="capability-card text-center reveal"
+            style={{ transitionDelay: `${i * 80}ms`, opacity: visible ? 1 : undefined, transform: visible ? 'none' : undefined }}>
+            <div className="stat-number">{s.value}</div>
+            <div className="stat-label">{s.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/* ── Capabilities ─────────────────────────────────────────────────────── */
+
+const CAPABILITIES = [
+  { icon: 'chat', title: 'چت هوشمند', desc: 'مکالمه با ۸ مدل پیشرفته، streaming实时، Markdown، syntax highlighting و web search.' },
+  { icon: 'code', title: 'API سازگار با OpenAI', desc: 'در ۲ دقیقه کلید API بسازید. endpoint ما با تمام کتابخونه‌های OpenAI-compatible کار میکنه.' },
+  { icon: 'models', title: 'Smart Mode', desc: 'هوش مصنوعی خودش بهترین مدل رو بر اساس سوال شما انتخاب میکنه — همیشه cheapest capable model.' },
+  { icon: 'dashboard', title: 'داشبورد و مدیریت', desc: 'پیگیری لحظه‌ای مصرف، تاریخچه تراکنش‌ها، شارژ کیف پول ریالی از طریق درگاه زرین‌پال.' },
+  { icon: 'search', title: 'جستجوی وب', desc: 'DuckDuckGo + Wikipedia — نتایج زنده بدون API key. مدل به اطلاعات روز دسترسی داره.' },
+  { icon: 'security', title: 'امن و مستقل', desc: 'سرورهای اختصاصی، رمزنگاری کامل، بدون تحریم. مکالمات شما private میمونن.' },
+  { icon: 'prompts', title: 'حافظه و اسکیلز', desc: 'مدل مکالمات مهم رو به خاطر میسپره. اسکیلز marketplace برای تخصص‌های مختلف.' },
+  { icon: 'tasks', title: 'تسک‌های زمان‌بندی شده', desc: 'پرامپت‌های recurring تنظیم کنید. تحویل از طریق dashboard یا Telegram.' },
+  { icon: 'documents', title: 'RAG و آپلود فایل', desc: 'آپلود PDF, TXT, CSV, JSON — مدل محتواش رو میخونه و بهش استناد میکنه.' },
+]
+
+function Capabilities() {
+  const { ref, visible } = useReveal()
+  return (
+    <section ref={ref} className="py-24 md:py-32">
+      <div className="max-w-6xl mx-auto px-6">
+        <div className="text-center mb-16">
+          <p className="section-eyebrow">قابلیت‌ها</p>
+          <h2 className="section-heading mb-4">
+            هر چیزی که برای کار با
+            <span style={{ color: 'var(--landing-accent)' }}> هوش مصنوعی </span>
+            نیاز دارید
           </h2>
-          <p className="text-[var(--text-secondary)] text-center mb-16">
-            ۴ قدم ساده تا دسترسی به هوش مصنوعی
+          <p style={{ color: 'var(--landing-text-muted)', maxWidth: '36rem', margin: '0 auto' }}>
+            از چت ساده تا API سازمانی — همه در یک پلتفرم، با قیمت ریالی و بدون تحریم.
           </p>
         </div>
 
-        <div className={`reveal-stagger ${visible ? 'visible' : ''}`}>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {STEPS.map((s, i) => (
-              <div key={s.title} className="text-center p-6">
-                <div className="relative inline-flex mb-4">
-                  <div className="w-14 h-14 rounded-2xl bg-[var(--accent-dim)] flex items-center justify-center relative z-10">
-                    <span className="text-lg font-bold text-[var(--accent)]">{i + 1}</span>
-                  </div>
-                  {i < STEPS.length - 1 && (
-                    <div className="hidden md:block absolute top-1/2 left-full w-8 h-0.5 bg-[var(--border)] -translate-y-1/2" />
-                  )}
-                </div>
-                <h3 className="font-bold text-[var(--text-primary)] mb-1">{s.title}</h3>
-                <p className="text-xs text-[var(--text-muted)]">{s.desc}</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {CAPABILITIES.map((c, i) => (
+            <div key={c.title} className="capability-card reveal"
+              style={{ transitionDelay: `${i * 60}ms`, opacity: visible ? 1 : undefined, transform: visible ? 'none' : undefined }}>
+              <div className="capability-icon">
+                <Icon name={c.icon as any} size={18} />
               </div>
-            ))}
-          </div>
+              <h3 className="font-semibold text-[#dfe1f4] mb-1.5">{c.title}</h3>
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--landing-text-muted)' }}>{c.desc}</p>
+            </div>
+          ))}
         </div>
       </div>
     </section>
   )
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   CTA Banner — with glow
-   ═══════════════════════════════════════════════════════════════════════════ */
+/* ── How it works ─────────────────────────────────────────────────────── */
 
-function CTABanner({ isLoggedIn }: { isLoggedIn: boolean }) {
+const STEPS = [
+  { step: '۱', title: 'ثبت‌نام', desc: '۳۰ ثانیه، فقط ایمیل' },
+  { step: '۲', title: 'شارژ کیف پول', desc: 'پرداخت ریالی، درگاه زرین‌پال' },
+  { step: '۳', title: 'چت یا API', desc: 'انتخاب مدل، شروع مکالمه' },
+  { step: '۴', title: 'پیگیری مصرف', desc: 'داشبورد لحظه‌ای' },
+]
+
+function HowItWorks() {
   const { ref, visible } = useReveal()
-
   return (
-    <section ref={ref} className={`py-20 md:py-28 reveal-section ${visible ? 'visible' : ''}`}>
+    <section ref={ref} className="py-24 md:py-32" style={{ background: 'rgba(129,140,248,0.02)' }}>
       <div className="max-w-3xl mx-auto px-6">
-        <div className="relative overflow-hidden rounded-3xl p-10 md:p-16 text-center"
-          style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.08), rgba(168,85,247,0.06))', border: '1px solid rgba(99,102,241,0.15)' }}>
-          <div className="absolute inset-0 pointer-events-none" aria-hidden="true"
-            style={{ background: 'radial-gradient(circle at 50% 0%, rgba(99,102,241,0.15), transparent 60%)' }} />
-          <div className="relative z-10">
-            <h2 className="text-2xl md:text-4xl font-bold text-[var(--text-primary)] mb-4">آماده شروع هستید؟</h2>
-            <p className="text-[var(--text-secondary)] mb-8 max-w-md mx-auto">
-              همین حالا ثبتنام کنید و به پیشرفتهترین مدلهای هوش مصنوعی دسترسی پیدا کنید.
-            </p>
-            <Link
-              href={isLoggedIn ? '/chat' : '/signup'}
-              className="btn-spring btn btn-primary btn-lg text-base px-12 py-4 rounded-xl font-semibold inline-flex items-center gap-2"
-              style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 4px 32px rgba(99,102,241,0.4)' }}
-            >
-              {isLoggedIn ? 'رفتن به چت' : 'شروع رایگان'}
-              <Icon name="arrowRight" size={18} />
-            </Link>
-          </div>
+        <div className="text-center mb-16">
+          <p className="section-eyebrow">شروع کنید</p>
+          <h2 className="section-heading">چطور کار میکنه؟</h2>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {STEPS.map((s, i) => (
+            <div key={s.title} className="reveal text-center"
+              style={{ transitionDelay: `${i * 100}ms`, opacity: visible ? 1 : undefined, transform: visible ? 'none' : undefined }}>
+              <div className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center font-bold text-lg"
+                style={{ background: 'var(--landing-accent-dim)', color: 'var(--landing-accent)' }}>
+                {s.step}
+              </div>
+              <h3 className="font-semibold text-[#dfe1f4] mb-1">{s.title}</h3>
+              <p className="text-xs" style={{ color: 'var(--landing-text-muted)' }}>{s.desc}</p>
+            </div>
+          ))}
         </div>
       </div>
     </section>
   )
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   FAQ — Spring accordion
-   ═══════════════════════════════════════════════════════════════════════════ */
+/* ── Pricing ──────────────────────────────────────────────────────────── */
+
+function Pricing({ isLoggedIn, modelCount }: { isLoggedIn: boolean; modelCount: string }) {
+  const { ref, visible } = useReveal()
+  return (
+    <section ref={ref} className="py-24 md:py-32">
+      <div className="max-w-5xl mx-auto px-6">
+        <div className="text-center mb-16">
+          <p className="section-eyebrow">تعرفه‌ها</p>
+          <h2 className="section-heading mb-4">
+            قیمت‌گذاری
+            <span style={{ color: 'var(--landing-accent)' }}> شفاف </span>
+            و ساده
+          </h2>
+          <p style={{ color: 'var(--landing-text-muted)', maxWidth: '36rem', margin: '0 auto' }}>
+            {modelCount} — فقط به اندازه مصرف واقعی پرداخت کنید. تعرفه هر مدل رو قبل از ارسال می‌بینید.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[
+            { name: 'رایگان', price: '۰ تومان', desc: 'شروع بدون هزینه', features: ['مدل Tencent HY-3', 'Smart Mode رایگان', 'API تا ۱۰۰ درخواست', 'چت با web search'], cta: 'شروع رایگان', href: '/signup' },
+            { name: 'اعتباری', price: 'پرداخت به ازای مصرف', desc: 'محبوب‌ترین', features: ['همه ۸ مدل', 'DeepSeek V4 Pro', 'Mistral Large', 'MiMo Pro', 'API نامحدود', 'RAG و آپلود فایل', 'اسکیلز و حافظه'], cta: 'مشاهده مدل‌ها', href: '/models', featured: true },
+            { name: 'اشتراکی', price: 'طرح‌های ماهانه', desc: 'برای کاربران حرفه‌ای', features: ['سقف مصرف بالاتر', 'اولویت در صف', 'مدل‌های premium', 'تسک‌های زمان‌بندی', 'پشتیبانی اختصاصی'], cta: 'مشاهده طرح‌ها', href: '/pricing' },
+          ].map((p, i) => (
+            <div key={p.name} className={`pricing-card${p.featured ? ' featured' : ''} reveal`}
+              style={{ transitionDelay: `${i * 100}ms`, opacity: visible ? 1 : undefined, transform: visible ? 'none' : undefined }}>
+              <h3 className="text-lg font-bold text-[#dfe1f4] mb-1">{p.name}</h3>
+              <p className="text-2xl font-extrabold mb-1" style={{ color: 'var(--landing-accent)' }}>{p.price}</p>
+              <p className="text-sm mb-6" style={{ color: 'var(--landing-text-muted)' }}>{p.desc}</p>
+              <ul className="space-y-2.5 mb-8">
+                {p.features.map(f => (
+                  <li key={f} className="flex items-center gap-2 text-sm" style={{ color: 'var(--landing-text-muted)' }}>
+                    <Icon name="check" size={12} style={{ color: 'var(--landing-accent)' }} />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <Link href={isLoggedIn && p.href === '/signup' ? '/chat' : p.href}
+                className={p.featured ? 'cta-primary w-full justify-center' : 'cta-secondary w-full justify-center'}>
+                {p.cta}
+              </Link>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ── FAQ ──────────────────────────────────────────────────────────────── */
+
+const FAQ = [
+  { q: 'Multiai چه فرقی با ChatGPT داره؟', a: 'Multiai یه پلتفرم یکپارچه‌ست — به بهترین مدل‌های هوش مصنوعی دنیا (DeepSeek, Mistral, Tencent, MiMo و...) از یک پنل دسترسی دارید، با قیمت ریالی و بدون نیاز به VPN. لازم نیست چندتا سرویس جداگانه بخرید.' },
+  { q: 'آیا نیاز به VPN دارم؟', a: 'خیر. تمام ارتباطات از طریق زیرساخت اختصاصی و داخلی مسیریابی میشه. بدون فیلترشکن، بدون قطعی.' },
+  { q: 'هزینه استفاده چقدره؟', a: 'تعرفه‌ها بر اساس مدل متفاوته. هر مدل قیمت token ورودی و خروجی خودش رو داره. هزینه دقیق رو قبل از ارسال هر درخواست می‌بینید. مدل Tencent HY-3 برای شروع رایگانه.' },
+  { q: 'اطلاعات من امنه؟', a: 'بله. تمام ارتباطات رمزنگاری شده (TLS 1.3)، داده‌ها روی سرورهای اختصاصی ذخیره میشن، و مکالمات شما فقط برای خودتون قابل دسترسه.' },
+  { q: 'چطور API key بسازم؟', a: 'بعد از ثبت‌نام، از پنل کاربری > بخش «کلید API» یک کلید جدید بسازید. endpoint ما با OpenAI-compatible هست — کافیه base_url رو عوض کنید.' },
+  { q: 'Smart Mode چیه؟', a: 'Smart Mode هوشمندانه محتوای پیام شما رو تحلیل میکنه و بهترین مدل رو بر اساس موجودی کیف پول و نیاز شما انتخاب میکنه. سوال ساده؟ مدل ارزون. کد؟ مدل قوی. همیشه cheapest capable model.' },
+]
 
 function FAQSection() {
   const [openIndex, setOpenIndex] = useState<number | null>(null)
   const { ref, visible } = useReveal()
-
   return (
-    <section ref={ref} className="py-20 md:py-28">
+    <section ref={ref} className="py-24 md:py-32">
       <div className="max-w-2xl mx-auto px-6">
-        <div className={`reveal-section ${visible ? 'visible' : ''}`}>
-          <h2 className="text-3xl md:text-4xl font-bold text-center text-[var(--text-primary)] mb-12">
-            سوالات متداول
-          </h2>
+        <div className="text-center mb-16">
+          <p className="section-eyebrow">سوالات متداول</p>
+          <h2 className="section-heading">هر سوالی دارید، جوابش اینجاست</h2>
         </div>
-
-        <div className={`reveal-stagger ${visible ? 'visible' : ''}`}>
-          <div className="space-y-3">
-            {FAQ.map((item, i) => {
-              const isOpen = openIndex === i
-              return (
-                <div key={item.q} className="card border border-[var(--border)] rounded-2xl overflow-hidden">
-                  <button
-                    type="button"
-                    className="w-full px-6 py-5 text-right flex items-center justify-between gap-4 hover:bg-[var(--bg-hover)] transition-colors"
-                    onClick={() => setOpenIndex(isOpen ? null : i)}
-                    aria-expanded={isOpen}
-                  >
-                    <span className="font-medium text-[var(--text-primary)]">{item.q}</span>
-                    <Icon name="arrowRight" size={16}
-                      className={`text-[var(--text-muted)] shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-90' : ''}`} />
-                  </button>
-                  <div className={`faq-answer-spring ${isOpen ? 'open' : ''}`}>
-                    <div>
-                      <p className="px-6 pb-5 text-sm text-[var(--text-secondary)] leading-relaxed">{item.a}</p>
-                    </div>
-                  </div>
+        <div className="reveal" style={{ opacity: visible ? 1 : undefined, transform: visible ? 'none' : undefined }}>
+          {FAQ.map((item, i) => {
+            const isOpen = openIndex === i
+            return (
+              <div key={item.q} className="faq-item">
+                <button className="faq-trigger" onClick={() => setOpenIndex(isOpen ? null : i)} aria-expanded={isOpen}>
+                  <span>{item.q}</span>
+                  <Icon name="arrowRight" size={14}
+                    style={{ color: 'var(--landing-text-muted)', transition: 'transform 300ms ease', transform: isOpen ? 'rotate(90deg)' : 'none' }} />
+                </button>
+                <div className={`faq-answer${isOpen ? ' open' : ''}`}>
+                  <div><p>{item.a}</p></div>
                 </div>
-              )
-            })}
-          </div>
+              </div>
+            )
+          })}
         </div>
       </div>
     </section>
   )
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   Page
-   ═══════════════════════════════════════════════════════════════════════════ */
+/* ── CTA Banner ───────────────────────────────────────────────────────── */
+
+function CTABanner({ isLoggedIn }: { isLoggedIn: boolean }) {
+  const { ref, visible } = useReveal(0.2)
+  return (
+    <section ref={ref} className="py-24 md:py-32" style={{ background: 'rgba(129,140,248,0.02)' }}>
+      <div className="max-w-2xl mx-auto px-6 text-center">
+        <div className="capability-card reveal" style={{
+          padding: '3rem', borderRadius: '1.5rem',
+          borderColor: 'rgba(129,140,248,0.15)',
+          opacity: visible ? 1 : undefined, transform: visible ? 'none' : undefined
+        }}>
+          <h2 className="section-heading mb-4">آماده شروع هستید؟</h2>
+          <p className="mb-8" style={{ color: 'var(--landing-text-muted)' }}>
+            همین حالا ثبت‌نام کنید و به پیشرفته‌ترین مدل‌های هوش مصنوعی دسترسی پیدا کنید.
+            بدون VPN، بدون تحریم، با قیمت ریالی.
+          </p>
+          <Link href={isLoggedIn ? '/chat' : '/signup'} className="cta-primary">
+            {isLoggedIn ? 'رفتن به چت' : 'شروع رایگان — ۳۰ ثانیه'}
+            <Icon name="arrowRight" size={16} />
+          </Link>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ── Page ──────────────────────────────────────────────────────────────── */
 
 export default function LandingPage() {
   const { user } = useAuth()
   const isLoggedIn = !!user
-
   const [models, setModels] = useState<ModelCatalogItem[]>([])
   const [modelsLoaded, setModelsLoaded] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     fetch('/api/catalog/models')
-      .then((res) => res.json())
-      .then((data: CatalogResponse) => {
-        if (cancelled) return
-        setModels(data?.data ?? [])
-      })
-      .catch((err) => { console.error('Failed to fetch catalog:', err) })
-      .finally(() => {
-        if (!cancelled) setModelsLoaded(true)
-      })
+      .then(r => r.json())
+      .then((d: CatalogResponse) => { if (!cancelled) setModels(d?.data ?? []) })
+      .catch(err => { console.error('Failed to fetch catalog:', err) })
+      .finally(() => { if (!cancelled) setModelsLoaded(true) })
     return () => { cancelled = true }
   }, [])
 
   const modelCount = modelsLoaded ? modelCountLabel(models) : 'در حال بارگذاری...'
 
   return (
-    <div className="landing-v3">
+    <div className="landing-v5">
       <Hero isLoggedIn={isLoggedIn} modelCount={modelCount} />
-      <StatsBar modelCount={modelCount} />
-      <Features />
-      <Steps />
-      <CTABanner isLoggedIn={isLoggedIn} />
+      <PlatformMarquee />
+      <Stats modelCount={modelCount} />
+      <Capabilities />
+      <HowItWorks />
+      <Pricing isLoggedIn={isLoggedIn} modelCount={modelCount} />
       <FAQSection />
-      <footer className="text-center py-12 text-xs text-[var(--text-muted)] border-t border-[var(--border)]">
-        <p>Multiai — دسترسی به هوش مصنوعی برای همه</p>
+      <CTABanner isLoggedIn={isLoggedIn} />
+      <footer className="text-center py-12 text-sm" style={{ color: 'var(--landing-text-muted)', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+        <p>Multiai — پلتفرم کامل هوش مصنوعی فارسی</p>
       </footer>
     </div>
   )

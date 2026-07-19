@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import os
 import json
-import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
@@ -618,74 +617,48 @@ async def admin_refresh_pricing(request: Request) -> JSONResponse:
     result = await refresh_pricing()
     return JSONResponse(jsonable_encoder(result))
 
-# --- Model Test Endpoint ---
-@router.get("/admin/models/test")
-async def test_models():
-    """Test all models and return status (ok/error/timeout)."""
-    import asyncio
-    results = []
-    models = [
-        "tencent-hy3", "mistral-large", "mistral-medium-3-5",
-        "deepseek-v4-pro", "deepseek-v4-flash", "agnes-2.0-flash",
-        "kimi-k2.7-code-free", "mimo-v2.5", "mimo-v2.5-pro",
-        "mimo-v2.5-pro-ultraspeed"
-    ]
-    async def test_one(model):
-        try:
-            r = await _http.post(
-                f"{LITELLM_HOST}/v1/chat/completions",
-                json={"model": model, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 5},
-                timeout=15
-            )
-            return {"model": model, "status": "ok" if r.status_code == 200 else "error", "code": r.status_code}
-        except Exception as e:
-            return {"model": model, "status": "timeout", "error": str(e)[:50]}
-    
-    results = await asyncio.gather(*[test_one(m) for m in models])
-    return JSONResponse({"results": results, "total": len(results)})
+# ── Model Test (auto-recommend healthy) ──
 
 
-# ponytail: test all models endpoint
+# ponytail: test all models + auto-recommend healthy ones (concurrent)
 @router.get("/admin/test-models")
 async def test_all_models(request: Request):
-    """Ping every model with a quick test, return status for each."""
-    import concurrent.futures, urllib.request, json as _json, time as _time
-    
+    """Ping every model concurrently, return status, and mark healthy ones as recommended."""
+    import httpx, asyncio
     async with async_session() as session:
         res = await session.execute(sqlalchemy.text(
             "SELECT provider_model_id, display_name FROM model_catalog WHERE availability='available'"
         ))
         rows = res.fetchall()
     
-    def _ping(mid, name):
-        import sys as _sys, traceback as _tb
-        t0 = _time.monotonic()
+    async def test_one(client, row):
+        mid, name = row.provider_model_id, row.display_name
         try:
-            req = urllib.request.Request(
+            r = await client.post(
                 f"{LITELLM_HOST}/v1/chat/completions",
-                data=_json.dumps({"model": mid, "messages": [{"role":"user","content":"hi"}], "max_tokens": 5}).encode(),
-                headers={"Content-Type": "application/json"}
+                json={"model": mid, "messages": [{"role":"user","content":"hi"}], "max_tokens": 5},
+                headers={}
             )
-            # Bypass proxy by using a custom opener
-            proxy_handler = urllib.request.ProxyHandler({})
-            opener = urllib.request.build_opener(proxy_handler)
-            resp = opener.open(req, timeout=15)
-            ms = (_time.monotonic() - t0) * 1000
-            return {"id": mid, "name": name, "ok": resp.status == 200, "status": resp.status, "ms": ms}
+            ok = r.status_code == 200
+            return {"id": mid, "name": name, "ok": ok, "status": r.status_code, "ms": r.elapsed.total_seconds() * 1000}
         except Exception as e:
-            ms = (_time.monotonic() - t0) * 1000
-            _sys.stderr.write(f"DEBUG _ping {mid}: {type(e).__name__}: {e}\n")
-            _sys.stderr.write(_tb.format_exc()[:500])
-            _sys.stderr.write("\n---\n")
-            _sys.stderr.flush()
-            return {"id": mid, "name": name, "ok": False, "error": str(e)[:100], "ms": ms}
+            return {"id": mid, "name": name, "ok": False, "error": str(e)[:100]}
     
-    loop = asyncio.get_running_loop()
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
-        futures = [loop.run_in_executor(pool, _ping, r.provider_model_id, r.display_name) for r in rows]
-        results = await asyncio.gather(*futures)
+    async with httpx.AsyncClient(timeout=10) as client:
+        results = await asyncio.gather(*[test_one(client, row) for row in rows])
     
-    return JSONResponse({"results": results, "total": len(results), "ok": sum(1 for r in results if r["ok"])})
+    healthy_ids = [r["id"] for r in results if r["ok"]]
+    if healthy_ids:
+        async with async_session() as session:
+            for mid in healthy_ids:
+                await session.execute(
+                    sqlalchemy.text("UPDATE model_catalog SET recommended_for = '[\"chat\"]' WHERE provider_model_id = :mid"),
+                    {"mid": mid}
+                )
+            await session.commit()
+        await rds.delete('cache:catalog:models')
+    
+    return JSONResponse({"results": results, "total": len(results), "ok": len(healthy_ids), "recommended": len(healthy_ids)})
 
 # ponytail: image captcha generator
 import io, random, base64

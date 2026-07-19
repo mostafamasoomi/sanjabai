@@ -2,19 +2,15 @@
 
 import { useEffect, useRef } from 'react'
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   VortexParticles — Canvas-based particle field inspired by motion.page
-   Subtle floating particles with gentle movement and fade edges.
-   ═══════════════════════════════════════════════════════════════════════════ */
+/* Routing-graph ambient field — motion.page energy without SaaS particle soup */
 
-interface Particle {
+interface Node {
   x: number
   y: number
   vx: number
   vy: number
-  size: number
-  opacity: number
-  pulse: number
+  r: number
+  hue: number
 }
 
 export default function VortexParticles() {
@@ -23,116 +19,114 @@ export default function VortexParticles() {
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    let particles: Particle[] = []
-    let animationId: number
+    let nodes: Node[] = []
     let width = 0
     let height = 0
+    let raf = 0
+    let reduced = false
 
-    const ACCENT = { r: 129, g: 140, b: 248 } // indigo
-    const WHITE = { r: 223, g: 225, b: 244 } // motion.page text color
+    const colors = [
+      { r: 79, g: 178, b: 246 },  // blue
+      { r: 175, g: 71, b: 255 },  // violet
+      { r: 48, g: 218, b: 220 },  // teal
+    ]
+
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const onMq = () => { reduced = mq.matches }
+    onMq()
+    mq.addEventListener?.('change', onMq)
 
     function resize() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
-      width = window.innerWidth
-      height = window.innerHeight
-      canvas!.width = width * dpr
-      canvas!.height = height * dpr
-      canvas!.style.width = `${width}px`
-      canvas!.style.height = `${height}px`
+      width = canvas!.clientWidth || window.innerWidth
+      height = canvas!.clientHeight || window.innerHeight
+      canvas!.width = Math.floor(width * dpr)
+      canvas!.height = Math.floor(height * dpr)
       ctx!.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
 
-    function createParticles() {
-      const count = Math.min(Math.floor((width * height) / 12000), 120)
-      particles = []
-      for (let i = 0; i < count; i++) {
-        particles.push({
-          x: Math.random() * width,
-          y: Math.random() * height,
-          vx: (Math.random() - 0.5) * 0.2,
-          vy: (Math.random() - 0.5) * 0.2 - 0.1,
-          size: Math.random() * 1.5 + 0.5,
-          opacity: Math.random() * 0.4 + 0.1,
-          pulse: Math.random() * Math.PI * 2,
-        })
-      }
+    function seed() {
+      const count = Math.min(Math.floor((width * height) / 18000), 64)
+      nodes = Array.from({ length: count }, () => ({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        vx: (Math.random() - 0.5) * 0.18,
+        vy: (Math.random() - 0.5) * 0.18,
+        r: Math.random() * 1.4 + 0.6,
+        hue: Math.floor(Math.random() * colors.length),
+      }))
     }
 
-    function draw(timestamp: number) {
+    function frame() {
       ctx!.clearRect(0, 0, width, height)
-
-      const t = timestamp * 0.001
-
-      for (const p of particles) {
-        p.x += p.vx
-        p.y += p.vy
-
-        // Wrap around
-        if (p.x < -50) p.x = width + 50
-        if (p.x > width + 50) p.x = -50
-        if (p.y < -50) p.y = height + 50
-        if (p.y > height + 50) p.y = -50
-
-        // Pulsing opacity
-        const pulse = Math.sin(t * 0.8 + p.pulse) * 0.15 + 0.85
-        const alpha = p.opacity * pulse
-
-        // Distance from center — closer to center = more accent-colored
-        const cx = width / 2
-        const cy = height / 2
-        const dx = (p.x - cx) / (width / 2)
-        const dy = (p.y - cy) / (height / 2)
-        const dist = Math.sqrt(dx * dx + dy * dy)
-
-        // Blend between accent (center) and white (edges)
-        const blend = Math.max(0, 1 - dist * 1.5)
-        const r = Math.round(ACCENT.r * blend + WHITE.r * (1 - blend))
-        const g = Math.round(ACCENT.g * blend + WHITE.g * (1 - blend))
-        const b = Math.round(ACCENT.b * blend + WHITE.b * (1 - blend))
-
-        ctx!.beginPath()
-        ctx!.arc(p.x, p.y, p.size, 0, Math.PI * 2)
-        ctx!.fillStyle = `rgba(${r},${g},${b},${alpha})`
-        ctx!.fill()
+      if (reduced) {
+        // static soft field
+        for (const n of nodes) {
+          const c = colors[n.hue]
+          ctx!.beginPath()
+          ctx!.arc(n.x, n.y, n.r, 0, Math.PI * 2)
+          ctx!.fillStyle = `rgba(${c.r},${c.g},${c.b},0.18)`
+          ctx!.fill()
+        }
+        return
       }
 
-      // Draw subtle connections between nearby particles
-      for (let i = 0; i < particles.length; i++) {
-        for (let j = i + 1; j < particles.length; j++) {
-          const dx = particles[i].x - particles[j].x
-          const dy = particles[i].y - particles[j].y
-          const dist = Math.sqrt(dx * dx + dy * dy)
-          if (dist < 120) {
-            const alpha = (1 - dist / 120) * 0.06
+      for (const n of nodes) {
+        n.x += n.vx
+        n.y += n.vy
+        if (n.x < -20) n.x = width + 20
+        if (n.x > width + 20) n.x = -20
+        if (n.y < -20) n.y = height + 20
+        if (n.y > height + 20) n.y = -20
+      }
+
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const a = nodes[i]
+          const b = nodes[j]
+          const dx = a.x - b.x
+          const dy = a.y - b.y
+          const d = Math.hypot(dx, dy)
+          if (d < 140) {
+            const alpha = (1 - d / 140) * 0.08
             ctx!.beginPath()
-            ctx!.moveTo(particles[i].x, particles[i].y)
-            ctx!.lineTo(particles[j].x, particles[j].y)
-            ctx!.strokeStyle = `rgba(129,140,248,${alpha})`
-            ctx!.lineWidth = 0.5
+            ctx!.moveTo(a.x, a.y)
+            ctx!.lineTo(b.x, b.y)
+            ctx!.strokeStyle = `rgba(79,178,246,${alpha})`
+            ctx!.lineWidth = 0.7
             ctx!.stroke()
           }
         }
       }
 
-      animationId = requestAnimationFrame(draw)
+      for (const n of nodes) {
+        const c = colors[n.hue]
+        ctx!.beginPath()
+        ctx!.arc(n.x, n.y, n.r, 0, Math.PI * 2)
+        ctx!.fillStyle = `rgba(${c.r},${c.g},${c.b},0.45)`
+        ctx!.fill()
+      }
+
+      raf = requestAnimationFrame(frame)
+    }
+
+    const onResize = () => {
+      resize()
+      seed()
     }
 
     resize()
-    createParticles()
-    animationId = requestAnimationFrame(draw)
-
-    window.addEventListener('resize', () => {
-      resize()
-      createParticles()
-    })
+    seed()
+    raf = requestAnimationFrame(frame)
+    window.addEventListener('resize', onResize)
 
     return () => {
-      cancelAnimationFrame(animationId)
-      window.removeEventListener('resize', resize)
+      cancelAnimationFrame(raf)
+      window.removeEventListener('resize', onResize)
+      mq.removeEventListener?.('change', onMq)
     }
   }, [])
 
@@ -146,8 +140,9 @@ export default function VortexParticles() {
         width: '100%',
         height: '100%',
         pointerEvents: 'none',
-        maskImage: 'radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 75%)',
-        WebkitMaskImage: 'radial-gradient(ellipse 80% 60% at 50% 0%, black 40%, transparent 75%)',
+        opacity: 0.85,
+        maskImage: 'radial-gradient(ellipse 70% 60% at 70% 45%, black 20%, transparent 75%)',
+        WebkitMaskImage: 'radial-gradient(ellipse 70% 60% at 70% 45%, black 20%, transparent 75%)',
       }}
     />
   )

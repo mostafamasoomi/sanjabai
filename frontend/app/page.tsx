@@ -92,20 +92,20 @@ function Hero({ isLoggedIn, modelCount }: { isLoggedIn: boolean; modelCount: str
       <div className="hero-parallax" style={{ transform: 'translateY(calc(var(--scroll, 0) * 90px)) scale(calc(1 - var(--scroll, 0) * 0.05))', opacity: 'calc(1 - var(--scroll, 0) * 0.55)' }}>
         <div className="shell hero-grid">
           <div className="hero-copy">
-            <div className="announcement">
+            <div className="announcement entrance-item">
               <span className="chip">NEW</span>
               Smart Mode — مدل مناسب را خودش انتخاب میکند
             </div>
-          <h1 className="display">
+          <h1 className="display entrance-item">
             یک درگاه.
             <br />
-            <span className="mark">همه مدل‌ها.</span>
+            <span className="mark">همه مدلها.</span>
           </h1>
-          <p className="lede" style={{ marginTop: '1.25rem' }}>
-            چت چندمدلی، API سازگار با OpenAI، پرداخت ریالی با زرین‌پال —
-            بدون VPN. از یک workspace به پیشرفته‌ترین مدل‌ها وصل شوید.
+          <p className="lede entrance-item" style={{ marginTop: '1.25rem' }}>
+            چت چندمدلی، API سازگار با OpenAI، پرداخت ریالی با زرینپال —
+            بدون VPN. از یک workspace به پیشرفتهترین مدلها وصل شوید.
           </p>
-          <div className="hero-actions">
+          <div className="hero-actions entrance-item">
             <Link href={isLoggedIn ? '/chat' : '/signup'} className="btn-primary">
               {isLoggedIn ? 'شروع چت' : 'شروع رایگان'}
               <Icon name="arrowRight" size={16} />
@@ -114,14 +114,14 @@ function Hero({ isLoggedIn, modelCount }: { isLoggedIn: boolean; modelCount: str
               مستندات API
             </Link>
           </div>
-          <div className="hero-trust">
+          <div className="hero-trust entrance-item">
             <span><Icon name="check" size={14} style={{ color: 'var(--accent-teal)' }} />{modelCount}</span>
             <span><Icon name="check" size={14} style={{ color: 'var(--accent-teal)' }} />بدون VPN</span>
             <span><Icon name="check" size={14} style={{ color: 'var(--accent-teal)' }} />پرداخت ریالی</span>
           </div>
         </div>
 
-        <div className="stage" aria-hidden="true">
+        <div className="stage entrance-item" aria-hidden="true">
           <div className="stage-bar">
             <span className="stage-dot" />
             <span className="stage-dot" />

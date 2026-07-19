@@ -4441,6 +4441,30 @@ img, svg { display: block; max-width: 100%; }
   overflow: hidden;
   background: var(--bg);
 }
+
+/* ── Hero entrance choreography (motion.page DNA) ────────────────────── */
+.hero-parallax {
+  will-change: transform, opacity;
+}
+.entrance-item {
+  opacity: 0;
+  transform: translateY(32px) scale(0.96);
+  animation: heroEntrance 0.9s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.entrance-item:nth-child(1) { animation-delay: 0.12s; }
+.entrance-item:nth-child(2) { animation-delay: 0.28s; }
+.entrance-item:nth-child(3) { animation-delay: 0.44s; }
+.entrance-item:nth-child(4) { animation-delay: 0.60s; }
+.entrance-item:nth-child(5) { animation-delay: 0.76s; }
+.entrance-item:nth-child(6) { animation-delay: 0.92s; }
+@keyframes heroEntrance {
+  from { opacity: 0; transform: translateY(32px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .entrance-item { opacity: 1; transform: none; animation: none; }
+}
+
 .landing-v7 .hero-grid {
   position: relative;
   z-index: 2;

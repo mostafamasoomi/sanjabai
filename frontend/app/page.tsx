@@ -7,7 +7,7 @@ import { Icon } from '@/components/ui/Icon'
 import { modelCountLabel } from '@/lib/claims'
 import { type ModelCatalogItem, type CatalogResponse } from '@/types/catalog'
 import VortexParticles from '@/components/VortexParticles'
-import SmoothScroll from '@/components/SmoothScroll'
+
 
 /* Landing v7 — motion.page STRUCTURE DNA
    Asymmetric hero · constellation · bento · API stage · three doors
@@ -521,7 +521,7 @@ export default function LandingPage() {
 
   return (
     <div className="landing-v7">
-      <SmoothScroll />
+
       <Hero isLoggedIn={isLoggedIn} modelCount={modelCount} />
       <Marquee />
       <ScrollRoutingStage isLoggedIn={isLoggedIn} />

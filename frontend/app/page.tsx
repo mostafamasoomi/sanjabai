@@ -1,16 +1,17 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useAuth } from '@/lib/auth'
 import { Icon } from '@/components/ui/Icon'
 import { modelCountLabel } from '@/lib/claims'
 import { type ModelCatalogItem, type CatalogResponse } from '@/types/catalog'
+import VortexParticles from '@/components/VortexParticles'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Multiai Landing v5 — motion.page DNA
-   Deep navy canvas, confident typography, single accent, minimal decoration.
-   Based on real platform capabilities (not marketing fluff).
+   Multiai Landing v6 — Full motion.page DNA
+   Canvas particles, ultra-thin typography, glass badges, conic dots,
+   staggered reveals. Built on real platform capabilities.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── Reveal hook ──────────────────────────────────────────────────────── */
@@ -26,11 +27,12 @@ function useReveal(threshold = 0.15) {
   return { ref, visible }
 }
 
-/* ── Platform marquee (duplicated for seamless loop) ──────────────────── */
+/* ── Platform marquee ─────────────────────────────────────────────────── */
 
 const PLATFORMS = [
-  'DeepSeek', 'Mistral', 'Tencent', 'GPT-4o', 'Claude', 'Gemini',
-  'Llama', 'Qwen', 'MiMo', 'Smart Mode', 'API Access', 'OpenAI Compatible',
+  'DeepSeek V4', 'Mistral Large', 'Tencent HY-3', 'MiMo Pro',
+  'GPT-4o', 'Claude 3.5', 'Gemini', 'Llama 3', 'Qwen',
+  'Smart Mode', 'OpenAI API', 'RAG',
 ]
 
 function PlatformMarquee() {
@@ -39,11 +41,28 @@ function PlatformMarquee() {
       <div className="platform-marquee-inner">
         {[...PLATFORMS, ...PLATFORMS].map((p, i) => (
           <span key={i} className="platform-chip">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--landing-accent)' }} />
+            <span className="conic-dot" />
             {p}
           </span>
         ))}
       </div>
+    </div>
+  )
+}
+
+/* ── Staggered dot grid ───────────────────────────────────────────────── */
+
+function DotGrid() {
+  return (
+    <div className="dot-grid" aria-hidden="true">
+      {Array.from({ length: 30 }).map((_, i) => {
+        const x = 5 + Math.random() * 90
+        const y = 5 + Math.random() * 90
+        const delay = Math.random() * 3
+        return (
+          <span key={i} className="dot" style={{ left: `${x}%`, top: `${y}%`, animationDelay: `${delay}s` }} />
+        )
+      })}
     </div>
   )
 }
@@ -53,31 +72,37 @@ function PlatformMarquee() {
 function Hero({ isLoggedIn, modelCount }: { isLoggedIn: boolean; modelCount: string }) {
   return (
     <section className="hero-section">
+      <VortexParticles />
+      <DotGrid />
+
       <div className="relative z-10 w-full max-w-4xl mx-auto px-6 py-20 text-center">
-        {/* Badge */}
-        <div className="inline-flex mb-8">
-          <span className="platform-chip" style={{ borderColor: 'rgba(129,140,248,0.2)' }}>
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full rounded-full bg-[var(--landing-accent)] animate-ping opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--landing-accent)]" />
-            </span>
+        {/* Glass badge */}
+        <div className="inline-flex mb-10">
+          <span className="glass-badge">
+            <span className="live-dot" />
             {modelCount}
+            <span className="conic-dot" />
           </span>
         </div>
 
-        {/* Headline */}
+        {/* Headline — ultra-thin, motion.page style */}
         <h1 className="hero-headline mb-6">
-          پلتفرم کامل
+          پلتفرم
+          {' '}
+          <span className="accent">کامل</span>
+          {' '}
+          هوش مصنوعی
           <br />
-          <span className="accent">هوش مصنوعی فارسی</span>
+          <span className="accent">فارسی</span>
+          .
         </h1>
 
-        <p className="text-base sm:text-lg max-w-xl mx-auto leading-relaxed mb-10" style={{ color: 'var(--landing-text-muted)' }}>
-          دسترسی به پیشرفته‌ترین مدل‌های هوش مصنوعی دنیا،
-          پرداخت ریالی، بدون نیاز به VPN، با API سازگار با OpenAI.
+        <p className="text-base sm:text-lg max-w-xl mx-auto leading-relaxed mb-10" style={{ color: 'var(--text-muted)' }}>
+          دسترسی به پیشرفته‌ترین مدل‌های هوش مصنوعی دنیا.
+          پرداخت ریالی، بدون VPN، API سازگار با OpenAI.
         </p>
 
-        {/* CTAs */}
+        {/* CTAs — white primary (motion.page style) */}
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link href={isLoggedIn ? '/chat' : '/signup'} className="cta-primary">
             {isLoggedIn ? 'شروع چت' : 'شروع رایگان'}
@@ -119,14 +144,14 @@ function Stats({ modelCount }: { modelCount: string }) {
 /* ── Capabilities ─────────────────────────────────────────────────────── */
 
 const CAPABILITIES = [
-  { icon: 'chat', title: 'چت هوشمند', desc: 'مکالمه با ۸ مدل پیشرفته، streaming实时، Markdown، syntax highlighting و web search.' },
-  { icon: 'code', title: 'API سازگار با OpenAI', desc: 'در ۲ دقیقه کلید API بسازید. endpoint ما با تمام کتابخونه‌های OpenAI-compatible کار میکنه.' },
-  { icon: 'models', title: 'Smart Mode', desc: 'هوش مصنوعی خودش بهترین مدل رو بر اساس سوال شما انتخاب میکنه — همیشه cheapest capable model.' },
-  { icon: 'dashboard', title: 'داشبورد و مدیریت', desc: 'پیگیری لحظه‌ای مصرف، تاریخچه تراکنش‌ها، شارژ کیف پول ریالی از طریق درگاه زرین‌پال.' },
-  { icon: 'search', title: 'جستجوی وب', desc: 'DuckDuckGo + Wikipedia — نتایج زنده بدون API key. مدل به اطلاعات روز دسترسی داره.' },
-  { icon: 'security', title: 'امن و مستقل', desc: 'سرورهای اختصاصی، رمزنگاری کامل، بدون تحریم. مکالمات شما private میمونن.' },
+  { icon: 'chat', title: 'چت هوشمند', desc: 'مکالمه با برترین مدل‌ها — streaming实时، Markdown، syntax highlighting و web search.' },
+  { icon: 'code', title: 'API سازگار با OpenAI', desc: 'در ۲ دقیقه کلید API بسازید. با تمام کتابخونه‌های استاندارد کار میکنه.' },
+  { icon: 'models', title: 'Smart Mode', desc: 'هوش مصنوعی خودش بهترین مدل رو انتخاب میکنه — همیشه cheapest capable model.' },
+  { icon: 'dashboard', title: 'داشبورد و مدیریت', desc: 'پیگیری لحظه‌ای مصرف، تاریخچه تراکنش‌ها، شارژ ریالی از طریق زرین‌پال.' },
+  { icon: 'search', title: 'جستجوی وب', desc: 'DuckDuckGo + Wikipedia — نتایج زنده بدون API key.' },
+  { icon: 'security', title: 'امن و مستقل', desc: 'سرورهای اختصاصی، رمزنگاری کامل، بدون تحریم. مکالمات شما private.' },
   { icon: 'prompts', title: 'حافظه و اسکیلز', desc: 'مدل مکالمات مهم رو به خاطر میسپره. اسکیلز marketplace برای تخصص‌های مختلف.' },
-  { icon: 'tasks', title: 'تسک‌های زمان‌بندی شده', desc: 'پرامپت‌های recurring تنظیم کنید. تحویل از طریق dashboard یا Telegram.' },
+  { icon: 'tasks', title: 'تسک‌های زمان‌بندی', desc: 'پرامپت‌های recurring تنظیم کنید. تحویل از طریق dashboard یا Telegram.' },
   { icon: 'documents', title: 'RAG و آپلود فایل', desc: 'آپلود PDF, TXT, CSV, JSON — مدل محتواش رو میخونه و بهش استناد میکنه.' },
 ]
 
@@ -139,10 +164,12 @@ function Capabilities() {
           <p className="section-eyebrow">قابلیت‌ها</p>
           <h2 className="section-heading mb-4">
             هر چیزی که برای کار با
-            <span style={{ color: 'var(--landing-accent)' }}> هوش مصنوعی </span>
+            {' '}
+            <span style={{ color: 'var(--accent)' }}>هوش مصنوعی</span>
+            {' '}
             نیاز دارید
           </h2>
-          <p style={{ color: 'var(--landing-text-muted)', maxWidth: '36rem', margin: '0 auto' }}>
+          <p style={{ color: 'var(--text-muted)', maxWidth: '36rem', margin: '0 auto' }}>
             از چت ساده تا API سازمانی — همه در یک پلتفرم، با قیمت ریالی و بدون تحریم.
           </p>
         </div>
@@ -154,8 +181,8 @@ function Capabilities() {
               <div className="capability-icon">
                 <Icon name={c.icon as any} size={18} />
               </div>
-              <h3 className="font-semibold text-[#dfe1f4] mb-1.5">{c.title}</h3>
-              <p className="text-sm leading-relaxed" style={{ color: 'var(--landing-text-muted)' }}>{c.desc}</p>
+              <h3 className="font-medium text-[var(--text-primary)] mb-1.5">{c.title}</h3>
+              <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)' }}>{c.desc}</p>
             </div>
           ))}
         </div>
@@ -168,8 +195,8 @@ function Capabilities() {
 
 const STEPS = [
   { step: '۱', title: 'ثبت‌نام', desc: '۳۰ ثانیه، فقط ایمیل' },
-  { step: '۲', title: 'شارژ کیف پول', desc: 'پرداخت ریالی، درگاه زرین‌پال' },
-  { step: '۳', title: 'چت یا API', desc: 'انتخاب مدل، شروع مکالمه' },
+  { step: '۲', title: 'شارژ کیف پول', desc: 'پرداخت ریالی، زرین‌پال' },
+  { step: '۳', title: 'چت یا API', desc: 'انتخاب مدل، شروع' },
   { step: '۴', title: 'پیگیری مصرف', desc: 'داشبورد لحظه‌ای' },
 ]
 
@@ -186,12 +213,12 @@ function HowItWorks() {
           {STEPS.map((s, i) => (
             <div key={s.title} className="reveal text-center"
               style={{ transitionDelay: `${i * 100}ms`, opacity: visible ? 1 : undefined, transform: visible ? 'none' : undefined }}>
-              <div className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center font-bold text-lg"
-                style={{ background: 'var(--landing-accent-dim)', color: 'var(--landing-accent)' }}>
+              <div className="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center text-lg"
+                style={{ background: 'var(--accent-dim)', color: 'var(--accent)', fontWeight: 300 }}>
                 {s.step}
               </div>
-              <h3 className="font-semibold text-[#dfe1f4] mb-1">{s.title}</h3>
-              <p className="text-xs" style={{ color: 'var(--landing-text-muted)' }}>{s.desc}</p>
+              <h3 className="font-medium text-[var(--text-primary)] mb-1">{s.title}</h3>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{s.desc}</p>
             </div>
           ))}
         </div>
@@ -211,29 +238,31 @@ function Pricing({ isLoggedIn, modelCount }: { isLoggedIn: boolean; modelCount: 
           <p className="section-eyebrow">تعرفه‌ها</p>
           <h2 className="section-heading mb-4">
             قیمت‌گذاری
-            <span style={{ color: 'var(--landing-accent)' }}> شفاف </span>
+            {' '}
+            <span style={{ color: 'var(--accent)' }}>شفاف</span>
+            {' '}
             و ساده
           </h2>
-          <p style={{ color: 'var(--landing-text-muted)', maxWidth: '36rem', margin: '0 auto' }}>
-            {modelCount} — فقط به اندازه مصرف واقعی پرداخت کنید. تعرفه هر مدل رو قبل از ارسال می‌بینید.
+          <p style={{ color: 'var(--text-muted)', maxWidth: '36rem', margin: '0 auto' }}>
+            {modelCount} — فقط به اندازه مصرف واقعی پرداخت کنید.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[
             { name: 'رایگان', price: '۰ تومان', desc: 'شروع بدون هزینه', features: ['مدل Tencent HY-3', 'Smart Mode رایگان', 'API تا ۱۰۰ درخواست', 'چت با web search'], cta: 'شروع رایگان', href: '/signup' },
-            { name: 'اعتباری', price: 'پرداخت به ازای مصرف', desc: 'محبوب‌ترین', features: ['همه ۸ مدل', 'DeepSeek V4 Pro', 'Mistral Large', 'MiMo Pro', 'API نامحدود', 'RAG و آپلود فایل', 'اسکیلز و حافظه'], cta: 'مشاهده مدل‌ها', href: '/models', featured: true },
-            { name: 'اشتراکی', price: 'طرح‌های ماهانه', desc: 'برای کاربران حرفه‌ای', features: ['سقف مصرف بالاتر', 'اولویت در صف', 'مدل‌های premium', 'تسک‌های زمان‌بندی', 'پشتیبانی اختصاصی'], cta: 'مشاهده طرح‌ها', href: '/pricing' },
+            { name: 'اعتباری', price: 'پرداخت به ازای مصرف', desc: 'محبوب‌ترین', features: ['همه مدل‌ها', 'DeepSeek V4 Pro', 'Mistral Large', 'MiMo Pro', 'API نامحدود', 'RAG و آپلود فایل', 'اسکیلز و حافظه'], cta: 'مشاهده مدل‌ها', href: '/models', featured: true },
+            { name: 'اشتراکی', price: 'طرح‌های ماهانه', desc: 'حرفه‌ای', features: ['سقف مصرف بالاتر', 'اولویت در صف', 'مدل‌های premium', 'تسک‌های زمان‌بندی', 'پشتیبانی اختصاصی'], cta: 'مشاهده طرح‌ها', href: '/pricing' },
           ].map((p, i) => (
             <div key={p.name} className={`pricing-card${p.featured ? ' featured' : ''} reveal`}
               style={{ transitionDelay: `${i * 100}ms`, opacity: visible ? 1 : undefined, transform: visible ? 'none' : undefined }}>
-              <h3 className="text-lg font-bold text-[#dfe1f4] mb-1">{p.name}</h3>
-              <p className="text-2xl font-extrabold mb-1" style={{ color: 'var(--landing-accent)' }}>{p.price}</p>
-              <p className="text-sm mb-6" style={{ color: 'var(--landing-text-muted)' }}>{p.desc}</p>
+              <h3 className="text-lg font-medium text-[var(--text-primary)] mb-1">{p.name}</h3>
+              <p className="text-2xl mb-1" style={{ color: 'var(--accent)', fontWeight: 300 }}>{p.price}</p>
+              <p className="text-sm mb-6" style={{ color: 'var(--text-muted)' }}>{p.desc}</p>
               <ul className="space-y-2.5 mb-8">
                 {p.features.map(f => (
-                  <li key={f} className="flex items-center gap-2 text-sm" style={{ color: 'var(--landing-text-muted)' }}>
-                    <Icon name="check" size={12} style={{ color: 'var(--landing-accent)' }} />
+                  <li key={f} className="flex items-center gap-2 text-sm" style={{ color: 'var(--text-muted)' }}>
+                    <Icon name="check" size={12} style={{ color: 'var(--accent)' }} />
                     {f}
                   </li>
                 ))}
@@ -253,12 +282,12 @@ function Pricing({ isLoggedIn, modelCount }: { isLoggedIn: boolean; modelCount: 
 /* ── FAQ ──────────────────────────────────────────────────────────────── */
 
 const FAQ = [
-  { q: 'Multiai چه فرقی با ChatGPT داره؟', a: 'Multiai یه پلتفرم یکپارچه‌ست — به بهترین مدل‌های هوش مصنوعی دنیا (DeepSeek, Mistral, Tencent, MiMo و...) از یک پنل دسترسی دارید، با قیمت ریالی و بدون نیاز به VPN. لازم نیست چندتا سرویس جداگانه بخرید.' },
+  { q: 'Multiai چه فرقی با ChatGPT داره؟', a: 'Multiai یه پلتفرم یکپارچه‌ست — به بهترین مدل‌های هوش مصنوعی دنیا (DeepSeek, Mistral, Tencent, MiMo و...) از یک پنل دسترسی دارید، با قیمت ریالی و بدون نیاز به VPN.' },
   { q: 'آیا نیاز به VPN دارم؟', a: 'خیر. تمام ارتباطات از طریق زیرساخت اختصاصی و داخلی مسیریابی میشه. بدون فیلترشکن، بدون قطعی.' },
-  { q: 'هزینه استفاده چقدره؟', a: 'تعرفه‌ها بر اساس مدل متفاوته. هر مدل قیمت token ورودی و خروجی خودش رو داره. هزینه دقیق رو قبل از ارسال هر درخواست می‌بینید. مدل Tencent HY-3 برای شروع رایگانه.' },
-  { q: 'اطلاعات من امنه؟', a: 'بله. تمام ارتباطات رمزنگاری شده (TLS 1.3)، داده‌ها روی سرورهای اختصاصی ذخیره میشن، و مکالمات شما فقط برای خودتون قابل دسترسه.' },
-  { q: 'چطور API key بسازم؟', a: 'بعد از ثبت‌نام، از پنل کاربری > بخش «کلید API» یک کلید جدید بسازید. endpoint ما با OpenAI-compatible هست — کافیه base_url رو عوض کنید.' },
-  { q: 'Smart Mode چیه؟', a: 'Smart Mode هوشمندانه محتوای پیام شما رو تحلیل میکنه و بهترین مدل رو بر اساس موجودی کیف پول و نیاز شما انتخاب میکنه. سوال ساده؟ مدل ارزون. کد؟ مدل قوی. همیشه cheapest capable model.' },
+  { q: 'هزینه استفاده چقدره؟', a: 'تعرفه‌ها بر اساس مدل متفاوته. هزینه دقیق رو قبل از ارسال هر درخواست می‌بینید. مدل Tencent HY-3 برای شروع رایگانه.' },
+  { q: 'اطلاعات من امنه؟', a: 'بله. تمام ارتباطات رمزنگاری شده (TLS 1.3)، داده‌ها روی سرورهای اختصاصی ذخیره میشن.' },
+  { q: 'چطور API key بسازم؟', a: 'بعد از ثبت‌نام، از پنل کاربری > بخش «کلید API» یک کلید جدید بسازید. endpoint ما با OpenAI-compatible هست.' },
+  { q: 'Smart Mode چیه؟', a: 'Smart Mode محتوای پیام شما رو تحلیل میکنه و بهترین مدل رو بر اساس موجودی کیف پول انتخاب میکنه. همیشه cheapest capable model.' },
 ]
 
 function FAQSection() {
@@ -279,7 +308,7 @@ function FAQSection() {
                 <button className="faq-trigger" onClick={() => setOpenIndex(isOpen ? null : i)} aria-expanded={isOpen}>
                   <span>{item.q}</span>
                   <Icon name="arrowRight" size={14}
-                    style={{ color: 'var(--landing-text-muted)', transition: 'transform 300ms ease', transform: isOpen ? 'rotate(90deg)' : 'none' }} />
+                    style={{ color: 'var(--text-muted)', transition: 'transform 300ms ease', transform: isOpen ? 'rotate(90deg)' : 'none' }} />
                 </button>
                 <div className={`faq-answer${isOpen ? ' open' : ''}`}>
                   <div><p>{item.a}</p></div>
@@ -302,11 +331,11 @@ function CTABanner({ isLoggedIn }: { isLoggedIn: boolean }) {
       <div className="max-w-2xl mx-auto px-6 text-center">
         <div className="capability-card reveal" style={{
           padding: '3rem', borderRadius: '1.5rem',
-          borderColor: 'rgba(129,140,248,0.15)',
+          borderColor: 'rgba(129,140,248,0.12)',
           opacity: visible ? 1 : undefined, transform: visible ? 'none' : undefined
         }}>
           <h2 className="section-heading mb-4">آماده شروع هستید؟</h2>
-          <p className="mb-8" style={{ color: 'var(--landing-text-muted)' }}>
+          <p className="mb-8" style={{ color: 'var(--text-muted)' }}>
             همین حالا ثبت‌نام کنید و به پیشرفته‌ترین مدل‌های هوش مصنوعی دسترسی پیدا کنید.
             بدون VPN، بدون تحریم، با قیمت ریالی.
           </p>
@@ -341,7 +370,7 @@ export default function LandingPage() {
   const modelCount = modelsLoaded ? modelCountLabel(models) : 'در حال بارگذاری...'
 
   return (
-    <div className="landing-v5">
+    <div className="landing-v6">
       <Hero isLoggedIn={isLoggedIn} modelCount={modelCount} />
       <PlatformMarquee />
       <Stats modelCount={modelCount} />
@@ -350,7 +379,7 @@ export default function LandingPage() {
       <Pricing isLoggedIn={isLoggedIn} modelCount={modelCount} />
       <FAQSection />
       <CTABanner isLoggedIn={isLoggedIn} />
-      <footer className="text-center py-12 text-sm" style={{ color: 'var(--landing-text-muted)', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
+      <footer className="text-center py-12 text-sm" style={{ color: 'var(--text-muted)', borderTop: '1px solid rgba(255,255,255,0.03)' }}>
         <p>Multiai — پلتفرم کامل هوش مصنوعی فارسی</p>
       </footer>
     </div>

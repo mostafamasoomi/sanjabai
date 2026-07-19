@@ -90,6 +90,12 @@ function Hero({ isLoggedIn, modelCount }: { isLoggedIn: boolean; modelCount: str
   return (
     <section className="hero" aria-label="Hero">
       <VortexParticles />
+      <div className="hero-orbit" aria-hidden="true">
+        <span className="hero-orbit-ring hero-orbit-ring-a" />
+        <span className="hero-orbit-ring hero-orbit-ring-b" />
+        <span className="hero-orbit-core" />
+        <span className="hero-orbit-beam" />
+      </div>
       <div className="hero-parallax" style={{ transform: 'translateY(calc(var(--scroll, 0) * 90px)) scale(calc(1 - var(--scroll, 0) * 0.05))', opacity: 'calc(1 - var(--scroll, 0) * 0.55)' }}>
         <div className="shell hero-grid">
           <div className="hero-copy">
@@ -197,6 +203,7 @@ function ScrollRoutingStage({ isLoggedIn }: { isLoggedIn: boolean }) {
   ]
   const active=steps[step]
   const nodes=[{x:16,y:68,label:'chat'},{x:16,y:30,label:'file'},{x:50,y:50,label:'smart'},{x:84,y:30,label:'model'},{x:84,y:70,label:'api'}]
+  const routeTargets = ['chat', 'smart', 'model', 'api']
   return <section ref={sectionRef} className="routing-scroll-section">
     <div className="routing-sticky shell-wide">
       <div className="routing-copy">
@@ -207,10 +214,12 @@ function ScrollRoutingStage({ isLoggedIn }: { isLoggedIn: boolean }) {
         <Link href={isLoggedIn?'/chat':'/signup'} className="text-link routing-cta">همین حالا امتحانش کن <Icon name="arrowRight" size={14}/></Link>
       </div>
       <div className="routing-stage" style={{'--routing-progress':progress,'--routing-color':active.color} as React.CSSProperties}>
+        <div className="routing-stage-beam" aria-hidden="true" />
         <div className="routing-stage-grid" aria-hidden="true"/>
         <svg className="routing-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d="M16 68 C29 68,35 50,50 50 S70 30,84 30"/><path d="M16 30 C29 30,35 50,50 50 S70 70,84 70"/><path className="routing-trace" pathLength="1" d="M16 68 C29 68,35 50,50 50 S70 30,84 30" style={{strokeDashoffset:1-Math.max(progress*1.7,.02)}}/></svg>
         {nodes.map((n,i)=><div key={n.label} className={`routing-node ${i===step?'active':''}`} style={{left:`${n.x}%`,top:`${n.y}%`}}><span className="routing-node-dot"/><small>{n.label}</small></div>)}
-        <div className="routing-readout"><span className="routing-live"><i/> LIVE ROUTE</span><strong>{active.title}</strong><p>{active.body}</p><div className="routing-progress"><span style={{transform:`scaleX(${Math.max(progress,.04)})`}}/></div><code>progress {Math.round(progress*100)}%</code></div>
+        <div className="routing-state-pill"><i /> {routeTargets[step]} selected</div>
+        <div className="routing-readout" aria-live="polite"><span className="routing-live"><i/> LIVE ROUTE</span><strong>{active.title}</strong><p>{active.body}</p><div className="routing-progress"><span style={{transform:`scaleX(${Math.max(progress,.04)})`}}/></div><code>progress {Math.round(progress*100)}%</code></div>
       </div>
     </div>
   </section>

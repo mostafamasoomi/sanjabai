@@ -20,7 +20,7 @@ export default function SmoothScroll() {
     let current = window.scrollY
     let raf = 0
     let running = false
-    const ease = 0.085
+    const ease = 0.12
 
     const maxScroll = () =>
       Math.max(0, document.documentElement.scrollHeight - window.innerHeight)

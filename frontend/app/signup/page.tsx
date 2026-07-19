@@ -142,7 +142,7 @@ export default function SignupPage() {
           </div>
           <div>
             <label className="text-xs text-[var(--text-dim)] mb-1.5 block">کپچا</label>
-            {captchaImg && <img src={captchaImg} alt="captcha" className="mb-2 rounded" style={{maxWidth:200,height:60}} onClick={fetchCaptcha} />}
+            {captchaImg && <img src={captchaImg} alt="تصویر امنیتی کپچا" className="mb-2 rounded" style={{maxWidth:200,height:60}} onClick={fetchCaptcha} />}
             <input
               className="input"
               type="text"

@@ -103,7 +103,7 @@ export default function LoginPage() {
           </div>
           <div>
             <label className="text-xs text-[var(--text-secondary)] mb-1.5 block font-medium">کپچا</label>
-            {captchaImg && <img src={captchaImg} alt="captcha" className="mb-2 rounded" style={{maxWidth:200,height:60}} onClick={fetchCaptcha} />}
+            {captchaImg && <img src={captchaImg} alt="تصویر امنیتی کپچا" className="mb-2 rounded" style={{maxWidth:200,height:60}} onClick={fetchCaptcha} />}
             <input
               className="input"
               type="text"

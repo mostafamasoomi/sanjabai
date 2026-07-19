@@ -4875,15 +4875,46 @@ img, svg { display: block; max-width: 100%; }
 /* ── Reveal ───────────────────────────────────────────────────────────── */
 .landing-v7 .reveal {
   opacity: 0;
-  transform: translateY(28px);
+  transform: translateY(36px) scale(0.97);
   transition:
-    opacity 0.6s var(--ease-out-expo),
-    transform 0.6s var(--ease-out-expo);
+    opacity 0.8s var(--ease-out-expo),
+    transform 0.8s var(--ease-out-expo);
 }
 .landing-v7 .reveal.on {
   opacity: 1;
-  transform: none;
+  transform: translateY(0) scale(1);
 }
+
+/* Bento card stagger — each card reveals 70ms after the previous */
+.landing-v7 .bento .bento-card { opacity: 0; transform: translateY(30px) scale(0.96); transition: opacity 0.7s var(--ease-out-expo), transform 0.7s var(--ease-out-expo); }
+.landing-v7 .bento.reveal.on .bento-card:nth-child(1) { transition-delay: 60ms; }
+.landing-v7 .bento.reveal.on .bento-card:nth-child(2) { transition-delay: 130ms; }
+.landing-v7 .bento.reveal.on .bento-card:nth-child(3) { transition-delay: 200ms; }
+.landing-v7 .bento.reveal.on .bento-card:nth-child(4) { transition-delay: 270ms; }
+.landing-v7 .bento.reveal.on .bento-card:nth-child(5) { transition-delay: 340ms; }
+.landing-v7 .bento.reveal.on .bento-card { opacity: 1; transform: translateY(0) scale(1); }
+
+/* Constellation chip stagger */
+.landing-v7 .constellation .chip { opacity: 0; transform: translateY(16px); transition: opacity 0.5s var(--ease-out-expo), transform 0.5s var(--ease-out-expo); }
+.landing-v7 .constellation.reveal.on .chip:nth-child(1) { transition-delay: 40ms; }
+.landing-v7 .constellation.reveal.on .chip:nth-child(2) { transition-delay: 80ms; }
+.landing-v7 .constellation.reveal.on .chip:nth-child(3) { transition-delay: 120ms; }
+.landing-v7 .constellation.reveal.on .chip:nth-child(4) { transition-delay: 160ms; }
+.landing-v7 .constellation.reveal.on .chip:nth-child(5) { transition-delay: 200ms; }
+.landing-v7 .constellation.reveal.on .chip:nth-child(6) { transition-delay: 240ms; }
+.landing-v7 .constellation.reveal.on .chip:nth-child(7) { transition-delay: 280ms; }
+.landing-v7 .constellation.reveal.on .chip:nth-child(8) { transition-delay: 320ms; }
+.landing-v7 .constellation.reveal.on .chip { opacity: 1; transform: translateY(0); }
+
+/* Three doors card stagger */
+.landing-v7 .doors-grid .door-card { opacity: 0; transform: translateY(24px); transition: opacity 0.6s var(--ease-out-expo), transform 0.6s var(--ease-out-expo); }
+.landing-v7 .doors-grid.reveal.on .door-card:nth-child(1) { transition-delay: 80ms; }
+.landing-v7 .doors-grid.reveal.on .door-card:nth-child(2) { transition-delay: 160ms; }
+.landing-v7 .doors-grid.reveal.on .door-card:nth-child(3) { transition-delay: 240ms; }
+.landing-v7 .doors-grid.reveal.on .door-card { opacity: 1; transform: translateY(0); }
+
+/* Section depth — subtle parallax via CSS var */
+.landing-v7 .section { will-change: transform; }
 
 /* ── Footer ───────────────────────────────────────────────────────────── */
 .landing-v7 .foot {
@@ -4896,7 +4927,10 @@ img, svg { display: block; max-width: 100%; }
 
 @media (prefers-reduced-motion: reduce) {
   .landing-v7 .marquee-track { animation: none; }
-  .landing-v7 .reveal { opacity: 1; transform: none; transition: none; }
+  .landing-v7 .reveal,
+  .landing-v7 .bento .bento-card,
+  .landing-v7 .constellation .chip,
+  .landing-v7 .doors-grid .door-card { opacity: 1; transform: none; transition: none; }
   .landing-v7 .btn-primary,
   .landing-v7 .bento-card,
   .landing-v7 .chip { transition: none; }

@@ -3,9 +3,35 @@ node_modules/
 __pycache__/
 lab/
 .env
-
 # Secrets
-.env
 backend/litellm_config.yaml
 infra/ssh_key
 infra/ssh_tunnel/
+# Python env
+backend/venv/
+# Artifacts
+backups/
+frontend/app.bak/
+frontend/test-results/
+.hypothesis/
+.pytest_cache/
+.mypy_cache/
+.hermes/plans/
+AUDIT_PLAN.md
+MULTIAI_AUDIT_REPORT.md
+MVP_STATUS.md
+TEST_RESULTS.md
+test_results.json
+test_results_final.json
+prompt_plan.md
+prompt_templates/
+*.bak
+*.tsbuildinfo
+frontend/docs/
+frontend/findings.md
+frontend/progress.md
+frontend/task_plan.md
+run_tests.py
+test_final_demo.py
+frontend/app/motion-effects.css
+infra/pgvector/

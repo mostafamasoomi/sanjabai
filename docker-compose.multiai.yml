@@ -8,6 +8,8 @@ services:
       POSTGRES_DB: multiai
     volumes:
       - multiai_pg_data:/var/lib/postgresql/data
+      - /root/multiai/infra/pgvector/vector.so:/usr/local/lib/postgresql/vector.so:ro
+      # ponytail: no host port needed — API connects via Docker network
     networks: [multiai_net]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U multiai"]
@@ -60,34 +62,10 @@ services:
         condition: service_started
       multiai_tunnel:
         condition: service_started
-    environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://multiai:multiai@multiai_pg:5432/multiai}
-      REDIS_URL: redis://multiai_redis:6379/0
-      MOCK_MODE: "false"
-      LITELLM_HOST: http://multiai_litellm:4000
-      no_proxy: localhost,127.0.0.1,10.10.11.0/24,172.16.0.0/12,multiai_litellm,multiai_pg,multiai_redis,multiai_api,multiai_frontend,multiai_tunnel
-      ADMIN_TOKEN: ${ADMIN_TOKEN:?ADMIN_TOKEN must be set in .env}
-      API_KEY_PEPPER: ${API_KEY_PEPPER:?API_KEY_PEPPER must be set in .env}
-      BASE_URL: ${BASE_URL:-http://localhost:3003}
-      ZARINPAL_MERCHANT_ID: ${ZARINPAL_MERCHANT_ID:-}
-      ZARINPAL_SANDBOX: ${ZARINPAL_SANDBOX:-true}
+    env_file: .env
+    # env vars loaded from .env via env_file above
     ports:
-      - "127.0.0.1:8001:8000"
-    networks: [multiai_net]
-
-  multiai_admin:
-    build:
-      context: ./admin
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    depends_on:
-      - multiai_api
-    environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://multiai:multiai@multiai_pg:5432/multiai}
-      ADMIN_USER: ${ADMIN_USER:-admin}
-      ADMIN_PASS: ${ADMIN_PASS:?ADMIN_PASS must be set in .env}
-    ports:
-      - "0.0.0.0:8081:80"
+      - "0.0.0.0:8001:8000"
     networks: [multiai_net]
 
   multiai_frontend:

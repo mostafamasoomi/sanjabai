@@ -56,6 +56,11 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { CommandPalette, setOpen: openPalette } = useCommandPalette()
 
+  // Landing page — minimal wrapper, no sidebar
+  if (pathname === '/') {
+    return <><ToastContainer />{children}</>
+  }
+
   useEffect(() => { setSidebarOpen(false) }, [pathname])
   // Close user menu on outside click
   useEffect(() => {
@@ -96,7 +101,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   const isActive = (href: string) => pathname === href || pathname?.startsWith(href + '/')
 
   // Redirect unauthenticated users to login for protected pages
-  const PUBLIC_ROUTES = ['/login', '/signup', '/forgot-password', '/onboarding', '/pricing', '/', '/models', '/search', '/developer']
+  const PUBLIC_ROUTES = ['/login', '/signup', '/forgot-password', '/onboarding', '/pricing', '/']
   if (!loading && !user && !PUBLIC_ROUTES.some(p => pathname === p || pathname?.startsWith(p + '/'))) {
     router.push('/login')
     return null
@@ -264,10 +269,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               </button>
           </div>
           <nav className="p-2">
-            {(user
-              ? NAV.filter((n) => !n.admin || user?.is_admin)
-              : NAV.filter((n) => PUBLIC_ROUTES.includes(n.href))
-            ).map((item) => (
+            {NAV.filter((n) => !n.admin || user?.is_admin).map((item) => (
               <Link
                 key={item.href}
                 href={item.href}

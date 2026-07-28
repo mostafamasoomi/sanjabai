@@ -136,27 +136,9 @@ async def _is_model_allowed(model_id: str) -> bool:
     # Strip provider prefix if present (e.g. bynara/tencent-hy3 -> tencent-hy3)
     bare = model_id.split('/')[-1] if '/' in model_id else model_id
     # Fast-path against the dynamic working set (DB-backed, hardcoded fallback)
-    working = await get_working_models()
-    if bare in working or model_id in working:
-        # Still verify DB availability if possible, but allow on cache lag / DB miss
-        if async_session is None:
-            return True
-        try:
-            async with async_session() as session:
-                res = await session.execute(
-                    sqlalchemy.text(
-                        "SELECT 1 FROM model_catalog WHERE (provider_model_id = :mid OR id = :mid OR provider_model_id = :bare OR id = :bare) AND availability='available' LIMIT 1"
-                    ),
-                    {'mid': model_id, 'bare': bare},
-                )
-                row = res.fetchone()
-                if row:
-                    return True
-                # DB miss but in working set -> allow (cache lag)
-                return True
-        except Exception as e:
-            logger.warning(f"_is_model_allowed DB check failed model={model_id}: {e}")
-            return True
+    fast_path = await get_working_models()
+    if bare in fast_path or model_id in fast_path:
+        return True  # ponytail: skip redundant 2nd DB query; add when live-kill switch needed
     # Not in working set -> must be in DB available
     if async_session is None:
         return False
@@ -175,6 +157,17 @@ async def _is_model_allowed(model_id: str) -> bool:
 
 
 # ── Shared helpers ──────────────────────────────────────────────
+
+async def _release_reservation(reservation: dict | None, uid: int, label: str = '') -> None:
+    """Release a billing reservation; fire-and-forget, logs on failure."""
+    if not reservation or async_session is None:
+        return
+    try:
+        async with async_session() as s:
+            await SqlBillingRepo(s).release(reservation['reservation_id'])
+            await s.commit()
+    except Exception as e:
+        logger.warning(f"release_reservation failed uid={uid} {label}: {e}")
 
 async def _check_quota_pre(uid: int) -> JSONResponse | None:
     """Pre-flight quota and balance check before calling LiteLLM."""
@@ -617,16 +610,7 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
     model_to_check = payload_dict.get('model', '')
     if model_to_check and not await _is_model_allowed(model_to_check):
         logger.info(f"chat blocked: model={model_to_check} uid={uid} not allowed")
-        # Release reservation on early return
-        if reservation:
-            try:
-                async with async_session() as _rel_session:
-                    _rel_repo = SqlBillingRepo(_rel_session)
-                    _rel_svc = BillingService(_rel_repo)
-                    await _rel_svc.release(reservation['reservation_id'])
-                    await _rel_session.commit()
-            except Exception as _rel_e:
-                logger.warning(f"BillingService.release on model reject failed uid={uid}: {_rel_e}")
+        await _release_reservation(reservation, uid, 'model_reject')
         return JSONResponse(
             {'error': {'message': f'مدل {model_to_check} در دسترس نیست | مدل پیشفرض tencent-hy3 را انتخاب کنید', 'type': 'invalid_request', 'code': 'model_not_available'}},
             status_code=400,
@@ -690,16 +674,7 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
 
     stream = payload_dict.get('stream', False)
     if stream:
-        # P1: Release reservation before streaming (stream billing handles actual cost in finally)
-        if reservation:
-            try:
-                async with async_session() as _rel_session:
-                    _rel_repo = SqlBillingRepo(_rel_session)
-                    _rel_svc = BillingService(_rel_repo)
-                    await _rel_svc.release(reservation['reservation_id'])
-                    await _rel_session.commit()
-            except Exception as _rel_e:
-                logger.warning(f"BillingService.release before stream failed uid={uid}: {_rel_e}")
+        await _release_reservation(reservation, uid, 'before_stream')
         return await _chat_stream(payload_dict, request)
     try:
         r = await _http.post(f"{LITELLM_HOST}/v1/chat/completions", json=payload_dict, headers={'Accept': 'application/json'})
@@ -714,32 +689,15 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
                     'balance_after': cost_info.get('balance_after', 0),
                     'currency': 'IRT',
                 }
-            # P1: Release reservation after successful billing (track_usage already wrote ledger)
-            if reservation:
-                try:
-                    async with async_session() as _rel_session:
-                        _rel_repo = SqlBillingRepo(_rel_session)
-                        _rel_svc = BillingService(_rel_repo)
-                        await _rel_svc.release(reservation['reservation_id'])
-                        await _rel_session.commit()
-                except Exception as _rel_e:
-                    logger.warning(f"BillingService.release after success failed uid={uid}: {_rel_e}")
+            # P1: Release reservation after successful billing
+            await _release_reservation(reservation, uid, 'after_success')
             # P3: Fire background auto-memory extraction
             _fire_memory_extraction(uid, payload_dict.get('messages', []))
             return Response(content=json.dumps(resp_data), status_code=200, media_type='application/json')
         return Response(content=r.content, status_code=r.status_code, media_type='application/json')
     except Exception as e:
         logger.warning(f"chat gateway error uid={uid} model={payload_dict.get('model')}: {e}")
-        # P1: Release reservation on error
-        if reservation:
-            try:
-                async with async_session() as _rel_session:
-                    _rel_repo = SqlBillingRepo(_rel_session)
-                    _rel_svc = BillingService(_rel_repo)
-                    await _rel_svc.release(reservation['reservation_id'])
-                    await _rel_session.commit()
-            except Exception as _rel_e:
-                logger.warning(f"BillingService.release on error failed uid={uid}: {_rel_e}")
+        await _release_reservation(reservation, uid, 'on_error')
         return JSONResponse({'detail': 'سرویس موقتاً در دسترس نیست', 'code': 'gateway_error'}, status_code=502)
 
 
@@ -790,16 +748,7 @@ async def chat_with_file(
         msgs = []
     text, err = await _extract_file_text(file)
     if err:
-        # P1: Release reservation on early return
-        if reservation:
-            try:
-                async with async_session() as _rel_session:
-                    _rel_repo = SqlBillingRepo(_rel_session)
-                    _rel_svc = BillingService(_rel_repo)
-                    await _rel_svc.release(reservation['reservation_id'])
-                    await _rel_session.commit()
-            except Exception as _rel_e:
-                logger.warning(f"BillingService.release on file error failed uid={uid}: {_rel_e}")
+        await _release_reservation(reservation, uid, 'file_error')
         return JSONResponse({'error': {'message': err, 'type': 'file_error'}}, status_code=400)
     if text.strip():
         file_block = f'[Attached file: {file.filename}]\n\n{text[:50000]}'
@@ -809,16 +758,7 @@ async def chat_with_file(
     # Whitelist validation
     if not await _is_model_allowed(selected_model):
         logger.info(f"chat_with_file blocked model={selected_model} uid={uid}")
-        # P1: Release reservation on early return
-        if reservation:
-            try:
-                async with async_session() as _rel_session:
-                    _rel_repo = SqlBillingRepo(_rel_session)
-                    _rel_svc = BillingService(_rel_repo)
-                    await _rel_svc.release(reservation['reservation_id'])
-                    await _rel_session.commit()
-            except Exception as _rel_e:
-                logger.warning(f"BillingService.release on model reject failed uid={uid}: {_rel_e}")
+        await _release_reservation(reservation, uid, 'model_reject')
         return JSONResponse(
             {'error': {'message': f'مدل {selected_model} در دسترس نیست | مدل tencent-hy3', 'type': 'invalid_request', 'code': 'model_not_available'}},
             status_code=400,
@@ -833,16 +773,7 @@ async def chat_with_file(
     except Exception as e:
         logger.warning(f"chat_with_file injection failed uid={uid}: {e}")
     if stream:
-        # P1: Release reservation before streaming (stream billing handles actual cost in finally)
-        if reservation:
-            try:
-                async with async_session() as _rel_session:
-                    _rel_repo = SqlBillingRepo(_rel_session)
-                    _rel_svc = BillingService(_rel_repo)
-                    await _rel_svc.release(reservation['reservation_id'])
-                    await _rel_session.commit()
-            except Exception as _rel_e:
-                logger.warning(f"BillingService.release before stream failed uid={uid}: {_rel_e}")
+        await _release_reservation(reservation, uid, 'before_stream')
         return await _chat_stream(payload, request)
     try:
         r = await _http.post(
@@ -860,16 +791,8 @@ async def chat_with_file(
                     'balance_after': cost_info.get('balance_after', 0),
                     'currency': 'IRT',
                 }
-            # P1: Release reservation after successful billing (track_usage already wrote ledger)
-            if reservation:
-                try:
-                    async with async_session() as _rel_session:
-                        _rel_repo = SqlBillingRepo(_rel_session)
-                        _rel_svc = BillingService(_rel_repo)
-                        await _rel_svc.release(reservation['reservation_id'])
-                        await _rel_session.commit()
-                except Exception as _rel_e:
-                    logger.warning(f"BillingService.release after success failed uid={uid}: {_rel_e}")
+            # P1: Release reservation after successful billing
+            await _release_reservation(reservation, uid, 'after_success')
             # P3: Fire background auto-memory extraction
             _fire_memory_extraction(uid, msgs)
             return Response(content=json.dumps(resp_data), status_code=200, media_type='application/json')

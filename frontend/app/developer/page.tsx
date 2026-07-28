@@ -132,7 +132,7 @@ export default function DeveloperPage() {
         // Backend may return array or paginated {items: [...]} format
         setKeys(Array.isArray(data) ? data : (data?.items ?? []))
       }
-    } catch (err) { console.error('Failed to fetch API keys:', err) }
+    } catch {}
   }, [token, headers])
 
   useEffect(() => {

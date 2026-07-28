@@ -114,7 +114,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _db._start = datetime.now(timezone.utc)
 
     from migrate import migrate
-    await migrate(_eng)
+    # Migration with retry guard — reduces startup fragility
+    import asyncio as _aio
+    _max_retries, _attempt = 1, 0
+    while True:
+        try:
+            await migrate(_eng)
+            break
+        except Exception:
+            _attempt += 1
+            if _attempt > _max_retries:
+                raise
+            await _aio.sleep(5)
 
     # Start background pricing refresh task (every 15 minutes)
     import asyncio

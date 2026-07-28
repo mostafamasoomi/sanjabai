@@ -1,245 +1,299 @@
 'use client'
 
-import Link from 'next/link'
-import { useEffect, useRef, useState } from 'react'
-import { useAuth } from '@/lib/auth'
-import { Icon } from '@/components/ui/Icon'
-import { modelCountLabel } from '@/lib/claims'
-import { type ModelCatalogItem, type CatalogResponse } from '@/types/catalog'
-import VortexParticles from '@/components/VortexParticles'
+import { useEffect, useState } from 'react'
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import VortexBackground from '@/components/VortexBackground'
+import WaterTrailBackground from '@/components/WaterTrailBackground'
+import MeshGradientBackground from '@/components/MeshGradientBackground'
+import PhysicsBoxes from '@/components/PhysicsBoxes'
+import './motion-effects.css'
 
+/* ════════════════════════════════════════════════════════════════════════════
+   Data — motion.page reference, rebranded to MultiAI
+   ════════════════════════════════════════════════════════════════════════════ */
 
-/* Landing v7 — motion.page STRUCTURE DNA
-   Asymmetric hero · constellation · bento · API stage · three doors
-   Real capabilities only. No SaaS feature-grid. No fake metrics. */
-
-function useReveal(threshold = 0.12) {
-  const ref = useRef<HTMLDivElement>(null)
-  const [on, setOn] = useState(false)
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const obs = new IntersectionObserver(([e]) => {
-      if (e.isIntersecting) setOn(true)
-    }, { threshold })
-    obs.observe(el)
-    return () => obs.disconnect()
-  }, [threshold])
-  return { ref, on }
-}
-
-function useScrollProgress(ref: React.RefObject<HTMLElement | null>) {
-  const [progress, setProgress] = useState(0)
-  useEffect(() => {
-    let frame = 0
-    const update = () => {
-      const el = ref.current
-      if (!el) return
-      const rect = el.getBoundingClientRect()
-      const range = Math.max(el.offsetHeight - window.innerHeight, 1)
-      setProgress(Math.min(1, Math.max(0, -rect.top / range)))
-    }
-    const onScroll = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(update) }
-    update()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    window.addEventListener('resize', onScroll)
-    return () => { cancelAnimationFrame(frame); window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll) }
-  }, [ref])
-  return progress
-}
-
-/** Sets --scroll (0..1 over hero height) and --page-scroll (0..1 over doc) on <html>.
- *  Drives VortexParticles focus + hero parallax. rAF-throttled. */
-function usePageScroll() {
-  useEffect(() => {
-    let frame = 0
-    const update = () => {
-      const y = window.scrollY
-      const hero = document.querySelector('.hero') as HTMLElement | null
-      const heroH = hero?.offsetHeight || window.innerHeight
-      const docRange = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1)
-      document.documentElement.style.setProperty('--scroll', String(Math.min(1, y / heroH)))
-      document.documentElement.style.setProperty('--page-scroll', String(Math.min(1, y / docRange)))
-      frame = 0
-    }
-    const onScroll = () => { if (!frame) frame = requestAnimationFrame(update) }
-    update()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    window.addEventListener('resize', onScroll)
-    return () => { cancelAnimationFrame(frame); window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll) }
-  }, [])
-}
-
-const MODELS_STRIP = [
-  'DeepSeek V4', 'Mistral Large', 'Tencent HY-3', 'MiMo Pro',
-  'Smart Mode', 'OpenAI API', 'RAG', 'Zarinpal',
+const TRICKS = [
+  { icon: '/icons/scroll.svg', title: 'Scroll\nAnimations' },
+  { icon: '/icons/transition.svg', title: 'Page\nTransitions' },
+  { icon: '/icons/gesture.svg', title: 'Hover &\nGestures' },
+  { icon: '/icons/timeline.svg', title: 'Timeline\nSequencing' },
+  { icon: '/icons/cursor.svg', title: 'Custom\nCursors' },
+  { icon: '/icons/stagger.svg', title: 'Stagger\nEffects' },
+  { icon: '/icons/svg-icon.svg', title: 'SVG &\nDrawSVG' },
+  { icon: '/icons/splittext.svg', title: 'SplitText\nEffects' },
 ]
 
-const CHIPS = [
-  'چت چندمدلی',
-  'Smart Mode',
-  'API سازگار با OpenAI',
-  'RAG و فایل',
-  'حافظه و اسکیلز',
-  'تسک زمان‌بندی',
-  'مقایسه مدل',
-  'کیف‌پول ریالی',
+const LOGOS = [
+  { name: 'WordPress', src: '/logos/wordpress.svg' },
+  { name: 'Webflow', src: '/logos/webflow.svg' },
+  { name: 'Shopify', src: '/logos/shopify.svg' },
+  { name: 'React', src: '/logos/react.svg' },
+  { name: 'Vue', src: '/logos/vue.svg' },
+  { name: 'Astro', src: '/logos/astro.svg' },
+  { name: 'Elementor', src: '/logos/elementor.svg' },
+  { name: 'Oxygen', src: '/logos/oxygen.svg' },
+  { name: 'Bricks', src: '/logos/bricks.svg' },
+  { name: 'Wix', src: '/logos/wix.svg' },
+  { name: 'HTML5', src: '/logos/html5.svg' },
+  { name: 'Claude', src: '/logos/claude.svg' },
+  { name: 'Next.js', src: '/logos/nextjs.svg' },
+  { name: 'Svelte', src: '/logos/svelte.svg' },
+  { name: 'Tailwind', src: '/logos/tailwind.svg' },
+  { name: 'Nuxt', src: '/logos/nuxt.svg' },
+  { name: 'Angular', src: '/logos/angular.svg' },
+  { name: 'Framer', src: '/logos/framer.svg' },
+  { name: 'Squarespace', src: '/logos/squarespace.svg' },
 ]
 
-function Hero({ isLoggedIn, modelCount }: { isLoggedIn: boolean; modelCount: string }) {
+const CODE_TABS: Record<string, string> = {
+  Animation: `from({ opacity: 0, y: 40 })
+  .to({ opacity: 1, y: 0 })
+  .duration(0.6)
+  .ease('power2.out')
+  .onScroll({ scrub: true })`,
+  Timeline: `from({ opacity: 0, scale: 0.9 })
+  .to({ opacity: 1, scale: 1 })
+  .duration(0.8)
+  .ease('power3.out')
+  .stagger(0.1)`,
+  Stagger: `.from('.card', {
+    opacity: 0,
+    y: 60,
+    rotateX: 15
+  })
+  .duration(0.7)
+  .stagger(0.05, {
+    from: 'center'
+  })`,
+  SplitText: `SplitText.create('.heading', {
+  type: 'chars,words'
+})
+.from(chars, {
+  opacity: 0,
+  y: 20,
+  stagger: 0.02
+})`,
+  DrawSVG: `gsap.from('.path', {
+  drawSVG: '0%',
+  duration: 1.5,
+  ease: 'power2.inOut',
+  scrollTrigger: {
+    trigger: '.path',
+    scrub: true
+  }
+})`,
+}
+
+const FEATURES_ROW1 = [
+  { img: '/illustrations/hp-builder.webp', eyebrow: 'VISUAL BUILDER', title: 'Pick a thing. Make it move.', desc: 'Point at your live site, choose an element, set a trigger, and drag the timing. No code. No timeline jargon.' },
+  { img: '/illustrations/hp-scroll.webp', eyebrow: 'SCROLL ANIMATIONS', title: 'Pin. Scrub. Parallax.', desc: 'Pinned sections, scroll-scrubbed timelines, layered parallax — the stuff that usually eats a week of JavaScript. Here it takes five clicks.' },
+  { img: '/illustrations/hp-export.webp', eyebrow: 'ONE-CLICK DEPLOY', title: 'Go live with one line', desc: 'Hit deploy. You get a clean snippet you can paste anywhere — WordPress, Webflow, React, plain HTML. Done.' },
+]
+
+const FEATURES_ROW2 = [
+  { img: '/illustrations/hp-builder-card.webp', eyebrow: 'THE BUILDER', title: 'Animate any site, visually', desc: 'Pick any element on your live page, choose a trigger, and drag the timing. If you can use Figma, you can use MultiAI.' },
+  { img: '/illustrations/hp-canvas.webp', eyebrow: 'THE CANVAS', title: 'Shaders, without the math', desc: 'Canvas is a complete WebGPU visual production editor — with a real video timeline, not a folder of shader presets.' },
+  { img: '/illustrations/hp-sdk.webp', eyebrow: 'THE SDK', title: 'The engine under it all', desc: 'One function, one object. Every visual the builder produces is pure SDK code — zero runtime, zero lock-in.' },
+]
+
+const CANVAS_ASSETS = [
+  { name: 'Event Horizon', src: '/illustrations/canvas-event-horizon.webp' },
+  { name: 'Nebula Plasma', src: '/illustrations/canvas-nebula-plasma.webp' },
+  { name: 'Heatmap', src: '/illustrations/canvas-heatmap.webp' },
+]
+
+const TESTIMONIALS = [
+  { text: '"Genial and perfect tool. MultiAI is the most incredible tool to create complex and amazing animations with less time and effort."', name: 'Andre Beltrame', avatar: '/avatars/andre-beltrame.jpeg' },
+  { text: '"Brilliant and innovative. The next big thing in online animation. Very well crafted and very thought through."', name: 'Rene Brokop', avatar: '/avatars/rene-brokop.jpg' },
+  { text: '"Once you dig and understand how the animations work, you start to see opportunities to make your website so much more interesting."', name: 'Jonathan Jernigan', avatar: '/avatars/jonathan-jernigan.jpg' },
+]
+
+const PRICING_PLANS = [
+  { name: 'Builder', price: '€99', period: '/year', features: ['Visual builder', 'Unlimited projects', 'All SDK features', 'WordPress plugin', 'Priority support'] },
+  { name: 'Canvas', price: '€149', period: '/year', features: ['Everything in Builder', 'Canvas editor', 'Shader library', 'WebGPU rendering', 'Export to any platform'] },
+  { name: 'Bundle', price: '€199', period: '/year', features: ['Everything in Canvas', 'Builder + Canvas combined', 'Save €49/year', 'All future updates', 'Early access'] },
+]
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Components
+   ════════════════════════════════════════════════════════════════════════════ */
+
+function ArrowIcon() {
   return (
-    <section className="hero" aria-label="Hero">
-      <VortexParticles />
-      <div className="hero-orbit" aria-hidden="true">
-        <span className="hero-orbit-ring hero-orbit-ring-a" />
-        <span className="hero-orbit-ring hero-orbit-ring-b" />
-        <span className="hero-orbit-core" />
-        <span className="hero-orbit-beam" />
-      </div>
-      <div className="hero-parallax" style={{ transform: 'translateY(calc(var(--scroll, 0) * 90px)) scale(calc(1 - var(--scroll, 0) * 0.05))', opacity: 'calc(1 - var(--scroll, 0) * 0.55)' }}>
-        <div className="shell hero-grid">
-          <div className="hero-copy">
-            <div className="announcement entrance-item">
-              <span className="chip">NEW</span>
-              Smart Mode — مدل مناسب را خودش انتخاب میکند
-            </div>
-          <h1 className="display entrance-item">
-            یک درگاه.
-            <br />
-            <span className="mark">همه مدلها.</span>
-          </h1>
-          <p className="lede entrance-item" style={{ marginTop: '1.25rem' }}>
-            چت چندمدلی، API سازگار با OpenAI، پرداخت ریالی با زرینپال —
-            بدون VPN. از یک workspace به پیشرفتهترین مدلها وصل شوید.
-          </p>
-          <div className="hero-actions entrance-item">
-            <Link href={isLoggedIn ? '/chat' : '/signup'} className="btn-primary">
-              {isLoggedIn ? 'شروع چت' : 'شروع رایگان'}
-              <Icon name="arrowRight" size={16} />
-            </Link>
-            <Link href="/developer" className="btn-secondary">
-              مستندات API
-            </Link>
-          </div>
-          <div className="hero-trust entrance-item">
-            <span><Icon name="check" size={14} style={{ color: 'var(--accent-teal)' }} />{modelCount}</span>
-            <span><Icon name="check" size={14} style={{ color: 'var(--accent-teal)' }} />بدون VPN</span>
-            <span><Icon name="check" size={14} style={{ color: 'var(--accent-teal)' }} />پرداخت ریالی</span>
-          </div>
-        </div>
-
-        <div className="stage entrance-item" aria-hidden="true" style={{ animationDelay: '0.92s' }}>
-          <div className="stage-bar">
-            <span className="stage-dot" />
-            <span className="stage-dot" />
-            <span className="stage-dot" />
-            <span style={{ marginInlineStart: '0.5rem' }}>multiai · chat</span>
-            <span style={{ marginInlineStart: 'auto', color: 'var(--accent-teal)' }}>Smart Mode</span>
-          </div>
-          <div className="stage-body">
-            <div className="chat-line">
-              <div className="chat-bubble user">
-                یک endpoint OpenAI-compatible برای اپم می‌خوام که با کیف‌پول ریالی کار کنه.
-              </div>
-            </div>
-            <div className="chat-line">
-              <div className="chat-bubble bot">
-                <div className="model-badge">
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent-teal)' }} />
-                  routed · deepseek-v4-pro
-                </div>
-                endpoint شما با OpenAI سازگار است. کلید API بسازید، base_url را عوض کنید،
-                هزینه هر درخواست قبل از ارسال نمایش داده می‌شود.
-              </div>
-            </div>
-            <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              {['chat', 'api', 'rag', 'wallet'].map((t) => (
-                <span key={t} style={{
-                  fontSize: '0.7rem',
-                  color: 'var(--text-dim)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: 999,
-                  padding: '0.2rem 0.55rem',
-                }}>{t}</span>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-      </div>
-    </section>
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+      <path d="M1 11L11 1M11 1H4M11 1V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }
 
-function Marquee() {
-  const items = [...MODELS_STRIP, ...MODELS_STRIP]
+function LogoIcon({ src, name }: { src: string; name: string }) {
+  const [failed, setFailed] = useState(false)
+  if (failed) return <span style={{ fontSize: '0.8rem' }}>{name}</span>
+  return <img src={src} alt={name} onError={() => setFailed(true)} />
+}
+
+/* ── MotionEffects ──────────────────────────────────────────────────── */
+function MotionEffects() {
+  useEffect(() => {
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reduced || typeof window === 'undefined') return
+
+    gsap.registerPlugin(ScrollTrigger)
+
+    // Hero camera progress (vortex + water trail)
+    gsap.to({}, {
+      scrollTrigger: {
+        trigger: '.motion-hero',
+        start: 'top top',
+        end: 'bottom top',
+        scrub: 1,
+        onUpdate: (self: any) => {
+          const p = self.progress
+          document.documentElement.style.setProperty('--scroll-progress', String(p))
+          if ((window as any).motionVortex) (window as any).motionVortex.setProgress(p)
+        }
+      }
+    })
+
+    // Reveal sections with stagger
+    document.querySelectorAll('.motion-section')
+      .forEach((el: any) => {
+        gsap.from(el, {
+          scrollTrigger: {
+            trigger: el,
+            start: 'top 88%',
+            toggleClass: { targets: el, className: 'is-visible' },
+          },
+          y: 42,
+          opacity: 0,
+          scale: 0.985,
+          duration: 0.8,
+          ease: 'power2.out',
+        })
+      })
+
+    // Engine door stagger
+    document.querySelectorAll('.motion-engine-door').forEach((el: any, i: number) => {
+      gsap.from(el, {
+        scrollTrigger: {
+          trigger: el.closest('.motion-engine-doors'),
+          start: 'top 85%',
+        },
+        y: 30,
+        opacity: 0,
+        delay: i * 0.1,
+        duration: 0.6,
+        ease: 'power2.out',
+      })
+    })
+
+    // Stats count-up
+    document.querySelectorAll('.motion-stat-num').forEach((el: any) => {
+      const text = el.textContent
+      const target = parseFloat(text.replace(/[^0-9.]/g, '')) || 0
+      const suffix = text.replace(/[0-9.]/g, '')
+      gsap.from(el, {
+        scrollTrigger: {
+          trigger: el.closest('.motion-stats'),
+          start: 'top 85%',
+        },
+        textContent: 0,
+        duration: 1.2,
+        ease: 'power2.out',
+        snap: { textContent: 1 },
+        modifiers: {
+          textContent: (v: number) => {
+            const n = Math.round(v * target)
+            return n >= 1000 ? `${(n / 1000).toFixed(1)}k${suffix}` : `${n}${suffix}`
+          }
+        }
+      })
+    })
+
+    // Feature card reveal
+    document.querySelectorAll('.motion-feature-card').forEach((el: any, i: number) => {
+      gsap.from(el, {
+        scrollTrigger: {
+          trigger: el.closest('.motion-features-grid'),
+          start: 'top 85%',
+        },
+        y: 30,
+        opacity: 0,
+        delay: i * 0.08,
+        duration: 0.7,
+        ease: 'power2.out',
+      })
+    })
+
+    ScrollTrigger.refresh()
+    return () => ScrollTrigger.getAll().forEach((st: any) => st.kill())
+  }, [])
+
+  return null
+}
+
+/* ── Nav ────────────────────────────────────────────────────────────── */
+function Nav() {
+  const [scrolled, setScrolled] = useState(false)
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 40)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    onScroll()
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
   return (
-    <div className="marquee" role="marquee" aria-label="Supported AI models">
-      <div className="marquee-track">
-        {items.map((m, i) => (
-          <span key={`${m}-${i}`} className="marquee-item">{m}</span>
-        ))}
+    <nav className={`motion-nav${scrolled ? ' motion-nav--scrolled' : ''}`}>
+      <div className="motion-nav-inner">
+        <a href="/" className="motion-nav-logo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 4h6v6H4V4zm0 10h6v6H4v-6zm10-10h6v6h-6V4zm3 10h3v6h-3v-6z" fill="currentColor"/>
+          </svg>
+        </a>
+        <div className="motion-nav-center">
+          <a href="#builder">Builder</a>
+          <a href="#canvas">Canvas</a>
+          <a href="#stack">Platforms</a>
+          <a href="#pricing">Plans</a>
+          <a href="https://docs.multi-ai.com" target="_blank" rel="noopener">Docs</a>
+        </div>
+        <div className="motion-nav-right">
+          <a href="#" className="motion-nav-link">Log in</a>
+          <a href="#" className="motion-nav-cta">Get Started</a>
+        </div>
       </div>
-    </div>
+    </nav>
   )
 }
 
-function ScrollRoutingStage({ isLoggedIn }: { isLoggedIn: boolean }) {
-  const sectionRef = useRef<HTMLElement>(null)
-  const progress = useScrollProgress(sectionRef)
-  const [reduced, setReduced] = useState(false)
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const update = () => setReduced(mq.matches)
-    update(); mq.addEventListener?.('change', update)
-    return () => mq.removeEventListener?.('change', update)
-  }, [])
-  const step = reduced ? 1 : Math.min(3, Math.floor(progress * 4))
-  const steps = [
-    { label: '۱ · دریافت', title: 'درخواست وارد می‌شود', body: 'چت، فایل یا API — فرمت مهم نیست؛ نقطه ورود یکی است.', color: 'var(--accent-blue)' },
-    { label: '۲ · فهم', title: 'Smart Mode مسئله را می‌خواند', body: 'دسته، پیچیدگی و موجودی کیف‌پول را برای این turn بررسی می‌کند.', color: 'var(--accent-pink)' },
-    { label: '۳ · انتخاب', title: 'مدل مناسب route می‌شود', body: 'ارزان‌ترین مدل توانا انتخاب می‌شود؛ بدون انتخاب دستی و حدس.', color: 'var(--accent-violet)' },
-    { label: '۴ · پاسخ', title: 'نتیجه در همان workspace', body: 'پاسخ را در چت، stream API یا task زمان‌بندی‌شده تحویل بگیرید.', color: 'var(--accent-teal)' },
-  ]
-  const active=steps[step]
-  const nodes=[{x:16,y:68,label:'chat'},{x:16,y:30,label:'file'},{x:50,y:50,label:'smart'},{x:84,y:30,label:'model'},{x:84,y:70,label:'api'}]
-  const routeTargets = ['chat', 'smart', 'model', 'api']
-  return <section ref={sectionRef} className="routing-scroll-section">
-    <div className="routing-sticky shell-wide">
-      <div className="routing-copy">
-        <p className="eyebrow">Scroll to route</p>
-        <h2 className="display">از درخواست تا پاسخ، <span className="mark">زنده.</span></h2>
-        <p className="lede">غلتک را بچرخانید. مسیر Smart Mode را قدم‌به‌قدم ببینید.</p>
-        <div className="routing-steps">{steps.map((s,i)=><div key={s.label} className={`routing-step ${i===step?'active':''}`} style={{'--step-color':s.color} as React.CSSProperties}><span>{s.label}</span><strong>{s.title}</strong></div>)}</div>
-        <Link href={isLoggedIn?'/chat':'/signup'} className="text-link routing-cta">همین حالا امتحانش کن <Icon name="arrowRight" size={14}/></Link>
-      </div>
-      <div className="routing-stage" style={{'--routing-progress':progress,'--routing-color':active.color} as React.CSSProperties}>
-        <div className="routing-stage-beam" aria-hidden="true" />
-        <div className="routing-stage-grid" aria-hidden="true"/>
-        <svg className="routing-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d="M16 68 C29 68,35 50,50 50 S70 30,84 30"/><path d="M16 30 C29 30,35 50,50 50 S70 70,84 70"/><path className="routing-trace" pathLength="1" d="M16 68 C29 68,35 50,50 50 S70 30,84 30" style={{strokeDashoffset:1-Math.max(progress*1.7,.02)}}/></svg>
-        {nodes.map((n,i)=><div key={n.label} className={`routing-node ${i===step?'active':''}`} style={{left:`${n.x}%`,top:`${n.y}%`}}><span className="routing-node-dot"/><small>{n.label}</small></div>)}
-        <div className="routing-state-pill"><i /> {routeTargets[step]} selected</div>
-        <div className="routing-readout" aria-live="polite"><span className="routing-live"><i/> LIVE ROUTE</span><strong>{active.title}</strong><p>{active.body}</p><div className="routing-progress"><span style={{transform:`scaleX(${Math.max(progress,.04)})`}}/></div><code>progress {Math.round(progress*100)}%</code></div>
-      </div>
-    </div>
-  </section>
-}
-
-function Constellation() {
-  const { ref, on } = useReveal()
+/* ── Hero ────────────────────────────────────────────────────────────── */
+function Hero() {
   return (
-    <section className="section" ref={ref} aria-label="Capabilities">
-      <div className="shell">
-        <div className={`section-head reveal ${on ? 'on' : ''}`}>
-          <p className="eyebrow">کل جعبه ابزار</p>
-          <h2 className="section-title">قدرت‌هایی که واقعاً دارید</h2>
-          <p className="lede" style={{ marginTop: '0.85rem' }}>
-            نه لیست بازاریابی — قابلیت‌های زنده پنل: چت، API، مسیریابی هوشمند، فایل، حافظه و اتوماسیون.
-          </p>
+    <section className="motion-hero">
+      <MeshGradientBackground variant={0} />
+      <MeshGradientBackground variant={1} />
+      <VortexBackground />
+      <WaterTrailBackground />
+      <div className="motion-hero-content">
+        <a href="#canvas" className="motion-hero-pill">
+          NEW Canvas is here — the agent-native visual production studio
+        </a>
+        <h1>The complete animation stack.</h1>
+        <p className="motion-hero-sub">
+          Point at your live site, animate it visually, and walk away with clean, zero-dependency code. Scroll, hover, text, cursors — all of it.
+        </p>
+        <div className="motion-hero-actions">
+          <a href="#" className="motion-btn motion-btn-primary">Start animating</a>
+          <a href="#builder" className="motion-btn motion-btn-ghost">See it in action</a>
         </div>
-        <div className={`constellation reveal ${on ? 'on' : ''}`} style={{ transitionDelay: '80ms' }}>
-          {CHIPS.map((c) => (
-            <span key={c} className="chip"><i />{c}</span>
+      </div>
+      <div className="motion-hero-strip">
+        <div className="motion-strip-track">
+          {[...LOGOS, ...LOGOS].map((m, i) => (
+            <div key={i} className="motion-strip-chip">
+              <LogoIcon src={m.src} name={m.name} />
+              <span>{m.name}</span>
+            </div>
           ))}
         </div>
       </div>
@@ -247,167 +301,49 @@ function Constellation() {
   )
 }
 
-function SmartSplit({ isLoggedIn }: { isLoggedIn: boolean }) {
-  const { ref, on } = useReveal()
+/* ── Tricks Grid ────────────────────────────────────────────────────── */
+function TricksGrid() {
   return (
-    <section className="section" ref={ref} style={{ background: 'rgba(255,255,255,0.01)' }}>
-      <div className={`shell split reveal ${on ? 'on' : ''}`}>
-        <div>
-          <p className="eyebrow">Smart Mode</p>
-          <h2 className="section-title">مدل را تو انتخاب نکن — مسیر هوشمند انتخاب میکند.</h2>
-          <p className="lede" style={{ marginTop: '1rem' }}>
-            پیام را تحلیل میکند، دسته را تشخیص می‌دهد (کد، استدلال، خلاقیت، ساده)
-            و ارزان‌ترین مدل توانا را با توجه به موجودی کیف‌پول برمی‌گزیند.
-          </p>
-          <div style={{ marginTop: '1.5rem' }}>
-            <Link href={isLoggedIn ? '/chat' : '/signup'} className="text-link">
-              امتحان در چت
-              <Icon name="arrowRight" size={14} />
-            </Link>
-          </div>
-        </div>
-        <div className="stage">
-          <div className="stage-bar">
-            <span className="stage-dot" />
-            <span className="stage-dot" />
-            <span className="stage-dot" />
-            <span style={{ marginInlineStart: '0.5rem' }}>routing · live</span>
-          </div>
-          <div className="stage-body" style={{ direction: 'ltr', textAlign: 'left', fontFamily: 'ui-monospace, monospace', fontSize: '0.78rem', lineHeight: 1.7, color: 'var(--text-dim)' }}>
-            <div><span style={{ color: 'var(--accent-pink)' }}>input</span>: &quot;refactor this FastAPI endpoint&quot;</div>
-            <div><span style={{ color: 'var(--accent-violet)' }}>category</span>: code</div>
-            <div><span style={{ color: 'var(--accent-teal)' }}>selected</span>: deepseek-v4-pro</div>
-            <div><span style={{ color: 'var(--accent-blue)' }}>headers</span>: X-Smart-Model · X-Smart-Category</div>
-            <div style={{ marginTop: '0.75rem', color: 'var(--text-muted)' }}>// cheapest capable model for this turn</div>
-          </div>
+    <section className="motion-section">
+      <div className="motion-section-inner">
+        <h2 className="motion-section-title">The whole bag of tricks</h2>
+        <div className="motion-tricks-grid">
+          {TRICKS.map((t, i) => (
+            <div key={i} className="motion-trick-card">
+              <img src={t.icon} alt="" aria-hidden="true" />
+              <span className="motion-trick-label">{t.title}</span>
+            </div>
+          ))}
         </div>
       </div>
     </section>
   )
 }
 
-function BentoTheater() {
-  const { ref, on } = useReveal()
+/* ── Visual Builder + SDK ────────────────────────────────────────────── */
+function BuilderSection() {
+  const [tab, setTab] = useState('Animation')
   return (
-    <section className="section" ref={ref}>
-      <div className="shell">
-        <div className={`section-head reveal ${on ? 'on' : ''}`}>
-          <p className="eyebrow">Product theater</p>
-          <h2 className="section-title">نشان بده. ادعا نکن.</h2>
-          <p className="lede" style={{ marginTop: '0.85rem' }}>
-            هر کارت یک سطح واقعی محصول است — نه آیکون بالای سه خط توضیح.
-          </p>
-        </div>
-        <div className={`bento reveal ${on ? 'on' : ''}`} style={{ transitionDelay: '60ms' }}>
-          <article className="bento-card wide featured">
-            <div className="bento-visual">
-              <div className="hi">POST /v1/chat/with-file</div>
-              <div>accept: .pdf .txt .md .csv .json · max 10MB</div>
-              <div className="vi">→ extract · inject context · stream answer</div>
-            </div>
-            <p className="eyebrow" style={{ marginBottom: 0 }}>RAG / FILE</p>
-            <h3>فایل را آپلود کنید، مدل استناد میکند</h3>
-            <p>PDF و متن را می‌خواند، به عنوان context تزریق میکند و در همان مکالمه پاسخ می‌دهد.</p>
-          </article>
-
-          <article className="bento-card wide">
-            <div className="bento-visual">
-              <div className="pi">memory.auto_extract</div>
-              <div>facts ≤ 3 / conversation</div>
-              <div className="hi">skills.marketplace · clone · rate · run</div>
-            </div>
-            <p className="eyebrow" style={{ marginBottom: 0 }}>MEMORY & SKILLS</p>
-            <h3>حافظه + اسکیلز</h3>
-            <p>حقایق مهم مکالمه ذخیره می‌شود. اسکیل‌های آماده را clone کنید و با متغیر اجرا کنید.</p>
-          </article>
-
-          <article className="bento-card">
-            <div className="bento-visual">
-              <div className="vi">cron: 0 9 * * *</div>
-              <div>delivery: dashboard | telegram</div>
-              <div className="hi">tasks.run_now()</div>
-            </div>
-            <p className="eyebrow" style={{ marginBottom: 0 }}>SCHEDULE</p>
-            <h3>تسک زمان‌بندی</h3>
-            <p>پرامپت‌های تکراری را زمان‌بندی کنید و نتیجه را در پنل یا تلگرام بگیرید.</p>
-          </article>
-
-          <article className="bento-card">
-            <div className="bento-visual">
-              <div>model A ──┐</div>
-              <div className="hi">         ├─ compare</div>
-              <div>model B ──┘</div>
-              <div className="pi">latency · tokens · cost</div>
-            </div>
-            <p className="eyebrow" style={{ marginBottom: 0 }}>COMPARE</p>
-            <h3>مقایسه مدل</h3>
-            <p>دو مدل موازی؛ زمان، توکن و هزینه کنار هم.</p>
-          </article>
-
-          <article className="bento-card">
-            <div className="bento-visual">
-              <div className="hi">baseURL: /v1</div>
-              <div>Authorization: Bearer ***
+    <section id="builder" className="motion-section motion-section-alt">
+      <div className="motion-section-inner">
+        <div className="motion-builder">
+          <div className="motion-builder-text">
+            <span className="motion-eyebrow">VISUAL BUILDER + SDK</span>
+            <h3>You point and click.<br />It writes real code.</h3>
+            <p className="motion-builder-p">Grab any element on your live page, choose a trigger, and set the timing. MultiAI writes the same SDK code a senior dev would, then hands it over.</p>
+            <a href="#pricing" className="motion-btn motion-btn-ghost" style={{ marginTop: '0.5rem' }}>Explore plans <ArrowIcon /></a>
+          </div>
+          <div className="motion-builder-visual">
+            <div className="motion-code-block">
+              <div className="motion-code-tabs">
+                {Object.keys(CODE_TABS).map(name => (
+                  <button key={name} className={tab === name ? 'active' : ''} onClick={() => setTab(name)}>
+                    {name}
+                  </button>
+                ))}
               </div>
-              <div className="vi">chat.completions.create()</div>
+              <pre key={tab}>{CODE_TABS[tab]}</pre>
             </div>
-            <p className="eyebrow" style={{ marginBottom: 0 }}>API</p>
-            <h3>OpenAI-compatible</h3>
-            <p>کلید بسازید، base_url را عوض کنید — SDKهای رایج کار می‌کنند.</p>
-          </article>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function ApiStage() {
-  const { ref, on } = useReveal()
-  const snippet = `from openai import OpenAI
-
-client = OpenAI(
-  api_key="sk-...",
-  base_url="https://your-host/v1",
-)
-
-client.chat.completions.create(
-  model="deepseek-v4-pro",
-  messages=[{"role":"user","content":"سلام"}],
-)`
-  return (
-    <section className="section" ref={ref} style={{ background: 'rgba(48,218,220,0.02)' }}>
-      <div className={`shell split reveal ${on ? 'on' : ''}`}>
-        <div className="stage">
-          <div className="stage-bar">
-            <span className="stage-dot" />
-            <span className="stage-dot" />
-            <span className="stage-dot" />
-            <span style={{ marginInlineStart: '0.5rem' }}>sdk · openai-compatible</span>
-          </div>
-          <pre className="stage-body" style={{
-            margin: 0,
-            direction: 'ltr',
-            textAlign: 'left',
-            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-            fontSize: '0.78rem',
-            lineHeight: 1.7,
-            color: 'var(--text-dim)',
-            whiteSpace: 'pre-wrap',
-          }}>{snippet}</pre>
-        </div>
-        <div>
-          <p className="eyebrow">OpenAI-compatible API</p>
-          <h2 className="section-title">همان SDK. endpoint ما.</h2>
-          <p className="lede" style={{ marginTop: '1rem' }}>
-            برای اپ‌ها و agentها: completions استریم و غیر استریم، مدیریت کلید API،
-            و صورتحساب توکنی با نمایش هزینه. دسترسی بدون VPN.
-          </p>
-          <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-            <Link href="/developer" className="btn-secondary">رفتن به Developer</Link>
-            <Link href="/pricing" className="text-link">
-              دیدن تعرفه‌ها
-              <Icon name="arrowRight" size={14} />
-            </Link>
           </div>
         </div>
       </div>
@@ -415,135 +351,406 @@ client.chat.completions.create(
   )
 }
 
-function LocalReality() {
-  const { ref, on } = useReveal()
+/* ── Feature Card ───────────────────────────────────────────────────── */
+function FeatureCard({ img, eyebrow, title, desc }: { img: string; eyebrow: string; title: string; desc: string }) {
   return (
-    <section className="section" ref={ref}>
-      <div className="shell">
-        <div className={`section-head reveal ${on ? 'on' : ''}`}>
-          <p className="eyebrow">واقعیت محلی</p>
-          <h2 className="section-title">بدون VPN. پرداخت ریالی.</h2>
+    <article className="motion-feature-card">
+      <img src={img} alt="" className="motion-feature-img" />
+      <span className="motion-eyebrow">{eyebrow}</span>
+      <h3 className="motion-feature-title">{title}</h3>
+      <p className="motion-feature-desc">{desc}</p>
+    </article>
+  )
+}
+
+/* ── Point. Click. Animate. ─────────────────────────────────────────── */
+function PointClickAnimate() {
+  return (
+    <section className="motion-section">
+      <div className="motion-section-inner">
+        <span className="motion-eyebrow">VISUAL BUILDER</span>
+        <h2 className="motion-section-title">Point. Click. Animate.</h2>
+        <p className="motion-section-sub">Here&apos;s everything the builder does — point, click, animate, and ship.</p>
+        <div className="motion-features-grid">
+          {FEATURES_ROW1.map((f, i) => <FeatureCard key={i} {...f} />)}
         </div>
-        <div className={`facts reveal ${on ? 'on' : ''}`} style={{ transitionDelay: '70ms' }}>
-          <div className="fact">
-            <h3>دسترسی مستقیم</h3>
-            <p>
-              زیرساخت اختصاصی طوری طراحی شده که بدون فیلترشکن به چت و API برسید —
-              همان چیزی که برای کار روزمره در ایران لازم است.
-            </p>
-          </div>
-          <div className="fact">
-            <h3>کیف‌پول زرین‌پال</h3>
-            <p>
-              شارژ با تومان، موجودی شفاف، و نمایش هزینه درخواست وقتی قیمت مدل موجود باشد.
-              بدون داستان ارزی پیچیده.
-            </p>
-          </div>
+        <div className="motion-features-grid" style={{ marginTop: '1.5rem' }}>
+          {FEATURES_ROW2.map((f, i) => <FeatureCard key={i} {...f} />)}
         </div>
       </div>
     </section>
   )
 }
 
-function ThreeDoors({ isLoggedIn }: { isLoggedIn: boolean }) {
-  const { ref, on } = useReveal()
+/* ── Canvas Showcase ─────────────────────────────────────────────────── */
+function CanvasSection() {
   return (
-    <section className="section" ref={ref} style={{ background: 'rgba(175,71,255,0.03)' }}>
-      <div className="shell">
-        <div className={`section-head center reveal ${on ? 'on' : ''}`}>
-          <p className="eyebrow">Architecture</p>
-          <h2 className="section-title">یک موتور. سه در.</h2>
-          <p className="lede" style={{ marginTop: '0.85rem' }}>
-            همان مدل‌ها، سه ورودی: گفتگو، API، اتوماسیون.
-          </p>
+    <section id="canvas" className="motion-section motion-canvas-showcase">
+      <div className="motion-section-inner">
+        <div className="motion-canvas-heading">
+          <span className="motion-eyebrow">CANVAS · AGENT-NATIVE PRODUCTION</span>
+          <h2 className="motion-section-title">Million-dollar assets made with Canvas.</h2>
+          <p className="motion-section-sub">Canvas is a complete WebGPU visual production editor — with a real video timeline, not a folder of shader presets.</p>
+          <a href="#" className="motion-btn motion-btn-primary">Create with Canvas · €149/year</a>
         </div>
-        <div className={`doors reveal ${on ? 'on' : ''}`} style={{ transitionDelay: '80ms' }}>
-          <div className="door featured">
-            <div className="n">Door 01</div>
-            <h3>گفتگو</h3>
-            <p>چت چندمدلی، Smart Mode، مقایسه، آپلود فایل و حافظه — برای کار روزمره.</p>
-            <Link href={isLoggedIn ? '/chat' : '/signup'}>ورود به چت →</Link>
-          </div>
-          <div className="door">
-            <div className="n">Door 02</div>
-            <h3>API</h3>
-            <p>OpenAI-compatible برای اپ‌ها و agentها. کلید بسازید و base_url را عوض کنید.</p>
-            <Link href="/developer">مستندات →</Link>
-          </div>
-          <div className="door">
-            <div className="n">Door 03</div>
-            <h3>اتوماسیون</h3>
-            <p>تسک‌های زمان‌بندی‌شده، اسکیلز و تحویل به داشبورد یا تلگرام.</p>
-            <Link href={isLoggedIn ? '/tasks' : '/signup'}>تسک‌ها →</Link>
-          </div>
+        <div style={{ position: 'relative', marginBottom: '3rem', borderRadius: 'var(--radius)', border: '1px solid var(--border)', overflow: 'hidden' }}>
+          <img src="/illustrations/canvas-between-two-infinities.webp" alt="MultiAI Canvas editing the Between Two Infinities composition" style={{ width: '100%', display: 'block' }} />
+        </div>
+        <div className="motion-canvas-gallery">
+          {CANVAS_ASSETS.map(({ name, src }) => (
+            <article key={name} className="motion-canvas-card">
+              <img src={src} alt={name} />
+              <h3>{name}</h3>
+            </article>
+          ))}
         </div>
       </div>
     </section>
   )
 }
 
-function FinalCta({ isLoggedIn }: { isLoggedIn: boolean }) {
-  const { ref, on } = useReveal(0.2)
+/* ── Stack Grid ──────────────────────────────────────────────────────── */
+function StackSection() {
   return (
-    <section className="final" ref={ref} aria-label="Get started">
-      <div className={`shell reveal ${on ? 'on' : ''}`}>
-        <h2 className="display">شروع کن — مدل‌ها منتظرند.</h2>
-        <p className="lede">
-          ثبت‌نام سریع، پرداخت ریالی، دسترسی بدون VPN.
-          اگر از قبل حساب دارید، مستقیم بروید سراغ چت یا API.
+    <section id="stack" className="motion-section motion-section-alt">
+      <div className="motion-section-inner">
+        <span className="motion-eyebrow">YOUR STACK, COVERED</span>
+        <h2 className="motion-section-title">Plays nice with<br />everything</h2>
+        <p className="motion-section-sub">
+          WordPress, React, Astro, Webflow, Shopify, plain HTML — MultiAI drops into whatever you&apos;ve already built. Your stack stays exactly as it is.
         </p>
-        <div className="final-actions">
-          <Link href={isLoggedIn ? '/chat' : '/signup'} className="btn-primary">
-            {isLoggedIn ? 'رفتن به چت' : 'ساخت حساب'}
-            <Icon name="arrowRight" size={16} />
-          </Link>
-          <Link href="/models" className="btn-secondary">کاتالوگ مدل‌ها</Link>
+        <div className="motion-stack-grid">
+          {LOGOS.map((s, i) => (
+            <div key={i} className="motion-stack-item">
+              <img src={s.src} alt={s.name} />
+              <span>{s.name}</span>
+            </div>
+          ))}
         </div>
       </div>
     </section>
   )
 }
 
-export default function LandingPage() {
-  const { user } = useAuth()
-  const isLoggedIn = !!user
-  const [models, setModels] = useState<ModelCatalogItem[]>([])
-  const [modelsLoaded, setModelsLoaded] = useState(false)
-
-  usePageScroll()
-
-  useEffect(() => {
-    let cancelled = false
-    fetch('/api/catalog/models')
-      .then((r) => r.json())
-      .then((d: CatalogResponse) => {
-        if (!cancelled) setModels(d?.data ?? [])
-      })
-      .catch((err) => console.error('Failed to fetch catalog:', err))
-      .finally(() => {
-        if (!cancelled) setModelsLoaded(true)
-      })
-    return () => { cancelled = true }
-  }, [])
-
-  const modelCount = modelsLoaded ? modelCountLabel(models) : 'در حال بارگذاری…'
-
+/* ── Timeline Editor ────────────────────────────────────────────────── */
+function TimelineSection() {
   return (
-    <div className="landing-v7">
+    <section className="motion-section">
+      <div className="motion-section-inner motion-timeline">
+        <div className="motion-timeline-text">
+          <span className="motion-eyebrow">VISUAL TIMELINE EDITOR</span>
+          <h3>Every from and to,<br />laid out on a timeline</h3>
+          <p>Drag, stretch, and stack animation entries like clips in a video editor. Every change previews live on your actual site. When it looks right, it is right.</p>
+          <a href="https://docs.multi-ai.com" target="_blank" rel="noopener" className="motion-btn motion-btn-ghost">Learn more <ArrowIcon /></a>
+        </div>
+        <div className="motion-timeline-code">
+          <div className="motion-code-block" style={{ padding: '1.5rem' }}>
+            <div style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+              hero-entrance <span style={{ color: 'var(--text-muted)' }}>0.00s / 4.00s</span>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {['from', 'opacity', 'y', 'duration', 'ease', 'stagger'].map((label, i) => (
+                <div key={i} style={{
+                  padding: '0.5rem 1rem',
+                  borderRadius: 'var(--radius-sm)',
+                  background: i === 0 ? 'rgba(175,71,255,0.1)' : 'rgba(255,255,255,0.04)',
+                  border: '1px solid var(--border)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '0.8rem',
+                  color: i === 0 ? 'rgb(255,91,222)' : 'var(--text-muted)',
+                }}>{label}</div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
 
-      <Hero isLoggedIn={isLoggedIn} modelCount={modelCount} />
-      <Marquee />
-      <ScrollRoutingStage isLoggedIn={isLoggedIn} />
-      <Constellation />
-      <SmartSplit isLoggedIn={isLoggedIn} />
-      <BentoTheater />
-      <ApiStage />
-      <LocalReality />
-      <ThreeDoors isLoggedIn={isLoggedIn} />
-      <FinalCta isLoggedIn={isLoggedIn} />
-      <footer className="foot">
-        <div className="shell">Multiai — درگاه هوش مصنوعی فارسی</div>
-      </footer>
-    </div>
+/* ── SDK API ─────────────────────────────────────────────────────────── */
+function SDKSection() {
+  return (
+    <section className="motion-section motion-section-alt">
+      <div className="motion-section-inner motion-timeline">
+        <div className="motion-timeline-text">
+          <span className="motion-eyebrow">DECLARATIVE SDK</span>
+          <h3>One function. One object.<br />That&apos;s the whole API.</h3>
+          <p>from, to, duration, ease — pass a plain object and you&apos;re done. You&apos;ll have it memorized before your coffee cools.</p>
+          <a href="https://docs.multi-ai.com" target="_blank" rel="noopener" className="motion-btn motion-btn-ghost">Learn more <ArrowIcon /></a>
+        </div>
+        <div className="motion-timeline-code">
+          <pre className="motion-code-block">{`from: { opacity: 0, y: 40 },
+to: { opacity: 1, y: 0 },
+duration: 0.6,
+ease: 'power2.out',
+}).onScroll({ scrub: true });`}</pre>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ── Stagger & Orchestration ────────────────────────────────────────── */
+function StaggerSection() {
+  return (
+    <section className="motion-section">
+      <div className="motion-section-inner motion-timeline">
+        <div className="motion-timeline-text">
+          <span className="motion-eyebrow">STAGGER & ORCHESTRATION</span>
+          <h3>Move 500 elements<br />like they&apos;re one</h3>
+          <p>Cascade from the center, ripple from the edges, or randomize across a grid. It stays smooth when the element count gets silly.</p>
+          <a href="https://docs.multi-ai.com" target="_blank" rel="noopener" className="motion-btn motion-btn-ghost">Learn more <ArrowIcon /></a>
+        </div>
+        <div className="motion-timeline-code">
+          <pre className="motion-code-block">{`from('.card', {
+  opacity: 0,
+  y: 60,
+  rotateX: 15,
+  stagger: {
+    each: 0.05,
+    from: 'center',
+    grid: [20, 25]
+  }
+}).duration(0.7)`}</pre>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ── Composable Triggers ────────────────────────────────────────────── */
+function TriggersSection() {
+  const triggers = [
+    { icon: '⬆', label: 'Scroll' },
+    { icon: '👆', label: 'Hover' },
+    { icon: '🔄', label: 'Click' },
+    { icon: '👁', label: 'View' },
+    { icon: '⏸', label: 'Pause' },
+    { icon: '▶', label: 'Play' },
+    { icon: '🔁', label: 'Loop' },
+    { icon: '⚡', label: 'Custom' },
+  ]
+  return (
+    <section className="motion-section motion-section-alt">
+      <div className="motion-section-inner">
+        <span className="motion-eyebrow">COMPOSABLE TRIGGERS</span>
+        <h2 className="motion-section-title">Eight trigger types —<br />mix them however you like</h2>
+        <div className="motion-tricks-grid" style={{ marginTop: '3rem' }}>
+          {triggers.map((t, i) => (
+            <div key={i} className="motion-trick-card">
+              <span style={{ fontSize: '2rem' }}>{t.icon}</span>
+              <span className="motion-trick-label">{t.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ── SplitText ───────────────────────────────────────────────────────── */
+function SplitTextSection() {
+  return (
+    <section className="motion-section">
+      <div className="motion-section-inner motion-timeline">
+        <div className="motion-timeline-text">
+          <span className="motion-eyebrow">SPLITTEXT</span>
+          <h3>Split, flip, scramble, mask —<br />text that performs</h3>
+          <p>Break any text into characters, words, or lines — then animate each one individually with the same ease and timing you already know.</p>
+          <a href="https://docs.multi-ai.com" target="_blank" rel="noopener" className="motion-btn motion-btn-ghost">Learn more <ArrowIcon /></a>
+        </div>
+        <div className="motion-timeline-code">
+          <pre className="motion-code-block">{`SplitText.create('.heading', {
+  type: 'chars,words'
+})
+.from(chars, {
+  opacity: 0,
+  y: 20,
+  stagger: 0.02
+})`}</pre>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ── Engine Doors ────────────────────────────────────────────────────── */
+function EngineSection() {
+  return (
+    <section className="motion-section motion-section-alt">
+      <div className="motion-section-inner">
+        <h2 className="motion-section-title">One engine,<br />three doors</h2>
+        <p className="motion-section-sub">
+          One animation engine, three ways to drive it — a full desktop studio, a one-click WordPress plugin, or the raw SDK. Every path produces the same output.
+        </p>
+        <div className="motion-engine-doors">
+          <div className="motion-engine-door">
+            <span className="motion-eyebrow">THE BUILDER</span>
+            <h4>Animate Everything</h4>
+            <p>The full visual builder for macOS, Windows, and Linux. Point, click, animate, deploy.</p>
+            <a href="#" className="motion-btn motion-btn-ghost" style={{ marginTop: '1rem', fontSize: '0.85rem' }}>Download the app <ArrowIcon /></a>
+          </div>
+          <div className="motion-engine-door">
+            <span className="motion-eyebrow">WORDPRESS PLUGIN</span>
+            <h4>Animate Everything</h4>
+            <p>Install the plugin, open any page, and start animating. No export, no code — it just works.</p>
+            <a href="#" className="motion-btn motion-btn-ghost" style={{ marginTop: '1rem', fontSize: '0.85rem' }}>Install plugin <ArrowIcon /></a>
+          </div>
+          <div className="motion-engine-door">
+            <span className="motion-eyebrow">THE SDK</span>
+            <h4>Animate Everything</h4>
+            <p>One import, one function call. Full control from any framework, any build tool, any stack.</p>
+            <a href="#" className="motion-btn motion-btn-ghost" style={{ marginTop: '1rem', fontSize: '0.85rem' }}>npm i @motion.page/sdk <ArrowIcon /></a>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ── Testimonials ────────────────────────────────────────────────────── */
+function TestimonialsSection() {
+  return (
+    <section className="motion-section">
+      <div className="motion-section-inner">
+        <h2 className="motion-section-title">Kind words from<br />people who ship.</h2>
+        <div className="motion-testimonials">
+          {TESTIMONIALS.map((t, i) => (
+            <div key={i} className="motion-testimonial">
+              {t.avatar && <img src={t.avatar} alt={t.name} className="motion-test-avatar" />}
+              <p className="motion-test-text">{t.text}</p>
+              <div className="motion-test-meta">
+                <strong>{t.name}</strong>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ── Pricing ────────────────────────────────────────────────────────── */
+function PricingSection() {
+  const [annual, setAnnual] = useState(true)
+  return (
+    <section id="pricing" className="motion-section motion-section-alt">
+      <div className="motion-section-inner">
+        <h2 className="motion-section-title">Pick your creative weapon.</h2>
+        <p className="motion-section-sub">Animations, shaders, or both — flat pricing, no per-seat math.</p>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginBottom: '2.5rem' }}>
+          <button
+            onClick={() => setAnnual(false)}
+            className={annual ? 'motion-btn motion-btn-ghost' : 'motion-btn motion-btn-primary'}
+            style={{ fontSize: '13.44px', padding: '7px 20px', borderRadius: '9999px' }}
+          >Monthly</button>
+          <button
+            onClick={() => setAnnual(true)}
+            className={annual ? 'motion-btn motion-btn-primary' : 'motion-btn motion-btn-ghost'}
+            style={{ fontSize: '13.44px', padding: '7px 20px', borderRadius: '9999px', background: annual ? 'rgba(255,255,255,0.1)' : undefined }}
+          >Yearly −50%</button>
+        </div>
+        <div className="motion-pricing-grid">
+          {PRICING_PLANS.map(plan => (
+            <div key={plan.name} className="motion-pricing-card">
+              <span className="motion-eyebrow">{plan.name}</span>
+              <div className="motion-pricing-price">{plan.price}<span className="motion-pricing-period">{plan.period}</span></div>
+              <ul className="motion-pricing-features">
+                {plan.features.map(f => <li key={f}>{f}</li>)}
+              </ul>
+              <a href="#" className="motion-btn motion-btn-primary" style={{ background: 'rgba(255,91,222,0.08)', color: 'rgb(255,91,222)', fontSize: '13.44px' }}>
+                Get instant access <ArrowIcon />
+              </a>
+              <div style={{ textAlign: 'center', marginTop: '0.5rem', fontSize: '10.08px', color: 'var(--text-dim)' }}>or try free for 7 days</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/* ── CTA ────────────────────────────────────────────────────────────── */
+function CTA() {
+  return (
+    <section className="motion-cta">
+      <h2>Go on —<br />make something move.</h2>
+      <p>Start with free credits. No credit card required.</p>
+      <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+        <a href="#" className="motion-btn motion-btn-primary">Start animating</a>
+        <a href="https://docs.multi-ai.com" target="_blank" rel="noopener" className="motion-btn" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgb(186,188,210)', fontSize: '18.08px' }}>Read the docs</a>
+      </div>
+    </section>
+  )
+}
+
+/* ── Footer ─────────────────────────────────────────────────────────── */
+function Footer() {
+  return (
+    <footer className="motion-footer">
+      <div className="motion-footer-inner">
+        <div className="motion-footer-links">
+          <div>
+            <h4>Product</h4>
+            <a href="#">Builder</a>
+            <a href="#">Canvas</a>
+            <a href="#">Platforms</a>
+            <a href="#">Plans</a>
+            <a href="#">Changelog</a>
+          </div>
+          <div>
+            <h4>Resources</h4>
+            <a href="#">Documentation</a>
+            <a href="#">SDK Documentation</a>
+            <a href="#">Builder Documentation</a>
+            <a href="#">Status</a>
+          </div>
+          <div>
+            <h4>Legal</h4>
+            <a href="#">Terms of Service</a>
+            <a href="#">Privacy Policy</a>
+            <a href="#">EULA</a>
+            <a href="#">Accessibility</a>
+          </div>
+        </div>
+        <div className="motion-footer-bottom">
+          <p>&copy; {new Date().getFullYear()} MultiAI — The complete animation stack. All rights reserved.</p>
+        </div>
+      </div>
+    </footer>
+  )
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Page
+   ════════════════════════════════════════════════════════════════════════════ */
+
+export default function Home() {
+  return (
+    <>
+      <div className="motion-grain" aria-hidden="true" />
+      <MotionEffects />
+      <Nav />
+      <main>
+        <Hero />
+        <TricksGrid />
+        <BuilderSection />
+        <PointClickAnimate />
+        <CanvasSection />
+        <StackSection />
+        <TimelineSection />
+        <SDKSection />
+        <StaggerSection />
+        <TriggersSection />
+        <SplitTextSection />
+        <EngineSection />
+        <PhysicsBoxes />
+        <TestimonialsSection />
+        <PricingSection />
+        <CTA />
+        <Footer />
+      </main>
+    </>
   )
 }

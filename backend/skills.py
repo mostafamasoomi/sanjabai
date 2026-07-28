@@ -61,14 +61,17 @@ async def list_my_skill_templates(request: Request) -> JSONResponse:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
         return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
-    async with async_session() as session:
-        res = await session.execute(
-            SkillTemplate.__table__.select().where(
-                SkillTemplate.user_id == uid,
-            ).order_by(SkillTemplate.created_at.desc())
-        )
-        rows = [dict(r._mapping) for r in res.fetchall()]
-    return JSONResponse(jsonable_encoder(rows))
+    try:
+        async with async_session() as session:
+            res = await session.execute(
+                SkillTemplate.__table__.select().where(
+                    SkillTemplate.user_id == uid,
+                ).order_by(SkillTemplate.created_at.desc())
+            )
+            rows = [dict(r._mapping) for r in res.fetchall()]
+        return JSONResponse(jsonable_encoder(rows))
+    except Exception:
+        return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
 
 
 @router.get('/skills')
@@ -82,46 +85,48 @@ async def list_skill_templates(
     limit: int = 50,
 ) -> JSONResponse:
     """List public skill templates with optional filtering and sorting."""
-    if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
-    async with async_session() as session:
-        stmt = SkillTemplate.__table__.select().where(SkillTemplate.is_public == True)
-        if category:
-            stmt = stmt.where(SkillTemplate.category == category)
-        if featured is not None:
-            stmt = stmt.where(SkillTemplate.is_featured == featured)
-        if q:
-            stmt = stmt.where(
-                SkillTemplate.title.ilike(f'%{_escape_like(q)}%') |
-                SkillTemplate.title_fa.ilike(f'%{_escape_like(q)}%') |
-                SkillTemplate.description.ilike(f'%{_escape_like(q)}%') |
-                SkillTemplate.description_fa.ilike(f'%{_escape_like(q)}%')
-            )
-        if sort == 'newest':
-            stmt = stmt.order_by(SkillTemplate.created_at.desc())
-        elif sort == 'top_rated':
-            stmt = stmt.order_by(
-                SkillTemplate.rating_sum.desc().nullslast(),
-                SkillTemplate.rating_count.desc(),
-            )
-        else:
-            stmt = stmt.order_by(SkillTemplate.usage_count.desc())
-        stmt = stmt.offset(skip).limit(min(limit, 100))
-        res = await session.execute(stmt)
-        rows = [dict(r._mapping) for r in res.fetchall()]
-    return JSONResponse(jsonable_encoder(rows))
+    try:
+        async with async_session() as session:
+            stmt = SkillTemplate.__table__.select().where(SkillTemplate.is_public == True)
+            if category:
+                stmt = stmt.where(SkillTemplate.category == category)
+            if featured is not None:
+                stmt = stmt.where(SkillTemplate.is_featured == featured)
+            if q:
+                stmt = stmt.where(
+                    SkillTemplate.title.ilike(f'%{_escape_like(q)}%') |
+                    SkillTemplate.title_fa.ilike(f'%{_escape_like(q)}%') |
+                    SkillTemplate.description.ilike(f'%{_escape_like(q)}%') |
+                    SkillTemplate.description_fa.ilike(f'%{_escape_like(q)}%')
+                )
+            if sort == 'newest':
+                stmt = stmt.order_by(SkillTemplate.created_at.desc())
+            elif sort == 'top_rated':
+                stmt = stmt.order_by(
+                    SkillTemplate.rating_sum.desc().nullslast(),
+                    SkillTemplate.rating_count.desc(),
+                )
+            else:
+                stmt = stmt.order_by(SkillTemplate.usage_count.desc())
+            stmt = stmt.offset(skip).limit(min(limit, 100))
+            res = await session.execute(stmt)
+            rows = [dict(r._mapping) for r in res.fetchall()]
+        return JSONResponse(jsonable_encoder(rows))
+    except Exception:
+        return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
 
 
 @router.get('/skills/{template_id}')
 async def get_skill_template(request: Request, template_id: int) -> JSONResponse:
     """Get a single skill template by ID."""
-    if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
-    async with async_session() as session:
-        res = await session.execute(
-            SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
-        )
-        row = res.fetchone()
+    try:
+        if async_session is None:
+            return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        async with async_session() as session:
+            res = await session.execute(
+                SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
+            )
+            row = res.fetchone()
         if not row:
             return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
         data = dict(row._mapping)
@@ -129,7 +134,9 @@ async def get_skill_template(request: Request, template_id: int) -> JSONResponse
             uid = await _get_user_id(request)
             if not uid or (data.get('user_id') != uid and not await admin_required(request)):
                 return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
-    return JSONResponse(jsonable_encoder(data))
+        return JSONResponse(jsonable_encoder(data))
+    except Exception:
+        return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
 
 
 @router.post('/skills')
@@ -175,31 +182,34 @@ async def update_skill_template(request: Request, template_id: int, payload: Ski
     uid = await _get_user_id(request)
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
-    if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
-    async with async_session() as session:
-        res = await session.execute(
-            SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
-        )
-        row = res.fetchone()
-        if not row:
-            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
-        if row.user_id != uid:
-            return JSONResponse({'detail': 'دسترسی غیرمجاز'}, status_code=403)
-        update_data = {}
-        for field in ['title', 'title_fa', 'description', 'description_fa', 'category',
-                       'prompt_template', 'variables', 'default_model', 'is_public', 'tags']:
-            val = getattr(payload, field, None)
-            if val is not None:
-                update_data[field] = val
-        if update_data:
-            update_data['updated_at'] = datetime.now(timezone.utc).replace(tzinfo=None)
-            await session.execute(
-                SkillTemplate.__table__.update().where(SkillTemplate.id == template_id),
-                update_data,
+    try:
+        if async_session is None:
+            return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        async with async_session() as session:
+            res = await session.execute(
+                SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
             )
-            await session.commit()
-    return JSONResponse({'status': 'ok'})
+            row = res.fetchone()
+            if not row:
+                return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+            if row.user_id != uid:
+                return JSONResponse({'detail': 'دسترسی غیرمجاز'}, status_code=403)
+            update_data = {}
+            for field in ['title', 'title_fa', 'description', 'description_fa', 'category',
+                           'prompt_template', 'variables', 'default_model', 'is_public', 'tags']:
+                val = getattr(payload, field, None)
+                if val is not None:
+                    update_data[field] = val
+            if update_data:
+                update_data['updated_at'] = datetime.now(timezone.utc).replace(tzinfo=None)
+                await session.execute(
+                    SkillTemplate.__table__.update().where(SkillTemplate.id == template_id),
+                    update_data,
+                )
+                await session.commit()
+        return JSONResponse({'status': 'ok'})
+    except Exception:
+        return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
 
 
 @router.delete('/skills/{template_id}')
@@ -208,22 +218,25 @@ async def delete_skill_template(request: Request, template_id: int) -> JSONRespo
     uid = await _get_user_id(request)
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
-    if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
-    async with async_session() as session:
-        res = await session.execute(
-            SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
-        )
-        row = res.fetchone()
-        if not row:
-            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
-        if row.user_id != uid:
-            return JSONResponse({'detail': 'دسترسی غیرمجاز'}, status_code=403)
-        await session.execute(
-            SkillTemplate.__table__.delete().where(SkillTemplate.id == template_id)
-        )
-        await session.commit()
-    return JSONResponse({'status': 'deleted'})
+    try:
+        if async_session is None:
+            return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        async with async_session() as session:
+            res = await session.execute(
+                SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
+            )
+            row = res.fetchone()
+            if not row:
+                return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+            if row.user_id != uid:
+                return JSONResponse({'detail': 'دسترسی غیرمجاز'}, status_code=403)
+            await session.execute(
+                SkillTemplate.__table__.delete().where(SkillTemplate.id == template_id)
+            )
+            await session.commit()
+        return JSONResponse({'status': 'deleted'})
+    except Exception:
+        return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
 
 
 @router.post('/skills/{template_id}/rate')
@@ -234,79 +247,85 @@ async def rate_skill_template(request: Request, template_id: int, payload: Skill
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if payload.rating < 1 or payload.rating > 5:
         return JSONResponse({'detail': 'امتیاز باید بین ۱ تا ۵ باشد'}, status_code=400)
-    if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
-    async with async_session() as session:
-        res = await session.execute(
-            SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
-        )
-        if not res.fetchone():
-            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
-        existing = await session.execute(
-            SkillTemplateRating.__table__.select().where(
-                SkillTemplateRating.template_id == template_id,
-                SkillTemplateRating.user_id == uid,
+    try:
+        if async_session is None:
+            return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        async with async_session() as session:
+            res = await session.execute(
+                SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
             )
-        )
-        old_rating = existing.fetchone()
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
-        if old_rating:
-            old_val = old_rating.rating
-            await session.execute(
-                SkillTemplateRating.__table__.update().where(
+            if not res.fetchone():
+                return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+            existing = await session.execute(
+                SkillTemplateRating.__table__.select().where(
                     SkillTemplateRating.template_id == template_id,
                     SkillTemplateRating.user_id == uid,
-                ),
-                {'rating': payload.rating, 'created_at': now},
+                )
             )
-            await session.execute(
-                SkillTemplate.__table__.update().where(SkillTemplate.id == template_id),
-                {
-                    'rating_sum': SkillTemplate.rating_sum - old_val + payload.rating,
-                    'updated_at': now,
-                },
-            )
-        else:
-            session.add(SkillTemplateRating(
-                template_id=template_id,
-                user_id=uid,
-                rating=payload.rating,
-            ))
-            await session.execute(
-                SkillTemplate.__table__.update().where(SkillTemplate.id == template_id),
-                {
-                    'rating_sum': SkillTemplate.rating_sum + payload.rating,
-                    'rating_count': SkillTemplate.rating_count + 1,
-                    'updated_at': now,
-                },
-            )
-        await session.commit()
-    return JSONResponse({'status': 'ok'})
+            old_rating = existing.fetchone()
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            if old_rating:
+                old_val = old_rating.rating
+                await session.execute(
+                    SkillTemplateRating.__table__.update().where(
+                        SkillTemplateRating.template_id == template_id,
+                        SkillTemplateRating.user_id == uid,
+                    ),
+                    {'rating': payload.rating, 'created_at': now},
+                )
+                await session.execute(
+                    SkillTemplate.__table__.update().where(SkillTemplate.id == template_id),
+                    {
+                        'rating_sum': SkillTemplate.rating_sum - old_val + payload.rating,
+                        'updated_at': now,
+                    },
+                )
+            else:
+                session.add(SkillTemplateRating(
+                    template_id=template_id,
+                    user_id=uid,
+                    rating=payload.rating,
+                ))
+                await session.execute(
+                    SkillTemplate.__table__.update().where(SkillTemplate.id == template_id),
+                    {
+                        'rating_sum': SkillTemplate.rating_sum + payload.rating,
+                        'rating_count': SkillTemplate.rating_count + 1,
+                        'updated_at': now,
+                    },
+                )
+            await session.commit()
+        return JSONResponse({'status': 'ok'})
+    except Exception:
+        return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
 
 
 @router.post('/skills/{template_id}/use')
 async def use_skill_template(request: Request, template_id: int, payload: SkillUseRequest) -> JSONResponse:
     """Use a skill template: increment usage count and return rendered prompt."""
-    if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
-    async with async_session() as session:
-        res = await session.execute(
-            SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
-        )
-        row = res.fetchone()
-        if not row:
-            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
-        await session.execute(
-            SkillTemplate.__table__.update().where(SkillTemplate.id == template_id),
-            {'usage_count': SkillTemplate.usage_count + 1, 'updated_at': now},
-        )
-        await session.commit()
-        rendered = row.prompt_template
-        for var_name, var_value in payload.variables.items():
-            rendered = rendered.replace('{' + var_name + '}', var_value)
-        model = payload.model or row.default_model or ''
-    return JSONResponse(jsonable_encoder({
-        'rendered_prompt': rendered,
-        'model': model,
-    }))
+    try:
+        if async_session is None:
+            return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        async with async_session() as session:
+            res = await session.execute(
+                SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
+            )
+            row = res.fetchone()
+            if not row:
+                return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            await session.execute(
+                SkillTemplate.__table__.update().where(SkillTemplate.id == template_id),
+                {'usage_count': SkillTemplate.usage_count + 1, 'updated_at': now},
+            )
+            await session.commit()
+            rendered = row.prompt_template
+            for var_name, var_value in payload.variables.items():
+                rendered = rendered.replace('{' + var_name + '}', var_value)
+            model = payload.model or row.default_model or ''
+        return JSONResponse(jsonable_encoder({
+            'rendered_prompt': rendered,
+            'model': model,
+        }))
+    except Exception:
+        return JSONResponse({'detail': 'خطای سرور'}, status_code=500)

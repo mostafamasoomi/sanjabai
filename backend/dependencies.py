@@ -181,12 +181,15 @@ async def _get_user_id(request: Request) -> int | None:
                 )
                 key = res.fetchone()
                 if key:
-                    key_id = key.id
                     user_id = key.user_id
-                    asyncio.create_task(_update_api_key_last_used(key_id))
-                    user_res = await session.execute(User.__table__.select().where(User.id == user_id))
-                    user_row = user_res.fetchone()
-                    if user_row and user_row.banned:
+                    asyncio.create_task(_update_api_key_last_used(key.id))
+                    # Verify user is not banned (single query, no extra join)
+                    from sqlalchemy import select as sa_select
+                    user_res = await session.execute(
+                        sa_select(User.banned).where(User.id == user_id)
+                    )
+                    banned_val = user_res.scalar_one_or_none()
+                    if banned_val:
                         return None
                     return user_id
     return None

@@ -35,7 +35,7 @@ export default function ApiKeysPage() {
       const r = await fetch('/api/api-keys', { headers: { Authorization: `Bearer ${token}` } })
       if (r.status === 401) { router.push('/login'); return }
       if (r.ok) setKeys(await r.json())
-    } catch (err) { console.error('Failed to fetch API keys:', err) }
+    } catch {}
   }
 
   const generateKey = async () => {

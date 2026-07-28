@@ -48,3 +48,80 @@ model_list:
     api_key: os.environ/OPENROUTER_API_KEY
     model: openai/text-embedding-3-small
   model_name: text-embedding-3-small
+
+# === freellmapi-s2 (91.107.145.209:3001) ===
+- litellm_params:
+    api_base: http://91.107.145.209:3001/v1
+    api_key: freellmapi-25c68362f62ede985e6b1eab28c8d8282edfb894c9e47676
+    model: openai/auto
+  model_name: freellmapi-auto
+- litellm_params:
+    api_base: http://91.107.145.209:3001/v1
+    api_key: freellmapi-25c68362f62ede985e6b1eab28c8d8282edfb894c9e47676
+    model: openai/fusion
+  model_name: fusion
+- litellm_params:
+    api_base: http://91.107.145.209:3001/v1
+    api_key: freellmapi-25c68362f62ede985e6b1eab28c8d8282edfb894c9e47676
+    model: openai/gemini-3.5-flash
+  model_name: gemini-3.5-flash
+- litellm_params:
+    api_base: http://91.107.145.209:3001/v1
+    api_key: freellmapi-25c68362f62ede985e6b1eab28c8d8282edfb894c9e47676
+    model: openai/gpt-oss-120b
+  model_name: gpt-oss-120b
+- litellm_params:
+    api_base: http://91.107.145.209:3001/v1
+    api_key: freellmapi-25c68362f62ede985e6b1eab28c8d8282edfb894c9e47676
+    model: openai/llama-3.3-70b
+  model_name: llama-3.3-70b
+- litellm_params:
+    api_base: http://91.107.145.209:3001/v1
+    api_key: freellmapi-25c68362f62ede985e6b1eab28c8d8282edfb894c9e47676
+    model: openai/gpt-oss-20b
+  model_name: gpt-oss-20b
+- litellm_params:
+    api_base: http://91.107.145.209:3001/v1
+    api_key: freellmapi-25c68362f62ede985e6b1eab28c8d8282edfb894c9e47676
+    model: openai/gpt-oss-safeguard-20b
+  model_name: gpt-oss-safeguard-20b
+- litellm_params:
+    api_base: http://91.107.145.209:3001/v1
+    api_key: freellmapi-25c68362f62ede985e6b1eab28c8d8282edfb894c9e47676
+    model: openai/gemma-4-31b-it
+  model_name: gemma-4-31b-it
+- litellm_params:
+    api_base: http://91.107.145.209:3001/v1
+    api_key: freellmapi-25c68362f62ede985e6b1eab28c8d8282edfb894c9e47676
+    model: openai/gemini-2.5-flash
+  model_name: gemini-2.5-flash
+- litellm_params:
+    api_base: http://91.107.145.209:3001/v1
+    api_key: freellmapi-25c68362f62ede985e6b1eab28c8d8282edfb894c9e47676
+    model: openai/gemma-4-26b-it
+  model_name: gemma-4-26b-it
+- litellm_params:
+    api_base: http://91.107.145.209:3001/v1
+    api_key: freellmapi-25c68362f62ede985e6b1eab28c8d8282edfb894c9e47676
+    model: openai/gemini-2.5-flash-lite
+  model_name: gemini-2.5-flash-lite
+- litellm_params:
+    api_base: http://91.107.145.209:3001/v1
+    api_key: freellmapi-25c68362f62ede985e6b1eab28c8d8282edfb894c9e47676
+    model: openai/llama-3.1-8b-instant
+  model_name: llama-3.1-8b-instant
+- litellm_params:
+    api_base: http://91.107.145.209:3001/v1
+    api_key: freellmapi-25c68362f62ede985e6b1eab28c8d8282edfb894c9e47676
+    model: openai/gemini-3.1-flash-lite
+  model_name: gemini-3.1-flash-lite
+- litellm_params:
+    api_base: http://91.107.145.209:3001/v1
+    api_key: freellmapi-25c68362f62ede985e6b1eab28c8d8282edfb894c9e47676
+    model: openai/compound
+  model_name: compound
+- litellm_params:
+    api_base: http://91.107.145.209:3001/v1
+    api_key: freellmapi-25c68362f62ede985e6b1eab28c8d8282edfb894c9e47676
+    model: openai/compound-mini
+  model_name: compound-mini

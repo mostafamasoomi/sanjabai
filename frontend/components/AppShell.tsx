@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { AuthProvider, useAuth } from '@/lib/auth'
 import { ToastContainer } from '@/components/ui'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import { LanguageToggle } from '@/components/LanguageToggle'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { useCommandPalette } from '@/components/CommandPalette'
 import { isOnboarded } from '@/lib/onboarding'
@@ -217,6 +218,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               <span>جستجو</span>
               <kbd className="text-[10px] bg-[var(--bg-surface)] px-1 rounded">⌘K</kbd>
             </button>
+            <LanguageToggle />
             <ThemeToggle />
             {!loading && !user && (
               <Link href="/login" className="btn btn-primary btn-sm">ورود</Link>

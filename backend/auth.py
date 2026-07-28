@@ -142,6 +142,22 @@ async def signup(payload: AuthSignup) -> JSONResponse:
     if not stored or str(stored) != str(payload.captcha_answer):
         return JSONResponse({"detail": "کپچا اشتباه است"}, status_code=400)
     await rds.delete(f"captcha:{payload.captcha_token}")
+
+    # Rate limiting: max 3 signups per minute per email/IP to prevent abuse
+    rate_key = f"rate_signup:{payload.email}"
+    try:
+        count = await rds.incr(rate_key)
+        if count == 1:
+            await rds.expire(rate_key, 60)
+        if count > 3:
+            await rds.decr(rate_key)
+            return JSONResponse(
+                {"detail": "ثبت‌نام سریع است. بعداً دوباره تلاش کنید"},
+                status_code=429,
+            )
+    except Exception:
+        pass
+
     valid, err = validate_email(payload.email)
     if not valid:
         return JSONResponse({'detail': err}, status_code=400)
@@ -199,6 +215,22 @@ async def login(payload: AuthLogin) -> JSONResponse:
     if not stored or str(stored) != str(payload.captcha_answer):
         return JSONResponse({"detail": "کپچا اشتباه است"}, status_code=400)
     await rds.delete(f"captcha:{payload.captcha_token}")
+
+    # Rate limiting: max 5 attempts per 60 seconds per email
+    rate_key = f"rate_login:{payload.email}"
+    try:
+        count = await rds.incr(rate_key)
+        if count == 1:
+            await rds.expire(rate_key, 60)
+        if count > 5:
+            await rds.decr(rate_key)
+            return JSONResponse(
+                {"detail": "تعداد تلاش‌ها زیاد است. بعداً دوباره تلاش کنید"},
+                status_code=429,
+            )
+    except Exception:
+        pass  # Redis failure -> allow through
+
     """Authenticate user with email/password. Includes account lockout protection."""
     if async_session is None:
         return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)

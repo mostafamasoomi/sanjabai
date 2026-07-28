@@ -44,17 +44,31 @@ def _gen_token() -> str:
 
 
 def _hash_password(password: str) -> str:
-    salt = secrets.token_hex(16)
-    dk = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000)
-    return f'{salt}${dk.hex()}'
-
-
+    """Hash password using argon2id."""
+    from argon2 import PasswordHasher
+    ph = PasswordHasher()
+    return ph.hash(password)
 def _verify_password(password: str, stored: str) -> bool:
+    """Verify password against argon2 hash."""
+    from argon2 import PasswordHasher, VerificationMismatchError
+    ph = PasswordHasher()
+    try:
+        ph.verify(stored, password)
+        return True
+    except VerificationMismatchError:
+        return False
+    except Exception:
+        # Fallback to old format if hash doesn't contain $argon2
+        if "$" not in stored:
+            # legacy pbkdf2 fallback
+            return _verify_password_legacy(password, stored)
+        return False
+
+def _verify_password_legacy(password: str, stored: str) -> bool:
+    """Legacy pbkdf2-sha256 verification for migrated users."""
     salt, h = stored.split('$')
     dk = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000)
     return hmac.compare_digest(h, dk.hex())
-
-
 def _hash_api_key(raw_key: str) -> str:
     """Hash an API key at rest using sha256 with a server-side pepper (salt)."""
     return hashlib.sha256(API_KEY_PEPPER + raw_key.encode()).hexdigest()

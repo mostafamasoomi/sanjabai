@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import localFont from 'next/font/local'
 import './globals.css'
+import { Suspense } from 'react'
 
 const freigeist = localFont({
   src: [
@@ -30,16 +31,27 @@ const jetbrains = localFont({
 })
 
 export const metadata: Metadata = {
-  title: 'MultiAI — The complete animation stack.',
-  description: 'Point at your live site, animate it visually, and walk away with clean, zero-dependency code. Scroll, hover, text, cursors — all of it.',
+  title: 'MultiAI — One Platform, Every AI Model',
+  description: 'Chat with GPT, Claude, DeepSeek, Gemini and 20+ AI models in one place. Upload documents, build skills, generate API keys.',
 }
+
+// Inline script to set dir based on lang on initial load (before React mounts)
+const layoutScript = `
+  (function() {
+    try {
+      const lang = localStorage.getItem('lang') || navigator.language || 'fa';
+      const isFa = lang === 'fa' || lang.startsWith('fa');
+      document.documentElement.dir = isFa ? 'rtl' : 'ltr';
+      document.documentElement.lang = isFa ? 'fa' : 'en';
+    } catch(e) {}
+  })();
+`
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="dark" className={`${freigeist.variable} ${cirka.variable} ${jetbrains.variable}`}>
-      <body className="antialiased">
-        {children}
-      </body>
+    <html lang="en" data-theme="dark" className={`${freigeist.variable} ${cirka.variable} ${jetbrains.variable}`} suppressHydrationWarning>
+      <style dangerouslySetInnerHTML={{__html: layoutScript}} />
+      <body className="antialiased">{children}</body>
     </html>
   )
 }

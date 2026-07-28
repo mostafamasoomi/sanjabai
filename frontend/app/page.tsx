@@ -1,6 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
+import { LanguageToggle } from '@/components/LanguageToggle'
+
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import VortexBackground from '@/components/VortexBackground'
@@ -47,42 +49,11 @@ const LOGOS = [
 ]
 
 const CODE_TABS: Record<string, string> = {
-  Animation: `from({ opacity: 0, y: 40 })
-  .to({ opacity: 1, y: 0 })
-  .duration(0.6)
-  .ease('power2.out')
-  .onScroll({ scrub: true })`,
-  Timeline: `from({ opacity: 0, scale: 0.9 })
-  .to({ opacity: 1, scale: 1 })
-  .duration(0.8)
-  .ease('power3.out')
-  .stagger(0.1)`,
-  Stagger: `.from('.card', {
-    opacity: 0,
-    y: 60,
-    rotateX: 15
-  })
-  .duration(0.7)
-  .stagger(0.05, {
-    from: 'center'
-  })`,
-  SplitText: `SplitText.create('.heading', {
-  type: 'chars,words'
-})
-.from(chars, {
-  opacity: 0,
-  y: 20,
-  stagger: 0.02
-})`,
-  DrawSVG: `gsap.from('.path', {
-  drawSVG: '0%',
-  duration: 1.5,
-  ease: 'power2.inOut',
-  scrollTrigger: {
-    trigger: '.path',
-    scrub: true
-  }
-})`,
+  Animation: `from({ opacity: 0, y: 40 })\n  .to({ opacity: 1, y: 0 })\n  .duration(0.6)\n  .ease('power2.out')\n  .onScroll({ scrub: true })`,
+  Timeline: `from({ opacity: 0, scale: 0.9 })\n  .to({ opacity: 1, scale: 1 })\n  .duration(0.8)\n  .ease('power3.out')\n  .stagger(0.1)`,
+  Stagger: `.from('.card', {\n    opacity: 0,\n    y: 60,\n    rotateX: 15\n  })\n  .duration(0.7)\n  .stagger(0.05, {\n    from: 'center'\n  })`,
+  SplitText: `SplitText.create('.heading', {\n  type: 'chars,words'\n})\n(chars, {\n  opacity: 0,\n  y: 20,\n  stagger: 0.02\n})`,
+  DrawSVG: `gsap.from('.path', {\n  drawSVG: '0%',\n  duration: 1.5,\n  ease: 'power2.inOut',\n  scrollTrigger: {\n    trigger: '.path',\n    scrub: true\n  }\n})`,
 }
 
 const FEATURES_ROW1 = [
@@ -122,7 +93,7 @@ const PRICING_PLANS = [
 function ArrowIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-      <path d="M1 11L11 1M11 1H4M11 1V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M 1 11 L 11 1 M 11 1 H 4 M 11 V 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
@@ -243,7 +214,7 @@ function Nav() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
   return (
-    <nav className={`motion-nav${scrolled ? ' motion-nav--scrolled' : ''}`}>
+    <nav className={`motion-nav${scrolled ? ' motion-nav--scrolled' : ''}`} >
       <div className="motion-nav-inner">
         <a href="/" className="motion-nav-logo">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -258,8 +229,9 @@ function Nav() {
           <a href="https://docs.multi-ai.com" target="_blank" rel="noopener">Docs</a>
         </div>
         <div className="motion-nav-right">
-          <a href="#" className="motion-nav-link">Log in</a>
-          <a href="#" className="motion-nav-cta">Get Started</a>
+          <LanguageToggle />
+          <a href="#login" className="motion-nav-link">Log in</a>
+          <a href="#signup" className="motion-nav-cta">Get Started</a>
         </div>
       </div>
     </nav>
@@ -370,7 +342,7 @@ function PointClickAnimate() {
       <div className="motion-section-inner">
         <span className="motion-eyebrow">VISUAL BUILDER</span>
         <h2 className="motion-section-title">Point. Click. Animate.</h2>
-        <p className="motion-section-sub">Here&apos;s everything the builder does — point, click, animate, and ship.</p>
+        <p className="motion-section-sub">Here's everything the builder does — point, click, animate, and ship.</p>
         <div className="motion-features-grid">
           {FEATURES_ROW1.map((f, i) => <FeatureCard key={i} {...f} />)}
         </div>
@@ -417,7 +389,7 @@ function StackSection() {
         <span className="motion-eyebrow">YOUR STACK, COVERED</span>
         <h2 className="motion-section-title">Plays nice with<br />everything</h2>
         <p className="motion-section-sub">
-          WordPress, React, Astro, Webflow, Shopify, plain HTML — MultiAI drops into whatever you&apos;ve already built. Your stack stays exactly as it is.
+          WordPress, React, Astro, Webflow, Shopify, plain HTML — MultiAI drops into whatever you've already built. Your stack stays exactly as it is.
         </p>
         <div className="motion-stack-grid">
           {LOGOS.map((s, i) => (
@@ -446,7 +418,7 @@ function TimelineSection() {
         <div className="motion-timeline-code">
           <div className="motion-code-block" style={{ padding: '1.5rem' }}>
             <div style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '0.85rem', marginBottom: '1rem' }}>
-              hero-entrance <span style={{ color: 'var(--text-muted)' }}>0.00s / 4.00s</span>
+              hero-entrance <span style={{ color: "var(--text-muted)" }}>0.00s / 4.00s</span>
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
               {['from', 'opacity', 'y', 'duration', 'ease', 'stagger'].map((label, i) => (
@@ -475,16 +447,12 @@ function SDKSection() {
       <div className="motion-section-inner motion-timeline">
         <div className="motion-timeline-text">
           <span className="motion-eyebrow">DECLARATIVE SDK</span>
-          <h3>One function. One object.<br />That&apos;s the whole API.</h3>
-          <p>from, to, duration, ease — pass a plain object and you&apos;re done. You&apos;ll have it memorized before your coffee cools.</p>
+          <h3>One function. One object.<br />That's the whole API.</h3>
+          <p>from, to, duration, ease — pass a plain object and you're done. You'll have it memorized before your coffee cools.</p>
           <a href="https://docs.multi-ai.com" target="_blank" rel="noopener" className="motion-btn motion-btn-ghost">Learn more <ArrowIcon /></a>
         </div>
         <div className="motion-timeline-code">
-          <pre className="motion-code-block">{`from: { opacity: 0, y: 40 },
-to: { opacity: 1, y: 0 },
-duration: 0.6,
-ease: 'power2.out',
-}).onScroll({ scrub: true });`}</pre>
+          <pre className="motion-code-block">{`from: { opacity: 0, y: 40 },\nto: { opacity: 1, y: 0 },\nduration: 0.6,\n  ease: 'power2.out',\n}).onScroll({ scrub: true });`}</pre>
         </div>
       </div>
     </section>
@@ -498,50 +466,42 @@ function StaggerSection() {
       <div className="motion-section-inner motion-timeline">
         <div className="motion-timeline-text">
           <span className="motion-eyebrow">STAGGER & ORCHESTRATION</span>
-          <h3>Move 500 elements<br />like they&apos;re one</h3>
-          <p>Cascade from the center, ripple from the edges, or randomize across a grid. It stays smooth when the element count gets silly.</p>
+          <h3>Sequence animations<br />with precision</h3>
+          <p>Chain effects together, add delays, and create complex animations with simple declarative commands.</p>
           <a href="https://docs.multi-ai.com" target="_blank" rel="noopener" className="motion-btn motion-btn-ghost">Learn more <ArrowIcon /></a>
         </div>
         <div className="motion-timeline-code">
-          <pre className="motion-code-block">{`from('.card', {
-  opacity: 0,
-  y: 60,
-  rotateX: 15,
-  stagger: {
-    each: 0.05,
-    from: 'center',
-    grid: [20, 25]
-  }
-}).duration(0.7)`}</pre>
+          <div className="motion-code-block" style={{ padding: '1.5rem' }}>
+            <pre>{`.from('.cards', { stagger: 0.1, from: 'center' })\n .to('.hero', { opacity: 1, y: 0 })\n .call(() => console.log('Done!'))`}</pre>
+          </div>
         </div>
       </div>
     </section>
   )
 }
 
-/* ── Composable Triggers ────────────────────────────────────────────── */
-function TriggersSection() {
-  const triggers = [
-    { icon: '⬆', label: 'Scroll' },
-    { icon: '👆', label: 'Hover' },
-    { icon: '🔄', label: 'Click' },
-    { icon: '👁', label: 'View' },
-    { icon: '⏸', label: 'Pause' },
-    { icon: '▶', label: 'Play' },
-    { icon: '🔁', label: 'Loop' },
-    { icon: '⚡', label: 'Custom' },
-  ]
+/* ── Pricing ───────────────────────────────────────────────────────── */
+function PricingSection() {
   return (
-    <section className="motion-section motion-section-alt">
+    <section id="pricing" className="motion-section motion-section-alt motion-pricing">
       <div className="motion-section-inner">
-        <span className="motion-eyebrow">COMPOSABLE TRIGGERS</span>
-        <h2 className="motion-section-title">Eight trigger types —<br />mix them however you like</h2>
-        <div className="motion-tricks-grid" style={{ marginTop: '3rem' }}>
-          {triggers.map((t, i) => (
-            <div key={i} className="motion-trick-card">
-              <span style={{ fontSize: '2rem' }}>{t.icon}</span>
-              <span className="motion-trick-label">{t.label}</span>
-            </div>
+        <span className="motion-eyebrow">PRICING PLANS</span>
+        <h2 className="motion-section-title">Choose your plan</h2>
+        <div className="motion-pricing-grid">
+          {PRICING_PLANS.map((plan, i) => (
+            <article key={plan.name} className="motion-pricing-card" style={{ zIndex: i }}>
+              <h3>{plan.name}</h3>
+              <div className="motion-pricing-price">
+                <span>{plan.price}</span>
+                <span>{plan.period}</span>
+              </div>
+              <ul className="motion-pricing-features">
+                {plan.features.map((f, idx) => (
+                  <li key={idx}>✓ {f}</li>
+                ))}
+              </ul>
+              <a href="#" className="motion-btn motion-btn-primary" style={{ marginTop: '1rem' }}>Get {plan.name}</a>
+            </article>
           ))}
         </div>
       </div>
@@ -549,80 +509,22 @@ function TriggersSection() {
   )
 }
 
-/* ── SplitText ───────────────────────────────────────────────────────── */
-function SplitTextSection() {
-  return (
-    <section className="motion-section">
-      <div className="motion-section-inner motion-timeline">
-        <div className="motion-timeline-text">
-          <span className="motion-eyebrow">SPLITTEXT</span>
-          <h3>Split, flip, scramble, mask —<br />text that performs</h3>
-          <p>Break any text into characters, words, or lines — then animate each one individually with the same ease and timing you already know.</p>
-          <a href="https://docs.multi-ai.com" target="_blank" rel="noopener" className="motion-btn motion-btn-ghost">Learn more <ArrowIcon /></a>
-        </div>
-        <div className="motion-timeline-code">
-          <pre className="motion-code-block">{`SplitText.create('.heading', {
-  type: 'chars,words'
-})
-.from(chars, {
-  opacity: 0,
-  y: 20,
-  stagger: 0.02
-})`}</pre>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-/* ── Engine Doors ────────────────────────────────────────────────────── */
-function EngineSection() {
-  return (
-    <section className="motion-section motion-section-alt">
-      <div className="motion-section-inner">
-        <h2 className="motion-section-title">One engine,<br />three doors</h2>
-        <p className="motion-section-sub">
-          One animation engine, three ways to drive it — a full desktop studio, a one-click WordPress plugin, or the raw SDK. Every path produces the same output.
-        </p>
-        <div className="motion-engine-doors">
-          <div className="motion-engine-door">
-            <span className="motion-eyebrow">THE BUILDER</span>
-            <h4>Animate Everything</h4>
-            <p>The full visual builder for macOS, Windows, and Linux. Point, click, animate, deploy.</p>
-            <a href="#" className="motion-btn motion-btn-ghost" style={{ marginTop: '1rem', fontSize: '0.85rem' }}>Download the app <ArrowIcon /></a>
-          </div>
-          <div className="motion-engine-door">
-            <span className="motion-eyebrow">WORDPRESS PLUGIN</span>
-            <h4>Animate Everything</h4>
-            <p>Install the plugin, open any page, and start animating. No export, no code — it just works.</p>
-            <a href="#" className="motion-btn motion-btn-ghost" style={{ marginTop: '1rem', fontSize: '0.85rem' }}>Install plugin <ArrowIcon /></a>
-          </div>
-          <div className="motion-engine-door">
-            <span className="motion-eyebrow">THE SDK</span>
-            <h4>Animate Everything</h4>
-            <p>One import, one function call. Full control from any framework, any build tool, any stack.</p>
-            <a href="#" className="motion-btn motion-btn-ghost" style={{ marginTop: '1rem', fontSize: '0.85rem' }}>npm i @motion.page/sdk <ArrowIcon /></a>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-/* ── Testimonials ────────────────────────────────────────────────────── */
+/* ── Testimonials ─────────────────────────────────────────────────── */
 function TestimonialsSection() {
   return (
     <section className="motion-section">
       <div className="motion-section-inner">
-        <h2 className="motion-section-title">Kind words from<br />people who ship.</h2>
+        <span className="motion-eyebrow">WHAT PEOPLE SAY</span>
+        <h2 className="motion-section-title">Trusted by creative teams worldwide</h2>
         <div className="motion-testimonials">
           {TESTIMONIALS.map((t, i) => (
             <div key={i} className="motion-testimonial">
-              {t.avatar && <img src={t.avatar} alt={t.name} className="motion-test-avatar" />}
-              <p className="motion-test-text">{t.text}</p>
-              <div className="motion-test-meta">
+              <blockquote>"{t.text}"</blockquote>
+              <div className="motion-testimonial-author">
                 <strong>{t.name}</strong>
+                <span className="motion-testimonial-role">Creative Director</span>
               </div>
+              <img src={t.avatar} alt={t.name} className="motion-testimonial-avatar" />
             </div>
           ))}
         </div>
@@ -631,126 +533,40 @@ function TestimonialsSection() {
   )
 }
 
-/* ── Pricing ────────────────────────────────────────────────────────── */
-function PricingSection() {
-  const [annual, setAnnual] = useState(true)
-  return (
-    <section id="pricing" className="motion-section motion-section-alt">
-      <div className="motion-section-inner">
-        <h2 className="motion-section-title">Pick your creative weapon.</h2>
-        <p className="motion-section-sub">Animations, shaders, or both — flat pricing, no per-seat math.</p>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginBottom: '2.5rem' }}>
-          <button
-            onClick={() => setAnnual(false)}
-            className={annual ? 'motion-btn motion-btn-ghost' : 'motion-btn motion-btn-primary'}
-            style={{ fontSize: '13.44px', padding: '7px 20px', borderRadius: '9999px' }}
-          >Monthly</button>
-          <button
-            onClick={() => setAnnual(true)}
-            className={annual ? 'motion-btn motion-btn-primary' : 'motion-btn motion-btn-ghost'}
-            style={{ fontSize: '13.44px', padding: '7px 20px', borderRadius: '9999px', background: annual ? 'rgba(255,255,255,0.1)' : undefined }}
-          >Yearly −50%</button>
-        </div>
-        <div className="motion-pricing-grid">
-          {PRICING_PLANS.map(plan => (
-            <div key={plan.name} className="motion-pricing-card">
-              <span className="motion-eyebrow">{plan.name}</span>
-              <div className="motion-pricing-price">{plan.price}<span className="motion-pricing-period">{plan.period}</span></div>
-              <ul className="motion-pricing-features">
-                {plan.features.map(f => <li key={f}>{f}</li>)}
-              </ul>
-              <a href="#" className="motion-btn motion-btn-primary" style={{ background: 'rgba(255,91,222,0.08)', color: 'rgb(255,91,222)', fontSize: '13.44px' }}>
-                Get instant access <ArrowIcon />
-              </a>
-              <div style={{ textAlign: 'center', marginTop: '0.5rem', fontSize: '10.08px', color: 'var(--text-dim)' }}>or try free for 7 days</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-/* ── CTA ────────────────────────────────────────────────────────────── */
-function CTA() {
-  return (
-    <section className="motion-cta">
-      <h2>Go on —<br />make something move.</h2>
-      <p>Start with free credits. No credit card required.</p>
-      <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-        <a href="#" className="motion-btn motion-btn-primary">Start animating</a>
-        <a href="https://docs.multi-ai.com" target="_blank" rel="noopener" className="motion-btn" style={{ background: 'rgba(255,255,255,0.08)', color: 'rgb(186,188,210)', fontSize: '18.08px' }}>Read the docs</a>
-      </div>
-    </section>
-  )
-}
-
-/* ── Footer ─────────────────────────────────────────────────────────── */
+/* ── Footer ──────────────────────────────────────────────────────── */
 function Footer() {
   return (
     <footer className="motion-footer">
-      <div className="motion-footer-inner">
+      <div className="motion-section-inner">
+        <p>&copy; 2024 MultiAI. All rights reserved.</p>
         <div className="motion-footer-links">
-          <div>
-            <h4>Product</h4>
-            <a href="#">Builder</a>
-            <a href="#">Canvas</a>
-            <a href="#">Platforms</a>
-            <a href="#">Plans</a>
-            <a href="#">Changelog</a>
-          </div>
-          <div>
-            <h4>Resources</h4>
-            <a href="#">Documentation</a>
-            <a href="#">SDK Documentation</a>
-            <a href="#">Builder Documentation</a>
-            <a href="#">Status</a>
-          </div>
-          <div>
-            <h4>Legal</h4>
-            <a href="#">Terms of Service</a>
-            <a href="#">Privacy Policy</a>
-            <a href="#">EULA</a>
-            <a href="#">Accessibility</a>
-          </div>
-        </div>
-        <div className="motion-footer-bottom">
-          <p>&copy; {new Date().getFullYear()} MultiAI — The complete animation stack. All rights reserved.</p>
+          <a href="#">Privacy</a>
+          <a href="#">Terms</a>
+          <a href="#">Support</a>
         </div>
       </div>
     </footer>
   )
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
-   Page
-   ════════════════════════════════════════════════════════════════════════════ */
-
-export default function Home() {
+/* ──── Page ─────────────────────────────────────────────────────────── */
+export default function LandingPage() {
   return (
     <>
-      <div className="motion-grain" aria-hidden="true" />
       <MotionEffects />
       <Nav />
-      <main>
-        <Hero />
-        <TricksGrid />
-        <BuilderSection />
-        <PointClickAnimate />
-        <CanvasSection />
-        <StackSection />
-        <TimelineSection />
-        <SDKSection />
-        <StaggerSection />
-        <TriggersSection />
-        <SplitTextSection />
-        <EngineSection />
-        <PhysicsBoxes />
-        <TestimonialsSection />
-        <PricingSection />
-        <CTA />
-        <Footer />
-      </main>
+      <Hero />
+      <TricksGrid />
+      <BuilderSection />
+      <PointClickAnimate />
+      <CanvasSection />
+      <StackSection />
+      <TimelineSection />
+      <SDKSection />
+      <StaggerSection />
+      <PricingSection />
+      <TestimonialsSection />
+      <Footer />
     </>
   )
 }

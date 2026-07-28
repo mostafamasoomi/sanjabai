@@ -50,7 +50,7 @@ const layoutScript = `
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" data-theme="dark" className={`${freigeist.variable} ${cirka.variable} ${jetbrains.variable}`} suppressHydrationWarning>
-      <style dangerouslySetInnerHTML={{__html: layoutScript}} />
+      <script dangerouslySetInnerHTML={{__html: layoutScript}} />
       <body className="antialiased">{children}</body>
     </html>
   )

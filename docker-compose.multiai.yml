@@ -78,7 +78,6 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://multiai-multiai_api-1:8000
       HOSTNAME: 0.0.0.0
-      ADMIN_TOKEN: ${ADMIN_TOKEN:?ADMIN_TOKEN must be set in .env}
     ports:
       - "0.0.0.0:3003:3000"
     networks: [multiai_net]

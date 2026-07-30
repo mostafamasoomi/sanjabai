@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockCatalog } from './helpers'
+import { mockCatalog, signIn } from './helpers'
 
 test.describe('smoke', () => {
   test.beforeEach(async ({ page }) => {
@@ -21,32 +21,33 @@ test.describe('smoke', () => {
   })
 
   test('chat page loads', async ({ page }) => {
+    // /chat is behind the auth guard, so the test needs a session.
+    await signIn(page)
     await page.goto('/chat')
     // Welcome assistant message
     await expect(page.getByText('به Multiai خوش آمدید')).toBeVisible()
     // Model picker becomes visible once the (mocked) catalog resolves
-    await expect(page.locator('[data-testid="model-select"]')).toBeVisible()
+    await expect(page.getByTestId('model-picker-trigger')).toBeVisible()
   })
 
   test('models page loads with catalog cards', async ({ page }) => {
     await page.goto('/models')
-    await expect(
-      page.getByRole('heading', { name: 'مدلهای هوش مصنوعی' }),
-    ).toBeVisible()
+    // NOTE: "مدل‌ها" carries a ZWNJ (U+200C). Playwright normalizes runs of
+    // whitespace in accessible names but ZWNJ is not whitespace, so an exact
+    // string without it never matches. Match a substring instead, as
+    // navigation.spec.ts already does.
+    await expect(page.getByRole('heading', { name: /هوش مصنوعی/ }).first()).toBeVisible()
     // Each catalog entry renders as a card with its display name (h3 heading)
     await expect(page.getByRole('heading', { name: 'GPT-4o' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Claude Sonnet 4' })).toBeVisible()
   })
 
   test('dashboard requires auth', async ({ page }) => {
-    // No token in storage -> the dashboard must NOT render protected data.
+    // No token in storage -> the app shell must bounce us to /login rather
+    // than render protected data. The redirect happens in an effect once the
+    // auth state resolves, so wait for the URL instead of sampling it.
     await page.goto('/dashboard')
-    // Either it redirects to /login or it shows an inline login CTA.
-    const redirectedToLogin = page.url().includes('/login')
-    if (redirectedToLogin) {
-      await expect(page.getByRole('heading', { name: /ورود/ })).toBeVisible()
-    } else {
-      await expect(page.getByText('وارد شوید')).toBeVisible()
-    }
+    await page.waitForURL(/\/login/)
+    await expect(page.getByRole('heading', { name: /ورود/ })).toBeVisible()
   })
 })

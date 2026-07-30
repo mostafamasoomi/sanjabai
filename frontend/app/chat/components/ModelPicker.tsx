@@ -269,7 +269,7 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
 
       {open && (
         <>
-          <div role="button" tabIndex={0} className="model-picker-overlay" onClick={() => setOpen(false)} />
+          <div className="model-picker-overlay" onClick={() => setOpen(false)} />
           <div
             className="model-picker-dropdown"
             role="dialog"
@@ -352,7 +352,12 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
                       <div key={provider} className="model-picker-provider-group">
                         {groupedByProvider.length > 1 && (
                           <div className="model-picker-provider-group-title" dir="ltr">
-                            <span className="model-provider-badge">{getProviderLabel(provider)}</span>
+                            {/* dir on the element that actually holds the Latin
+                                run, not just an ancestor — the isolation then
+                                travels with the badge if it is ever moved. */}
+                            <span className="model-provider-badge" dir="ltr">
+                              {getProviderLabel(provider)}
+                            </span>
                             <span className="text-muted" style={{ fontSize: '10px' }}>{groupModels.length} مدل</span>
                           </div>
                         )}

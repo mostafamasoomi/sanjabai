@@ -93,6 +93,26 @@ export async function mockAuthMe(page: Page, user: MockUser | null) {
   )
 }
 
+/**
+ * Stub /api/captcha. Both auth forms fetch a captcha on mount and refuse to
+ * submit until the answer field is filled, so any test that submits one of
+ * them needs this.
+ */
+export async function mockCaptcha(page: Page) {
+  await page.route(
+    (url) => url.toString().includes('/api/captcha'),
+    (route) =>
+      route.fulfill(
+        json({
+          token: 'test-captcha-token',
+          // 1x1 transparent GIF — enough for the <img> to load.
+          captcha:
+            'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+        }),
+      ),
+  )
+}
+
 /** Stub the signup endpoint used by the onboarding flow. */
 export async function mockSignup(
   page: Page,
@@ -101,6 +121,35 @@ export async function mockSignup(
   await page.route(
     (url) => url.toString().includes('/api/auth/signup'),
     (route) => route.fulfill(json({ token: 'test-token', user })),
+  )
+}
+
+/**
+ * Put the page in a signed-in state.
+ *
+ * <AuthProvider> restores a session by reading `multiai_auth_token` from
+ * localStorage and validating it against /api/auth/me, so a test that wants an
+ * authenticated page needs both halves. Without this the app shell's auth
+ * guard redirects protected routes to /login — which is the correct behaviour,
+ * and what these tests used to accidentally bypass because AuthProvider was
+ * never mounted at all.
+ *
+ * Also stubs /api/conversations so the first-visit guard doesn't bounce the
+ * session to /onboarding.
+ */
+export async function signIn(
+  page: Page,
+  user: MockUser = { id: 1, email: 'test@example.com' },
+) {
+  await page.addInitScript(() => {
+    localStorage.setItem('multiai_auth_token', 'test-token')
+    // The onboarding guard checks this before hitting the network.
+    localStorage.setItem('multiai_onboarded', '1')
+  })
+  await mockAuthMe(page, user)
+  await page.route(
+    (url) => url.toString().includes('/api/conversations'),
+    (route) => route.fulfill(json([{ id: 1, title: 'گفتگوی نمونه' }])),
   )
 }
 

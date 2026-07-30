@@ -2,6 +2,13 @@
 
 > Auto-generated from `:root` CSS variables in `app/globals.css`.
 > Last updated: 2026-07-18
+>
+> **Scope:** this documents the *product* system — the tokens and component
+> classes used by every signed-in page (dashboard, chat, models, wallet,
+> admin). The marketing page has its own scoped system in `app/landing.css`,
+> whose tokens are all prefixed `--lp-*` and whose classes are all prefixed
+> `.lp-`. The two are deliberately independent; only the brand accent is
+> shared. Regenerating this file will not pick up the landing tokens.
 
 ## Identity
 

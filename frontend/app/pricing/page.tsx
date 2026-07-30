@@ -162,9 +162,35 @@ export default function PricingPage() {
       <div className="card" style={{ overflow: 'hidden', marginBottom: 32 }}>
         {/* Table Header */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 130px 90px', gap: 8, padding: '14px 16px', borderBottom: '2px solid var(--border)', background: 'var(--bg-hover)', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
-          <div role="button" tabIndex={0} className="cursor-pointer" onClick={() => setSortBy('name')}>مدل {sortBy === 'name' && '↕'}</div>
-          <div role="button" tabIndex={0} style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setSortBy('input')}>ورودی/1M (تومان) {sortBy === 'input' && '↕'}</div>
-          <div role="button" tabIndex={0} style={{ textAlign: 'left', cursor: 'pointer' }} onClick={() => setSortBy('output')}>خروجی/1M (تومان) {sortBy === 'output' && '↕'}</div>
+          {/* Real <button>s, not divs with role="button": these actually sort,
+              so they need to be keyboard-operable, and aria-sort tells a
+              screen-reader user which column is active. */}
+          <button
+            type="button"
+            className="pricing-sort-btn"
+            aria-pressed={sortBy === 'name'}
+            onClick={() => setSortBy('name')}
+          >
+            مدل {sortBy === 'name' && '↕'}
+          </button>
+          <button
+            type="button"
+            className="pricing-sort-btn"
+            style={{ textAlign: 'left' }}
+            aria-pressed={sortBy === 'input'}
+            onClick={() => setSortBy('input')}
+          >
+            ورودی/1M (تومان) {sortBy === 'input' && '↕'}
+          </button>
+          <button
+            type="button"
+            className="pricing-sort-btn"
+            style={{ textAlign: 'left' }}
+            aria-pressed={sortBy === 'output'}
+            onClick={() => setSortBy('output')}
+          >
+            خروجی/1M (تومان) {sortBy === 'output' && '↕'}
+          </button>
           <div className="text-center">سطح</div>
         </div>
 

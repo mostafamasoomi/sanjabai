@@ -4,12 +4,14 @@ import {
   mockCatalog,
   mockAuthMe,
   mockSignup,
+  mockCaptcha,
   mockConversationsEmpty,
 } from './helpers'
 
 test.describe('onboarding', () => {
   test.beforeEach(async ({ page }) => {
     await mockCatalog(page)
+    await mockCaptcha(page)
     await mockSignup(page)
     // Keep the session "logged in" if the auth context re-validates the token.
     await mockAuthMe(page, { id: 1, email: 'test@example.com' })
@@ -19,33 +21,19 @@ test.describe('onboarding', () => {
   test('signup → onboarding → goal → chat', async ({ page }) => {
     await page.goto('/signup')
 
-    page.on('request', (r) => console.log('REQ', r.method(), r.url()))
-    page.on('response', (r) => console.log('RES', r.status(), r.url()))
-    page.on('console', (m) => console.log('PAGE', m.type(), m.text()))
-    page.on('pageerror', (e) => console.log('PAGEERR', e.message))
-
+    // The form has password + confirm, so `input[type=password]` is not unique.
     await page.locator('input[type="email"]').fill('test@example.com')
-    await page.locator('input[type="password"]').fill('secret123')
-    console.log('BEFORE CLICK url=', page.url())
+    const passwords = page.locator('input[type="password"]')
+    await passwords.nth(0).fill('secret123')
+    await passwords.nth(1).fill('secret123')
+    // Submission is blocked until the captcha answer is non-empty; the value
+    // itself is validated server-side, which is mocked.
+    await page.getByPlaceholder('پاسخ را وارد کنید').fill('1234')
 
-    try {
-      await Promise.all([
-        page.waitForURL(/\/onboarding/, { timeout: 20000 }),
-        page.getByRole('button', { name: 'ثبتنام' }).click(),
-      ])
-    } catch (e) {
-      const html = await page.content()
-      console.log('AFTER FAIL url=', page.url())
-      console.log('HAS خوش آمدید:', html.includes('خوش آمدید'))
-      console.log('HAS ایمل و رمز:', html.includes('ایمل و رمز'))
-      console.log('HAS /api in html:', html.includes('/api/'))
-      throw e
-    }
-    await page.locator('input[type="password"]').fill('secret123')
     // signup triggers an SPA navigation to /onboarding.
     await Promise.all([
       page.waitForURL(/\/onboarding/),
-      page.getByRole('button', { name: 'ثبتنام' }).click(),
+      page.getByRole('button', { name: 'ثبت‌نام', exact: true }).click(),
     ])
 
     // 1) signup redirects to onboarding
@@ -63,15 +51,15 @@ test.describe('onboarding', () => {
     // 3) continue -> recommendation (driven by the mocked catalog)
     await page.getByRole('button', { name: 'ادامه' }).click()
     await expect(page.getByText(/مدل پیشنهادی/)).toBeVisible()
+    // The recommended model's name may appear in more than one node (card
+    // title plus a summary line), so assert on the first match.
     await expect(
-      page.getByText('GPT-4o').or(page.getByText('Claude Sonnet 4')),
+      page.getByText('GPT-4o').or(page.getByText('Claude Sonnet 4')).first(),
     ).toBeVisible()
 
-    // 4) finish -> chat (SPA navigation)
-    await Promise.all([
-      page.waitForURL(/\/chat/),
-      page.getByRole('button', { name: 'شروع چت' }).click(),
-    ])
-    await expect(page).toHaveURL(/\/chat/)
+    // 4) finish -> chat. `finish()` calls router.replace(), which is a client
+    // navigation, so wait on the URL rather than a load event.
+    await page.getByRole('button', { name: /شروع چت/ }).click()
+    await page.waitForURL(/\/chat/)
   })
 })

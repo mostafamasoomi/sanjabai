@@ -848,7 +848,7 @@ export default function ChatPage() {
     <>
       {/* Mobile overlay */}
       {isMobile && mobileDrawerOpen && (
-        <div role="button" tabIndex={0} className="conv-drawer-overlay" onClick={() => setMobileDrawerOpen(false)} />
+        <div className="conv-drawer-overlay" onClick={() => setMobileDrawerOpen(false)} />
       )}
 
       <div className={`chat-page ${!isMobile && sidebarOpen ? 'chat-page-with-sidebar' : ''}`}>

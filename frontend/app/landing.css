@@ -1,0 +1,1735 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Multiai — Landing design system
+   ───────────────────────────────────────────────────────────────────────────
+   Everything here is scoped under `.lp` so the marketing page can have its
+   own visual language without leaking into the product UI (dashboard, chat,
+   admin), which lives in globals.css.
+
+   Principles
+   1. RTL-first. Logical properties only (inline-start/end, ms/me, padding-
+      inline). Nothing here assumes left-to-right.
+   2. Persian-native typography. Vazirmatn everywhere, generous leading,
+      zero letter-spacing on Persian runs (it breaks Arabic-script joining).
+      Latin/technical runs get their own class with .lp-latin.
+   3. One scale. Spacing, radius, and type come from tokens — no magic
+      numbers copied out of a browser inspector.
+   4. Works in both themes. Every surface is expressed as a token that has a
+      light-mode counterpart.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp {
+  /* ── Surfaces ─────────────────────────────────────────────────────────── */
+  --lp-bg: #07070e;
+  --lp-bg-soft: #0a0a14;
+  --lp-panel: rgba(255, 255, 255, 0.026);
+  --lp-panel-hi: rgba(255, 255, 255, 0.055);
+  --lp-line: rgba(255, 255, 255, 0.09);
+  --lp-line-hi: rgba(255, 255, 255, 0.17);
+
+  /* ── Ink ──────────────────────────────────────────────────────────────── */
+  --lp-ink: #edeef7;
+  --lp-ink-2: #a2a3ba;
+  --lp-ink-3: #6b6c86;
+
+  /* ── Brand ────────────────────────────────────────────────────────────── */
+  --lp-brand: #7c6cf6;
+  --lp-brand-soft: rgba(124, 108, 246, 0.14);
+  --lp-violet: #b06cf6;
+  --lp-cyan: #4cc9f0;
+  --lp-mint: #34d399;
+
+  /* ── Geometry ─────────────────────────────────────────────────────────── */
+  --lp-max: 1180px;
+  --lp-gutter: clamp(1.25rem, 4vw, 2rem);
+  --lp-r-sm: 10px;
+  --lp-r: 16px;
+  --lp-r-lg: 24px;
+  --lp-r-pill: 999px;
+
+  /* ── Rhythm — one variable drives every section's vertical spacing ────── */
+  --lp-section: clamp(4.5rem, 9vw, 7.5rem);
+
+  /* ── Motion ───────────────────────────────────────────────────────────── */
+  --lp-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --lp-fast: 0.18s var(--lp-ease);
+  --lp-slow: 0.5s var(--lp-ease);
+
+  /* ── Elevation ────────────────────────────────────────────────────────── */
+  --lp-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 40px -12px rgba(0, 0, 0, 0.6);
+  --lp-shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.3), 0 32px 80px -24px rgba(0, 0, 0, 0.8);
+
+  position: relative;
+  isolation: isolate;
+  background: var(--lp-bg);
+  color: var(--lp-ink);
+  font-family: 'Vazirmatn', system-ui, sans-serif;
+  font-weight: 400;
+  line-height: 1.85;
+  letter-spacing: 0;
+  overflow-x: clip;
+}
+
+[data-theme='light'] .lp {
+  --lp-bg: #fbfbfe;
+  --lp-bg-soft: #f4f4fa;
+  --lp-panel: rgba(16, 16, 34, 0.022);
+  --lp-panel-hi: rgba(16, 16, 34, 0.05);
+  --lp-line: rgba(16, 16, 34, 0.1);
+  --lp-line-hi: rgba(16, 16, 34, 0.2);
+
+  --lp-ink: #14141f;
+  --lp-ink-2: #4d4e63;
+  --lp-ink-3: #7a7b92;
+
+  --lp-brand: #5b49e8;
+  --lp-brand-soft: rgba(91, 73, 232, 0.1);
+  --lp-violet: #8b3fd6;
+  --lp-cyan: #0891b2;
+
+  --lp-shadow: 0 1px 2px rgba(16, 16, 34, 0.05), 0 12px 32px -12px rgba(16, 16, 34, 0.16);
+  --lp-shadow-lg: 0 2px 4px rgba(16, 16, 34, 0.05), 0 32px 64px -24px rgba(16, 16, 34, 0.2);
+}
+
+.lp *,
+.lp *::before,
+.lp *::after {
+  box-sizing: border-box;
+}
+
+.lp ::selection {
+  background: var(--lp-brand-soft);
+  color: var(--lp-ink);
+}
+
+.lp :focus-visible {
+  outline: 2px solid var(--lp-brand);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* Latin / technical runs inside Persian prose. Isolates bidi so identifiers
+   like "api.multiai.ir/v1" never get reordered by the RTL paragraph. */
+.lp-latin {
+  unicode-bidi: isolate;
+  direction: ltr;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.92em;
+}
+
+/* Persian digits are already glyphs; this just keeps columns aligned. */
+.lp-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Layout primitives
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-container {
+  width: min(100% - (2 * var(--lp-gutter)), var(--lp-max));
+  margin-inline: auto;
+}
+
+.lp-section {
+  position: relative;
+  padding-block: var(--lp-section);
+}
+
+.lp-section--soft {
+  background: var(--lp-bg-soft);
+  border-block: 1px solid var(--lp-line);
+}
+
+/* Section heading block: eyebrow → title → lead. Centered by default,
+   `--lp-align: start` flips it for asymmetric sections. */
+.lp-head {
+  display: flex;
+  flex-direction: column;
+  align-items: var(--lp-align, center);
+  text-align: var(--lp-align-text, center);
+  gap: 0.75rem;
+  max-width: 44rem;
+  margin-inline: auto;
+  margin-block-end: clamp(2.5rem, 5vw, 4rem);
+}
+
+.lp-head--start {
+  --lp-align: flex-start;
+  --lp-align-text: start;
+  margin-inline: 0;
+}
+
+.lp-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--lp-brand);
+}
+
+.lp-eyebrow::before {
+  content: '';
+  width: 1.5rem;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+.lp-title {
+  margin: 0;
+  font-size: clamp(1.75rem, 3.6vw, 2.6rem);
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--lp-ink);
+  text-wrap: balance;
+}
+
+.lp-lead {
+  margin: 0;
+  font-size: clamp(0.95rem, 1.4vw, 1.06rem);
+  line-height: 1.95;
+  color: var(--lp-ink-2);
+  text-wrap: pretty;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Surfaces
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-card {
+  position: relative;
+  background: var(--lp-panel);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-r);
+  transition: border-color var(--lp-fast), background var(--lp-fast),
+    transform var(--lp-fast);
+}
+
+/* Hairline of light along the top edge — reads as a physical bevel and is
+   what separates a card from a plain rectangle. */
+.lp-card::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 12%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--lp-line-hi), transparent);
+  opacity: 0;
+  transition: opacity var(--lp-slow);
+  pointer-events: none;
+}
+
+.lp-card:hover {
+  border-color: var(--lp-line-hi);
+  background: var(--lp-panel-hi);
+}
+
+.lp-card:hover::before {
+  opacity: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Buttons
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.4rem;
+  border: 1px solid transparent;
+  border-radius: var(--lp-r-pill);
+  font-family: inherit;
+  font-size: 0.94rem;
+  font-weight: 600;
+  line-height: 1.5;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--lp-fast), border-color var(--lp-fast),
+    color var(--lp-fast), transform var(--lp-fast), box-shadow var(--lp-fast);
+}
+
+.lp-btn:active {
+  transform: translateY(1px);
+}
+
+.lp-btn--primary {
+  background: var(--lp-brand);
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px -8px var(--lp-brand);
+}
+
+.lp-btn--primary:hover {
+  background: color-mix(in srgb, var(--lp-brand) 88%, #fff);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 12px 32px -8px var(--lp-brand);
+}
+
+.lp-btn--secondary {
+  background: var(--lp-panel-hi);
+  border-color: var(--lp-line);
+  color: var(--lp-ink);
+}
+
+.lp-btn--secondary:hover {
+  border-color: var(--lp-line-hi);
+  background: var(--lp-panel-hi);
+}
+
+.lp-btn--ghost {
+  background: transparent;
+  color: var(--lp-ink-2);
+}
+
+.lp-btn--ghost:hover {
+  color: var(--lp-ink);
+  background: var(--lp-panel-hi);
+}
+
+.lp-btn--lg {
+  padding: 0.9rem 1.85rem;
+  font-size: 1rem;
+}
+
+.lp-btn--block {
+  width: 100%;
+}
+
+/* Arrow glyph that always points "forward" in reading order. The mirroring
+   uses the standalone `scale` property so it composes with the hover nudge on
+   `transform` instead of overwriting it. */
+.lp-btn__arrow,
+.lp-feature__link svg {
+  transition: transform var(--lp-fast);
+}
+
+[dir='rtl'] .lp-btn__arrow,
+[dir='rtl'] .lp-feature__link svg {
+  scale: -1 1;
+}
+
+.lp-btn:hover .lp-btn__arrow,
+.lp-feature__link:hover svg {
+  transform: translateX(0.2rem);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Pill / badge
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.9rem;
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-r-pill);
+  background: var(--lp-panel);
+  font-size: 0.8rem;
+  color: var(--lp-ink-2);
+  text-decoration: none;
+  transition: border-color var(--lp-fast), color var(--lp-fast);
+}
+
+a.lp-pill:hover {
+  border-color: var(--lp-line-hi);
+  color: var(--lp-ink);
+}
+
+.lp-pill__dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--lp-mint);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lp-mint) 22%, transparent);
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Provider logo — CSS mask so every brand mark renders as one flat colour.
+   The source SVGs have inconsistent fills (some #fff, some none/black), which
+   made half of them invisible when they were used as <img>.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-logo {
+  width: var(--lp-logo-size, 22px);
+  height: var(--lp-logo-size, 22px);
+  flex-shrink: 0;
+  background-color: currentColor;
+  -webkit-mask: var(--lp-logo-src) center / contain no-repeat;
+  mask: var(--lp-logo-src) center / contain no-repeat;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Scroll reveal — driven by IntersectionObserver in <Reveal>.
+   Deliberately cheap: opacity + a small translate, nothing that reflows.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.7s var(--lp-ease), transform 0.7s var(--lp-ease);
+  transition-delay: var(--lp-delay, 0ms);
+}
+
+.lp-reveal[data-visible='true'] {
+  opacity: 1;
+  transform: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Ambient background — replaces four stacked WebGL canvases (two three.js
+   mesh gradients, a vortex, and a water-trail) with three blurred CSS blobs.
+   Same mood, no GPU contexts, no main-thread work.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-aura {
+  position: absolute;
+  inset-block-start: -20vh;
+  inset-inline: 0;
+  height: 130vh;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
+  -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
+}
+
+.lp-aura__blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.5;
+  will-change: transform;
+}
+
+.lp-aura__blob:nth-child(1) {
+  inset-block-start: 4%;
+  inset-inline-start: 50%;
+  width: min(70vw, 720px);
+  aspect-ratio: 1;
+  translate: -50% 0;
+  background: radial-gradient(circle, var(--lp-brand), transparent 68%);
+  animation: lp-drift-a 22s var(--lp-ease) infinite alternate;
+}
+
+.lp-aura__blob:nth-child(2) {
+  inset-block-start: 26%;
+  inset-inline-end: 4%;
+  width: min(46vw, 460px);
+  aspect-ratio: 1;
+  background: radial-gradient(circle, var(--lp-violet), transparent 70%);
+  opacity: 0.32;
+  animation: lp-drift-b 27s var(--lp-ease) infinite alternate;
+}
+
+.lp-aura__blob:nth-child(3) {
+  inset-block-start: 40%;
+  inset-inline-start: 2%;
+  width: min(42vw, 420px);
+  aspect-ratio: 1;
+  background: radial-gradient(circle, var(--lp-cyan), transparent 70%);
+  opacity: 0.22;
+  animation: lp-drift-c 31s var(--lp-ease) infinite alternate;
+}
+
+[data-theme='light'] .lp-aura__blob {
+  opacity: 0.22;
+}
+
+[data-theme='light'] .lp-aura__blob:nth-child(2),
+[data-theme='light'] .lp-aura__blob:nth-child(3) {
+  opacity: 0.16;
+}
+
+@keyframes lp-drift-a {
+  to {
+    transform: translate3d(0, 5vh, 0) scale(1.12);
+  }
+}
+@keyframes lp-drift-b {
+  to {
+    transform: translate3d(-4vw, 7vh, 0) scale(0.88);
+  }
+}
+@keyframes lp-drift-c {
+  to {
+    transform: translate3d(5vw, -4vh, 0) scale(1.15);
+  }
+}
+
+/* Faint grid, anchored to the hero. Gives the aura something to sit against
+   so the top of the page doesn't read as an undifferentiated blur. */
+.lp-grid-lines {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: linear-gradient(var(--lp-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--lp-line) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000, transparent 75%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000, transparent 75%);
+  opacity: 0.5;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Header
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-header {
+  position: fixed;
+  inset-block-start: 0;
+  inset-inline: 0;
+  z-index: 60;
+  transition: background var(--lp-slow), border-color var(--lp-slow),
+    backdrop-filter var(--lp-slow);
+  border-block-end: 1px solid transparent;
+}
+
+.lp-header[data-scrolled='true'] {
+  background: color-mix(in srgb, var(--lp-bg) 82%, transparent);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  border-block-end-color: var(--lp-line);
+}
+
+.lp-header__inner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  height: 68px;
+}
+
+.lp-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--lp-ink);
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.lp-brand__mark {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.lp-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-inline: auto;
+}
+
+.lp-nav__link {
+  padding: 0.45rem 0.85rem;
+  border-radius: var(--lp-r-sm);
+  font-size: 0.9rem;
+  color: var(--lp-ink-2);
+  text-decoration: none;
+  transition: color var(--lp-fast), background var(--lp-fast);
+}
+
+.lp-nav__link:hover {
+  color: var(--lp-ink);
+  background: var(--lp-panel-hi);
+}
+
+.lp-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.lp-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--lp-r-sm);
+  background: transparent;
+  color: var(--lp-ink-2);
+  cursor: pointer;
+  transition: color var(--lp-fast), background var(--lp-fast);
+}
+
+.lp-icon-btn:hover {
+  color: var(--lp-ink);
+  background: var(--lp-panel-hi);
+}
+
+.lp-burger {
+  display: none;
+}
+
+/* ── Mobile drawer ────────────────────────────────────────────────────────── */
+.lp-drawer {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  background: var(--lp-bg);
+  animation: lp-drawer-in 0.25s var(--lp-ease);
+}
+
+@keyframes lp-drawer-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+.lp-drawer__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 68px;
+  padding-inline: var(--lp-gutter);
+  border-block-end: 1px solid var(--lp-line);
+}
+
+.lp-drawer__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1.5rem var(--lp-gutter);
+  overflow-y: auto;
+}
+
+.lp-drawer__link {
+  padding: 0.9rem 0.5rem;
+  border-block-end: 1px solid var(--lp-line);
+  font-size: 1.05rem;
+  color: var(--lp-ink);
+  text-decoration: none;
+}
+
+.lp-drawer__actions {
+  display: grid;
+  gap: 0.75rem;
+  margin-block-start: 1.75rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Hero
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-hero {
+  position: relative;
+  padding-block: clamp(7.5rem, 15vw, 11rem) var(--lp-section);
+}
+
+.lp-hero__inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 1.5rem;
+}
+
+.lp-hero__title {
+  margin: 0;
+  max-width: 26ch;
+  font-size: clamp(2.25rem, 6.2vw, 4rem);
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: 0;
+  text-wrap: balance;
+}
+
+/* The rotating phrase owns its own line: a block-level grid whose variants are
+   all stacked in one cell. That way the headline above it never reflows and
+   the swapped phrase can't leave a dangling word beside a gap. */
+.lp-hero__rotator {
+  display: grid;
+  justify-items: center;
+  background: linear-gradient(100deg, var(--lp-brand), var(--lp-violet) 55%, var(--lp-cyan));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* All variants occupy the same grid cell: the element sizes to the widest
+   word, so swapping the active one never reflows the headline. Transitions
+   (not an animation) so each change re-triggers without a remount. */
+.lp-hero__rotator > span {
+  grid-area: 1 / 1;
+  opacity: 0;
+  transform: translateY(0.35em);
+  transition: opacity 0.45s var(--lp-ease), transform 0.45s var(--lp-ease);
+}
+
+.lp-hero__rotator > span[data-active='true'] {
+  opacity: 1;
+  transform: none;
+}
+
+.lp-hero__lead {
+  margin: 0;
+  max-width: 40rem;
+  font-size: clamp(1rem, 1.6vw, 1.12rem);
+  line-height: 2;
+  color: var(--lp-ink-2);
+  text-wrap: pretty;
+}
+
+.lp-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.lp-hero__trust {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem 1.5rem;
+  font-size: 0.82rem;
+  color: var(--lp-ink-3);
+}
+
+.lp-hero__trust li {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  list-style: none;
+}
+
+.lp-hero__trust svg {
+  color: var(--lp-mint);
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Product preview — the hero's proof. A real-looking slice of the chat UI
+   instead of decorative physics boxes.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-preview {
+  position: relative;
+  margin-block-start: clamp(3rem, 6vw, 4.5rem);
+  border-radius: var(--lp-r-lg);
+  border: 1px solid var(--lp-line);
+  background: color-mix(in srgb, var(--lp-bg-soft) 88%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--lp-shadow-lg);
+  overflow: hidden;
+}
+
+.lp-preview__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 1rem;
+  border-block-end: 1px solid var(--lp-line);
+  background: var(--lp-panel);
+}
+
+.lp-preview__dots {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.lp-preview__dots i {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--lp-line-hi);
+}
+
+.lp-preview__tabs {
+  display: flex;
+  gap: 0.3rem;
+  margin-inline: auto;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.lp-preview__tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.lp-preview__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: var(--lp-r-pill);
+  background: transparent;
+  color: var(--lp-ink-3);
+  font-family: inherit;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--lp-fast), background var(--lp-fast),
+    border-color var(--lp-fast);
+}
+
+.lp-preview__tab:hover {
+  color: var(--lp-ink-2);
+}
+
+.lp-preview__tab[aria-selected='true'] {
+  color: var(--lp-ink);
+  background: var(--lp-panel-hi);
+  border-color: var(--lp-line);
+}
+
+.lp-preview__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: clamp(1.25rem, 3vw, 2rem);
+  min-height: 16rem;
+  text-align: start;
+}
+
+.lp-msg {
+  display: flex;
+  gap: 0.7rem;
+  max-width: 42rem;
+}
+
+.lp-msg--user {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.lp-msg__avatar {
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.lp-msg--user .lp-msg__avatar {
+  background: var(--lp-panel-hi);
+  color: var(--lp-ink-2);
+}
+
+.lp-msg--ai .lp-msg__avatar {
+  background: var(--lp-brand-soft);
+  color: var(--lp-brand);
+}
+
+.lp-msg__bubble {
+  padding: 0.65rem 1rem;
+  border-radius: var(--lp-r);
+  font-size: 0.9rem;
+  line-height: 1.9;
+}
+
+.lp-msg--user .lp-msg__bubble {
+  background: var(--lp-brand);
+  color: #fff;
+  border-end-end-radius: 4px;
+}
+
+.lp-msg--ai .lp-msg__bubble {
+  background: var(--lp-panel-hi);
+  border: 1px solid var(--lp-line);
+  color: var(--lp-ink);
+  border-end-start-radius: 4px;
+}
+
+/* Typewriter caret on the streaming answer. */
+.lp-msg__caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  vertical-align: -0.15em;
+  margin-inline-start: 2px;
+  background: var(--lp-brand);
+  animation: lp-blink 1s steps(2) infinite;
+}
+
+@keyframes lp-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.lp-preview__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  margin-block-start: auto;
+  padding-block-start: 1rem;
+  border-block-start: 1px solid var(--lp-line);
+  font-size: 0.74rem;
+  color: var(--lp-ink-3);
+}
+
+.lp-preview__meta b {
+  color: var(--lp-ink-2);
+  font-weight: 600;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Provider marquee
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-marquee {
+  --lp-marquee-duration: 42s;
+  padding-block: clamp(2.5rem, 5vw, 3.5rem);
+  overflow: hidden;
+}
+
+.lp-marquee__label {
+  margin: 0 0 1.5rem;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--lp-ink-3);
+}
+
+.lp-marquee__viewport {
+  display: flex;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+
+.lp-marquee__track {
+  display: flex;
+  gap: 3rem;
+  padding-inline-end: 3rem;
+  flex-shrink: 0;
+  min-width: 100%;
+  animation: lp-marquee var(--lp-marquee-duration) linear infinite;
+}
+
+.lp-marquee__viewport:hover .lp-marquee__track {
+  animation-play-state: paused;
+}
+
+@keyframes lp-marquee {
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+/* The track always travels in one physical direction; in RTL the negative
+   translate would fight the flow, so mirror it. */
+[dir='rtl'] .lp-marquee__track {
+  animation-name: lp-marquee-rtl;
+}
+
+@keyframes lp-marquee-rtl {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.lp-marquee__item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--lp-ink-3);
+  font-size: 0.92rem;
+  white-space: nowrap;
+  transition: color var(--lp-fast);
+  --lp-logo-size: 24px;
+}
+
+.lp-marquee__item:hover {
+  color: var(--lp-ink);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Stats band
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--lp-line);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-r);
+  overflow: hidden;
+}
+
+/* column-reverse: the markup is dt → dd (label defines value), the display is
+   value above label. */
+.lp-stat {
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-end;
+  gap: 0.15rem;
+  padding: clamp(1.25rem, 3vw, 2rem);
+  background: var(--lp-bg);
+  text-align: center;
+}
+
+.lp-stat dd {
+  margin: 0;
+}
+
+.lp-stat__value {
+  font-size: clamp(1.5rem, 3vw, 2.1rem);
+  font-weight: 700;
+  line-height: 1.3;
+  background: linear-gradient(160deg, var(--lp-ink), var(--lp-ink-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.lp-stat__label {
+  font-size: 0.82rem;
+  color: var(--lp-ink-3);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Feature bento
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-bento {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 1rem;
+}
+
+/* 3 / 3 — 2 / 2 / 2 — 6. Two headline cards, a row of three supporting ones,
+   then a full-width closer. Every row fills exactly six columns, so there is
+   no orphan card, and the varying widths make this read as a composition
+   rather than the spreadsheet of six identical boxes it replaced. */
+.lp-bento > :nth-child(-n + 2) {
+  grid-column: span 3;
+}
+
+.lp-bento > :nth-child(n + 3) {
+  grid-column: span 2;
+}
+
+.lp-bento > :last-child {
+  grid-column: span 6;
+}
+
+.lp-feature {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: clamp(1.25rem, 2.5vw, 1.75rem);
+  overflow: hidden;
+}
+
+.lp-feature__icon {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin-block-end: 0.35rem;
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-r-sm);
+  background: var(--lp-brand-soft);
+  color: var(--lp-brand);
+  flex-shrink: 0;
+}
+
+.lp-feature__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.6;
+  color: var(--lp-ink);
+}
+
+.lp-feature__desc {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.95;
+  color: var(--lp-ink-2);
+}
+
+.lp-feature__link {
+  margin-block-start: auto;
+  padding-block-start: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--lp-brand);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.lp-feature__link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* The full-width closer of the bento lays its content out horizontally, so a
+   card three times the width of its neighbours doesn't read as a mostly empty
+   band. Declared after `.lp-feature` because both are single-class selectors —
+   source order is what decides which `display` wins. */
+.lp-feature--wide {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.25rem 1.75rem;
+}
+
+.lp-feature--wide .lp-feature__icon {
+  grid-row: 1 / span 2;
+  margin: 0;
+}
+
+.lp-feature--wide .lp-feature__title {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.lp-feature--wide .lp-feature__desc {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.lp-feature--wide .lp-feature__link {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  margin: 0;
+  padding: 0;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .lp-feature--wide {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.5rem 1rem;
+  }
+  .lp-feature--wide .lp-feature__link {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    padding-block-start: 0.5rem;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Steps
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: lp-step;
+}
+
+.lp-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-block-start: 2.75rem;
+}
+
+.lp-step::before {
+  counter-increment: lp-step;
+  content: counter(lp-step, persian);
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--lp-line);
+  border-radius: 50%;
+  background: var(--lp-panel);
+  color: var(--lp-brand);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+/* Connector between step markers. A flat colour rather than a gradient, so it
+   reads identically whichever direction the document flows. */
+.lp-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  inset-block-start: 1rem;
+  inset-inline-start: 2.5rem;
+  inset-inline-end: -1.5rem;
+  height: 1px;
+  background: var(--lp-line);
+}
+
+.lp-step__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--lp-ink);
+}
+
+.lp-step__desc {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.95;
+  color: var(--lp-ink-2);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Split (copy beside a code block)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-split {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: clamp(2rem, 5vw, 4rem);
+  align-items: center;
+}
+
+.lp-split__copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.lp-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0.25rem 0 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.lp-checklist li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+  line-height: 1.85;
+  color: var(--lp-ink-2);
+}
+
+.lp-checklist svg {
+  margin-block-start: 0.45em;
+  color: var(--lp-mint);
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Code block
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-code {
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-r);
+  background: var(--lp-bg-soft);
+  box-shadow: var(--lp-shadow);
+  overflow: hidden;
+}
+
+.lp-code__head {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.5rem 0.6rem;
+  border-block-end: 1px solid var(--lp-line);
+}
+
+.lp-code__tab {
+  padding: 0.35rem 0.85rem;
+  border: 1px solid transparent;
+  border-radius: var(--lp-r-sm);
+  background: transparent;
+  color: var(--lp-ink-3);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: color var(--lp-fast), background var(--lp-fast);
+}
+
+.lp-code__tab:hover {
+  color: var(--lp-ink-2);
+}
+
+.lp-code__tab[aria-selected='true'] {
+  color: var(--lp-ink);
+  background: var(--lp-panel-hi);
+  border-color: var(--lp-line);
+}
+
+.lp-code__copy {
+  margin-inline-start: auto;
+}
+
+.lp-code__body {
+  margin: 0;
+  padding: 1.1rem 1.25rem;
+  direction: ltr;
+  text-align: left;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 0.78rem;
+  line-height: 1.85;
+  color: var(--lp-ink-2);
+  overflow-x: auto;
+  tab-size: 2;
+}
+
+.lp-code__body b {
+  color: var(--lp-brand);
+  font-weight: 400;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Pricing
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-billing {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-r-pill);
+  background: var(--lp-panel);
+}
+
+.lp-billing__opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 1rem;
+  border: 0;
+  border-radius: var(--lp-r-pill);
+  background: transparent;
+  color: var(--lp-ink-2);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--lp-fast), color var(--lp-fast);
+}
+
+.lp-billing__opt[aria-pressed='true'] {
+  background: var(--lp-brand);
+  color: #fff;
+}
+
+.lp-billing__save {
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--lp-r-pill);
+  background: color-mix(in srgb, var(--lp-mint) 20%, transparent);
+  color: var(--lp-mint);
+  font-size: 0.7rem;
+}
+
+.lp-billing__opt[aria-pressed='true'] .lp-billing__save {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+/* stretch, not start: equal-height cards let `.lp-plan__features { flex: 1 }`
+   push every CTA to the same baseline across the row. */
+.lp-plans {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+  align-items: stretch;
+}
+
+.lp-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: clamp(1.5rem, 3vw, 2rem);
+}
+
+/* The featured plan lifts out of the row rather than just changing colour. */
+.lp-plan--featured {
+  border-color: color-mix(in srgb, var(--lp-brand) 55%, transparent);
+  background: linear-gradient(180deg, var(--lp-brand-soft), transparent 55%);
+  box-shadow: 0 24px 60px -32px var(--lp-brand);
+}
+
+.lp-plan__badge {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 50%;
+  translate: -50% -50%;
+  padding: 0.2rem 0.8rem;
+  border-radius: var(--lp-r-pill);
+  background: var(--lp-brand);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.lp-plan__name {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--lp-ink);
+}
+
+.lp-plan__desc {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.8;
+  color: var(--lp-ink-3);
+}
+
+.lp-plan__price {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  padding-block: 0.5rem;
+  border-block-end: 1px solid var(--lp-line);
+}
+
+.lp-plan__amount {
+  font-size: clamp(1.9rem, 4vw, 2.4rem);
+  font-weight: 800;
+  line-height: 1.3;
+  color: var(--lp-ink);
+}
+
+.lp-plan__unit {
+  font-size: 0.85rem;
+  color: var(--lp-ink-3);
+}
+
+.lp-plan__features {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex: 1;
+}
+
+.lp-plan__features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  font-size: 0.87rem;
+  line-height: 1.8;
+  color: var(--lp-ink-2);
+}
+
+.lp-plan__features svg {
+  margin-block-start: 0.4em;
+  color: var(--lp-brand);
+  flex-shrink: 0;
+}
+
+.lp-plans__footnote {
+  margin: 1.75rem 0 0;
+  text-align: center;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FAQ
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-faq {
+  max-width: 46rem;
+  margin-inline: auto;
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-r);
+  overflow: hidden;
+}
+
+.lp-faq__item + .lp-faq__item {
+  border-block-start: 1px solid var(--lp-line);
+}
+
+/* The question is a heading for outline purposes; the button inside it does
+   the visual work, so the heading itself carries no styling of its own. */
+.lp-faq__heading {
+  margin: 0;
+  font: inherit;
+}
+
+.lp-faq__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 1.1rem 1.25rem;
+  border: 0;
+  background: transparent;
+  color: var(--lp-ink);
+  font-family: inherit;
+  font-size: 0.98rem;
+  font-weight: 600;
+  line-height: 1.7;
+  text-align: start;
+  cursor: pointer;
+  transition: background var(--lp-fast);
+}
+
+.lp-faq__trigger:hover {
+  background: var(--lp-panel);
+}
+
+.lp-faq__chevron {
+  flex-shrink: 0;
+  color: var(--lp-ink-3);
+  transition: transform var(--lp-fast), color var(--lp-fast);
+}
+
+.lp-faq__trigger[aria-expanded='true'] .lp-faq__chevron {
+  transform: rotate(180deg);
+  color: var(--lp-brand);
+}
+
+/* grid-template-rows 0fr → 1fr animates to auto height while keeping the
+   answer in the DOM, so it stays findable by ⌘F and by screen readers. */
+.lp-faq__panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s var(--lp-ease);
+}
+
+.lp-faq__panel[data-open='true'] {
+  grid-template-rows: 1fr;
+}
+
+.lp-faq__panel > div {
+  overflow: hidden;
+}
+
+.lp-faq__answer {
+  margin: 0;
+  padding: 0 1.25rem 1.25rem;
+  font-size: 0.9rem;
+  line-height: 2;
+  color: var(--lp-ink-2);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Closing CTA
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-cta {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  padding: clamp(3rem, 7vw, 5rem) clamp(1.5rem, 5vw, 4rem);
+  border: 1px solid var(--lp-line);
+  border-radius: var(--lp-r-lg);
+  background: var(--lp-bg-soft);
+  text-align: center;
+  overflow: hidden;
+}
+
+.lp-cta::before {
+  content: '';
+  position: absolute;
+  inset-block-start: -60%;
+  inset-inline-start: 50%;
+  width: min(80%, 640px);
+  aspect-ratio: 1;
+  translate: -50% 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--lp-brand), transparent 65%);
+  opacity: 0.28;
+  filter: blur(60px);
+  pointer-events: none;
+}
+
+.lp-cta > * {
+  position: relative;
+}
+
+.lp-cta .lp-lead {
+  max-width: 32rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Footer
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-footer {
+  border-block-start: 1px solid var(--lp-line);
+  background: var(--lp-bg-soft);
+  padding-block: clamp(3rem, 6vw, 4.5rem) 1.5rem;
+}
+
+.lp-footer__top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr));
+  gap: 2.5rem;
+}
+
+.lp-footer__about {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.9rem;
+  max-width: 22rem;
+}
+
+.lp-footer__tagline {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.95;
+  color: var(--lp-ink-3);
+}
+
+.lp-footer__col h3 {
+  margin: 0 0 0.9rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--lp-ink);
+}
+
+.lp-footer__col a {
+  display: block;
+  padding-block: 0.35rem;
+  font-size: 0.87rem;
+  color: var(--lp-ink-3);
+  text-decoration: none;
+  transition: color var(--lp-fast);
+}
+
+.lp-footer__col a:hover {
+  color: var(--lp-ink);
+}
+
+.lp-footer__bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-block-start: clamp(2.5rem, 5vw, 3.5rem);
+  padding-block-start: 1.5rem;
+  border-block-start: 1px solid var(--lp-line);
+  font-size: 0.8rem;
+  color: var(--lp-ink-3);
+}
+
+.lp-footer__social {
+  display: flex;
+  gap: 0.35rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Responsive — three breakpoints, each one collapsing a whole tier of the
+   grid rather than patching individual components.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 960px) {
+  .lp-bento {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .lp-bento > :nth-child(1),
+  .lp-bento > :nth-child(2),
+  .lp-bento > :nth-child(n + 3) {
+    grid-column: span 1;
+  }
+  .lp-split {
+    grid-template-columns: 1fr;
+  }
+  .lp-plans {
+    grid-template-columns: 1fr;
+    max-width: 26rem;
+    margin-inline: auto;
+  }
+  .lp-plan--featured {
+    order: -1;
+  }
+  .lp-steps {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+  .lp-step:not(:last-child)::after {
+    display: none;
+  }
+  .lp-footer__top {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .lp-footer__about {
+    grid-column: 1 / -1;
+    max-width: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .lp-nav,
+  .lp-header__actions .lp-btn,
+  .lp-header__actions .lp-nav__link {
+    display: none;
+  }
+  .lp-burger {
+    display: grid;
+  }
+  .lp-header__actions {
+    margin-inline-start: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .lp-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .lp-bento,
+  .lp-footer__top {
+    grid-template-columns: 1fr;
+  }
+  .lp-hero__actions .lp-btn {
+    flex: 1 1 12rem;
+  }
+  .lp-preview__body {
+    min-height: 0;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Reduced motion — kill the ambient loops outright rather than shortening
+   them; a 0.01ms infinite animation still burns a compositor thread.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  .lp *,
+  .lp *::before,
+  .lp *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .lp-aura__blob,
+  .lp-marquee__track,
+  .lp-msg__caret {
+    animation: none !important;
+  }
+  .lp-marquee__viewport {
+    overflow-x: auto;
+  }
+  .lp-reveal {
+    opacity: 1;
+    transform: none;
+  }
+}

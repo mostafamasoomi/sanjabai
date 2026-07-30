@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockCatalog, mockAuthMe } from './helpers'
+import { mockCatalog, mockAuthMe, signIn } from './helpers'
 
 /**
  * E2E tests for the API Keys page (/api-keys).
@@ -71,7 +71,9 @@ async function mockApiKeyApis(page: import('@playwright/test').Page) {
 test.describe('api-keys', () => {
   test.beforeEach(async ({ page }) => {
     await mockCatalog(page)
-    await mockAuthMe(page, { id: 1, email: 'test@example.com' })
+    // signIn() seeds the auth token too; mocking /api/auth/me alone leaves the
+    // session signed out, so the app shell redirects /api-keys to /login.
+    await signIn(page)
     await mockApiKeyApis(page)
   })
 
@@ -104,7 +106,7 @@ test.describe('api-keys', () => {
 
     // The one-time warning should be visible
     await expect(
-      page.getByText('این کلید فقط یک بار نمایش داده میشود'),
+      page.getByText('این کلید فقط یک بار نمایش داده می‌شود'),
     ).toBeVisible()
 
     // The new key value should be shown
@@ -128,7 +130,7 @@ test.describe('api-keys', () => {
     await expect(page.getByText('Old Key')).toBeVisible()
 
     // Active keys should have "فعال" badge
-    const activeBadges = page.getByText('فعال')
+    const activeBadges = page.getByText('فعال', { exact: true })
     await expect(activeBadges).toHaveCount(2) // Production and Development
 
     // Inactive key should have "غیرفعال" badge
@@ -189,7 +191,7 @@ test.describe('api-keys', () => {
     // Documentation sections
     await expect(page.getByText('احراز هویت')).toBeVisible()
     await expect(page.getByText('ارسال درخواست چت')).toBeVisible()
-    await expect(page.getByText('لیست مدلها')).toBeVisible()
+    await expect(page.getByText('لیست مدل‌ها')).toBeVisible()
   })
 
   test('api-keys page requires authentication', async ({ page }) => {

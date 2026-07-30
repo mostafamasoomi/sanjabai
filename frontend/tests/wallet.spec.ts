@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockCatalog, mockAuthMe } from './helpers'
+import { mockCatalog, mockAuthMe, signIn } from './helpers'
 
 /**
  * E2E tests for the wallet page (/wallet).
@@ -99,7 +99,11 @@ async function mockWalletApis(page: import('@playwright/test').Page) {
 test.describe('wallet', () => {
   test.beforeEach(async ({ page }) => {
     await mockCatalog(page)
-    await mockAuthMe(page, { id: 1, email: 'test@example.com' })
+    // signIn() seeds the localStorage token as well as mocking /api/auth/me.
+    // Mocking the endpoint alone is not enough: AuthProvider only calls it
+    // when a token is present, so without the token the session stays signed
+    // out and the app shell redirects /wallet to /login.
+    await signIn(page)
     await mockWalletApis(page)
   })
 
@@ -116,7 +120,7 @@ test.describe('wallet', () => {
     await expect(page.getByText('موجودی فعلی')).toBeVisible()
 
     // The "top up" card title (شارژ حساب)
-    await expect(page.getByText('شارژ حساب')).toBeVisible()
+    await expect(page.getByText('شارژ حساب').first()).toBeVisible()
   })
 
   test('topup flow UI', async ({ page }) => {
@@ -142,7 +146,7 @@ test.describe('wallet', () => {
     await expect(page.getByText('تایید شارژ')).toBeVisible()
 
     // Cancel the modal
-    await page.getByRole('button', { name: 'انصراف' }).click()
+    await page.getByRole('button', { name: 'انصراف', exact: true }).click()
     await expect(page.getByText('تایید شارژ')).toBeHidden()
   })
 
@@ -150,7 +154,7 @@ test.describe('wallet', () => {
     await page.goto('/wallet')
 
     // Wait for ledger section to appear
-    await expect(page.getByText('تاریخچه تراکنشها')).toBeVisible()
+    await expect(page.getByText('تاریخچه تراکنش‌ها')).toBeVisible()
 
     // Filter tabs should be present
     await expect(page.getByRole('button', { name: 'همه' })).toBeVisible()
@@ -162,14 +166,14 @@ test.describe('wallet', () => {
     await expect(page.getByText('استفاده از API')).toBeVisible()
 
     // Table headers
-    await expect(page.getByRole('columnheader', { name: 'تاریخ' })).toBeVisible()
-    await expect(page.getByRole('columnheader', { name: 'شرح' })).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: 'تاریخ' }).first()).toBeVisible()
+    await expect(page.getByRole('columnheader', { name: 'شرح' }).first()).toBeVisible()
   })
 
   test('credit packages section displays', async ({ page }) => {
     await page.goto('/wallet')
 
-    await expect(page.getByText('بستههای اعتباری')).toBeVisible()
+    await expect(page.getByText('بسته‌های اعتباری')).toBeVisible()
     await expect(page.getByText('بسته شروع')).toBeVisible()
     await expect(page.getByText('بسته حرفه‌ای')).toBeVisible()
   })
@@ -177,21 +181,22 @@ test.describe('wallet', () => {
   test('payment history section displays', async ({ page }) => {
     await page.goto('/wallet')
 
-    await expect(page.getByText('تاریخچه پرداختها')).toBeVisible()
+    await expect(page.getByText('تاریخچه پرداخت‌ها')).toBeVisible()
     // Payment status badge
     await expect(page.getByText('موفق')).toBeVisible()
   })
 
-  test('wallet page shows login prompt when not authenticated', async ({ page }) => {
-    // Override auth to return unauthenticated
+  test('wallet page redirects to login when not authenticated', async ({ page }) => {
+    // Override auth to return unauthenticated and drop the seeded token.
+    // The key is `multiai_auth_token` — see lib/auth.tsx.
     await mockAuthMe(page, null)
-    // Also need to clear any stored token
-    await page.addInitScript(() => localStorage.removeItem('auth_token'))
+    await page.addInitScript(() => localStorage.removeItem('multiai_auth_token'))
 
     await page.goto('/wallet')
 
-    // Should show login prompt
-    await expect(page.getByText('برای مشاهده کیف پول، ابتدا وارد حساب خود شوید.')).toBeVisible()
-    await expect(page.getByRole('link', { name: 'ورود' })).toBeVisible()
+    // The app shell guards protected routes, so a signed-out visitor is sent
+    // to /login rather than shown the wallet page's inline prompt.
+    await page.waitForURL(/\/login/)
+    await expect(page.getByRole('heading', { name: /ورود/ })).toBeVisible()
   })
 })

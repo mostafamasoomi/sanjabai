@@ -688,7 +688,7 @@ export default function AdminPage() {
 
         {/* Mobile Overlay */}
         {sidebarOpen && (
-          <div role="button" tabIndex={0} className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />
+          <div className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setSidebarOpen(false)} />
         )}
 
         {/* ─── Main Content ────────────────────────────────────────────── */}
@@ -843,7 +843,7 @@ export default function AdminPage() {
                             </span>
                           </td>
                           <td className="p-3">
-                            <div role="button" tabIndex={0} className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                               <button className="btn btn-sm" onClick={() => setEditingUser(u)} title="ویرایش">
                                 <Icon name="settings" size={14} />
                               </button>
@@ -866,9 +866,9 @@ export default function AdminPage() {
 
               {/* User Edit Modal */}
               {editingUser && (
-                <div role="button" tabIndex={0} className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setEditingUser(null)}>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setEditingUser(null)}>
                   <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-                  <div role="button" tabIndex={0} className="card relative w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+                  <div className="card relative w-full max-w-md" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="font-bold text-primary">ویرایش کاربر</h3>
                       <button className="btn btn-icon btn-sm" onClick={() => setEditingUser(null)}>

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { mockCatalog } from './helpers'
+import { mockCatalog, signIn } from './helpers'
 
 test.describe('a11y', () => {
   test.beforeEach(async ({ page }) => {
@@ -49,13 +49,19 @@ test.describe('a11y', () => {
   })
 
   test('model identifiers in chat are LTR-isolated', async ({ page }) => {
+    await signIn(page)
     await page.goto('/chat')
-    const select = page.locator('[data-testid="model-select"]')
+    const select = page.getByTestId('model-picker-trigger')
     await expect(select).toBeVisible()
     // Latin model names must not be flipped by the RTL document.
     await expect(select).toHaveAttribute('dir', 'ltr')
+    // Provider names live inside the picker's dropdown, so open it first.
+    await select.click()
     // Provider badge (Latin provider name) is likewise LTR-isolated.
-    const badge = page.locator('.badge', { hasText: /OpenAI|Anthropic/ }).first()
+    const badge = page
+      .locator('.model-provider-badge')
+      .filter({ hasText: /OpenAI|Anthropic/ })
+      .first()
     await expect(badge).toHaveAttribute('dir', 'ltr')
   })
 })

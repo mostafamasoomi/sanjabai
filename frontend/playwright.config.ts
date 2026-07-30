@@ -15,6 +15,10 @@ import { defineConfig, devices } from '@playwright/test'
  */
 export default defineConfig({
   testDir: './tests',
+  // Only *.spec.ts are Playwright tests. tests/lib/*.test.ts are Vitest unit
+  // tests; without this Playwright picks them up and dies on `import
+  // { vi } from 'vitest'`.
+  testMatch: '**/*.spec.ts',
   timeout: 60_000,
   expect: { timeout: 15_000 },
   fullyParallel: true,

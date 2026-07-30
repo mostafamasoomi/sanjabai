@@ -1,0 +1,35 @@
+/* ── Builder / Timeline split columns ─────────────────────────────────────── */
+.motion-builder-text,
+.motion-timeline-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+.motion-builder-visual,
+.motion-timeline-code {
+  min-width: 0;
+}
+
+/* ── Testimonials (author/avatar/role) ────────────────────────────────────── */
+.motion-testimonial {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.motion-testimonial-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  order: -1;
+}
+.motion-testimonial-author {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.motion-testimonial-role {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}

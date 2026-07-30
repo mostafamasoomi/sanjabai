@@ -3,6 +3,8 @@ node_modules/
 __pycache__/
 lab/
 .env
+.env.*
+!.env.example
 # Secrets
 backend/litellm_config.yaml
 infra/ssh_key
@@ -33,5 +35,4 @@ frontend/progress.md
 frontend/task_plan.md
 run_tests.py
 test_final_demo.py
-frontend/app/motion-effects.css
 infra/pgvector/

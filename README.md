@@ -26,10 +26,10 @@ Multiai یک **پلتفرم جامع هوش مصنوعی** است که به کا
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    🖥️  Frontend (Next.js 15)                    │
-│   RTL Persian UI • Dark/Light Mode • Responsive • 26 Pages     │
+│   RTL Persian UI • Dark/Light Mode • Responsive • 29 Pages     │
 ├─────────────────────────────────────────────────────────────────┤
 │                    ⚡ API Gateway (FastAPI)                      │
-│   136 Endpoints • Rate Limiting • Auth • Billing • Streaming   │
+│   150 Endpoints • Rate Limiting • Auth • Billing • Streaming   │
 ├─────────────────────────────────────────────────────────────────┤
 │                    🧠 AI Models (Bynara)                        │
 │   8 Models • Streaming • Smart Routing • Web Search            │
@@ -351,8 +351,8 @@ multiai/
 
 | متریک | مقدار |
 |-------|-------|
-| API Endpoints | 136+ |
-| Frontend Pages | 26 |
+| API Endpoints | 150 |
+| Frontend Pages | 29 |
 | Database Tables | 31+ |
 | SQLAlchemy Models | 30 |
 | AI Models (available) | 8 Bynara |

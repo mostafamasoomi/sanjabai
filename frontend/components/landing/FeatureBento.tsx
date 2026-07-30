@@ -1,0 +1,48 @@
+import { Icon } from '../ui/Icon'
+import { Reveal } from './Reveal'
+import { ForwardArrow } from './primitives'
+import { FEATURES } from './content'
+
+export function FeatureBento() {
+  return (
+    <section id="features" className="lp-section">
+      <div className="lp-container">
+        <Reveal>
+          <header className="lp-head">
+            <span className="lp-eyebrow">امکانات</span>
+            <h2 className="lp-title">هر چه لازم دارید، بدون اضافه‌کاری</h2>
+            <p className="lp-lead">
+              یک فضای کاری برای همه‌ی مدل‌ها: چت، ساخت عامل، مقایسه‌ی خروجی و مدیریت کلیدهای
+              API — همه در یک جا و با یک صورتحساب.
+            </p>
+          </header>
+        </Reveal>
+
+        <div className="lp-bento">
+          {FEATURES.map((feature, i) => (
+            <Reveal
+              key={feature.title}
+              as="article"
+              delay={i * 60}
+              className={`lp-card lp-feature${
+                i === FEATURES.length - 1 ? ' lp-feature--wide' : ''
+              }`}
+            >
+              <span className="lp-feature__icon">
+                <Icon name={feature.icon} size={20} />
+              </span>
+              <h3 className="lp-feature__title">{feature.title}</h3>
+              <p className="lp-feature__desc">{feature.desc}</p>
+              {feature.href && (
+                <a href={feature.href} className="lp-feature__link">
+                  {feature.linkLabel}
+                  <ForwardArrow size={13} />
+                </a>
+              )}
+            </Reveal>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}

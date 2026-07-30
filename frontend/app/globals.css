@@ -375,6 +375,45 @@ img, svg, video, canvas {
   border-bottom: 1px solid var(--border);
 }
 [data-theme='light'] .topbar-glass { background: rgba(255,255,255,0.7); }
+
+/* Sortable column headers on /pricing. */
+.pricing-sort-btn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.pricing-sort-btn:hover { color: var(--text-primary); }
+
+/* Brand lockup in the topbar. Always visible — on public routes it is the
+   only branding and the only route home. */
+.topbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.topbar-brand img { width: 24px; height: 24px; object-fit: contain; }
+
+/* Marketing links, shown only when signed out (there is no sidebar then). */
+.topbar-public-nav { display: none; align-items: center; gap: 0.25rem; margin-inline-start: 0.75rem; }
+.topbar-public-nav a {
+  padding: 0.35rem 0.7rem;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color var(--motion-fast), background var(--motion-fast);
+}
+.topbar-public-nav a:hover { color: var(--text-primary); background: var(--bg-hover); }
+@media (min-width: 768px) { .topbar-public-nav { display: flex; } }
 .layout-content { flex: 1; padding: var(--space-6); max-width: 1400px; width: 100%; margin: 0 auto; }
 @media (max-width: 768px) { .layout-content { padding: var(--space-4); } }
 

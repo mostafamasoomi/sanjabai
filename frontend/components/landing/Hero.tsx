@@ -38,12 +38,25 @@ function ProductPreview() {
   const [active, setActive] = useState(0)
   const thread = PREVIEW_THREADS[active]
 
-  // Types out the answer, then holds. Restarts whenever the tab changes.
+  // Types the answer out when the reader switches model tabs.
+  //
+  // The initial state is the *complete* answer, so the server-rendered HTML
+  // carries real content and a reader without JavaScript still sees a finished
+  // conversation. That makes the first mount a special case: replaying the
+  // animation there would blank the bubble that was just painted and retype
+  // it, which reads as a flash. So the first run only arms the ref, and the
+  // typewriter starts from the first genuine tab change onward.
   const [typed, setTyped] = useState(thread.answer)
   const timerRef = useRef<number>()
+  const mounted = useRef(false)
 
   useEffect(() => {
     window.clearInterval(timerRef.current)
+
+    if (!mounted.current) {
+      mounted.current = true
+      return
+    }
 
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       setTyped(thread.answer)
@@ -82,7 +95,7 @@ function ProductPreview() {
               aria-selected={i === active}
               onClick={() => setActive(i)}
             >
-              <ProviderLogo src={t.logo} size={14} />
+              {t.logo && <ProviderLogo src={t.logo} size={14} />}
               <span dir="ltr">{t.label}</span>
             </button>
           ))}
@@ -97,24 +110,25 @@ function ProductPreview() {
 
         <div className="lp-msg lp-msg--ai">
           <span className="lp-msg__avatar">
-            <ProviderLogo src={thread.logo} size={15} />
+            {thread.logo ? <ProviderLogo src={thread.logo} size={15} /> : '؟'}
           </span>
-          <p className="lp-msg__bubble" aria-live="polite">
+          {/* No aria-live here on purpose: announcing a decorative typewriter
+              two characters at a time would flood a screen reader. The bubble
+              is ordinary content and is read when the user reaches it. */}
+          <p className="lp-msg__bubble">
             {typed}
             {!done && <span className="lp-msg__caret" aria-hidden="true" />}
           </p>
         </div>
 
+        {/* Deliberately no latency or per-message price here: any number we
+            printed would be invented. The real figures are computed per
+            request and shown in the product itself. */}
         <div className="lp-preview__meta">
           <span>
             مدل: <b dir="ltr">{thread.label}</b>
           </span>
-          <span>
-            زمان پاسخ: <b>{thread.latency}</b>
-          </span>
-          <span>
-            هزینه: <b>{thread.cost}</b>
-          </span>
+          <span>هزینه‌ی تخمینی هر پیام، پیش از ارسال در خود چت نمایش داده می‌شود</span>
         </div>
       </div>
     </div>
@@ -138,18 +152,18 @@ export function Hero() {
         <div className="lp-hero__inner">
           <a href="/signup" className="lp-pill">
             <span className="lp-pill__dot" />
-            پلن رایگان فعال است — بدون کارت اعتباری
+            ثبت‌نام رایگان — بدون کارت اعتباری
           </a>
 
           <h1 className="lp-hero__title">
-            همه‌ی مدل‌های هوش مصنوعی جهان،
+            ۲۳ مدل هوش مصنوعی،
             <Rotator />
           </h1>
 
           <p className="lp-hero__lead">
-            با GPT-4o، Claude، Gemini، DeepSeek و بیش از بیست مدل دیگر در یک فضای کاری فارسی
-            کار کنید. عامل بسازید، خروجی‌ها را مقایسه کنید و همه را با یک API به محصول خودتان
-            وصل کنید.
+            با DeepSeek، Mistral، Gemini، Llama و ۱۹ مدل دیگر در یک فضای کاری فارسی کار
+            کنید. عامل بسازید، خروجی‌ها را مقایسه کنید و همه را با یک API به محصول خودتان
+            وصل کنید — با پرداخت به تومان و بدون اشتراک ماهانه.
           </p>
 
           <div className="lp-hero__actions">

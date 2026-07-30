@@ -45,6 +45,25 @@ const NAV: NavItem[] = [
   { href: '/admin', label: 'مدیریت', icon: 'settings', section: 'account', admin: true },
 ]
 
+/**
+ * Routes that render without the product sidebar/topbar. The landing page and
+ * the auth screens supply their own marketing chrome; wrapping them in the
+ * app shell would give them two competing navigations.
+ */
+const CHROME_LESS_ROUTES = new Set(['/', '/login', '/signup', '/forgot-password'])
+
+/** Routes reachable without a session. Everything else redirects to /login. */
+const PUBLIC_ROUTES = [
+  '/',
+  '/login',
+  '/signup',
+  '/forgot-password',
+  '/onboarding',
+  '/pricing',
+  '/models',
+  '/developer',
+]
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Inner layout
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -57,10 +76,11 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { CommandPalette, setOpen: openPalette } = useCommandPalette()
 
-  // Landing page — minimal wrapper, no sidebar
-  if (pathname === '/') {
-    return <><ToastContainer />{children}</>
-  }
+  // Routes that bring their own chrome: the landing page and the auth screens
+  // carry the marketing header/footer, so the product sidebar would be a
+  // second, conflicting navigation. They still need the provider tree above
+  // this component, which is why they render through here at all.
+  const bare = CHROME_LESS_ROUTES.has(pathname ?? '')
 
   useEffect(() => { setSidebarOpen(false) }, [pathname])
   // Close user menu on outside click
@@ -77,7 +97,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   // check can't confirm an empty list, we let the user into the app.
   useEffect(() => {
     if (loading || !user) return
-    if (pathname === '/onboarding') return
+    if (pathname === '/onboarding' || bare) return
     if (isOnboarded()) return
 
     let cancelled = false
@@ -97,16 +117,39 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [loading, user, token, pathname, router])
+  }, [loading, user, token, pathname, router, bare])
+
+  const isPublic = PUBLIC_ROUTES.some(
+    (p) => pathname === p || pathname?.startsWith(p + '/'),
+  )
+
+  // Send signed-out visitors to /login for anything that needs a session.
+  // Done in an effect, not during render: calling router.push() while
+  // rendering warns in React and can loop.
+  useEffect(() => {
+    if (loading || user || isPublic) return
+    router.push('/login')
+  }, [loading, user, isPublic, router])
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(href + '/')
 
-  // Redirect unauthenticated users to login for protected pages
-  const PUBLIC_ROUTES = ['/login', '/signup', '/forgot-password', '/onboarding', '/pricing', '/']
-  if (!loading && !user && !PUBLIC_ROUTES.some(p => pathname === p || pathname?.startsWith(p + '/'))) {
-    router.push('/login')
-    return null
+  // ── Every hook above this line runs on every route ───────────────────────
+  // The early returns below must stay below them, or React sees a different
+  // number of hooks between the landing page and the rest of the app.
+
+  if (bare) {
+    // The palette hook runs above regardless of route, so rendering it here
+    // costs no extra JavaScript and keeps ⌘K working site-wide.
+    return (
+      <>
+        {children}
+        {CommandPalette}
+        <ToastContainer />
+      </>
+    )
   }
+
+  if (!loading && !user && !isPublic) return null
 
   const NavItemLink = ({ item }: { item: NavItem }) => (
     <Link
@@ -127,7 +170,12 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   ]
 
   return (
-    <div role="button" tabIndex={0} className="layout-shell" onClick={() => userMenuOpen && setUserMenuOpen(false)}>
+    // Plain container. This used to carry role="button" + tabIndex={0} + an
+    // onClick, which made assistive tech announce the entire application as a
+    // single button and put it in the tab order. It only existed to dismiss
+    // the user menu on an outside click — which the document-level listener in
+    // the effect above already does.
+    <div className="layout-shell">
       {/* ── Desktop Sidebar — hidden when not logged in ── */}
       {user && (
       <aside className="layout-sidebar hidden md:flex sidebar-glass">
@@ -199,29 +247,55 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         {/* Top bar */}
         <header className="topbar-glass">
           <div className="flex items-center gap-2">
-            <button
-              className="md:hidden btn btn-ghost btn-icon topbar-menu-btn"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              aria-label="منو"
-            >
-              <Icon name={sidebarOpen ? 'close' : 'menu'} size={20} />
-            </button>
-            <Link href="/" className="md:hidden text-base font-bold text-gradient">Multiai</Link>
+            {/* Burger only opens something when there is a sidebar to open. */}
+            {user && (
+              <button
+                className="md:hidden btn btn-ghost btn-icon topbar-menu-btn"
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                aria-label="منو"
+              >
+                <Icon name={sidebarOpen ? 'close' : 'menu'} size={20} />
+              </button>
+            )}
+
+            {/* The brand used to be `md:hidden`, which left signed-out visitors
+                on a desktop with no logo and no way back to the home page —
+                /models and /pricing were dead ends. It is now always present,
+                and stands in for the marketing header on public routes. */}
+            <Link href="/" className="topbar-brand">
+              <img src="/logo.svg" alt="" width={24} height={24} />
+              <span>Multiai</span>
+            </Link>
+
+            {/* Public pages get the marketing links inline, since they have no
+                sidebar to carry them. */}
+            {!loading && !user && (
+              <nav className="topbar-public-nav" aria-label="پیمایش عمومی">
+                <Link href="/models">مدل‌ها</Link>
+                <Link href="/pricing">تعرفه‌ها</Link>
+                <Link href="/developer">مستندات</Link>
+              </nav>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => openPalette(true)}
-              className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-md)] border border-[var(--border)] text-xs text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text-secondary)] transition-all"
-            >
-              <Icon name="search" size={14} />
-              <span>جستجو</span>
-              <kbd className="text-[10px] bg-[var(--bg-surface)] px-1 rounded">⌘K</kbd>
-            </button>
+            {user && (
+              <button
+                onClick={() => openPalette(true)}
+                className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-md)] border border-[var(--border)] text-xs text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text-secondary)] transition-all"
+              >
+                <Icon name="search" size={14} />
+                <span>جستجو</span>
+                <kbd className="text-[10px] bg-[var(--bg-surface)] px-1 rounded">⌘K</kbd>
+              </button>
+            )}
             <LanguageToggle />
             <ThemeToggle />
             {!loading && !user && (
-              <Link href="/login" className="btn btn-primary btn-sm">ورود</Link>
+              <>
+                <Link href="/login" className="btn btn-ghost btn-sm">ورود</Link>
+                <Link href="/signup" className="btn btn-primary btn-sm">ثبت‌نام</Link>
+              </>
             )}
           </div>
         </header>
@@ -258,7 +332,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* ── Mobile sidebar overlay ─────────────────────────── */}
-      <div role="button" tabIndex={0} className={`mobile-overlay ${sidebarOpen ? 'mobile-overlay--open' : ''}`} onClick={() => setSidebarOpen(false)}>
+      <div className={`mobile-overlay ${sidebarOpen ? 'mobile-overlay--open' : ''}`} onClick={() => setSidebarOpen(false)}>
         <div className="mobile-overlay-bg" />
         <div
           className="mobile-drawer"

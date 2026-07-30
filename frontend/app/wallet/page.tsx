@@ -689,8 +689,8 @@ export default function WalletPage() {
 
       {/* ── Confirmation Modal ─────────────────────────────────────── */}
       {showConfirm && (
-        <div role="button" tabIndex={0} className="wallet-modal-overlay" onClick={() => setShowConfirm(false)}>
-          <div role="button" tabIndex={0} className="card wallet-modal-card" onClick={(e) => e.stopPropagation()}>
+        <div className="wallet-modal-overlay" onClick={() => setShowConfirm(false)}>
+          <div className="card wallet-modal-card" onClick={(e) => e.stopPropagation()}>
             <div style={{ textAlign: 'center', marginBottom: 20 }}>
               <div className="wallet-modal-icon">
                 <Icon name="wallet" size={28} className="text-accent" />

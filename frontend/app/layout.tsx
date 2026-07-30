@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next'
+import { AppShell } from '@/components/AppShell'
 import './globals.css'
 import '../styles-chat-sidebar.css'
 
@@ -9,16 +10,17 @@ export const metadata: Metadata = {
     template: '%s | Multiai',
   },
   description:
-    'دسترسی به بهترین مدل‌های هوش مصنوعی جهان با یک اشتراک: چت چندمدلی، ساخت عامل، و API سازگار با OpenAI — با پرداخت ریالی و پشتیبانی فارسی.',
+    'دسترسی به ۲۳ مدل هوش مصنوعی از یک پنل: چت چندمدلی، ساخت عامل، و API سازگار با OpenAI — با پرداخت به تومان به‌ازای مصرف و پشتیبانی فارسی.',
   applicationName: 'Multiai',
-  keywords: ['هوش مصنوعی', 'چت جی پی تی', 'GPT-4o', 'Claude', 'Gemini', 'API هوش مصنوعی'],
+  // Only models the platform actually serves (backend/litellm_config.yaml).
+  keywords: ['هوش مصنوعی', 'DeepSeek', 'Mistral', 'Gemini', 'Llama', 'API هوش مصنوعی'],
   openGraph: {
     type: 'website',
     locale: 'fa_IR',
     siteName: 'Multiai',
     title: 'Multiai — پلتفرم هوش مصنوعی فارسی',
     description:
-      'چت با بیش از ۲۰ مدل هوش مصنوعی، ساخت عامل، و یک API سازگار با OpenAI. پرداخت ریالی، بدون فیلترشکن.',
+      'چت با ۲۳ مدل هوش مصنوعی، ساخت عامل، و یک API سازگار با OpenAI. پرداخت به تومان به‌ازای مصرف، بدون فیلترشکن.',
   },
   robots: { index: true, follow: true },
 }
@@ -78,7 +80,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
       </head>
-      <body className="antialiased">{children}</body>
+      {/* AppShell owns <AuthProvider>. It was previously imported by nothing,
+          so every page fell back to the default auth context — whose login()
+          and signup() are no-ops that resolve, making the auth forms appear to
+          succeed while doing nothing. It also supplies the sidebar, topbar and
+          the .layout-content container that pages rely on for their gutters. */}
+      <body className="antialiased">
+        <AppShell>{children}</AppShell>
+      </body>
     </html>
   )
 }

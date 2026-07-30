@@ -18,7 +18,7 @@ import './landing.css'
 export const metadata: Metadata = {
   title: 'Multiai — دسترسی به همه‌ی مدل‌های هوش مصنوعی با یک اشتراک',
   description:
-    'با GPT-4o، Claude، Gemini، DeepSeek و بیش از ۲۰ مدل دیگر چت کنید، عامل هوش مصنوعی بسازید و همه را با یک API سازگار با OpenAI به محصولتان وصل کنید. پرداخت ریالی، بدون نیاز به فیلترشکن.',
+    'با ۲۳ مدل هوش مصنوعی — DeepSeek، Mistral، Gemini، Llama و بیشتر — چت کنید، عامل بسازید و همه را با یک API سازگار با OpenAI به محصولتان وصل کنید. پرداخت به تومان به‌ازای مصرف، بدون اشتراک ماهانه و بدون نیاز به فیلترشکن.',
   alternates: { canonical: '/' },
 }
 

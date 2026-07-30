@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Icon } from '../ui/Icon'
 import { Reveal } from './Reveal'
 import { CheckGlyph, ForwardArrow } from './primitives'
-import { API_POINTS, CODE_SAMPLES } from './content'
+import { API_BASE_URL, API_POINTS, CODE_SAMPLES } from './content'
 
 const LANGUAGES = Object.keys(CODE_SAMPLES)
 
@@ -45,7 +45,7 @@ export function ApiSection() {
           <span className="lp-eyebrow">برای توسعه‌دهندگان</span>
           <h2 className="lp-title">یک endpoint، همه‌ی مدل‌ها</h2>
           <p className="lp-lead">
-            آدرس پایه را به <span className="lp-latin">api.multiai.ir/v1</span> تغییر دهید.
+            آدرس پایه را به <span className="lp-latin">{API_BASE_URL}</span> تغییر دهید.
             همین. کتابخانه‌های رسمی OpenAI بدون هیچ تغییر دیگری کار می‌کنند.
           </p>
 

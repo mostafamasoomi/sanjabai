@@ -2,21 +2,6 @@
    Small shared pieces used across landing sections.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const FA_DIGITS = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹']
-
-/**
- * Formats a number for Persian readers: thousands separators plus Persian
- * digits. `toLocaleString('fa-IR')` would do this too, but it depends on the
- * runtime's ICU data — which differs between the Node server and the browser
- * and produced hydration mismatches. This is deterministic on both sides.
- */
-export function faNumber(value: number): string {
-  const grouped = Math.round(value)
-    .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, '٬')
-  return grouped.replace(/\d/g, (d) => FA_DIGITS[Number(d)])
-}
-
 /**
  * Provider brand mark. Rendered as a CSS mask rather than an <img> because the
  * source SVGs in /public/ai carry inconsistent fills — some are hard-coded

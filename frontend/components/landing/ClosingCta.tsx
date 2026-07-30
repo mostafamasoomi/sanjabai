@@ -8,8 +8,8 @@ export function ClosingCta() {
         <Reveal className="lp-cta">
           <h2 className="lp-title">امروز شروع کنید</h2>
           <p className="lp-lead">
-            ثبت‌نام کمتر از یک دقیقه طول می‌کشد و اعتبار اولیه روی حسابتان می‌نشیند. کارت
-            اعتباری لازم نیست.
+            ثبت‌نام کمتر از یک دقیقه طول می‌کشد و رایگان است. کارت اعتباری لازم نیست — کیف
+            پول را هر وقت خواستید شارژ کنید.
           </p>
           <div className="lp-hero__actions">
             <a href="/signup" className="lp-btn lp-btn--primary lp-btn--lg">

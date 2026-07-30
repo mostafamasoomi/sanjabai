@@ -86,7 +86,7 @@ services:
     build:
       context: ./bot
       dockerfile: Dockerfile
-    restart: unless-stopped
+    restart: on-failure:3
     depends_on:
       - multiai_api
     environment:

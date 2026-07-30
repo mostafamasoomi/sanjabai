@@ -132,7 +132,7 @@ code, pre { font-family: var(--font-mono); }
   display: inline-flex; align-items: center; gap: 0.4rem;
   padding: 0px 28px; border-radius: 9999px;
   font-size: 18.08px; font-weight: 400; text-decoration: none;
-  cursor: pointer; border: none; transition: all 0.2s;
+  cursor: pointer; border: none; transition: background-color 0.2s, color 0.2s, transform 0.1s, box-shadow 0.2s;
   font-family: var(--font-body);
 }
 .motion-btn-primary {
@@ -442,10 +442,29 @@ code, pre { font-family: var(--font-mono); }
 .motion-faq { max-width: 48rem; margin: 0 auto; padding: 0 1rem; }
 .motion-faq-item { border-top: 1px solid var(--border); }
 .motion-faq-item dt {
-  font-weight: 500; padding: 1.25rem 0 0.75rem; cursor: pointer;
-  color: var(--text); font-size: 1rem; transition: color 0.2s;
+  font-weight: 500;
+  color: var(--text);
 }
 .motion-faq-item dt:hover { color: var(--accent); }
+.motion-faq-trigger:hover { color: var(--accent); }
+.motion-faq-trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 0 0.75rem;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.motion-faq-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
 .motion-faq-item dd { color: var(--text-muted); font-size: 0.9rem; line-height: 1.9; margin: 0 0 1.5rem; }
 
 /* ── Hero canvas overlay for full-page dark effect ─────────────────────────── */
@@ -465,6 +484,88 @@ code, pre { font-family: var(--font-mono); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
   .motion-strip-track { animation: none !important; }
+}
+
+/* ── Hero glow effect ────────────────────────────────────────────────────── */
+.motion-hero::before {
+  content: '';
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(192,132,252,0.15) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+  animation: heroGlow 8s ease-in-out infinite alternate;
+}
+@keyframes heroGlow {
+  0% { opacity: 0.6; transform: translateX(-50%) scale(1); }
+  100% { opacity: 1; transform: translateX(-50%) scale(1.2); }
+}
+
+/* ── Button press feedback ───────────────────────────────────────────────── */
+.motion-btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.97);
+  transition: transform 100ms ease-out;
+}
+.motion-nav-cta:active {
+  transform: scale(0.97);
+  transition: transform 100ms ease-out;
+}
+
+/* ── Card glow on hover ──────────────────────────────────────────────────── */
+.motion-feature-card:hover {
+  border-color: rgba(192,132,252,0.4);
+  box-shadow: 0 0 40px rgba(192,132,252,0.1), 0 20px 70px rgba(73,35,140,0.15);
+}
+.motion-feature-card:hover .motion-feature-icon {
+  animation: iconPulse 1.5s ease-in-out infinite;
+}
+@keyframes iconPulse {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.1); opacity: 1; }
+}
+
+/* ── Pricing card enhanced ───────────────────────────────────────────────── */
+.motion-pricing-card {
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.4s, border-color 0.3s;
+}
+.motion-pricing-card:hover {
+  transform: translateY(-8px) scale(1.02);
+}
+.motion-pricing-card.highlighted {
+  box-shadow: 0 0 30px rgba(192,132,252,0.15);
+}
+.motion-pricing-card.highlighted:hover {
+  box-shadow: 0 0 50px rgba(192,132,252,0.25), 0 20px 60px rgba(73,35,140,0.2);
+}
+
+/* ── FAQ expand animation ────────────────────────────────────────────────── */
+.motion-faq-item dd {
+  animation: faqExpand 0.3s ease-out;
+}
+@keyframes faqExpand {
+  0% { opacity: 0; transform: translateY(-8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Strip chip glow ─────────────────────────────────────────────────────── */
+.motion-strip-chip {
+  transition: border-color 0.2s, box-shadow 0.3s;
+}
+.motion-strip-chip:hover {
+  border-color: rgba(192,132,252,0.4);
+  box-shadow: 0 0 20px rgba(192,132,252,0.1);
+}
+
+/* ── Smooth section reveal ────────────────────────────────────────────────── */
+.motion-section {
+  will-change: transform, opacity;
+}
+.motion-section-alt {
+  background: linear-gradient(180deg, var(--bg-alt) 0%, var(--bg) 100%);
 }
 
 /* ── Physics cards (from source) ─────────────────────────────────────── */

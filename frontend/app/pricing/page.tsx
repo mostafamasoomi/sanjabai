@@ -56,7 +56,7 @@ function getModelTier(modelId: string): { label: string; color: string } {
   if (modelId.includes('flash') && !modelId.includes('agnes')) return { label: 'اقتصادی', color: 'var(--positive)' }
   if (modelId.includes('pro-ultraspeed')) return { label: 'سریع', color: 'var(--warning)' }
   if (modelId.includes('pro')) return { label: 'پیشرفته', color: 'var(--accent)' }
-  if (modelId.includes('large') || modelId.includes('medium')) return { label: 'حرفهای', color: 'var(--accent)' }
+  if (modelId.includes('large') || modelId.includes('medium')) return { label: 'حرفه‌ای', color: 'var(--accent)' }
   return { label: 'اقتصادی', color: 'var(--positive)' }
 }
 
@@ -86,7 +86,7 @@ export default function PricingPage() {
         if (data.exchangeRate) setExchangeRate(data.exchangeRate)
       }
     } catch {
-      toast('خطا در دریافت اطلاعات مدلها', 'error')
+      toast('خطا در دریافت اطلاعات مدل‌ها', 'error')
     } finally {
       setLoading(false)
     }
@@ -133,13 +133,13 @@ export default function PricingPage() {
       <div style={{ textAlign: 'center', marginBottom: 48 }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 16px', borderRadius: 'var(--radius-full)', background: 'var(--accent-dim)', marginBottom: 20 }}>
           <Icon name="sparkles" size={16} className="text-accent" />
-          <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>تعرفه مدلها</span>
+          <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>تعرفه مدل‌ها</span>
         </div>
         <h1 style={{ fontSize: 32, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12, lineHeight: 1.4 }}>
           قیمت‌گذاری شفاف، پرداخت به ازای مصرف
         </h1>
         <p style={{ fontSize: 15, color: 'var(--text-secondary)', maxWidth: 560, margin: '0 auto', lineHeight: 1.7 }}>
-          هر مدل هوش مصنوعی قیمت مشخصی دارد. فقط به اندازه مصرف واقعی خود پرداخت کنید. قیمتها به تومان به ازای هر ۱ میلیون توکن هستند.
+          هر مدل هوش مصنوعی قیمت مشخصی دارد. فقط به اندازه مصرف واقعی خود پرداخت کنید. قیمت‌ها به تومان به ازای هر ۱ میلیون توکن هستند.
         </p>
       </div>
 
@@ -254,7 +254,7 @@ export default function PricingPage() {
             <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>واحد قیمت</span>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-            قیمتها به <strong>تومان</strong> به ازای هر <strong>۱ میلیون توکن</strong> هستند. یک پیام معمولی حدود ۵۰۰-۲۰۰۰ توکن مصرف میکند.
+            قیمت‌ها به <strong>تومان</strong> به ازای هر <strong>۱ میلیون توکن</strong> هستند. یک پیام معمولی حدود ۵۰۰-۲۰۰۰ توکن مصرف می‌کند.
           </p>
         </div>
         <div className="card" style={{ padding: 20 }}>

@@ -319,7 +319,7 @@ export default function OnboardingPage() {
                 </h1>
                 <p className="text-[var(--text-secondary)] mt-3 max-w-md mx-auto leading-relaxed">
                   چند ثانیه وقت بدهید تا همهچیز را برای شما آماده کنیم. فقط چند قدم ساده تا شروع چت با
-                  بهترین مدلهای هوش مصنوعی دنیا.
+                  بهترین مدل‌های هوش مصنوعی دنیا.
                 </p>
                 <button className="btn btn-primary btn-lg mt-8" onClick={() => setStep(1)}>
                   بیا شروع کنیم
@@ -388,9 +388,9 @@ export default function OnboardingPage() {
             {/* STEP 2 — Model selection (browse catalog & pick favorites) */}
             {step === 2 && (
               <div className="fade-in slide-up">
-                <h2 className="text-2xl sm:text-3xl font-bold text-center mb-2">مدلهای مورد علاقه شما</h2>
+                <h2 className="text-2xl sm:text-3xl font-bold text-center mb-2">مدل‌های موردعلاقه شما</h2>
                 <p className="text-center text-[var(--text-secondary)] mb-6">
-                  از بین مدل‌های موجود، ۲ تا ۳ مدل مورد علاقه‌تان را انتخاب کنید.
+                  از بین مدل‌های موجود، ۲ تا ۳ مدل موردعلاقه‌تان را انتخاب کنید.
                 </p>
 
                 {catalogLoading ? (
@@ -482,7 +482,7 @@ export default function OnboardingPage() {
                 </h2>
                 <p className="text-center text-[var(--text-secondary)] mb-6">
                   {favoriteIds.length > 0
-                    ? 'بر اساس مدل‌های مورد علاقه و هدف شما، این مدل پیشنهاد می‌شود.'
+                    ? 'بر اساس مدل‌های موردعلاقه و هدف شما، این مدل پیشنهاد می‌شود.'
                     : 'این مدل برای نیاز شما بهینه شده — هر وقت خواستید می‌توانید عوضش کنید.'}
                 </p>
 

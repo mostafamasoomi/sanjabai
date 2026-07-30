@@ -884,7 +884,7 @@ export default function ProfilePage() {
         </p>
         <button className="btn btn-danger" disabled style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <Icon name="trash" size={14} />
-          {isFa ? 'حذف حساب (بهزودی)' : 'Delete Account (coming soon)'}
+          {isFa ? 'حذف حساب (به‌زودی)' : 'Delete Account (coming soon)'}
         </button>
       </div>
     </div>

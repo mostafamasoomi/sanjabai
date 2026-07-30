@@ -10,12 +10,13 @@ Services (see `docker-compose.multiai.yml`): `multiai_pg` (Postgres 16 + pgvecto
 
 ## Commands
 
-### Backend (`backend/`, Python 3.11)
+### Backend (`backend/`, Python 3.11 at runtime — CI tests run on 3.12)
 
 ```bash
 pip install -r backend/requirements.txt
 
-# Run the API locally (expects DATABASE_URL/REDIS_URL/LITELLM_HOST env vars, see below)
+# Run the API locally — requires DATABASE_URL/REDIS_URL/LITELLM_HOST and ADMIN_TOKEN
+# (database.py raises at import time if ADMIN_TOKEN is unset), see .env.example
 cd backend && uvicorn app:app --reload --port 8000
 
 # Run the full test suite
@@ -35,7 +36,7 @@ Tests mock Redis/asyncpg/`migrate` at import time in `tests/conftest.py` and dri
 
 ```bash
 cd frontend && npm ci
-npm run dev        # dev server on :3003 (see playwright.config.ts baseURL)
+npm run dev        # next dev, defaults to :3000 — Playwright/docker use :3003 (npx next dev -p 3003)
 npm run build       # next build (standalone output)
 npm run lint         # next lint
 npm run analyze      # ANALYZE=true next build, opens bundle treemap

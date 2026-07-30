@@ -301,7 +301,7 @@ export default function ApiKeysPage() {
           <div>
             <h3 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span className="apikeys-doc-num">۳</span>
-              لیست مدلها
+              لیست مدل‌ها
             </h3>
             <pre className="apikeys-pre">
               <code>{`curl -H "Authorization: Bearer *** \\

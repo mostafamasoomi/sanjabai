@@ -69,7 +69,7 @@ export default function SignupPage() {
             <Icon name="sparkles" size={28} className="text-white" />
           </div>
           <h1 className="text-xl font-extrabold mb-1 text-gradient">ثبت‌نام در Multiai</h1>
-          <p className="text-sm text-[var(--text-dim)]">دسترسی به همه مدلهای هوش مصنوعی</p>
+          <p className="text-sm text-[var(--text-dim)]">دسترسی به همه مدل‌های هوش مصنوعی</p>
         </div>
 
         {error && (

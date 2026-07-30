@@ -120,7 +120,7 @@ const NAV_ITEMS: { key: Page; label: string; icon: IconName }[] = [
   { key: 'discounts', label: 'تخفیف‌ها', icon: 'wallet' },
   { key: 'about', label: 'درباره ما', icon: 'notification' },
   { key: 'proxy', label: 'پروکسی', icon: 'security' },
-  { key: 'models', label: 'مدلها', icon: 'code' },
+  { key: 'models', label: 'مدل‌ها', icon: 'code' },
   { key: 'security', label: 'امنیت', icon: 'lock' },
 ]
 
@@ -562,7 +562,7 @@ export default function AdminPage() {
               <Icon name="settings" size={28} className="text-accent" />
             </div>
             <h1 className="text-xl font-bold text-primary">پنل مدیریت</h1>
-            <p className="text-sm mt-1 text-muted">Multiai Admin Dashboard</p>
+            <p className="text-sm mt-1 text-muted">داشبورد مدیریت Multiai</p>
           </div>
 
           <div className="space-y-4">
@@ -704,7 +704,7 @@ export default function AdminPage() {
           </div>
 
           {/* ─────────────────────────────────────────────────────────────
-              Dashboard
+              داشبورد
              ───────────────────────────────────────────────────────────── */}
           {page === 'dashboard' && (
             <div className="space-y-6">
@@ -925,8 +925,8 @@ export default function AdminPage() {
                     <StatCard icon="models" label="توکن مصرفی" value={userDetail.stats.total_tokens.toLocaleString('fa-IR')} color="#3b82f6" />
                     <StatCard icon="chat" label="گفتگوها" value={userDetail.stats.conversation_count} color="#a855f7" />
                     <StatCard icon="pricing" label="هزینه کل" value={userDetail.stats.total_cost.toLocaleString('fa-IR')} color="#f59e0b" />
-                    <StatCard icon="wallet" label="پرداختها" value={userDetail.stats.payment_count} color="#06b6d4" />
-                    <StatCard icon="dashboard" label="درخواستها" value={userDetail.stats.usage_events} color="#ec4899" />
+                    <StatCard icon="wallet" label="پرداخت‌ها" value={userDetail.stats.payment_count} color="#06b6d4" />
+                    <StatCard icon="dashboard" label="درخواست‌ها" value={userDetail.stats.usage_events} color="#ec4899" />
                   </div>
 
                   {/* User Info Card */}
@@ -963,7 +963,7 @@ export default function AdminPage() {
                         style={userDetailTab === tab ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : { color: 'var(--text-secondary)' }}
                         onClick={() => loadUserTab(tab)}
                       >
-                        {{ overview: 'نمای کلی', conversations: 'گفتگوها', usage: 'مصرف توکن', ledger: 'تراکنشها', payments: 'پرداختها' }[tab]}
+                        {{ overview: 'نمای کلی', conversations: 'گفتگوها', usage: 'مصرف توکن', ledger: 'تراکنش‌ها', payments: 'پرداخت‌ها' }[tab]}
                       </button>
                     ))}
                   </div>
@@ -1052,7 +1052,7 @@ export default function AdminPage() {
                     )}
                     {!loadingDetail && userDetailTab === 'payments' && userTabData && (
                       <div className="space-y-4">
-                        <h3 className="text-sm font-bold text-primary">پرداختها</h3>
+                        <h3 className="text-sm font-bold text-primary">پرداخت‌ها</h3>
                         <table className="admin-table w-full text-sm">
                           <thead><tr>
                             <th className="text-right p-2">شناسه</th><th className="text-right p-2">مبلغ</th>
@@ -1406,7 +1406,7 @@ export default function AdminPage() {
              ───────────────────────────────────────────────────────────── */}
           {page === 'models' && (
             <div className="space-y-6">
-              <SectionHeader title="مدلهای فعال" subtitle={`${models.length} مدل در دسترس`} />
+              <SectionHeader title="مدل‌های فعال" subtitle={`${models.length} مدل در دسترس`} />
 
               {/* Org Default Model */}
               <div className="admin-card">
@@ -1460,7 +1460,7 @@ export default function AdminPage() {
           )}
 
           {/* ─────────────────────────────────────────────────────────────
-              Security Dashboard
+              داشبورد امنیت
              ───────────────────────────────────────────────────────────── */}
           {page === 'security' && (
             <div className="space-y-6">

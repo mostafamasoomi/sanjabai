@@ -344,7 +344,7 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
 
                   <div className="model-picker-section">
                     <div className="model-picker-section-title">
-                      <span>همه مدلها</span>
+                      <span>همه مدل‌ها</span>
                       <span className="model-picker-section-count">{filtered.length}</span>
                     </div>
 

@@ -73,7 +73,7 @@ const PRESETS = [
   { icon: 'code' as const, label: 'کدنویسی', description: 'نوشتن و دیباگ کد', prompt: 'یک تابع در ' },
   { icon: 'chat' as const, label: 'ترجمه', description: 'ترجمه متن به فارسی', prompt: 'متن زیر را به فارسی روان ترجمه کن:\n\n' },
   { icon: 'search' as const, label: 'خلاصه‌سازی', description: 'خلاصه کردن متن طولانی', prompt: 'متن زیر را خلاصه کن:\n\n' },
-  { icon: 'dashboard' as const, label: 'تحلیل', description: 'تحلیل دادهها و اطلاعات', prompt: 'دادههای زیر را تحلیل کن:\n\n' },
+  { icon: 'dashboard' as const, label: 'تحلیل', description: 'تحلیل دادهها و اطلاعات', prompt: 'داده‌های زیر را تحلیل کن:\n\n' },
 ]
 
 function generateId() { return Date.now().toString(36) + Math.random().toString(36).slice(2) }
@@ -507,7 +507,7 @@ export default function ChatPage() {
   }, [models, model]);
 
   useEffect(() => {
-    if (catalogError) toast('خطا در دریافت فهرست مدلها', 'error')
+    if (catalogError) toast('خطا در دریافت فهرست مدل‌ها', 'error')
   }, [catalogError])
 
   const scrollToBottom = useCallback(() => {
@@ -891,7 +891,7 @@ export default function ChatPage() {
               <Icon name="models" size={18} className="text-[var(--accent)]" />
               {catalogError ? (
                 <span className="text-sm text-[var(--danger)] flex items-center gap-1">
-                  <Icon name="close" size={14} /> خطا در بارگذاری مدلها
+                  <Icon name="close" size={14} /> خطا در بارگذاری مدل‌ها
                 </span>
               ) : (
                 <ModelPicker
@@ -927,7 +927,7 @@ export default function ChatPage() {
               <Link
                 href="/compare"
                 className="conv-toggle-btn no-underline"
-                title="مقایسه مدلها"
+                title="مقایسه مدل‌ها"
               >
                 <Icon name="compare" size={16} />
               </Link>
@@ -971,7 +971,7 @@ export default function ChatPage() {
             <EmptyState
               icon="models"
               title="مدلی در دسترس نیست"
-              description="در حال حاضر فهرست مدلها خالی است. لطفاً اتصال را بررسی کرده و دوباره تلاش کنید."
+              description="در حال حاضر فهرست مدل‌ها خالی است. لطفاً اتصال را بررسی کرده و دوباره تلاش کنید."
             />
           )}
 
@@ -1086,9 +1086,9 @@ export default function ChatPage() {
                     اعتبار شما تمام شده!
                   </div>
                   <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                    برای ادامه استفاده از مدلهای هوش مصنوعی، نیاز به شارژ حساب دارید.
+                    برای ادامه استفاده از مدل‌های هوش مصنوعی، نیاز به شارژ حساب دارید.
                     <br />
-                    با شارژ حساب میتونید بدون محدودیت از تمام مدلها استفاده کنید.
+                    با شارژ حساب میتونید بدون محدودیت از تمام مدل‌ها استفاده کنید.
                   </div>
                   <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
                     <a href="/pricing" className="btn btn-primary" style={{ textDecoration: 'none', padding: '10px 24px', borderRadius: '10px', fontWeight: 600, fontSize: '0.9rem' }}>

@@ -63,3 +63,4 @@ frontend/task_plan.md
 run_tests.py
 test_final_demo.py
 infra/pgvector/
+backend/Dockerfile.litellm

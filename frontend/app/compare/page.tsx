@@ -75,7 +75,7 @@ export default function ComparePage() {
   }, [models, modelA, modelB])
 
   useEffect(() => {
-    if (catalogError) toast('خطا در دریافت فهرست مدلها', 'error')
+    if (catalogError) toast('خطا در دریافت فهرست مدل‌ها', 'error')
   }, [catalogError])
 
   const canCompare = useMemo(
@@ -233,7 +233,7 @@ export default function ComparePage() {
       {/* Header */}
       <div className="compare-header">
         <div>
-          <h1 className="text-2xl font-bold text-gradient">مقایسه مدلها</h1>
+          <h1 className="text-2xl font-bold text-gradient">مقایسه مدل‌ها</h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1">
             دو مدل را انتخاب کنید، یک prompt بنویسید و پاسخ‌ها را کنار هم مقایسه کنید
           </p>
@@ -328,7 +328,7 @@ export default function ComparePage() {
         <EmptyState
           icon="compare"
           title="مدلی برای مقایسه نیست"
-          description="فهرست مدلها خالی است؛ پس از بارگذاری مدلها می‌توانید آنها را مقایسه کنید."
+          description="فهرست مدل‌ها خالی است؛ پس از بارگذاری مدل‌ها می‌توانید آنها را مقایسه کنید."
         />
       )}
 

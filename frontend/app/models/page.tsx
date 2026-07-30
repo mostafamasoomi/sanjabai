@@ -43,7 +43,7 @@ export default function ModelsPage() {
       const r = await fetch("/api/admin/test-models", { headers: { Authorization: `Bearer ${t}` } });
       const d = await r.json();
       setTestResults(d.results || []);
-    } catch { toast("خطا در تست مدلها", "error"); }
+    } catch { toast("خطا در تست مدل‌ها", "error"); }
     finally { setTesting(false); }
   };
     const { models, loading, error } = useCatalog()
@@ -53,7 +53,7 @@ export default function ModelsPage() {
 
   // Surface catalog load failures as a toast (design-system error state).
   useEffect(() => {
-    if (error) toast('خطا در دریافت فهرست مدلها', 'error')
+    if (error) toast('خطا در دریافت فهرست مدل‌ها', 'error')
   }, [error])
 
   const providers = Array.from(new Set(models.map((m) => m.provider)))
@@ -68,8 +68,8 @@ export default function ModelsPage() {
     return (
       <div className="py-6">
         <div className="mb-8">
-          <h1 className="aurora-section-title text-2xl font-bold mb-2">مدلهای هوش مصنوعی</h1>
-          <p className="text-[var(--text-secondary)]">در حال بارگذاری فهرست مدلها...</p>
+          <h1 className="aurora-section-title text-2xl font-bold mb-2">مدل‌های هوش مصنوعی</h1>
+          <p className="text-[var(--text-secondary)]">در حال بارگذاری فهرست مدل‌ها...</p>
         </div>
         {/* Search bar skeleton */}
         <div className="aurora-search-bar mb-6">
@@ -103,12 +103,12 @@ export default function ModelsPage() {
     return (
       <div className="py-6">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold mb-2">مدلهای هوش مصنوعی</h1>
+          <h1 className="text-2xl font-bold mb-2">مدل‌های هوش مصنوعی</h1>
         </div>
         <EmptyState
           icon="close"
           title="خطا در بارگذاری"
-          description="در حال حاضر امکان دریافت فهرست مدلها وجود ندارد. لطفاً بعداً تلاش کنید."
+          description="در حال حاضر امکان دریافت فهرست مدل‌ها وجود ندارد. لطفاً بعداً تلاش کنید."
         />
       </div>
     )
@@ -118,11 +118,11 @@ export default function ModelsPage() {
     <div className="py-6">
       <div className="mb-8 flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="aurora-section-title text-2xl font-bold mb-2">مدلهای هوش مصنوعی</h1>
-          <p className="text-[var(--text-secondary)] leading-relaxed" style={{maxWidth: '480px'}}>همه مدلها از یک پنل — بهترین مدل را برای نیاز خود انتخاب کنید</p>
+          <h1 className="aurora-section-title text-2xl font-bold mb-2">مدل‌های هوش مصنوعی</h1>
+          <p className="text-[var(--text-secondary)] leading-relaxed" style={{maxWidth: '480px'}}>همه مدل‌ها از یک پنل — بهترین مدل را برای نیاز خود انتخاب کنید</p>
         </div>
         <button className="btn btn-sm btn-secondary" onClick={handleTestModels} disabled={testing}>
-          {testing ? '⏳ در حال تست...' : '🧪 تست همه مدلها'}
+          {testing ? '⏳ در حال تست...' : '🧪 تست همه مدل‌ها'}
         </button>
       </div>
 
@@ -221,7 +221,7 @@ export default function ModelsPage() {
       {/* Test results */}
       {testResults.length > 0 && (
         <div className="mt-6 card p-4">
-          <h3 className="text-sm font-bold mb-3">نتایج تست مدلها ({testResults.filter((r:any)=>r.ok).length}/{testResults.length} فعال)</h3>
+          <h3 className="text-sm font-bold mb-3">نتایج تست مدل‌ها ({testResults.filter((r:any)=>r.ok).length}/{testResults.length} فعال)</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
             {testResults.map((r:any) => (
               <div key={r.id} className={`flex items-center gap-2 p-2 rounded ${r.ok ? 'bg-[var(--positive)]/10' : 'bg-[var(--danger)]/10'}`}>

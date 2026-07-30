@@ -76,7 +76,7 @@ const faTime = (iso: string) => new Date(iso).toLocaleTimeString('fa-IR', { hour
 
 const planLabels: Record<string, string> = {
   free: 'رایگان',
-  pro: 'حرفهای',
+  pro: 'حرفه‌ای',
   enterprise: 'سازمانی',
 }
 
@@ -704,7 +704,7 @@ export default function DashboardPage() {
               />
               <QuickAction
                 icon="models"
-                label="مدلها"
+                label="مدل‌ها"
                 description={`${faNum(models.length)} مدل در دسترس`}
                 onClick={() => router.push('/models')}
               />

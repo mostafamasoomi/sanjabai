@@ -19,6 +19,33 @@ frontend/test-results/
 .pytest_cache/
 .mypy_cache/
 .hermes/plans/
+# Internal audit/report/planning docs — not for public release
+audit/
+audit-v2/
+API_REVIEW_REPORT.md
+COMPETITIVE_STRATEGY.md
+DESIGN_AUDIT_MULTIAI.md
+FINAL_REPORT.md
+FINAL_REVIEW_REPORT.md
+FINAL_SENIOR_REVIEW.md
+FRONTEND_REFACTOR_REPORT.md
+IMPECCABLE_PROMPT.md
+MODELS_SETUP_REPORT.md
+MVP_FINAL_AUDIT_*.md
+OPENROUTER_RESEARCH.md
+PLANNING.md
+PRICING_SETUP_REPORT.md
+PROFILE_AUTONOMY_REPORT.md
+RAG_ARCHITECTURE_ANALYSIS.md
+SECURITY_AUDIT_REPORT.md
+SENIOR_REVIEW_FINAL.md
+TEST_REPORT.md
+UI_PREMIUM_REPORT.md
+UI_REDESIGN_REPORT.md
+UXUI_REVIEW_REPORT.md
+demo_test_results.json
+# Wazuh agent registration key — do not commit
+wazuh-agent/client.keys
 AUDIT_PLAN.md
 MULTIAI_AUDIT_REPORT.md
 MVP_STATUS.md

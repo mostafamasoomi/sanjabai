@@ -370,7 +370,7 @@ multiai/
 
 ## 📄 License
 
-Proprietary — All rights reserved.
+MIT — see [LICENSE](./LICENSE).
 
 ---
 

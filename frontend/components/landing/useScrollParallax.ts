@@ -14,11 +14,21 @@ import { useEffect, type RefObject } from 'react'
  * IntersectionObserver): there's no reason to keep computing an offset for
  * a background layer that scrolled out of view an hour ago.
  */
-export function useScrollParallax(
-  boundary: RefObject<HTMLElement | null>,
-  layers: RefObject<HTMLElement | null>[],
-  depths: readonly number[],
-) {
+interface ParallaxLayer {
+  ref: RefObject<HTMLElement | null>
+  /** Fraction of scroll speed this layer drifts at. */
+  depth: number
+  /**
+   * The layer's own resting x-translate (e.g. '-50%' for a blob centered via
+   * `inset-inline-start: 50%` + `translate: -50% 0` in CSS). `el.style.translate`
+   * is a full property overwrite, not a merge with the stylesheet value, so
+   * without this every layer's horizontal position would collapse to 0 the
+   * instant the scroll handler first ran.
+   */
+  baseX?: string
+}
+
+export function useScrollParallax(boundary: RefObject<HTMLElement | null>, layers: ParallaxLayer[]) {
   useEffect(() => {
     const root = boundary.current
     if (!root) return
@@ -35,10 +45,10 @@ export function useScrollParallax(
     const apply = () => {
       frame = 0
       const y = window.scrollY
-      layers.forEach((layer, i) => {
-        const el = layer.current
-        if (el) el.style.translate = `0 ${(y * depths[i]).toFixed(1)}px`
-      })
+      for (const { ref, depth, baseX = '0' } of layers) {
+        const el = ref.current
+        if (el) el.style.translate = `${baseX} ${(y * depth).toFixed(1)}px`
+      }
     }
 
     const onScroll = () => {
@@ -67,5 +77,5 @@ export function useScrollParallax(
       window.removeEventListener('scroll', onScroll)
       cancelAnimationFrame(frame)
     }
-  }, [boundary, layers, depths])
+  }, [boundary, layers])
 }

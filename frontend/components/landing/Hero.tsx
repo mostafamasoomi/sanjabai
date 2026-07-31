@@ -7,8 +7,15 @@ import { useTilt } from './useTilt'
 import { useScrollParallax } from './useScrollParallax'
 
 /** Each blob drifts at its own fraction of scroll speed — the closer the
- * fraction is to 0, the farther back the layer reads as sitting. */
-const AURA_DEPTHS = [0.06, 0.1, 0.15] as const
+ * fraction is to 0, the farther back the layer reads as sitting. `baseX`
+ * mirrors each blob's own CSS `translate` x-component (blob 1 is centered
+ * via `inset-inline-start: 50%` + `translate: -50% 0`), since the parallax
+ * hook writes the whole `translate` property and would otherwise wipe it. */
+const AURA_DEPTHS = [
+  { depth: 0.06, baseX: '-50%' },
+  { depth: 0.1, baseX: '0' },
+  { depth: 0.15, baseX: '0' },
+] as const
 
 /* ── Rotating headline word ───────────────────────────────────────────────── */
 
@@ -159,8 +166,15 @@ export function Hero() {
   const blobRef1 = useRef<HTMLSpanElement>(null)
   const blobRef2 = useRef<HTMLSpanElement>(null)
   const blobRef3 = useRef<HTMLSpanElement>(null)
-  const blobLayers = useMemo(() => [blobRef1, blobRef2, blobRef3], [])
-  useScrollParallax(sectionRef, blobLayers, AURA_DEPTHS)
+  const blobLayers = useMemo(
+    () => [
+      { ref: blobRef1, ...AURA_DEPTHS[0] },
+      { ref: blobRef2, ...AURA_DEPTHS[1] },
+      { ref: blobRef3, ...AURA_DEPTHS[2] },
+    ],
+    [],
+  )
+  useScrollParallax(sectionRef, blobLayers)
 
   return (
     <section className="lp-hero" ref={sectionRef}>

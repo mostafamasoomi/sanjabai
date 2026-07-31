@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
+import { faNum, faPrice } from '@/lib/format'
 
 const AUTONOMY_LEVELS = [
   {
@@ -399,7 +400,7 @@ export default function ProfilePage() {
             <div>
               <span className="profile-stat-label">{isFa ? 'موجودی' : 'Balance'}</span>
               <span className="profile-stat-value text-gradient">
-                {balance !== null ? `${balance.toLocaleString(isFa ? 'fa-IR' : 'en-US')} ${isFa ? 'تومان' : 'IRR'}` : '—'}
+                {balance === null ? '—' : isFa ? faPrice(balance) : `${balance.toLocaleString('en-US')} IRR`}
               </span>
             </div>
           </div>
@@ -408,7 +409,11 @@ export default function ProfilePage() {
             <div>
               <span className="profile-stat-label">{isFa ? 'مصرف ماهانه' : 'Monthly usage'}</span>
               <span className="profile-stat-value">
-                {usage?.monthly ? `${(usage.monthly.inp + usage.monthly.out || 0).toLocaleString(isFa ? 'fa-IR' : 'en-US')} ${isFa ? 'توکن' : 'tokens'}` : '—'}
+                {!usage?.monthly
+                  ? '—'
+                  : isFa
+                    ? `${faNum(usage.monthly.inp + usage.monthly.out || 0)} توکن`
+                    : `${(usage.monthly.inp + usage.monthly.out || 0).toLocaleString('en-US')} tokens`}
               </span>
             </div>
           </div>

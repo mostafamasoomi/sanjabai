@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { Skeleton } from '@/components/ui'
+import { faNum } from '@/lib/format'
 import { HEALTH_LABEL, HEALTH_TONE } from '@/app/chat/components/modelUtils'
 import type { HealthStatus, HealthSummary, ModelHealthEntry } from '@/types/catalog'
 
@@ -24,9 +25,10 @@ const OVERALL_COPY: Record<HealthSummary['overall'], { label: string; tone: stri
 
 const STATUS_ORDER: HealthStatus[] = ['down', 'degraded', 'unknown', 'healthy']
 
+/** Thin wrapper: this page always rounds before formatting. */
 function fa(n: number | null | undefined, fallback = '—'): string {
   if (n == null || Number.isNaN(n)) return fallback
-  return Math.round(n).toLocaleString('fa-IR')
+  return faNum(Math.round(n), { fallback })
 }
 
 function relativeTime(iso: string | null): string {

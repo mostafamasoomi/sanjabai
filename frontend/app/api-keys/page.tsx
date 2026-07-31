@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
+import { faNum } from '@/lib/format'
 
 type ApiKeyInfo = {
   id: number
@@ -245,7 +246,7 @@ export default function ApiKeysPage() {
                         {k.usage_count !== undefined && (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                             <Icon name="chart" size={11} />
-                            {k.usage_count.toLocaleString('fa-IR')} درخواست
+                            {faNum(k.usage_count)} درخواست
                           </span>
                         )}
                       </div>

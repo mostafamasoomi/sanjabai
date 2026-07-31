@@ -241,7 +241,7 @@ export default function PromptsPage() {
                   {prompt.category}
                 </span>
               </div>
-              <h3 className="prompt-card-title">{prompt.title}</h3>
+              <h2 className="prompt-card-title">{prompt.title}</h2>
               <p className="prompt-card-desc">{prompt.description}</p>
               <div className="prompt-card-footer">
                 <span className="prompt-card-cta">

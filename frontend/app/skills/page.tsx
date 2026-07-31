@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon, type IconName } from '@/components/ui/Icon'
+import { faNum } from '@/lib/format'
 
 /* ═══════════════════════════════════════════════════════════════
    Types
@@ -83,9 +84,7 @@ const CATEGORY_LABELS: Record<string, string> = {
    Helpers
    ═══════════════════════════════════════════════════════════════ */
 
-function faNumber(n: number): string {
-  return n.toLocaleString('fa-IR')
-}
+const faNumber = faNum
 
 function renderStars(rating: number, size = 14) {
   const stars = []
@@ -167,9 +166,9 @@ function SkillCard({ skill, onUse }: { skill: Skill; onUse: (s: Skill) => void }
       </div>
 
       {/* Title */}
-      <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.4 }}>
+      <h2 style={{ fontSize: 'var(--fs-md)', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.5 }}>
         {skill.title_fa || skill.title}
-      </h3>
+      </h2>
 
       {/* Description preview */}
       <p
@@ -868,9 +867,8 @@ export default function SkillsPage() {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1.5rem' }}>
         <Icon name="sparkles" size={48} className="text-[var(--text-muted)]" style={{ opacity: 0.4 }} />
         <div className="text-center">
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
-            وارد شوید
-          </h2>
+          {/* h1: this branch replaces the whole page, so it owns the outline. */}
+          <h1 className="page-title" style={{ marginBottom: '0.5rem' }}>وارد شوید</h1>
           <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
             برای استفاده از مارکتپلیس اسکیل‌ها، ابتدا وارد حساب کاربری خود شوید.
           </p>
@@ -902,7 +900,7 @@ export default function SkillsPage() {
             <Icon name="sparkles" size={20} className="text-[var(--accent)]" />
           </div>
           <div>
-            <h1 style={{ fontSize: '1.375rem', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
+            <h1 className="page-title">
               مارکتپلیس اسکیل‌ها
             </h1>
             <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
@@ -1016,9 +1014,7 @@ export default function SkillsPage() {
         >
           <Icon name="sparkles" size={48} className="text-[var(--text-muted)]" style={{ opacity: 0.4 }} />
           <div className="text-center">
-            <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.375rem' }}>
-              اسکیلی یافت نشد
-            </h3>
+            <h2 className="empty-state__title">اسکیلی یافت نشد</h2>
             <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
               {search.trim()
                 ? 'عبارت جستجو را تغییر دهید یا فیلترها را بررسی کنید.'

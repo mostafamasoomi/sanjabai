@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon, type IconName } from '@/components/ui/Icon'
+import { faNum, faPrice, toFaDigits } from '@/lib/format'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type LedgerEntry = {
@@ -45,16 +46,20 @@ const MIN_TOPUP = 10_000
 const MAX_TOPUP = 100_000_000_000
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-const fmtIRR = (n: number) => n.toLocaleString('fa-IR')
-const fmtToman = (n: number) => `${n.toLocaleString('fa-IR')} تومان`
+// Numerals and money go through lib/format so every surface agrees; see the
+// note there on why toLocaleString is not called directly.
+const fmtIRR = (n: number) => faNum(n)
+const fmtToman = (n: number) => faPrice(n)
 const fmtDate = (s: string) =>
-  new Date(s).toLocaleDateString('fa-IR', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  toFaDigits(
+    new Date(s).toLocaleDateString('fa-IR', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+  )
 
 const statusLabel: Record<string, { text: string; badge: string }> = {
   paid: { text: 'موفق', badge: 'badge-positive' },
@@ -482,9 +487,9 @@ export default function WalletPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
             {creditPackages.map((pkg) => {
               const isPurchasing = purchasingPkgId === pkg.id
-              const baseToman = (pkg.base_amount / 10).toLocaleString('fa-IR')
+              const baseToman = faNum(pkg.base_amount / 10)
               const bonusToman = pkg.bonus_percent > 0
-                ? ((pkg.total_credits - pkg.base_amount) / 10).toLocaleString('fa-IR')
+                ? faNum((pkg.total_credits - pkg.base_amount) / 10)
                 : null
               return (
                 <div

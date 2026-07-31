@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
+import { faNum, faPrice, faCompact, toFaDigits } from '@/lib/format'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Types
@@ -43,16 +44,14 @@ type RangeKey = 'week' | 'month' | 'all'
    Helpers
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const fmtToman = (n: number) => `${n.toLocaleString('fa-IR')} تومان`
-const fmtIRR = (n: number) => n.toLocaleString('fa-IR')
-const fmtTokens = (n: number) => {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return String(n)
-}
+const fmtToman = (n: number) => faPrice(n)
+const fmtIRR = (n: number) => faNum(n)
+// Was `1.2M` / `34.0K` — Latin abbreviations that the RTL paragraph reorders
+// away from their number. faCompact gives the Persian equivalent instead.
+const fmtTokens = (n: number) => faCompact(n)
 const fmtDate = (s: string | null) => {
-  if (!s) return '-'
-  return new Date(s).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  if (!s) return '—'
+  return toFaDigits(new Date(s).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }))
 }
 const fmtDateShort = (s: string | null) => {
   if (!s) return '-'

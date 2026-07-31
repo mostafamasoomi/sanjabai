@@ -1,13 +1,13 @@
-# Multiai Aurora — Product, Data, Billing and Security Contract
+# Sanjabai Aurora — Product, Data, Billing and Security Contract
 
 **Version:** 1.0
 **Status:** Implementation baseline
 **Owner:** Product + Platform + Finance + Security
-**Scope:** `/root/multiai`
+**Scope:** `/root/sanjabai`
 
 ## 1. Scope and non-goals
 
-Multiai is a Persian-first AI workspace that provides a unified chat experience, approved multi-provider model catalog, transparent pay-as-you-go usage, wallet/payment operations, and a developer API.
+Sanjabai is a Persian-first AI workspace that provides a unified chat experience, approved multi-provider model catalog, transparent pay-as-you-go usage, wallet/payment operations, and a developer API.
 
 Current release includes:
 
@@ -125,7 +125,7 @@ export type ModelCatalogItem = {
 
 Rules:
 
-- `id` is a stable Multiai identifier; upstream ID is separate.
+- `id` is a stable Sanjabai identifier; upstream ID is separate.
 - Prices are snapshots, never overwritten in place.
 - Disabled or stale models are not offered to users.
 - `last_verified_at` and provenance are visible to admin and available to clients where safe.
@@ -256,7 +256,7 @@ Error messages must not expose provider credentials, SQL, internal topology, or 
 - Prompts/responses are sensitive content.
 - Do not log full content or secrets by default.
 - Define retention, deletion, export, account closure, and redaction policies before enabling long-term history.
-- Upstream provider processing must be disclosed accurately; do not claim zero third-party processing when requests leave Multiai.
+- Upstream provider processing must be disclosed accurately; do not claim zero third-party processing when requests leave Sanjabai.
 - Admin actions and billing changes are auditable without storing secrets.
 
 ## 13. Localization and direction

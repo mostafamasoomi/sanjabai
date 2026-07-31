@@ -1,5 +1,5 @@
 """
-Test fixtures and configuration for Multiai backend.
+Test fixtures and configuration for Sanjabai backend.
 Uses TestClient with dependency overrides for async DB and Redis.
 """
 import sys

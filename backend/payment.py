@@ -20,7 +20,7 @@ ZARINPAL_START = 'https://sandbox.zarinpal.com/pg/StartPay' if ZARINPAL_SANDBOX 
 
 class PaymentRequest(BaseModel):
     amount: int  # in Tomans
-    description: str = 'شارژ حساب Multiai'
+    description: str = 'شارژ حساب Sanjabai'
 
 
 async def create_payment(amount: int, description: str, callback_url: str, email: str = '', mobile: str = '') -> dict:

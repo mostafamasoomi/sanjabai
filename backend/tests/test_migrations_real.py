@@ -7,7 +7,7 @@ resolved in this order:
   1. ``$TEST_DATABASE_URL``  (its name must contain "test"), else
   2. ``$DATABASE_URL``       (its name must contain "test"), else
   3. a freshly ``CREATE DATABASE``'d temporary database
-     (``multiai_test_<pid>_<rand>``), which is dropped after the session.
+     (``sanjabai_test_<pid>_<rand>``), which is dropped after the session.
 
 The tests SKIP (rather than fail) when:
   * the real ``asyncpg`` driver is unavailable, or
@@ -79,9 +79,9 @@ def _parse(url: str) -> dict:
         "scheme": p.scheme,
         "host": p.hostname or "127.0.0.1",
         "port": p.port or 5432,
-        "user": p.username or "multiai",
-        "password": p.password or "multiai",
-        "database": (p.path or "").lstrip("/") or "multiai",
+        "user": p.username or "sanjabai",
+        "password": p.password or "sanjabai",
+        "database": (p.path or "").lstrip("/") or "sanjabai",
     }
 
 
@@ -99,13 +99,13 @@ def _random_suffix() -> str:
 
 
 async def _create_temp_database(base_url: str) -> str:
-    """Create a fresh ``multiai_test_<rand>`` database and return its URL.
+    """Create a fresh ``sanjabai_test_<rand>`` database and return its URL.
 
     Raises if a maintenance database (postgres/template1) cannot be reached or
     the role lacks CREATEDB privilege -- the caller turns that into a skip.
     """
     info = _parse(base_url)
-    name = f"multiai_test_{os.getpid()}_{_random_suffix()}"
+    name = f"sanjabai_test_{os.getpid()}_{_random_suffix()}"
     last_err: Exception | None = None
     for maint in ("postgres", "template1"):
         try:

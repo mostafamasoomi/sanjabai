@@ -13,7 +13,7 @@ import MarkdownRenderer from './components/MarkdownRenderer'
 import ModelPicker from './components/ModelPicker'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Multiai Chat — Aurora v2 + Conversation History Sidebar
+   Sanjabai Chat — Aurora v2 + Conversation History Sidebar
    Cancel, retry, model picker, cost preview, markdown, keyboard shortcuts.
    Sidebar: conversation CRUD, auto-save, mobile drawer, desktop collapse.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -173,7 +173,7 @@ export default function ChatPage() {
   const { user, token } = useAuth()
   const { models, loading, error: catalogError } = useCatalog()
   const [messages, setMessages] = useState<Message[]>(() => [
-    { id: 'welcome', role: 'assistant', content: 'سلام! به Multiai خوش آمدید. چطور می‌توانم کمک کنید؟' }
+    { id: 'welcome', role: 'assistant', content: 'سلام! به Sanjabai خوش آمدید. چطور می‌توانم کمک کنید؟' }
   ])
   const [model, setModel] = useState<ModelCatalogItem | null>(null);
   const [input, setInput] = useState('')
@@ -185,14 +185,14 @@ export default function ChatPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [attachedFile, setAttachedFile] = useState<File | null>(null)
   const [webSearch, setWebSearch] = useState<boolean>(() => {
-    try { return localStorage.getItem('multiai_web_search') === 'true' } catch { return false }
+    try { return localStorage.getItem('sanjabai_web_search') === 'true' } catch { return false }
   })
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [showPresets, setShowPresets] = useState(true)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [smartMode, setSmartMode] = useState<boolean>(() => {
-    try { return localStorage.getItem('multiai_smart_mode') === 'true' } catch { return false }
+    try { return localStorage.getItem('sanjabai_smart_mode') === 'true' } catch { return false }
   })
   const [smartModel, setSmartModel] = useState<string | null>(null)
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
@@ -253,10 +253,10 @@ export default function ChatPage() {
   useEffect(() => { activeConversationIdRef.current = activeConversationId }, [activeConversationId])
   useEffect(() => { messagesRef.current = messages }, [messages])
   useEffect(() => {
-    try { localStorage.setItem('multiai_smart_mode', smartMode ? 'true' : 'false') } catch {}
+    try { localStorage.setItem('sanjabai_smart_mode', smartMode ? 'true' : 'false') } catch {}
   }, [smartMode])
   useEffect(() => {
-    try { localStorage.setItem('multiai_web_search', webSearch ? 'true' : 'false') } catch {}
+    try { localStorage.setItem('sanjabai_web_search', webSearch ? 'true' : 'false') } catch {}
   }, [webSearch])
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -328,7 +328,7 @@ export default function ChatPage() {
         setMessages(loaded)
         setShowPresets(false)
       } else {
-        setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Multiai خوش آمدید. چطور می‌توانم کمک کنید؟' }])
+        setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Sanjabai خوش آمدید. چطور می‌توانم کمک کنید؟' }])
         setShowPresets(true)
       }
       // Set model from conversation if possible
@@ -390,7 +390,7 @@ export default function ChatPage() {
         setConversations(prev => prev.filter(c => c.id !== id))
         if (activeConversationId === id) {
           setActiveConversationId(null)
-          setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Multiai خوش آمدید. چطور می‌توانم کمک کنید؟' }])
+          setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Sanjabai خوش آمدید. چطور می‌توانم کمک کنید؟' }])
           setShowPresets(true)
         }
       }
@@ -405,7 +405,7 @@ export default function ChatPage() {
 
   const startNewChat = useCallback(() => {
     setActiveConversationId(null)
-    setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Multiai خوش آمدید. چطور می‌توانم کمک کنید؟' }])
+    setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Sanjabai خوش آمدید. چطور می‌توانم کمک کنید؟' }])
     setShowPresets(true)
     setError('')
     setMobileDrawerOpen(false)

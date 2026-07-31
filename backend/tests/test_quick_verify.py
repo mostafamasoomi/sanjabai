@@ -1,5 +1,5 @@
 """
-Quick verification tests for Multiai backend.
+Quick verification tests for Sanjabai backend.
 These tests use minimal mocking to verify core functionality.
 """
 import pytest

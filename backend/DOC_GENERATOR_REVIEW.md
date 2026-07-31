@@ -1,4 +1,4 @@
-# گزارش بررسی فنی — Document Generator (Multiai Backend)
+# گزارش بررسی فنی — Document Generator (Sanjabai Backend)
 
 نمره کلی: **6 / 10**
 

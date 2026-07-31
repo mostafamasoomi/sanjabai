@@ -99,7 +99,7 @@ export default function ProfilePage() {
 
   const fetchProfile = async () => {
     try {
-      const t = token || localStorage.getItem('multiai_auth_token')
+      const t = token || localStorage.getItem('sanjabai_auth_token')
       const r = await fetch('/api/auth/profile', {
         headers: { Authorization: `Bearer ${t}` },
       })
@@ -147,7 +147,7 @@ export default function ProfilePage() {
 
   const fetchUsage = async () => {
     try {
-      const t = token || localStorage.getItem('multiai_auth_token')
+      const t = token || localStorage.getItem('sanjabai_auth_token')
       const r = await fetch('/api/me/usage', { headers: { Authorization: `Bearer ${t}` } })
       if (r.ok) setUsage(await r.json())
     } catch {}
@@ -155,7 +155,7 @@ export default function ProfilePage() {
 
   const fetchBalance = async () => {
     try {
-      const t = token || localStorage.getItem('multiai_auth_token')
+      const t = token || localStorage.getItem('sanjabai_auth_token')
       const r = await fetch('/api/wallet', { headers: { Authorization: `Bearer ${t}` } })
       if (r.ok) setBalance((await r.json()).balance)
     } catch {}
@@ -164,7 +164,7 @@ export default function ProfilePage() {
   const handleSaveProfile = async () => {
     setSaving(true)
     try {
-      const t = token || localStorage.getItem('multiai_auth_token')
+      const t = token || localStorage.getItem('sanjabai_auth_token')
       const r = await fetch('/api/auth/profile', {
         method: 'PUT',
         headers: {
@@ -230,7 +230,7 @@ export default function ProfilePage() {
       const reader = new FileReader()
       reader.onload = async () => {
         const base64 = (reader.result as string).split(',')[1]
-        const t = token || localStorage.getItem('multiai_auth_token')
+        const t = token || localStorage.getItem('sanjabai_auth_token')
         const r = await fetch('/api/auth/avatar', {
           method: 'POST',
           headers: {
@@ -266,7 +266,7 @@ export default function ProfilePage() {
     }
     setChangingPassword(true)
     try {
-      const t = token || localStorage.getItem('multiai_auth_token')
+      const t = token || localStorage.getItem('sanjabai_auth_token')
       const r = await fetch('/api/auth/change-password', {
         method: 'POST',
         headers: {
@@ -298,7 +298,7 @@ export default function ProfilePage() {
     }
     setLinkingTelegram(true)
     try {
-      const t = token || localStorage.getItem('multiai_auth_token')
+      const t = token || localStorage.getItem('sanjabai_auth_token')
       const r = await fetch('/api/auth/telegram-link', {
         method: 'POST',
         headers: {
@@ -784,8 +784,8 @@ export default function ProfilePage() {
         </div>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
           {isFa
-            ? 'با اتصال حساب تلگرام می‌توانید از طریق ربات Multiai چت کنید و موجودی خود را ببینید.'
-            : 'Link your Telegram account to chat via the Multiai bot and view your balance.'}
+            ? 'با اتصال حساب تلگرام می‌توانید از طریق ربات Sanjabai چت کنید و موجودی خود را ببینید.'
+            : 'Link your Telegram account to chat via the Sanjabai bot and view your balance.'}
         </p>
         <div style={{ display: 'flex', gap: 8 }}>
           <input
@@ -827,8 +827,8 @@ export default function ProfilePage() {
         </div>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
           {isFa
-            ? 'با دعوت دوستان به Multiai، به ازای هر ثبت‌نام موفق اعتبار هدیه دریافت کنید.'
-            : 'Invite friends to Multiai and earn bonus credits for each successful signup.'}
+            ? 'با دعوت دوستان به Sanjabai، به ازای هر ثبت‌نام موفق اعتبار هدیه دریافت کنید.'
+            : 'Invite friends to Sanjabai and earn bonus credits for each successful signup.'}
         </p>
         {user?.referral_code && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

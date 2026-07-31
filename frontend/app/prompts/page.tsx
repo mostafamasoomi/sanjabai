@@ -6,7 +6,7 @@ import { Icon, type IconName } from '@/components/ui/Icon'
 import { faNum } from '@/lib/format'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Multiai Prompt Library — 10 Persian prompt templates with search & filter
+   Sanjabai Prompt Library — 10 Persian prompt templates with search & filter
    ═══════════════════════════════════════════════════════════════════════════ */
 
 type PromptCategory = 'کدنویسی' | 'ترجمه' | 'تحلیل' | 'خلاقیت' | 'عمومی'

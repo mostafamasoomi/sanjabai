@@ -1,1 +1,1 @@
-"""Service layer for Multiai backend (billing, metering, money)."""
+"""Service layer for Sanjabai backend (billing, metering, money)."""

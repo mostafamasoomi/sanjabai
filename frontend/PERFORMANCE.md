@@ -1,4 +1,4 @@
-# Multiai Frontend — Performance Notes (Phase 10)
+# Sanjabai Frontend — Performance Notes (Phase 10)
 
 This document records the performance work done in Phase 10 and how to verify/extend it.
 

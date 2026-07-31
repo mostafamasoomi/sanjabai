@@ -1,7 +1,7 @@
 # گزارش بررسی Frontend — بخش Documents (Document Generator)
 
 **تاریخ:** ۱۴۰۵/۰۴/۲۶
-**مسیر:** `/root/multiai/frontend`
+**مسیر:** `/root/sanjabai/frontend`
 **بازبین:** Subagent (تحلیل دستی + typecheck واقعی)
 
 > **نکته درباره مدل deepseek-v4-pro:** طبق دستورالعمل باید از مدل `deepseek-v4-pro`
@@ -26,14 +26,14 @@ import { useAuth } from '@/hooks/useAuth'
 import { useAuth } from '@/lib/auth'
 ```
 - پوشه `hooks/` **اصلاً وجود ندارد** (تأیید با `ls`).
-- `useAuth` در `/root/multiai/frontend/lib/auth.tsx` خط ۹۳ تعریف شده.
+- `useAuth` در `/root/sanjabai/frontend/lib/auth.tsx` خط ۹۳ تعریف شده.
 - `tsc --noEmit` خطا میدهد:
   ```
   app/documents/page.tsx(4,25): error TS2307:
   Cannot find module '@/hooks/useAuth' or its corresponding type declarations.
   ```
 - **نتیجه:** صفحه کامپایل نمیشود → در build جدید حضور ندارد
-  (تأیید: `docker exec multiai-multiai_frontend-1 ls /app/app/documents` →
+  (تأیید: `docker exec sanjabai-sanjabai_frontend-1 ls /app/app/documents` →
   `No such file or directory`). یعنی حتی AppShell لینک را دارد اما صفحه ۴۰۴ میدهد.
 
 ---

@@ -1,4 +1,4 @@
-"""Idempotent SQL migration runner for Multiai backend."""
+"""Idempotent SQL migration runner for Sanjabai backend."""
 from __future__ import annotations
 import asyncio
 from pathlib import Path

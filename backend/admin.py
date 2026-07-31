@@ -1402,8 +1402,8 @@ async def admin_mfa_setup(request: Request) -> JSONResponse:
     secret = pyotp.random_base32()
     totp = pyotp.TOTP(secret)
     provisioning_uri = totp.provisioning_uri(
-        name='Multiai Admin',
-        issuer_name='Multiai',
+        name='Sanjabai Admin',
+        issuer_name='Sanjabai',
     )
 
     # Store the pending secret in Redis so we can verify it later

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-Multiai is a Persian-first AI agent platform: a FastAPI backend gateway to AI models (via a self-hosted LiteLLM proxy in front of the "Bynara" provider), a Next.js 15 frontend (RTL Persian UI), a separate admin panel, and a Telegram bot. It provides chat/completions, conversation + assistant + skill + memory management, RAG over user documents, a document generator (PPTX/DOCX/Markdown), wallet/billing with a reservation-and-settle pattern, and subscriptions.
+Sanjabai is a Persian-first AI agent platform: a FastAPI backend gateway to AI models (via a self-hosted LiteLLM proxy in front of the "Bynara" provider), a Next.js 15 frontend (RTL Persian UI), a separate admin panel, and a Telegram bot. It provides chat/completions, conversation + assistant + skill + memory management, RAG over user documents, a document generator (PPTX/DOCX/Markdown), wallet/billing with a reservation-and-settle pattern, and subscriptions.
 
 Services (see `docker-compose.multiai.yml`): `multiai_pg` (Postgres 16 + pgvector), `multiai_redis`, `multiai_litellm` (LiteLLM proxy, egresses through `multiai_tunnel` SOCKS5), `multiai_api` (FastAPI backend, port 8001→8000), `multiai_frontend` (Next.js, port 3003→3000), `multiai_bot` (Telegram bot). There is also a standalone `admin/` FastAPI app (separate from `multiai_api`'s built-in `/admin/*` routes) and `infra/` (nginx + tunnel).
 
@@ -52,7 +52,7 @@ npx playwright test tests/wallet.spec.ts
 
 ```bash
 cp .env.example .env   # fill in BYNARA_API_KEY, SOCKS5_PROXY_URL, ADMIN_TOKEN, etc.
-docker compose -f docker-compose.multiai.yml up -d
+docker compose -f docker-compose.sanjabai.yml up -d
 # Frontend: http://localhost:3003  API: http://localhost:8001  Health: /health
 ```
 

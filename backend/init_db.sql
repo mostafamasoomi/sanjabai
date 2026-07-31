@@ -1,4 +1,4 @@
--- Initialize multiai database
+-- Initialize sanjabai database
 
 -- Pricing
 INSERT INTO pricing (model, input_per_million, output_per_million, currency, updated_at) VALUES

@@ -9,7 +9,7 @@ test.describe('smoke', () => {
 
   test('landing page loads', async ({ page }) => {
     await page.goto('/')
-    await expect(page).toHaveTitle(/Multiai/)
+    await expect(page).toHaveTitle(/Sanjabai/)
     // The h1 hero heading contains "هوش مصنوعی" (it is split across two
     // text nodes, hence a role+regex match rather than getByText).
     await expect(
@@ -25,7 +25,7 @@ test.describe('smoke', () => {
     await signIn(page)
     await page.goto('/chat')
     // Welcome assistant message
-    await expect(page.getByText('به Multiai خوش آمدید')).toBeVisible()
+    await expect(page.getByText('به Sanjabai خوش آمدید')).toBeVisible()
     // Model picker becomes visible once the (mocked) catalog resolves
     await expect(page.getByTestId('model-picker-trigger')).toBeVisible()
   })

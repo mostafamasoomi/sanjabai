@@ -16,7 +16,7 @@ import {
   isRecommendedModel,
 } from './modelUtils'
 
-const STORAGE_KEY = 'multiai_selected_model'
+const STORAGE_KEY = 'sanjabai_selected_model'
 
 type Props = {
   models: ModelCatalogItem[]

@@ -1,5 +1,5 @@
 /**
- * Multiai Admin — Utility JS
+ * Sanjabai Admin — Utility JS
  * Vanilla JS utilities for the admin panel.
  */
 

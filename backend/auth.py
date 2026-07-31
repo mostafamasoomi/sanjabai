@@ -643,6 +643,6 @@ async def send_welcome_email(request: Request) -> JSONResponse:
         user = res.fetchone()
         if not user or not user.email:
             return JSONResponse({'detail': 'ایمیلی ثبت نشده است'}, status_code=400)
-    body = f'<div dir="rtl" style="font-family:Tahoma;max-width:600px;margin:auto;padding:20px;"><h1 style="color:#6c5cf5;">به Multiai خوش آمدید! 🎉</h1><p>سلام {user.email}،</p><p>حساب شما با موفقیت ساخته شد.</p><p><a href="{BASE_URL}/chat" style="background:#6c5cf5;color:white;padding:10px 20px;text-decoration:none;border-radius:8px;">شروع چت</a></p></div>'
-    ok = await send_email(user.email, 'به Multiai خوش آمدید!', body)
+    body = f'<div dir="rtl" style="font-family:Tahoma;max-width:600px;margin:auto;padding:20px;"><h1 style="color:#6c5cf5;">به Sanjabai خوش آمدید! 🎉</h1><p>سلام {user.email}،</p><p>حساب شما با موفقیت ساخته شد.</p><p><a href="{BASE_URL}/chat" style="background:#6c5cf5;color:white;padding:10px 20px;text-decoration:none;border-radius:8px;">شروع چت</a></p></div>'
+    ok = await send_email(user.email, 'به Sanjabai خوش آمدید!', body)
     return JSONResponse({'status': 'sent' if ok else 'queued'})

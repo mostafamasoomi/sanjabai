@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🤖 Multiai
+# 🤖 Sanjabai
 
 ### پلتفرم هوش مصنوعی فارسی | Persian AI Agent Platform
 
@@ -17,9 +17,9 @@
 
 </div>
 
-## 🌟 چرا Multiai؟
+## 🌟 چرا Sanjabai؟
 
-Multiai یک **پلتفرم جامع هوش مصنوعی** است که به کاربران فارسی‌زبان امکان دسترسی به مدل‌های پیشرفته AI را فراهم می‌کند. برخلاف سرویس‌های ساده API gateway، Multiai یک **AI Agent Platform** کامل است با قابلیت‌های مدیریت مکالمه، دستیار شخصی، حافظه بلندمدت، و سیستم billing حرفه‌ای.
+Sanjabai یک **پلتفرم جامع هوش مصنوعی** است که به کاربران فارسی‌زبان امکان دسترسی به مدل‌های پیشرفته AI را فراهم می‌کند. برخلاف سرویس‌های ساده API gateway، Sanjabai یک **AI Agent Platform** کامل است با قابلیت‌های مدیریت مکالمه، دستیار شخصی، حافظه بلندمدت، و سیستم billing حرفه‌ای.
 
 <div align="center">
 
@@ -70,7 +70,7 @@ Multiai یک **پلتفرم جامع هوش مصنوعی** است که به کا
 - **Tasks** — تسکهای زمانبندیشده
 
 ### 📄 تولید سند و ارائه (Document Generator)
-با یک پرامپت ساده، Multiai به‌صورت خودکار **اسلاید، گزارش و ارائه** حرفه‌ای می‌سازد — بدون نیاز به قالب یا طراحی دستی:
+با یک پرامپت ساده، Sanjabai به‌صورت خودکار **اسلاید، گزارش و ارائه** حرفه‌ای می‌سازد — بدون نیاز به قالب یا طراحی دستی:
 
 | خروجی | پسوند | کتابخانه | کاربرد |
 |-------|-------|----------|--------|
@@ -78,7 +78,7 @@ Multiai یک **پلتفرم جامع هوش مصنوعی** است که به کا
 | Word | `.docx` | `python-docx` | سند ساختاریافته با سرفصل/زیربخش و فوتر برند |
 | Markdown Deck | `.md` | built-in | سازگار با Marp / reveal.js برای HTML/PDF |
 
-- **بله — Multiai می‌تواند پاورپوینت، ورد و اسلاید بسازد** (API + UI «سندساز»).
+- **بله — Sanjabai می‌تواند پاورپوینت، ورد و اسلاید بسازد** (API + UI «سندساز»).
 - مدل پیش‌فرض تولید محتوا: `mimo-v2.5-pro` (allow-list مدل‌های Bynara).
 - فایل‌ها روی volume `multiai_docs` (`/tmp/multiai_docs`)؛ metadata رجیستری فعلاً in-memory (تا restart API).
 - UI: مسیر `/documents` در منوی «سندساز».
@@ -162,15 +162,15 @@ curl -X POST http://localhost:8081/v1/documents/generate \
 
 ```bash
 # 1. Clone
-git clone https://github.com/mostafamasoomi/multiai.git
-cd multiai
+git clone https://github.com/mostafamasoomi/sanjabai.git
+cd sanjabai
 
 # 2. Configure environment
 cp .env.example .env
 # Edit .env with your API keys
 
 # 3. Start all services
-docker compose -f docker-compose.multiai.yml up -d
+docker compose -f docker-compose.sanjabai.yml up -d
 
 # 4. Access
 # Frontend: http://localhost:3003
@@ -187,9 +187,9 @@ API_KEY_PEPPER=your-random-pepper-string
 ADMIN_TOKEN=your-admin-token
 
 # Database
-POSTGRES_USER=multiai
+POSTGRES_USER=sanjabai
 POSTGRES_PASSWORD=your-db-password
-POSTGRES_DB=multiai
+POSTGRES_DB=sanjabai
 
 # Redis
 REDIS_URL=redis://localhost:6379
@@ -203,7 +203,7 @@ SMTP_PASS=your-smtp-password
 ## 📁 ساختار پروژه
 
 ```
-multiai/
+sanjabai/
 ├── backend/
 │   ├── app.py              # FastAPI application entry
 │   ├── auth.py             # Authentication endpoints
@@ -252,7 +252,7 @@ multiai/
 │   │   ├── playground/     # API playground
 │   │   └── documents/      # Document Generator (سندساز)
 │   └── components/         # Shared components
-├── docker-compose.multiai.yml
+├── docker-compose.sanjabai.yml
 └── README.md
 ```
 
@@ -378,6 +378,6 @@ MIT — see [LICENSE](./LICENSE).
 
 **ساخته شده با ❤️ برای جامعه فارسی‌زبان**
 
-[GitHub](https://github.com/mostafamasoomi/multiai) • [multiai.ir](https://multiai.ir)
+[GitHub](https://github.com/mostafamasoomi/sanjabai) • [multiai.ir](https://multiai.ir)
 
 </div>

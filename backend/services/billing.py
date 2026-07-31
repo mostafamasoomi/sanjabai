@@ -1,4 +1,4 @@
-"""Billing repository + wallet credit for Multiai.
+"""Billing repository + wallet credit for Sanjabai.
 
 Provides repository implementations:
 

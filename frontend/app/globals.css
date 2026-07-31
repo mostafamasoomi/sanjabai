@@ -159,6 +159,32 @@ img, svg, video, canvas {
   --space-12: 3rem;
   --space-16: 4rem;
 
+  /* ── Type scale ───────────────────────────────────────────────────────
+     A real ~1.2 ratio. Before this the card title, its value and its label
+     all sat within 4px of each other, so nothing said what to read first.
+     Persian carries taller ascenders and deeper descenders than Latin, which
+     is why every step pairs with more leading than a Latin-only UI needs. */
+  --fs-2xs: 0.6875rem;  /* 11px — dense metadata, table footnotes */
+  --fs-xs:  0.75rem;    /* 12px — labels, badges, captions */
+  --fs-sm:  0.8125rem;  /* 13px — secondary body */
+  --fs-md:  0.9375rem;  /* 15px — body */
+  --fs-lg:  1.125rem;   /* 18px — card / section title */
+  --fs-xl:  1.375rem;   /* 22px — page title */
+  --fs-2xl: 1.75rem;    /* 28px — stat value */
+  --fs-3xl: 2.25rem;    /* 36px — the one hero number on a page */
+
+  /* ── Shell geometry ───────────────────────────────────────────────────
+     Real tokens, because full-bleed routes have to subtract them to size
+     themselves. Both are enforced as fixed heights on the elements below,
+     so the arithmetic in .layout-content--flush cannot drift. */
+  --topbar-h: 3.75rem;     /* 60px */
+  --bottomnav-h: 3.5rem;   /* 56px — mobile only */
+
+  /* Smallest comfortable hit area. WCAG 2.2 AA target size is 24px; every
+     interactive element reaches it through padding, never by growing its
+     visual box. */
+  --tap-min: 1.5rem;
+
   /* Radius scale */
   --radius-md: 12px;
   --radius-lg: 16px;
@@ -331,16 +357,28 @@ img, svg, video, canvas {
 .toast-error { border-color: rgba(248,113,113,0.4); }
 
 /* ── App shell: sidebar / topbar / mobile drawer ─────────────────────────── */
-.layout-shell { display: flex; min-height: 100vh; background: var(--bg-base); }
+/* dvh throughout: on mobile browsers 100vh is the *largest* viewport, so a
+   full-height shell measured in vh sits partly under the URL bar and pushes
+   the composer off screen. */
+.layout-shell { display: flex; min-height: 100dvh; background: var(--bg-base); }
 .layout-sidebar {
   width: 260px; flex-shrink: 0;
   flex-direction: column;
-  height: 100vh; position: sticky; top: 0;
+  height: 100dvh; position: sticky; top: 0;
   border-inline-end: 1px solid var(--border);
 }
 .sidebar-glass { background: rgba(11,13,26,0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
 [data-theme='light'] .sidebar-glass { background: rgba(255,255,255,0.7); }
-.sidebar-nav { display: flex; flex-direction: column; }
+/* min-height:0 is load-bearing: as a flex item of the column sidebar the nav
+   defaults to min-height:auto, which is its full content height, so it refused
+   to shrink and the last item was clipped by the user block below it with no
+   scroll affordance. */
+.sidebar-nav { display: flex; flex-direction: column; min-height: 0; overscroll-behavior: contain; }
+/* Thin scrollbar so the nav does not gain a chunky gutter the moment it
+   overflows (which changes the width of every row). */
+.sidebar-nav::-webkit-scrollbar { width: 4px; }
+.sidebar-nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: var(--radius-full); }
+.sidebar-nav::-webkit-scrollbar-track { background: transparent; }
 .sidebar-section-label { padding: 0.5rem 0.75rem 0.35rem; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; color: var(--text-dim); text-transform: uppercase; }
 .sidebar-nav-item {
   position: relative;
@@ -366,27 +404,45 @@ img, svg, video, canvas {
 .sidebar-user-menu-item:hover { background: var(--bg-hover); color: var(--text-primary); }
 .sidebar-user-menu-item--danger { color: var(--danger); }
 
-.layout-main { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 100vh; }
+.layout-main { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 100dvh; }
 .topbar-glass {
   position: sticky; top: 0; z-index: 10;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 0.75rem 1.25rem;
+  gap: var(--space-3);
+  /* Fixed height, not padding-derived: --topbar-h is subtracted by the
+     full-bleed content container, and that arithmetic has to be exact or the
+     chat composer ends up a few pixels below the fold. */
+  height: var(--topbar-h);
+  flex-shrink: 0;
+  padding: 0 1.25rem;
   background: rgba(5,6,15,0.6); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border);
 }
 [data-theme='light'] .topbar-glass { background: rgba(255,255,255,0.7); }
 
-/* Sortable column headers on /pricing. */
+/* Sortable column headers on /pricing. They were converted from
+   div[role=button] to real buttons without being given a hit area, which left
+   them ~18px tall; the padding here is what gets them to the 24px minimum,
+   and the negative inline margin keeps the label optically aligned with the
+   column below it. */
 .pricing-sort-btn {
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: var(--tap-min);
+  padding: 0.25rem 0.4rem;
+  margin-inline: -0.4rem;
   border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: inherit;
   font: inherit;
   text-align: start;
   cursor: pointer;
 }
-.pricing-sort-btn:hover { color: var(--text-primary); }
+.pricing-sort-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+.pricing-sort-btn[aria-pressed='true'] { color: var(--accent); }
+.pricing-cell-value { font-size: var(--fs-sm); font-weight: 700; color: var(--text-primary); }
 
 /* Brand lockup in the topbar. Always visible — on public routes it is the
    only branding and the only route home. */
@@ -402,6 +458,14 @@ img, svg, video, canvas {
 }
 .topbar-brand img { width: 24px; height: 24px; object-fit: contain; }
 
+/* Signed in on a wide screen the sidebar already carries the lockup ~200px
+   away, so the topbar copy is pure duplication. It stays for narrow screens,
+   where the sidebar is collapsed into the drawer and this is the only brand
+   and the only route home. */
+@media (min-width: 768px) {
+  .topbar-brand--duplicate { display: none; }
+}
+
 /* Marketing links, shown only when signed out (there is no sidebar then). */
 .topbar-public-nav { display: none; align-items: center; gap: 0.25rem; margin-inline-start: 0.75rem; }
 .topbar-public-nav a {
@@ -416,6 +480,32 @@ img, svg, video, canvas {
 @media (min-width: 768px) { .topbar-public-nav { display: flex; } }
 .layout-content { flex: 1; padding: var(--space-6); max-width: 1400px; width: 100%; margin: 0 auto; }
 @media (max-width: 768px) { .layout-content { padding: var(--space-4); } }
+
+/* ── Full-bleed routes ────────────────────────────────────────────────────
+   /chat owns its own vertical rhythm: a fixed model bar, a scrolling
+   transcript and a composer pinned to the bottom. It was written before the
+   app shell existed, sized itself `100vh`, and once it was mounted inside the
+   padded .layout-content it ran a topbar's worth of height past the fold —
+   the composer fell off screen and the model bar collided with the topbar.
+
+   The modifier removes the gutters and hands the route an exact box: the
+   viewport minus the chrome above (and, on mobile, the bottom nav below).
+   Children size themselves with height:100% from here. */
+.layout-content--flush {
+  padding: 0;
+  max-width: none;
+  height: calc(100dvh - var(--topbar-h));
+  min-height: 0;
+  overflow: hidden;
+}
+@media (max-width: 767px) {
+  .layout-content--flush {
+    height: calc(100dvh - var(--topbar-h) - var(--bottomnav-h));
+  }
+}
+/* The shell's mobile bottom-nav spacer would add a second 56px of scroll under
+   a container that is already sized around it. */
+.layout-main--flush .layout-bottomnav-spacer { display: none; }
 
 .mobile-overlay { position: fixed; inset: 0; z-index: 40; visibility: hidden; }
 .mobile-overlay--open { visibility: visible; }
@@ -502,10 +592,17 @@ img, svg, video, canvas {
 /* ═══════════════════════════════════════════════════════════════════════════
    Chat page
    ═══════════════════════════════════════════════════════════════════════════ */
-.chat-page { display: flex; height: 100vh; overflow: hidden; }
-.chat-main-area { display: flex; flex-direction: column; flex: 1; min-width: 0; height: 100%; }
-.chat-model-bar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.6rem 1rem; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
-.chat-messages { flex: 1; overflow-y: auto; padding: var(--space-6) var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
+/* Fills .layout-content--flush, which is what does the viewport arithmetic. */
+.chat-page { display: flex; height: 100%; min-height: 0; overflow: hidden; }
+.chat-main-area { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; height: 100%; }
+.chat-model-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 0.75rem; padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+  flex-wrap: wrap; flex-shrink: 0;
+}
+.chat-messages { flex: 1; min-height: 0; overflow-y: auto; padding: var(--space-6) var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
 
 .chat-row { display: flex; gap: 0.6rem; max-width: 48rem; margin: 0 auto; width: 100%; }
 .chat-row-user { flex-direction: row-reverse; }
@@ -544,13 +641,25 @@ img, svg, video, canvas {
 .chat-preset-label { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
 .chat-preset-desc { font-size: 0.75rem; color: var(--text-muted); }
 
-.chat-composer { padding: 0.75rem 1rem 1rem; border-top: 1px solid var(--border); }
+.chat-composer { flex-shrink: 0; padding: 0.75rem 1rem 1rem; border-top: 1px solid var(--border); background: var(--bg-base); }
 .chat-composer-box { display: flex; align-items: flex-end; gap: 0.4rem; max-width: 48rem; margin: 0 auto; padding: 0.4rem; border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--bg-surface); }
 .chat-composer-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
 .chat-composer-input { flex: 1; resize: none; background: transparent; border: none; outline: none; color: var(--text-primary); font-size: 0.9rem; font-family: inherit; padding: 0.5rem 0.25rem; max-height: 12rem; }
 .chat-composer-input::placeholder { color: var(--text-dim); }
-.chat-composer-footer { display: flex; align-items: center; gap: 0.75rem; max-width: 48rem; margin: 0.4rem auto 0; flex-wrap: wrap; font-size: 0.7rem; color: var(--text-dim); }
+.chat-composer-footer { display: flex; align-items: center; gap: 0.75rem; max-width: 48rem; margin: 0.4rem auto 0; flex-wrap: wrap; font-size: var(--fs-xs); color: var(--text-dim); }
 .chat-composer-status { color: var(--text-muted); }
+/* Everything in this row is 11–12px text, so the links and toggles inside it
+   only clear the 24px target minimum through padding. Negative margin keeps
+   the row visually the same height it was. */
+.chat-composer-footer a,
+.chat-composer-footer .smart-mode-toggle {
+  min-height: var(--tap-min);
+  padding-block: 0.25rem;
+  padding-inline: 0.35rem;
+  margin-inline: -0.35rem;
+  border-radius: var(--radius-sm);
+}
+.chat-composer-footer a:hover { background: var(--bg-hover); }
 .chat-streaming-dot { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--accent); }
 .chat-streaming-dot::before { content: ''; width: 0.4rem; height: 0.4rem; border-radius: 50%; background: var(--accent); animation: chatTyping 1s ease-in-out infinite; }
 .chat-shortcuts-hint { display: flex; align-items: center; gap: 0.3rem; opacity: 0.7; }
@@ -564,7 +673,20 @@ img, svg, video, canvas {
 .wallet-balance-inline { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--positive); }
 .prompt-lib-btn { display: inline-flex; align-items: center; gap: 0.3rem; color: var(--accent); text-decoration: none; margin-inline-start: auto; }
 
-.smart-mode-toggle { display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer; }
+/* A real <button role="switch">, not a <label> around an .sr-only checkbox:
+   the hidden input was a 1×1 hit target sitting in the tab order, and the
+   switch role announces the on/off state without a second element. */
+.smart-mode-toggle {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  min-height: var(--tap-min);
+  padding: 0.25rem 0.5rem;
+  border: 1px solid transparent; border-radius: var(--radius-full);
+  background: transparent; color: var(--text-secondary);
+  font: inherit; font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.smart-mode-toggle:hover { background: var(--bg-hover); }
+.smart-mode-toggle[aria-checked='true'] { color: var(--accent); }
 .smart-mode-switch { position: relative; width: 2rem; height: 1.1rem; border-radius: var(--radius-full); background: var(--bg-hover); border: 1px solid var(--border); transition: background var(--motion-fast); flex-shrink: 0; }
 .smart-mode-switch.smart-mode-on { background: var(--accent); border-color: var(--accent); }
 .smart-mode-knob { position: absolute; top: 1px; inset-inline-start: 1px; width: 0.85rem; height: 0.85rem; border-radius: 50%; background: #fff; transition: transform var(--motion-fast); }
@@ -656,11 +778,69 @@ img, svg, video, canvas {
    Shared page layout primitives
    ═══════════════════════════════════════════════════════════════════════════ */
 .page-container { display: flex; flex-direction: column; gap: var(--space-6); max-width: 1100px; margin: 0 auto; }
-.page-title { font-size: 1.5rem; font-weight: 800; color: var(--text-primary); }
-.page-subtitle { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem; }
+.page-title { font-size: var(--fs-xl); font-weight: 800; line-height: 1.35; color: var(--text-primary); }
+.page-subtitle { font-size: var(--fs-sm); color: var(--text-muted); margin-top: 0.25rem; }
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); }
+
+/* ── Numerals ─────────────────────────────────────────────────────────────
+   Emitted by <Num> / lib/format. Tabular figures so a column of amounts lines
+   up digit-for-digit; the unit is a separate, dimmer span so the number keeps
+   the weight. See lib/format.tsx for the bidi rules — direction is set there,
+   per instance, because it depends on whether the unit is Latin. */
+.num { font-variant-numeric: tabular-nums; }
+.num-unit { font-size: 0.85em; font-weight: 400; color: var(--text-dim); }
+
+/* ── Stat card ────────────────────────────────────────────────────────────
+   Label (small, dim) → value (large, heavy) → unit. Three clearly separated
+   steps of the type scale, so the value reads first. */
+.stat-card { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.stat-card__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.stat-card__label { font-size: var(--fs-xs); font-weight: 500; color: var(--text-secondary); }
+.stat-card__icon { width: 2rem; height: 2rem; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; background: var(--accent-dim); color: var(--accent); flex-shrink: 0; }
+.stat-card__value { font-size: var(--fs-2xl); font-weight: 800; line-height: 1.25; color: var(--text-primary); letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.stat-card__unit { font-size: var(--fs-2xs); color: var(--text-dim); }
+/* One card per screen may claim the top of the scale. On the dashboard that
+   is the wallet balance — the number the page exists to show. */
+.stat-card--lead .stat-card__value { font-size: var(--fs-3xl); color: var(--accent); }
+
+/* ── Empty state ──────────────────────────────────────────────────────────
+   One shape for all of them. Before this some surfaces centred an icon, some
+   printed a bare "—", and some printed nothing at all. */
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-3); padding: var(--space-10) var(--space-4); text-align: center; }
+.empty-state__icon { width: 3rem; height: 3rem; border-radius: var(--radius-full); display: flex; align-items: center; justify-content: center; background: var(--bg-hover); color: var(--text-dim); }
+.empty-state__title { font-size: var(--fs-md); font-weight: 700; color: var(--text-secondary); }
+.empty-state__desc { font-size: var(--fs-sm); color: var(--text-muted); max-width: 26rem; line-height: 1.7; }
 .range-pill { display: inline-flex; align-items: center; padding: 0.3rem 0.8rem; border-radius: var(--radius-full); border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text-secondary); font-size: 0.78rem; cursor: pointer; }
 .range-pill.active, .range-pill[aria-selected='true'] { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+/* ═══════════════════════════════════════════════════════════════════════════
+   Dashboard — 12-column grid
+   ───────────────────────────────────────────────────────────────────────────
+   The page used to be three stacked `auto-fit` grids, which collapsed to a
+   single half-width column below the stat row and left ~45% of a 1440px
+   screen empty for the whole lower half. An explicit 12-column grid lets each
+   card declare how much of the measure it deserves, and every row fills it.
+   ═══════════════════════════════════════════════════════════════════════════ */
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--space-5);
+  align-items: start;
+}
+.dash-grid > .dash-span-3  { grid-column: span 3; }
+.dash-grid > .dash-span-4  { grid-column: span 4; }
+.dash-grid > .dash-span-8  { grid-column: span 8; }
+.dash-grid > .dash-span-12 { grid-column: 1 / -1; }
+/* Two-up before one-up: at tablet widths a 3-span card is narrower than its
+   own stat value. */
+@media (max-width: 1100px) {
+  .dash-grid > .dash-span-3,
+  .dash-grid > .dash-span-4,
+  .dash-grid > .dash-span-8 { grid-column: span 6; }
+}
+@media (max-width: 720px) {
+  .dash-grid > * { grid-column: 1 / -1; }
+}
+
 .slide-up { animation: slideUp 0.25s var(--ease) both; }
 @keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 .positive { color: var(--positive); }
@@ -714,20 +894,40 @@ img, svg, video, canvas {
 .profile-page { display: flex; flex-direction: column; gap: var(--space-6); max-width: 800px; margin: 0 auto; }
 .profile-header-icon { width: 2.5rem; height: 2.5rem; border-radius: var(--radius-md); background: var(--accent-dim); color: var(--accent); display: flex; align-items: center; justify-content: center; }
 .profile-avatar-section { display: flex; align-items: center; gap: var(--space-4); }
-.profile-avatar-card { display: flex; align-items: center; gap: var(--space-4); }
+/* Was a single non-wrapping flex row of [avatar block | 3-up stat grid]. At
+   390px the two children could not both fit and the grid escaped the viewport
+   by 136px. Stacking is the honest layout for a narrow screen; the row only
+   comes back once there is room for it. */
+.profile-avatar-card { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-5); }
+@media (min-width: 720px) {
+  .profile-avatar-card { flex-direction: row; align-items: center; }
+  .profile-avatar-card > .profile-stats-grid { flex: 1; }
+}
 .profile-avatar { width: 4rem; height: 4rem; border-radius: var(--radius-full); overflow: hidden; flex-shrink: 0; }
 .profile-avatar-letter { width: 4rem; height: 4rem; border-radius: var(--radius-full); background: var(--accent-dim); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 700; flex-shrink: 0; }
 .profile-section-card { display: flex; flex-direction: column; gap: var(--space-4); }
 .profile-input-group { display: flex; flex-direction: column; gap: 0.35rem; }
 .profile-input-label { font-size: 0.8rem; font-weight: 500; color: var(--text-secondary); }
-.profile-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-3); }
-.profile-stat-card { padding: var(--space-4); border-radius: var(--radius-md); background: var(--bg-elevated); border: 1px solid var(--border); text-align: center; }
-.profile-stat-value { font-size: 1.3rem; font-weight: 700; color: var(--text-primary); }
-.profile-stat-label { font-size: 0.72rem; color: var(--text-dim); margin-top: 0.2rem; }
+.profile-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-3); min-width: 0; }
+.profile-stat-card {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-md); background: var(--bg-elevated); border: 1px solid var(--border);
+  min-width: 0;
+}
+.profile-stat-card > div { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+/* Label first, value second — the label is the smaller, dimmer step, so the
+   value is what the eye lands on. */
+.profile-stat-label { font-size: var(--fs-xs); color: var(--text-dim); }
+/* An email is a single unbreakable token; without this it is what pushed the
+   card past the viewport edge. */
+.profile-stat-value { font-size: var(--fs-lg); font-weight: 700; color: var(--text-primary); overflow-wrap: anywhere; }
 .profile-toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0; }
-.profile-toggle { position: relative; width: 2.4rem; height: 1.3rem; border-radius: var(--radius-full); background: var(--bg-hover); border: 1px solid var(--border); cursor: pointer; flex-shrink: 0; }
+/* 2.4×1.3rem was a 21px-tall target. Kept the same visual width, raised the
+   track to the 24px minimum. */
+.profile-toggle { position: relative; width: 2.6rem; height: var(--tap-min); border-radius: var(--radius-full); background: var(--bg-hover); border: 1px solid var(--border); cursor: pointer; flex-shrink: 0; }
 .profile-toggle[aria-checked='true'], .profile-toggle.active { background: var(--accent); border-color: var(--accent); }
-.profile-toggle-knob { position: absolute; top: 1px; inset-inline-start: 1px; width: 1rem; height: 1rem; border-radius: 50%; background: #fff; transition: transform var(--motion-fast); }
+.profile-toggle-knob { position: absolute; top: 2px; inset-inline-start: 2px; width: 1.125rem; height: 1.125rem; border-radius: 50%; background: #fff; transition: transform var(--motion-fast); }
 .profile-toggle[aria-checked='true'] .profile-toggle-knob, .profile-toggle.active .profile-toggle-knob { transform: translateX(1.1rem); }
 [dir='rtl'] .profile-toggle[aria-checked='true'] .profile-toggle-knob, [dir='rtl'] .profile-toggle.active .profile-toggle-knob { transform: translateX(-1.1rem); }
 .profile-danger-card { border-color: var(--danger-dim); }
@@ -805,6 +1005,38 @@ img, svg, video, canvas {
 /* ═══════════════════════════════════════════════════════════════════════════
    Models catalog + signup (Aurora variants)
    ═══════════════════════════════════════════════════════════════════════════ */
+/* ── /models catalog ──────────────────────────────────────────────────────
+   Rebuilt: the search field used to span the full 1050px measure with the
+   provider chips squeezed beside it, and each card's primary action repeated
+   the card title verbatim in saturated purple, so a page whose job is
+   comparison was dominated by three identical bars. The field is now sized to
+   its content, the chips get the rest of the row, and the CTA is quiet. */
+.models-page { display: flex; flex-direction: column; gap: var(--space-5); }
+.models-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+.models-toolbar { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.models-search { position: relative; flex: 0 1 20rem; min-width: 12rem; }
+.models-filters { display: flex; gap: 0.4rem; flex-wrap: wrap; flex: 1 1 auto; }
+/* Sits at the end of the toolbar row rather than on a line of its own. */
+.models-count { margin-inline-start: auto; font-size: var(--fs-xs); color: var(--text-dim); white-space: nowrap; }
+
+.models-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: var(--space-4); }
+
+.model-tile { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-elevated); transition: border-color var(--motion-fast); }
+.model-tile:hover { border-color: var(--border-strong); }
+.model-tile__head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.model-tile__name { font-size: var(--fs-lg); font-weight: 700; line-height: 1.35; color: var(--text-primary); }
+.model-tile__provider { font-size: var(--fs-xs); color: var(--text-dim); }
+.model-tile__desc { font-size: var(--fs-sm); color: var(--text-secondary); line-height: 1.7; flex: 1; }
+/* Specs read as a small table, so the labels align and the values share a
+   baseline across cards. */
+.model-tile__specs { display: flex; gap: var(--space-5); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.model-tile__spec { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.model-tile__spec-label { font-size: var(--fs-2xs); color: var(--text-dim); }
+.model-tile__spec-value { font-size: var(--fs-sm); font-weight: 600; color: var(--text-secondary); }
+.model-tile__caps { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.model-tile__foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: auto; }
+.model-tile__note { font-size: var(--fs-2xs); color: var(--warning); }
+
 .aurora-search-bar { display: flex; align-items: center; gap: 0.6rem; }
 .aurora-search-input { flex: 1; }
 .aurora-filter-chips { display: flex; gap: 0.4rem; flex-wrap: wrap; }
@@ -829,6 +1061,28 @@ img, svg, video, canvas {
 .aurora-signup-btn { width: 100%; }
 .aurora-signup-error { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.9rem; border-radius: var(--radius-md); background: var(--danger-dim); color: var(--danger); font-size: 0.85rem; margin-bottom: var(--space-4); }
 .aurora-input-error { border-color: var(--danger) !important; }
+
+/* Secondary links and the captcha refresh on /login and /signup. These are
+   12px text set inline in a sentence, which gave them a ~17px hit box; the
+   padding is what lifts them to the 24px minimum without changing how the
+   sentence reads. */
+.auth-inline-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: var(--tap-min);
+  padding: 0.25rem 0.4rem;
+  margin-inline: -0.4rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  text-decoration: none;
+}
+.auth-inline-link:hover { background: var(--accent-dim); text-decoration: underline; }
 
 /* ── Misc ─────────────────────────────────────────────────────────────────── */
 .model-select-wrapper { position: relative; width: 100%; }

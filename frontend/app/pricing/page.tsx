@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
+import { Num } from '@/lib/format'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Types
@@ -33,9 +34,6 @@ type ModelPricing = {
    Helpers
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const fmtToman = (n: number) => `${n.toLocaleString('fa-IR')} تومان`
-const fmtIRR = (n: number) => n.toLocaleString('fa-IR')
-const fmtUSD = (n: number) => n < 1 ? `$${n.toFixed(3)}` : `$${n.toFixed(2)}`
 
 const modelIcons: Record<string, string> = {
   'agnes': '⚡',
@@ -135,7 +133,7 @@ export default function PricingPage() {
           <Icon name="sparkles" size={16} className="text-accent" />
           <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>تعرفه مدل‌ها</span>
         </div>
-        <h1 style={{ fontSize: 32, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12, lineHeight: 1.4 }}>
+        <h1 style={{ fontSize: 'var(--fs-3xl)', fontWeight: 800, color: 'var(--text-primary)', marginBottom: 12, lineHeight: 1.4 }}>
           قیمت‌گذاری شفاف، پرداخت به ازای مصرف
         </h1>
         <p style={{ fontSize: 15, color: 'var(--text-secondary)', maxWidth: 560, margin: '0 auto', lineHeight: 1.7 }}>
@@ -149,7 +147,7 @@ export default function PricingPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Icon name="wallet" size={18} className="text-accent" />
             <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>موجودی کیف پول:</span>
-            <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{fmtToman(balance)}</span>
+            <Num className="text-lg font-bold" value={balance} unit="تومان" />
           </div>
           <Link href="/wallet" className="btn btn-sm btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Icon name="plus" size={14} />
@@ -176,20 +174,18 @@ export default function PricingPage() {
           <button
             type="button"
             className="pricing-sort-btn"
-            style={{ textAlign: 'left' }}
             aria-pressed={sortBy === 'input'}
             onClick={() => setSortBy('input')}
           >
-            ورودی/1M (تومان) {sortBy === 'input' && '↕'}
+            ورودی/میلیون {sortBy === 'input' && '↕'}
           </button>
           <button
             type="button"
             className="pricing-sort-btn"
-            style={{ textAlign: 'left' }}
             aria-pressed={sortBy === 'output'}
             onClick={() => setSortBy('output')}
           >
-            خروجی/1M (تومان) {sortBy === 'output' && '↕'}
+            خروجی/میلیون {sortBy === 'output' && '↕'}
           </button>
           <div className="text-center">سطح</div>
         </div>
@@ -219,8 +215,6 @@ export default function PricingPage() {
             const icon = getModelIcon(model.providerModelId)
             const inputPct = (model.pricing.inputPerMillion / maxInput) * 100
             const outputPct = (model.pricing.outputPerMillion / maxOutput) * 100
-            const usdInput = model.pricing.usd?.inputPerMillion ?? 0
-            const usdOutput = model.pricing.usd?.outputPerMillion ?? 0
 
             return (
               <div
@@ -246,17 +240,17 @@ export default function PricingPage() {
                   </div>
                 </div>
 
-                {/* Input price Toman */}
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"', direction: 'ltr' }}>{fmtIRR(model.pricing.inputPerMillion)}</div>
+                {/* Input price, tomans per million tokens */}
+                <div>
+                  <Num className="pricing-cell-value" value={model.pricing.inputPerMillion} />
                   <div style={{ marginTop: 3, height: 3, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
                     <div style={{ width: `${inputPct}%`, height: '100%', borderRadius: 2, background: 'var(--accent)', opacity: 0.5 }} />
                   </div>
                 </div>
 
-                {/* Output price Toman */}
-                <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"', direction: 'ltr' }}>{fmtIRR(model.pricing.outputPerMillion)}</div>
+                {/* Output price, tomans per million tokens */}
+                <div>
+                  <Num className="pricing-cell-value" value={model.pricing.outputPerMillion} />
                   <div style={{ marginTop: 3, height: 3, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
                     <div style={{ width: `${outputPct}%`, height: '100%', borderRadius: 2, background: 'var(--warning)', opacity: 0.6 }} />
                   </div>
@@ -312,9 +306,10 @@ export default function PricingPage() {
         border: '1px solid var(--border)',
       }}>
         <Icon name="sparkles" size={28} style={{ color: 'var(--accent)', marginBottom: 12 }} />
-        <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
+        {/* h2, not h3 — the only heading above it on this page is the h1. */}
+        <h2 style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
           آماده شروع هستید؟
-        </h3>
+        </h2>
         <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 20, maxWidth: 400, margin: '0 auto 20px' }}>
           کیف پول خود را شارژ کنید و همین الان با هوش مصنوعی چت کنید.
         </p>

@@ -918,24 +918,24 @@ export default function SkillsPage() {
         </button>
       </div>
 
-      {/* ── Search + Sort ── */}
-      <div className="flex gap-3 items-center flex-wrap">
-        <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
-          <Icon name="search" size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+      {/* ── Search + sort + categories, one toolbar (shared with /models) ── */}
+      <div className="toolbar">
+        <div className="toolbar-search">
+          <Icon name="search" size={16} className="absolute top-1/2 -translate-y-1/2 text-[var(--text-muted)]" style={{ insetInlineStart: '0.75rem' }} />
           <input
             type="text"
             className="input"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="جستجوی اسکیل..."
-            style={{ width: '100%', paddingRight: '2.5rem', fontSize: '0.875rem' }}
+            style={{ paddingInlineStart: '2.5rem', fontSize: '0.875rem' }}
           />
           {search && (
             <button
               onClick={() => setSearch('')}
               style={{
                 position: 'absolute',
-                left: '0.75rem',
+                insetInlineEnd: '0.75rem',
                 top: '50%',
                 transform: 'translateY(-50%)',
                 background: 'none',
@@ -954,7 +954,8 @@ export default function SkillsPage() {
           className="input"
           value={sort}
           onChange={(e) => setSort(e.target.value)}
-          style={{ fontSize: '0.875rem', minWidth: '140px' }}
+          aria-label="ترتیب"
+          style={{ fontSize: '0.875rem' }}
         >
           {SORT_OPTIONS.map((opt) => (
             <option key={opt.key} value={opt.key}>
@@ -962,28 +963,20 @@ export default function SkillsPage() {
             </option>
           ))}
         </select>
+        <div className="toolbar-filters">
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat.key}
+              onClick={() => setCategory(cat.key)}
+              className={`aurora-chip ${category === cat.key ? 'active' : ''}`}
+              aria-pressed={category === cat.key}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+        {!loading && <p className="toolbar-count">{faNumber(skills.length)} اسکیل</p>}
       </div>
-
-      {/* ── Category Tabs ── */}
-      <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
-        {CATEGORIES.map((cat) => (
-          <button
-            key={cat.key}
-            onClick={() => setCategory(cat.key)}
-            className={`btn btn-sm ${category === cat.key ? 'btn-primary' : 'btn-ghost'}`}
-            style={{ whiteSpace: 'nowrap', fontSize: '0.8125rem' }}
-          >
-            {cat.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Results count ── */}
-      {!loading && (
-        <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-          {faNumber(skills.length)} اسکیل
-        </p>
-      )}
 
       {/* ── Loading skeletons ── */}
       {loading && (
@@ -1002,25 +995,16 @@ export default function SkillsPage() {
 
       {/* ── Empty state ── */}
       {!loading && skills.length === 0 && (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '4rem 2rem',
-            gap: '1rem',
-          }}
-        >
-          <Icon name="sparkles" size={48} className="text-[var(--text-muted)]" style={{ opacity: 0.4 }} />
-          <div className="text-center">
-            <h2 className="empty-state__title">اسکیلی یافت نشد</h2>
-            <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-              {search.trim()
-                ? 'عبارت جستجو را تغییر دهید یا فیلترها را بررسی کنید.'
-                : 'هنوز اسکیلی ایجاد نشده است. اولین اسکیل را شما ایجاد کنید!'}
-            </p>
-          </div>
+        <div className="empty-state">
+          <span className="empty-state__icon">
+            <Icon name="sparkles" size={22} />
+          </span>
+          <p className="empty-state__title">اسکیلی یافت نشد</p>
+          <p className="empty-state__desc">
+            {search.trim()
+              ? 'عبارت جستجو را تغییر دهید یا فیلترها را بررسی کنید.'
+              : 'هنوز اسکیلی ایجاد نشده است. اولین اسکیل را شما ایجاد کنید!'}
+          </p>
           <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
             <Icon name="plus" size={16} />
             ایجاد اسکیل جدید

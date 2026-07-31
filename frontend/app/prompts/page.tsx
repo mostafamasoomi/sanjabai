@@ -162,8 +162,8 @@ export default function PromptsPage() {
       </div>
 
       {/* Search & Filter */}
-      <div className="prompts-toolbar">
-        <div className="prompts-search-wrapper">
+      <div className="toolbar">
+        <div className="toolbar-search prompts-search-wrapper">
           <Icon name="search" size={16} className="prompts-search-icon" />
           <input
             type="text"
@@ -184,7 +184,7 @@ export default function PromptsPage() {
           )}
         </div>
 
-        <div className="prompts-categories">
+        <div className="toolbar-filters">
           <button
             className={`prompts-cat-btn ${activeCategory === 'all' ? 'prompts-cat-active' : ''}`}
             onClick={() => setActiveCategory('all')}
@@ -202,21 +202,22 @@ export default function PromptsPage() {
             </button>
           ))}
         </div>
+        <p className="toolbar-count">
+          {faNum(filteredPrompts.length)} پرامپت
+          {activeCategory !== 'all' && ` در دسته «${activeCategory}»`}
+          {search && ` برای «${search}»`}
+        </p>
       </div>
 
-      {/* Results count */}
-      <div className="prompts-count">
-        {faNum(filteredPrompts.length)} پرامپت
-        {activeCategory !== 'all' && ` در دسته «${activeCategory}»`}
-        {search && ` برای «${search}»`}
-      </div>
 
       {/* Prompt Grid */}
       {filteredPrompts.length === 0 ? (
-        <div className="prompts-empty">
-          <Icon name="search" size={32} style={{ color: 'var(--text-muted)', marginBottom: 12 }} />
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>پرامپتی با این مشخصات یافت نشد</p>
-          <button className="btn btn-ghost" onClick={() => { setSearch(''); setActiveCategory('all') }}>
+        <div className="prompts-empty empty-state">
+          <span className="empty-state__icon">
+            <Icon name="search" size={22} />
+          </span>
+          <p className="empty-state__title">پرامپتی با این مشخصات یافت نشد</p>
+          <button className="btn btn-secondary btn-sm" onClick={() => { setSearch(''); setActiveCategory('all') }}>
             پاک کردن فیلترها
           </button>
         </div>

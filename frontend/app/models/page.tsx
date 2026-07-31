@@ -177,8 +177,8 @@ export default function ModelsPage() {
     return (
       <div className="models-page">
         {header}
-        <div className="models-toolbar">
-          <div className="models-search">
+        <div className="toolbar">
+          <div className="toolbar-search">
             <Skeleton className="h-10 rounded-lg" />
           </div>
         </div>
@@ -221,8 +221,8 @@ export default function ModelsPage() {
       {/* Search sized to its content, chips take the rest of the row, and the
           result count sits at the end of the same row instead of on a line of
           its own. */}
-      <div className="models-toolbar">
-        <div className="models-search">
+      <div className="toolbar">
+        <div className="toolbar-search">
           <Icon
             name="search"
             size={16}
@@ -250,7 +250,7 @@ export default function ModelsPage() {
             </button>
           )}
         </div>
-        <div className="models-filters">
+        <div className="toolbar-filters">
           {chips.map((f) => (
             <button
               key={f.key}
@@ -263,7 +263,7 @@ export default function ModelsPage() {
             </button>
           ))}
         </div>
-        <p className="models-count">{faNum(filtered.length)} مدل</p>
+        <p className="toolbar-count">{faNum(filtered.length)} مدل</p>
       </div>
 
       {filtered.length === 0 ? (

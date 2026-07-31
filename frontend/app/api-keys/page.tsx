@@ -35,7 +35,13 @@ export default function ApiKeysPage() {
     try {
       const r = await fetch('/api/api-keys', { headers: { Authorization: `Bearer ${token}` } })
       if (r.status === 401) { router.push('/login'); return }
-      if (r.ok) setKeys(await r.json())
+      // The endpoint returns a bare array; anything else (an older shape, an
+      // error envelope with a 200) used to reach `keys.map` and take the whole
+      // page down through the error boundary.
+      if (r.ok) {
+        const body = await r.json()
+        setKeys(Array.isArray(body) ? body : (body?.items ?? []))
+      }
     } catch {}
   }
 

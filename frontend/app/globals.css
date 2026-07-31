@@ -518,6 +518,12 @@ img, svg, video, canvas {
 .layout-content--flush {
   padding: 0;
   max-width: none;
+  /* `flex: none` is load-bearing. .layout-content is `flex: 1`, and a growing
+     flex item ignores its own height — the container stretched to fill
+     .layout-main's 100dvh *on top of* the topbar, so the page picked up a
+     topbar's worth of vertical scroll and the composer slid under the mobile
+     bottom nav. */
+  flex: none;
   height: calc(100dvh - var(--topbar-h));
   min-height: 0;
   overflow: hidden;
@@ -806,6 +812,23 @@ img, svg, video, canvas {
 .page-subtitle { font-size: var(--fs-sm); color: var(--text-muted); margin-top: 0.25rem; }
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); }
 
+/* ── Toolbar ──────────────────────────────────────────────────────────────
+   Search + filters + result count, on one line. Shared by /models, /skills
+   and /prompts, which each grew their own arrangement: on /models the field
+   spanned the whole 1050px measure with the provider chips squeezed beside
+   it, on /skills the sort <select> inherited .input's width:100% and pushed
+   itself onto a row of its own. The field is sized to what a query needs;
+   the filters take the rest. */
+.toolbar { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
+.toolbar-search { position: relative; flex: 0 1 20rem; min-width: 12rem; }
+.toolbar-filters { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+/* The count is the result of the filters, so it sits next to them rather
+   than claiming a line below. */
+.toolbar-count { font-size: var(--fs-xs); color: var(--text-dim); white-space: nowrap; }
+/* .input is width:100% by design (form fields fill their group); a select
+   used as a filter has to opt out or it wraps the row. */
+.toolbar select.input { width: auto; min-width: 9rem; }
+
 /* ── Numerals ─────────────────────────────────────────────────────────────
    Emitted by <Num> / lib/format. Tabular figures so a column of amounts lines
    up digit-for-digit; the unit is a separate, dimmer span so the number keeps
@@ -821,11 +844,20 @@ img, svg, video, canvas {
 .stat-card__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .stat-card__label { font-size: var(--fs-xs); font-weight: 500; color: var(--text-secondary); }
 .stat-card__icon { width: 2rem; height: 2rem; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; background: var(--accent-dim); color: var(--accent); flex-shrink: 0; }
-.stat-card__value { font-size: var(--fs-2xl); font-weight: 800; line-height: 1.25; color: var(--text-primary); letter-spacing: -0.01em; overflow-wrap: anywhere; }
+/* No overflow-wrap here: a grouped number must never break mid-figure, which
+   is what turned ۱٬۲۵۰٬۰۰۰ into two lines on a 390px screen. The scale steps
+   down at that width instead (see the breakpoint below). */
+.stat-card__value { font-size: var(--fs-2xl); font-weight: 800; line-height: 1.25; color: var(--text-primary); letter-spacing: -0.01em; white-space: nowrap; }
 .stat-card__unit { font-size: var(--fs-2xs); color: var(--text-dim); }
 /* One card per screen may claim the top of the scale. On the dashboard that
    is the wallet balance — the number the page exists to show. */
 .stat-card--lead .stat-card__value { font-size: var(--fs-3xl); color: var(--accent); }
+/* A phone column is ~330px wide; the top two steps of the scale do not fit a
+   seven-figure toman amount on one line there. */
+@media (max-width: 480px) {
+  .stat-card__value { font-size: var(--fs-xl); }
+  .stat-card--lead .stat-card__value { font-size: var(--fs-2xl); }
+}
 
 /* ── Empty state ──────────────────────────────────────────────────────────
    One shape for all of them. Before this some surfaces centred an icon, some
@@ -861,8 +893,14 @@ img, svg, video, canvas {
   .dash-grid > .dash-span-4,
   .dash-grid > .dash-span-8 { grid-column: span 6; }
 }
+/* Each span listed explicitly rather than `.dash-grid > *`: the universal
+   selector loses to `.dash-grid > .dash-span-3` on specificity, so the phone
+   breakpoint silently did nothing and the stat cards stayed two-up. */
 @media (max-width: 720px) {
-  .dash-grid > * { grid-column: 1 / -1; }
+  .dash-grid > .dash-span-3,
+  .dash-grid > .dash-span-4,
+  .dash-grid > .dash-span-8,
+  .dash-grid > .dash-span-12 { grid-column: 1 / -1; }
 }
 
 .slide-up { animation: slideUp 0.25s var(--ease) both; }
@@ -988,17 +1026,16 @@ img, svg, video, canvas {
 .prompts-header-title { display: flex; flex-direction: column; }
 .prompts-title { font-size: var(--fs-xl); font-weight: 800; line-height: 1.35; color: var(--text-primary); }
 .prompts-subtitle { font-size: var(--fs-sm); color: var(--text-muted); }
-.prompts-toolbar { display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: center; }
-.prompts-search-wrapper { flex: 1; min-width: 12rem; display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); }
+/* Sizing comes from .toolbar-search; this only supplies the field chrome. */
+.prompts-search-wrapper { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); }
 .prompts-search-icon { display: flex; color: var(--text-dim); }
-.prompts-search-input { flex: 1; background: transparent; border: none; outline: none; color: var(--text-primary); font-size: 0.85rem; }
+.prompts-search-input { flex: 1; min-width: 0; min-height: var(--tap-min); background: transparent; border: none; outline: none; color: var(--text-primary); font-size: 0.85rem; }
 .prompts-search-clear { display: flex; background: none; border: none; color: var(--text-dim); cursor: pointer; }
-.prompts-categories { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .prompts-cat-btn { padding: 0.35rem 0.9rem; border-radius: var(--radius-full); border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text-secondary); font-size: 0.78rem; cursor: pointer; }
 .prompts-cat-active { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
-.prompts-count { font-size: 0.75rem; color: var(--text-dim); }
 .prompts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: var(--space-4); }
 .prompts-empty { grid-column: 1 / -1; }
+.prompts-cat-btn { display: inline-flex; align-items: center; gap: 0.3rem; min-height: var(--tap-min); }
 .prompt-card { display: flex; flex-direction: column; gap: 0.6rem; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-elevated); transition: border-color var(--motion-fast); }
 .prompt-card:hover { border-color: var(--border-strong); }
 .prompt-card-header { display: flex; align-items: center; gap: 0.6rem; }
@@ -1041,12 +1078,6 @@ img, svg, video, canvas {
    its content, the chips get the rest of the row, and the CTA is quiet. */
 .models-page { display: flex; flex-direction: column; gap: var(--space-5); }
 .models-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
-.models-toolbar { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
-.models-search { position: relative; flex: 0 1 20rem; min-width: 12rem; }
-.models-filters { display: flex; gap: 0.4rem; flex-wrap: wrap; }
-/* Follows the chips on the same line instead of occupying a row of its own —
-   it is the result of the filters, so it belongs next to them. */
-.models-count { font-size: var(--fs-xs); color: var(--text-dim); white-space: nowrap; }
 
 /* auto-fit, not auto-fill: with a short catalog auto-fill reserved an empty
    fourth column and left a third of the measure blank. */

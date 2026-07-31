@@ -92,59 +92,63 @@ function ProductPreview() {
   const done = typed.length >= thread.answer.length
 
   return (
-    <div className="lp-preview" ref={previewRef}>
-      <div className="lp-preview__sheen" aria-hidden="true" />
-      <div className="lp-preview__bar">
-        <span className="lp-preview__dots" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </span>
-
-        <div className="lp-preview__tabs" role="tablist" aria-label="انتخاب مدل">
-          {PREVIEW_THREADS.map((t, i) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              className="lp-preview__tab"
-              aria-selected={i === active}
-              onClick={() => setActive(i)}
-            >
-              {t.logo && <ProviderLogo src={t.logo} size={14} />}
-              <span dir="ltr">{t.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="lp-preview__body">
-        <div className="lp-msg lp-msg--user">
-          <span className="lp-msg__avatar">شما</span>
-          <p className="lp-msg__bubble">{thread.question}</p>
-        </div>
-
-        <div className="lp-msg lp-msg--ai">
-          <span className="lp-msg__avatar">
-            {thread.logo ? <ProviderLogo src={thread.logo} size={15} /> : '؟'}
+    <div className="lp-preview-stack">
+      <span className="lp-preview-ghost lp-preview-ghost--2" aria-hidden="true" />
+      <span className="lp-preview-ghost lp-preview-ghost--1" aria-hidden="true" />
+      <div className="lp-preview" ref={previewRef}>
+        <div className="lp-preview__sheen" aria-hidden="true" />
+        <div className="lp-preview__bar">
+          <span className="lp-preview__dots" aria-hidden="true">
+            <i />
+            <i />
+            <i />
           </span>
-          {/* No aria-live here on purpose: announcing a decorative typewriter
-              two characters at a time would flood a screen reader. The bubble
-              is ordinary content and is read when the user reaches it. */}
-          <p className="lp-msg__bubble">
-            {typed}
-            {!done && <span className="lp-msg__caret" aria-hidden="true" />}
-          </p>
+
+          <div className="lp-preview__tabs" role="tablist" aria-label="انتخاب مدل">
+            {PREVIEW_THREADS.map((t, i) => (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                className="lp-preview__tab"
+                aria-selected={i === active}
+                onClick={() => setActive(i)}
+              >
+                {t.logo && <ProviderLogo src={t.logo} size={14} />}
+                <span dir="ltr">{t.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Deliberately no latency or per-message price here: any number we
-            printed would be invented. The real figures are computed per
-            request and shown in the product itself. */}
-        <div className="lp-preview__meta">
-          <span>
-            مدل: <b dir="ltr">{thread.label}</b>
-          </span>
-          <span>هزینه‌ی تخمینی هر پیام، پیش از ارسال در خود چت نمایش داده می‌شود</span>
+        <div className="lp-preview__body">
+          <div className="lp-msg lp-msg--user">
+            <span className="lp-msg__avatar">شما</span>
+            <p className="lp-msg__bubble">{thread.question}</p>
+          </div>
+
+          <div className="lp-msg lp-msg--ai">
+            <span className="lp-msg__avatar">
+              {thread.logo ? <ProviderLogo src={thread.logo} size={15} /> : '؟'}
+            </span>
+            {/* No aria-live here on purpose: announcing a decorative typewriter
+                two characters at a time would flood a screen reader. The bubble
+                is ordinary content and is read when the user reaches it. */}
+            <p className="lp-msg__bubble">
+              {typed}
+              {!done && <span className="lp-msg__caret" aria-hidden="true" />}
+            </p>
+          </div>
+
+          {/* Deliberately no latency or per-message price here: any number we
+              printed would be invented. The real figures are computed per
+              request and shown in the product itself. */}
+          <div className="lp-preview__meta">
+            <span>
+              مدل: <b dir="ltr">{thread.label}</b>
+            </span>
+            <span>هزینه‌ی تخمینی هر پیام، پیش از ارسال در خود چت نمایش داده می‌شود</span>
+          </div>
         </div>
       </div>
     </div>

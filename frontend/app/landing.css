@@ -262,9 +262,18 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px -8px var(--lp-brand);
 }
 
+/* Lift on hover, punch back down past rest on :active (translateY(1px),
+   above) — a full press arc instead of just a colour fade, on the one
+   button most likely to actually get clicked. */
 .lp-btn--primary:hover {
   background: color-mix(in srgb, var(--lp-brand) 88%, #fff);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 12px 32px -8px var(--lp-brand);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 16px 36px -10px var(--lp-brand);
+  transform: translateY(-2px);
+}
+
+.lp-btn--primary:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 6px 16px -8px var(--lp-brand);
 }
 
 .lp-btn--secondary {
@@ -787,11 +796,59 @@ a.lp-pill:hover {
    instead of decorative physics boxes.
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* Real Z-depth, not another rotateX: two faint panels sit behind the preview
+   at translateZ(-70px)/-140px inside this wrapper's own perspective, so they
+   read as physically farther from the camera — foreshortened and dimmed by
+   actual 3D projection, not a faked scale/opacity guess. Everywhere else on
+   this page "3D" means rotation; this is the one place it means depth. */
+.lp-preview-stack {
+  position: relative;
+  margin-block-start: clamp(3rem, 6vw, 4.5rem);
+  perspective: 1800px;
+}
+
+.lp-preview-ghost {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--lp-r-lg);
+  border: 1px solid var(--lp-line-hi);
+  /* Deliberately lighter than the page background (unlike .lp-preview,
+     which sits close to it) — a dim near-black panel on a near-black page
+     has no edge to read at all. This is what actually makes the peek below
+     the front card visible, not the translateZ/translateY math alone. */
+  background: color-mix(in srgb, var(--lp-bg-soft) 65%, var(--lp-ink) 14%);
+  pointer-events: none;
+}
+
+/* Same footprint as .lp-preview (inset: 0) on purpose — perspective already
+   shrinks each ghost toward the wrapper's center as translateZ pushes it
+   back, so the peek comes from that projection plus translateY, not from
+   also hand-narrowing the box. */
+.lp-preview-ghost--1 {
+  transform: translateZ(-70px) translateY(26px);
+  opacity: 0.85;
+  z-index: 0;
+}
+
+.lp-preview-ghost--2 {
+  transform: translateZ(-160px) translateY(48px);
+  opacity: 0.5;
+  z-index: -1;
+}
+
+[data-theme='light'] .lp-preview-ghost--1 {
+  opacity: 0.4;
+}
+
+[data-theme='light'] .lp-preview-ghost--2 {
+  opacity: 0.2;
+}
+
 .lp-preview {
   --tx: 0deg;
   --ty: 0deg;
   position: relative;
-  margin-block-start: clamp(3rem, 6vw, 4.5rem);
+  z-index: 1;
   border-radius: var(--lp-r-lg);
   border: 1px solid var(--lp-line);
   background: color-mix(in srgb, var(--lp-bg-soft) 88%, transparent);
@@ -1883,7 +1940,13 @@ a.lp-pill:hover {
   .lp-marquee__viewport {
     overflow-x: auto;
   }
-  .lp-reveal {
+  /* Matches .lp-tilt/.lp-flip's own specificity (0,0,2,0) rather than relying
+     on [data-visible='true'] (which also overrides them, but only once
+     Reveal's effect has actually run) to win the cascade — this way "reduced
+     motion" holds regardless of observer timing, not as a side effect of it. */
+  .lp-reveal,
+  .lp-reveal.lp-tilt,
+  .lp-reveal.lp-flip {
     opacity: 1;
     transform: none;
   }

@@ -435,7 +435,7 @@ export default function WalletPage() {
               type="number"
               value={topupAmount}
               onChange={(e) => handleCustomAmount(e.target.value)}
-              placeholder="مبلغ دلخواه (ریال)"
+              placeholder="مبلغ دلخواه (تومان)"
               min={MIN_TOPUP}
               max={MAX_TOPUP}
               style={{
@@ -448,7 +448,7 @@ export default function WalletPage() {
 
           {effectiveAmount > 0 && effectiveAmount < MIN_TOPUP && (
             <p style={{ fontSize: 11, color: 'var(--danger)', marginBottom: 8 }}>
-              حداقل مبلغ: {fmtIRR(MIN_TOPUP)} ریال
+              حداقل مبلغ: {fmtIRR(MIN_TOPUP)} تومان
             </p>
           )}
 
@@ -466,7 +466,7 @@ export default function WalletPage() {
             }}
           >
             <Icon name="send" size={16} />
-            {busy ? 'در حال پردازش...' : `شارژ ${effectiveAmount > 0 ? fmtIRR(effectiveAmount) + ' ریال' : 'حساب'}`}
+            {busy ? 'در حال پردازش...' : `شارژ ${effectiveAmount > 0 ? fmtIRR(effectiveAmount) + ' تومان' : 'حساب'}`}
           </button>
         </div>
       </div>
@@ -487,9 +487,14 @@ export default function WalletPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
             {creditPackages.map((pkg) => {
               const isPurchasing = purchasingPkgId === pkg.id
-              const baseToman = faNum(pkg.base_amount / 10)
+              // base_amount/total_credits come from credit_packages and land
+              // in the ledger untouched (payment_endpoints.py: credit_amount
+              // = pkg.total_credits, added straight to the toman balance) —
+              // they were never rial, so dividing by 10 here understated both
+              // figures by an order of magnitude.
+              const baseToman = faNum(pkg.base_amount)
               const bonusToman = pkg.bonus_percent > 0
-                ? faNum((pkg.total_credits - pkg.base_amount) / 10)
+                ? faNum(pkg.total_credits - pkg.base_amount)
                 : null
               return (
                 <div
@@ -532,7 +537,7 @@ export default function WalletPage() {
 
                   <div className="flex-1">
                     <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 4, fontFeatureSettings: '"tnum"' }}>
-                      {fmtIRR(pkg.total_credits)} <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)' }}>ریال</span>
+                      {fmtIRR(pkg.total_credits)} <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)' }}>تومان</span>
                     </div>
                     <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>
                       شما {baseToman} تومان پرداخت می‌کنید
@@ -542,9 +547,6 @@ export default function WalletPage() {
                         + {bonusToman} تومان بونوس
                       </p>
                     )}
-                    <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                      معادل {fmtToman(pkg.total_credits)}
-                    </p>
                   </div>
 
                   <button
@@ -632,7 +634,7 @@ export default function WalletPage() {
                       <td
                         className={`wallet-td-amount ${isCredit ? 'positive' : 'negative'}`}
                       >
-                        {isCredit ? '+' : ''}{fmtIRR(l.amount)} <span className="wallet-currency">ریال</span>
+                        {isCredit ? '+' : ''}{fmtIRR(l.amount)} <span className="wallet-currency">تومان</span>
                       </td>
                       <td className="wallet-td-balance">
                         {fmtIRR(l.balance_after)}
@@ -678,7 +680,7 @@ export default function WalletPage() {
                         #{p.id}
                       </td>
                       <td className="wallet-td-amount text-primary">
-                        {fmtIRR(p.amount)} <span className="wallet-currency">ریال</span>
+                        {fmtIRR(p.amount)} <span className="wallet-currency">تومان</span>
                       </td>
                       <td style={{ padding: '12px' }}>
                         <span className={`badge ${st.badge}`}>{st.text}</span>
@@ -705,7 +707,7 @@ export default function WalletPage() {
                 آیا از شارژ حساب به مبلغ
               </p>
               <p className="wallet-modal-amount">
-                {fmtIRR(effectiveAmount)} ریال
+                {fmtIRR(effectiveAmount)} تومان
               </p>
               <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>اطمینان دارید؟</p>
             </div>

@@ -1238,7 +1238,11 @@ export default function ChatPage() {
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8z"/>
                   </svg>
-                  <Num value={walletBalance / 10} unit="تومان" />
+                  {/* walletBalance comes from /api/wallet, which — like
+                      app/wallet/page.tsx — returns an integer toman balance
+                      directly. The /10 here was treating it as rial and
+                      showed a tenth of the real balance. */}
+                  <Num value={walletBalance} unit="تومان" />
                 </span>
               )}
               {/* ── Prompt Library button ───────────────────────────── */}

@@ -5,6 +5,7 @@ import { CheckGlyph, ForwardArrow, ProviderLogo } from './primitives'
 import { HERO_ROTATION, HERO_TRUST, PREVIEW_THREADS } from './content'
 import { useTilt } from './useTilt'
 import { useScrollParallax } from './useScrollParallax'
+import { Constellation } from './Constellation'
 
 /** Each blob drifts at its own fraction of scroll speed — the closer the
  * fraction is to 0, the farther back the layer reads as sitting. `baseX`
@@ -188,6 +189,7 @@ export function Hero() {
         <span className="lp-aura__blob" ref={blobRef1} />
         <span className="lp-aura__blob" ref={blobRef2} />
         <span className="lp-aura__blob" ref={blobRef3} />
+        <Constellation />
       </div>
 
       <div className="lp-container">

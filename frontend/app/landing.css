@@ -539,6 +539,61 @@ a.lp-pill:hover {
   }
 }
 
+/* Hub-and-spoke node graph — the one 3D/motion element on the page that's
+   actually about the product (23 models converging into one workspace)
+   rather than a generic tilt/glow applied to whatever section needed one.
+   Sits inside .lp-aura as a fourth child, after the three blobs, so the
+   existing :nth-child(1/2/3) blob rules above are untouched and it rides
+   along with the same pointer-tilt the aura already gets. */
+.lp-constellation {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.28;
+  /* Every other shape in the aura is a 90px-blurred blob — it reads as
+     ambient light, never as a hard line. A crisp 1px stroke at the same
+     opacity looked like a technical diagram pasted over the headline
+     (round 2's first attempt at this); blurring it into the same register
+     as the blobs is what actually makes it sit in the background. */
+  filter: blur(1.5px);
+}
+
+[data-theme='light'] .lp-constellation {
+  opacity: 0.14;
+}
+
+.lp-constellation__lines line {
+  stroke: var(--lp-brand);
+  stroke-width: 1;
+  opacity: 0.3;
+}
+
+.lp-constellation__node {
+  fill: var(--lp-ink-2);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: lp-node-pulse 3.6s ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * -0.45s);
+}
+
+.lp-constellation__hub {
+  fill: var(--lp-cyan);
+  filter: drop-shadow(0 0 4px var(--lp-cyan));
+}
+
+@keyframes lp-node-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.4);
+  }
+}
+
 /* Faint grid, anchored to the hero. Gives the aura something to sit against
    so the top of the page doesn't read as an undifferentiated blur. */
 .lp-grid-lines {
@@ -1338,6 +1393,14 @@ a.lp-pill:hover {
   padding-block-start: 2.75rem;
 }
 
+/* This was previously the plainest section on the page: a static numbered
+   circle and a flat 1px line, no motion of its own beyond the generic
+   fade-in every other section also gets. Now each marker pops in (scale +
+   rotate) and the connector after it draws in like a line being traced
+   between them — reusing Reveal's own --lp-delay stagger so the sequence
+   still lands in step order, just with an extra beat so the line visibly
+   grows out of the marker that was already there rather than both
+   appearing at once. */
 .lp-step::before {
   counter-increment: lp-step;
   content: counter(lp-step, persian);
@@ -1354,6 +1417,15 @@ a.lp-pill:hover {
   color: var(--lp-brand);
   font-size: 0.85rem;
   font-weight: 700;
+  opacity: 0;
+  transform: scale(0.4) rotate(-45deg);
+  transition: opacity 0.5s var(--lp-ease), transform 0.5s var(--lp-ease);
+  transition-delay: var(--lp-delay, 0ms);
+}
+
+.lp-step[data-visible='true']::before {
+  opacity: 1;
+  transform: none;
 }
 
 /* Connector between step markers. A flat colour rather than a gradient, so it
@@ -1364,8 +1436,20 @@ a.lp-pill:hover {
   inset-block-start: 1rem;
   inset-inline-start: 2.5rem;
   inset-inline-end: -1.5rem;
-  height: 1px;
-  background: var(--lp-line);
+  height: 2px;
+  background: linear-gradient(90deg, var(--lp-brand), var(--lp-cyan));
+  transform: scaleX(0);
+  transform-origin: 0% 50%;
+  transition: transform 0.7s var(--lp-ease);
+  transition-delay: calc(var(--lp-delay, 0ms) + 280ms);
+}
+
+[dir='rtl'] .lp-step:not(:last-child)::after {
+  transform-origin: 100% 50%;
+}
+
+.lp-step[data-visible='true']:not(:last-child)::after {
+  transform: scaleX(1);
 }
 
 .lp-step__title {
@@ -1934,7 +2018,8 @@ a.lp-pill:hover {
   }
   .lp-aura__blob,
   .lp-marquee__track,
-  .lp-msg__caret {
+  .lp-msg__caret,
+  .lp-constellation__node {
     animation: none !important;
   }
   .lp-marquee__viewport {

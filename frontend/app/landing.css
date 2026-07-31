@@ -432,9 +432,20 @@ a.lp-pill:hover {
   pointer-events: none;
 }
 
-.lp-tilt:hover::after,
 .lp-tilt:focus-within::after {
   opacity: 1;
+}
+
+/* :hover alone would leave this glow "stuck" centered on a touch device —
+   tapping a card fires :hover with no matching pointerleave to clear it,
+   since useTilt never attached a listener there in the first place (it's
+   gated on pointer: fine). Real mice/trackpads are what (hover: hover)
+   actually detects; :focus-within above still covers keyboard use on any
+   device. */
+@media (hover: hover) and (pointer: fine) {
+  .lp-tilt:hover::after {
+    opacity: 1;
+  }
 }
 
 /* ── Flap reveal — a steeper, more theatrical rotateX than the site's
@@ -944,9 +955,18 @@ a.lp-pill:hover {
   pointer-events: none;
 }
 
-.lp-preview:hover .lp-preview__sheen,
 .lp-preview:focus-within .lp-preview__sheen {
   opacity: 1;
+}
+
+/* Same stuck-glow risk as .lp-tilt above: the preview's tabs are real
+   buttons, so a tap on touch would otherwise leave this bright sheen
+   patch parked wherever the tap landed until the user touches elsewhere
+   on the page. */
+@media (hover: hover) and (pointer: fine) {
+  .lp-preview:hover .lp-preview__sheen {
+    opacity: 1;
+  }
 }
 
 [data-theme='light'] .lp-preview__sheen {

@@ -1,6 +1,7 @@
 'use client'
 
 import type { HealthStatus, ModelCatalogItem, ModelHealth } from '@/types/catalog'
+import { faNum } from '@/lib/format'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Model health
@@ -78,12 +79,10 @@ export function getModelIcon(capabilities: string[] = [], recommendedFor: string
 
 export function formatPriceIRT(price: number): string {
   if (price == null || isNaN(price)) return '—'
-  // Price expected already in Toman (IRT). Show fa-IR formatting
-  try {
-    return `${Number(price).toLocaleString('fa-IR')} تومان/۱M`
-  } catch {
-    return `${price} تومان/۱M`
-  }
+  // Price is already in tomans. The unit used to read "تومان/۱M": a Persian
+  // word, a slash, then a Latin M, which the RTL run reorders. Spelled out in
+  // Persian it is unambiguous.
+  return `${faNum(price)} تومان/میلیون`
 }
 
 export function formatPricePair(

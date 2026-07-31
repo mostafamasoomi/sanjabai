@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Icon, type IconName } from '@/components/ui/Icon'
+import { faNum, toFaDigits } from '@/lib/format'
 import { toast } from '@/components/ui'
 import dynamic from 'next/dynamic'
 
@@ -665,10 +666,10 @@ export default function AdminPage() {
                 <Icon name={item.icon} size={18} />
                 <span>{item.label}</span>
                 {item.key === 'users' && users.length > 0 && (
-                  <span className="badge badge-accent mr-auto text-[10px]">{users.length}</span>
+                  <span className="badge badge-accent mr-auto text-[10px]">{faNum(users.length)}</span>
                 )}
                 {item.key === 'models' && models.length > 0 && (
-                  <span className="badge badge-accent mr-auto text-[10px]">{models.length}</span>
+                  <span className="badge badge-accent mr-auto text-[10px]">{faNum(models.length)}</span>
                 )}
               </button>
             ))}
@@ -711,11 +712,11 @@ export default function AdminPage() {
               {analytics ? (
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-                    <StatCard icon="profile" label="کل کاربران" value={analytics.user_count.toLocaleString('fa-IR')} color="var(--accent)" />
-                    <StatCard icon="check" label="کاربران فعال" value={analytics.active_users.toLocaleString('fa-IR')} color="var(--positive)" />
-                    <StatCard icon="payment" label="درآمد کل (تومان)" value={analytics.total_revenue?.toLocaleString('fa-IR') || '0'} color="var(--info)" />
-                    <StatCard icon="code" label="توکن مصرفی" value={analytics.total_tokens?.toLocaleString('fa-IR') || '0'} color="var(--warning)" />
-                    <StatCard icon="chat" label="گفتگوها" value={analytics.conv_count?.toLocaleString('fa-IR') || '0'} color="var(--accent)" />
+                    <StatCard icon="profile" label="کل کاربران" value={faNum(analytics.user_count)} color="var(--accent)" />
+                    <StatCard icon="check" label="کاربران فعال" value={faNum(analytics.active_users)} color="var(--positive)" />
+                    <StatCard icon="payment" label="درآمد کل (تومان)" value={faNum(analytics.total_revenue, { fallback: '۰' })} color="var(--info)" />
+                    <StatCard icon="code" label="توکن مصرفی" value={faNum(analytics.total_tokens, { fallback: '۰' })} color="var(--warning)" />
+                    <StatCard icon="chat" label="گفتگوها" value={faNum(analytics.conv_count, { fallback: '۰' })} color="var(--accent)" />
                   </div>
 
                   {/* Charts */}
@@ -749,7 +750,7 @@ export default function AdminPage() {
                                 <td className="p-3 text-xs font-mono">{l.user_id}</td>
                                 <td className="p-3">
                                   <span className={l.amount > 0 ? 'badge badge-positive' : 'badge badge-danger'}>
-                                    {l.amount > 0 ? '+' : ''}{l.amount.toLocaleString('fa-IR')}
+                                    {l.amount > 0 ? '+' : ''}{faNum(l.amount)}
                                   </span>
                                 </td>
                                 <td className="p-3 text-xs text-secondary">{l.reason}</td>
@@ -782,7 +783,7 @@ export default function AdminPage() {
              ───────────────────────────────────────────────────────────── */}
           {page === 'users' && !selectedUserId && (
             <div className="space-y-4">
-              <SectionHeader title="مدیریت کاربران" subtitle={`${users.length} کاربر ثبت‌نام شده`} />
+              <SectionHeader title="مدیریت کاربران" subtitle={`${faNum(users.length)} کاربر ثبت‌نام شده`} />
               <div className="admin-card">
                 <div style={{ position: 'relative' }}>
                   <Icon name="search" size={16} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
@@ -836,7 +837,7 @@ export default function AdminPage() {
                           <td className="p-3">
                             <span className="badge badge-accent">{u.plan || 'رایگان'}</span>
                           </td>
-                          <td className="p-3 text-xs">{u.wallet_balance?.toLocaleString('fa-IR')}</td>
+                          <td className="p-3 text-xs">{faNum(u.wallet_balance)}</td>
                           <td className="p-3">
                             <span className={u.is_active ? 'badge badge-positive' : 'badge badge-danger'}>
                               {u.is_active ? 'فعال' : 'غیرفعال'}
@@ -921,10 +922,10 @@ export default function AdminPage() {
                 <>
                   {/* Stat Cards */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
-                    <StatCard icon="wallet" label="موجودی" value={userDetail.balance.toLocaleString('fa-IR')} color="#22c55e" />
-                    <StatCard icon="models" label="توکن مصرفی" value={userDetail.stats.total_tokens.toLocaleString('fa-IR')} color="#3b82f6" />
+                    <StatCard icon="wallet" label="موجودی" value={faNum(userDetail.balance)} color="#22c55e" />
+                    <StatCard icon="models" label="توکن مصرفی" value={faNum(userDetail.stats.total_tokens)} color="#3b82f6" />
                     <StatCard icon="chat" label="گفتگوها" value={userDetail.stats.conversation_count} color="#a855f7" />
-                    <StatCard icon="pricing" label="هزینه کل" value={userDetail.stats.total_cost.toLocaleString('fa-IR')} color="#f59e0b" />
+                    <StatCard icon="pricing" label="هزینه کل" value={faNum(userDetail.stats.total_cost)} color="#f59e0b" />
                     <StatCard icon="wallet" label="پرداخت‌ها" value={userDetail.stats.payment_count} color="#06b6d4" />
                     <StatCard icon="dashboard" label="درخواست‌ها" value={userDetail.stats.usage_events} color="#ec4899" />
                   </div>
@@ -940,9 +941,9 @@ export default function AdminPage() {
                         <div><span className="text-muted">ایمیل</span><p className="font-medium">{userDetail.user.email || '—'}</p></div>
                         <div><span className="text-muted">تلگرام</span><p className="font-medium">{userDetail.user.telegram_id || '—'}</p></div>
                         <div><span className="text-muted">تلفن</span><p className="font-medium">{userDetail.user.phone || '—'}</p></div>
-                        <div><span className="text-muted">کیف پول</span><p className="font-medium">{userDetail.wallet.balance.toLocaleString('fa-IR')} (رزرو: {userDetail.wallet.reserved.toLocaleString('fa-IR')})</p></div>
-                        <div><span className="text-muted">سهمیه روزانه</span><p className="font-medium">{userDetail.quota?.daily_limit?.toLocaleString('fa-IR') || '—'}</p></div>
-                        <div><span className="text-muted">مصرف امروز</span><p className="font-medium">{userDetail.quota?.used_today?.toLocaleString('fa-IR') || '0'}</p></div>
+                        <div><span className="text-muted">کیف پول</span><p className="font-medium">{faNum(userDetail.wallet.balance)} (رزرو: {faNum(userDetail.wallet.reserved)})</p></div>
+                        <div><span className="text-muted">سهمیه روزانه</span><p className="font-medium">{faNum(userDetail.quota?.daily_limit) || '—'}</p></div>
+                        <div><span className="text-muted">مصرف امروز</span><p className="font-medium">{faNum(userDetail.quota?.used_today, { fallback: '۰' })}</p></div>
                         <div><span className="text-muted">عضویت</span><p className="font-medium">{new Date(userDetail.user.created_at).toLocaleDateString('fa-IR')}</p></div>
                       </div>
                     </div>
@@ -1015,9 +1016,9 @@ export default function AdminPage() {
                               <tr key={i}>
                                 <td className="p-2 text-xs font-medium">{m.model}</td>
                                 <td className="p-2 text-xs">{m.calls}</td>
-                                <td className="p-2 text-xs">{(m.input_tokens || 0).toLocaleString('fa-IR')}</td>
-                                <td className="p-2 text-xs">{(m.output_tokens || 0).toLocaleString('fa-IR')}</td>
-                                <td className="p-2 text-xs">{(m.total_cost || 0).toLocaleString('fa-IR')}</td>
+                                <td className="p-2 text-xs">{faNum(m.input_tokens || 0)}</td>
+                                <td className="p-2 text-xs">{faNum(m.output_tokens || 0)}</td>
+                                <td className="p-2 text-xs">{faNum(m.total_cost || 0)}</td>
                                 <td className="p-2 text-xs">{m.last_used ? new Date(m.last_used).toLocaleDateString('fa-IR') : '—'}</td>
                               </tr>
                             ))}
@@ -1037,8 +1038,8 @@ export default function AdminPage() {
                             {(userTabData?.items || []).map((l: any) => (
                               <tr key={l.id}>
                                 <td className="p-2 text-xs font-mono">{l.id}</td>
-                                <td className={`p-2 text-xs font-bold ${l.amount >= 0 ? 'text-green-400' : 'text-red-400'}`}>{l.amount >= 0 ? '+' : ''}{l.amount.toLocaleString('fa-IR')}</td>
-                                <td className="p-2 text-xs">{l.balance_after.toLocaleString('fa-IR')}</td>
+                                <td className={`p-2 text-xs font-bold ${l.amount >= 0 ? 'text-green-400' : 'text-red-400'}`}>{l.amount >= 0 ? '+' : ''}{faNum(l.amount)}</td>
+                                <td className="p-2 text-xs">{faNum(l.balance_after)}</td>
                                 <td className="p-2 text-xs">{l.reason}</td>
                                 <td className="p-2 text-xs">{new Date(l.created_at).toLocaleDateString('fa-IR')}</td>
                               </tr>
@@ -1063,7 +1064,7 @@ export default function AdminPage() {
                             {(userTabData?.payments || []).map((p: any) => (
                               <tr key={p.id}>
                                 <td className="p-2 text-xs font-mono">{p.id}</td>
-                                <td className="p-2 text-xs font-bold">{p.amount.toLocaleString('fa-IR')}</td>
+                                <td className="p-2 text-xs font-bold">{faNum(p.amount)}</td>
                                 <td className="p-2"><span className={`badge ${p.status === 'verified' ? 'badge-positive' : p.status === 'pending' ? 'badge-accent' : 'badge-danger'}`}>{p.status === 'verified' ? 'تایید شده' : p.status === 'pending' ? 'در انتظار' : 'ناموفق'}</span></td>
                                 <td className="p-2 text-xs">{p.payment_type}</td>
                                 <td className="p-2 text-xs font-mono">{p.ref_id || '—'}</td>
@@ -1088,7 +1089,7 @@ export default function AdminPage() {
                                     <td className="p-2"><span className={`badge ${s.status === 'active' ? 'badge-positive' : 'badge-accent'}`}>{s.status === 'active' ? 'فعال' : s.status}</span></td>
                                     <td className="p-2 text-xs">{new Date(s.starts_at).toLocaleDateString('fa-IR')}</td>
                                     <td className="p-2 text-xs">{s.ends_at ? new Date(s.ends_at).toLocaleDateString('fa-IR') : '—'}</td>
-                                    <td className="p-2 text-xs">{s.price_paid?.toLocaleString('fa-IR')}</td>
+                                    <td className="p-2 text-xs">{faNum(s.price_paid)}</td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -1132,8 +1133,8 @@ export default function AdminPage() {
                       prices.map((p: any) => (
                         <tr key={p.model}>
                           <td className="p-3 text-sm font-mono font-medium text-primary">{p.model}</td>
-                          <td className="p-3 text-xs">{p.input_per_million.toLocaleString('fa-IR')}</td>
-                          <td className="p-3 text-xs">{p.output_per_million.toLocaleString('fa-IR')}</td>
+                          <td className="p-3 text-xs">{faNum(p.input_per_million)}</td>
+                          <td className="p-3 text-xs">{faNum(p.output_per_million)}</td>
                           <td className="p-3"><span className="badge">{p.currency}</span></td>
                           <td className="p-3">
                             <button className="btn btn-sm" onClick={() => { setPzModel(p.model); setPzIn(String(p.input_per_million)); setPzOut(String(p.output_per_million)); setPzCur(p.currency) }}>
@@ -1185,7 +1186,7 @@ export default function AdminPage() {
              ───────────────────────────────────────────────────────────── */}
           {page === 'features' && (
             <div className="space-y-6">
-              <SectionHeader title="امکانات و ویژگی‌ها" subtitle={`${features.length} ویژگی ثبت شده`} />
+              <SectionHeader title="امکانات و ویژگی‌ها" subtitle={`${faNum(features.length)} ویژگی ثبت شده`} />
 
               <div className="space-y-2">
                 {features.length === 0 && (
@@ -1268,7 +1269,7 @@ export default function AdminPage() {
              ───────────────────────────────────────────────────────────── */}
           {page === 'discounts' && (
             <div className="space-y-6">
-              <SectionHeader title="کدهای تخفیف" subtitle={`${discounts.length} کد تخفیف فعال`} />
+              <SectionHeader title="کدهای تخفیف" subtitle={`${faNum(discounts.length)} کد تخفیف فعال`} />
 
               <div className="space-y-2">
                 {discounts.length === 0 && (
@@ -1406,7 +1407,7 @@ export default function AdminPage() {
              ───────────────────────────────────────────────────────────── */}
           {page === 'models' && (
             <div className="space-y-6">
-              <SectionHeader title="مدل‌های فعال" subtitle={`${models.length} مدل در دسترس`} />
+              <SectionHeader title="مدل‌های فعال" subtitle={`${faNum(models.length)} مدل در دسترس`} />
 
               {/* Org Default Model */}
               <div className="admin-card">
@@ -1526,19 +1527,19 @@ export default function AdminPage() {
                     <StatCard
                       icon="lock"
                       label="ورودهای ناموفق (۲۴ ساعت)"
-                      value={securityStats.failed_logins_24h.toLocaleString('fa-IR')}
+                      value={faNum(securityStats.failed_logins_24h)}
                       color="var(--danger)"
                     />
                     <StatCard
                       icon="user"
                       label="نشستهای فعال"
-                      value={securityStats.active_sessions.toLocaleString('fa-IR')}
+                      value={faNum(securityStats.active_sessions)}
                       color="var(--info)"
                     />
                     <StatCard
                       icon="security"
                       label="کاربران مسدود شده"
-                      value={securityStats.banned_users?.length?.toLocaleString('fa-IR') || '0'}
+                      value={faNum(securityStats.banned_users?.length, { fallback: '۰' })}
                       color="var(--warning)"
                     />
                   </div>
@@ -1700,7 +1701,7 @@ export default function AdminPage() {
                               {ev.details || '—'}
                             </td>
                             <td className="p-3 text-xs text-muted">
-                              {new Date(ev.created_at).toLocaleString('fa-IR')}
+                              {toFaDigits(new Date(ev.created_at).toLocaleString('fa-IR'))}
                             </td>
                           </tr>
                         ))
@@ -1787,7 +1788,7 @@ export default function AdminPage() {
                               {log.details || '—'}
                             </td>
                             <td className="p-3 text-xs text-muted">
-                              {new Date(log.created_at).toLocaleString('fa-IR')}
+                              {toFaDigits(new Date(log.created_at).toLocaleString('fa-IR'))}
                             </td>
                           </tr>
                         ))

@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
+import { faNum } from '@/lib/format'
 
 /* ═══════════════════════════════════════════════════════════════
    Types
@@ -69,7 +70,7 @@ const CATEGORY_LABELS: Record<string, string> = {
    ═══════════════════════════════════════════════════════════════ */
 
 function faNumber(n: number): string {
-  return n.toLocaleString('fa-IR')
+  return faNum(n)
 }
 
 function renderStars(rating: number, size = 14) {

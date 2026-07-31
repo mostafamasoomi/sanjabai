@@ -7,6 +7,7 @@ import { useCatalog } from '@/lib/useCatalog'
 import { type ModelCatalogItem, type Currency } from '@/types/catalog'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { Skeleton } from '@/components/ui'
+import { faNum, faCompact } from '@/lib/format'
 import { markOnboarded, isOnboarded, displayName } from '@/lib/onboarding'
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -134,15 +135,15 @@ function formatPrice(p?: ModelCatalogItem['pricing']): string {
 function formatPriceShort(p?: ModelCatalogItem['pricing']): string {
   if (!p) return ''
   const cur = p.currency === 'IRT' ? 'تومان' : p.currency === 'IRR' ? 'ریال' : p.currency
-  const fmt = (n: number) => n.toLocaleString('fa-IR')
+  const fmt = faNum
   return `ورودی ${fmt(p.inputPerMillion)} · خروجی ${fmt(p.outputPerMillion)} ${cur}`
 }
 
 function formatContext(n?: number): string {
   if (!n) return ''
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M توکن`
-  if (n >= 1_000) return `${Math.round(n / 1_000)}K توکن`
-  return `${n} توکن`
+  // `M` / `K` are Latin runs: in an RTL paragraph they were placed before
+  // the number they abbreviate. Persian words carry the same meaning safely.
+  return `${faCompact(n)} توکن`
 }
 
 const FAVORITES_KEY = 'multiai_favorite_models'
@@ -454,7 +455,7 @@ export default function OnboardingPage() {
 
                 {favoriteIds.length > 0 && (
                   <p className="text-center text-xs text-[var(--accent)] mt-3">
-                    {favoriteIds.length} مدل انتخاب شده
+                    {faNum(favoriteIds.length)} مدل انتخاب شده
                   </p>
                 )}
 

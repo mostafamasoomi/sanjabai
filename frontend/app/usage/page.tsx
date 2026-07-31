@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
+import { faNum, faPrice, faCompact, faPercent, toFaDigits } from '@/lib/format'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Types
@@ -43,22 +44,22 @@ type RangeKey = 'week' | 'month' | 'all'
    Helpers
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const fmtToman = (n: number) => `${n.toLocaleString('fa-IR')} تومان`
-const fmtIRR = (n: number) => n.toLocaleString('fa-IR')
-const fmtTokens = (n: number) => {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return String(n)
-}
+const fmtToman = (n: number) => faPrice(n)
+const fmtIRR = (n: number) => faNum(n)
+// Was `1.2M` / `34.0K` — Latin abbreviations that the RTL paragraph reorders
+// away from their number. faCompact gives the Persian equivalent instead.
+const fmtTokens = (n: number) => faCompact(n)
 const fmtDate = (s: string | null) => {
-  if (!s) return '-'
-  return new Date(s).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  if (!s) return '—'
+  return toFaDigits(new Date(s).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }))
 }
 const fmtDateShort = (s: string | null) => {
-  if (!s) return '-'
-  return new Date(s).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric' })
+  if (!s) return '—'
+  return toFaDigits(new Date(s).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric' }))
 }
-const fmtPct = (n: number) => `${(n * 100).toFixed(1)}%`
+// `٪` rather than `%`: the Latin sign is an LTR run that gets pushed away
+// from its number in an RTL paragraph.
+const fmtPct = (n: number) => faPercent(n * 100, 1)
 
 const modelDisplayNames: Record<string, string> = {
   'agnes-2.0-flash': 'Agnes 2.0 Flash',
@@ -211,7 +212,16 @@ export default function UsagePage() {
       const res = await fetch('/api/me/usage', { headers: { Authorization: `Bearer ${token}` } })
       if (res.ok) {
         const d = await res.json()
-        setData(d)
+        // Normalise the collections up front. Every derived value below is a
+        // useMemo that maps/filters/reduces over them, so one missing key in
+        // the response — an older backend, a user with no history — threw
+        // during render and the error boundary replaced the whole page with
+        // "خطای سیستمی". Defaulting here keeps that a legitimate empty state.
+        setData({
+          ...d,
+          recent_events: Array.isArray(d?.recent_events) ? d.recent_events : [],
+          per_model_breakdown: Array.isArray(d?.per_model_breakdown) ? d.per_model_breakdown : [],
+        })
       } else {
         toast('خطا در دریافت اطلاعات مصرف', 'error')
       }
@@ -374,7 +384,7 @@ export default function UsagePage() {
             <Icon name="chart" size={18} className="text-accent" />
           </div>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>گزارش مصرف</h1>
+            <h1 className="page-title">گزارش مصرف</h1>
             <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>تحلیل هزینه، توکن و عملکرد مدل‌ها</p>
           </div>
         </div>
@@ -428,7 +438,7 @@ export default function UsagePage() {
           ))}
         </div>
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          {rangedEvents.length} رویداد در بازه انتخابی
+          {faNum(rangedEvents.length)} رویداد در بازه انتخابی
         </span>
       </div>
 
@@ -459,7 +469,7 @@ export default function UsagePage() {
               </svg>
             </div>
           </div>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>هنوز مصرفی ثبت نشده است</h2>
+          <h2 className="card-title" style={{ marginBottom: 8 }}>هنوز مصرفی ثبت نشده است</h2>
           <p style={{ color: 'var(--text-muted)', fontSize: 14, maxWidth: 360, margin: '0 auto 24px' }}>
             با ارسال اولین پیام در چت، گزارش‌های دقیق مصرف توکن و هزینه اینجا نمایش داده می‌شود.
           </p>
@@ -544,7 +554,7 @@ export default function UsagePage() {
             <FadeInCard className="card" delay={260} style={{ padding: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                 <Icon name="chart" size={16} className="text-accent" />
-                <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>توزیع هزینه مدل‌ها</h2>
+                <h2 className="card-title">توزیع هزینه مدل‌ها</h2>
               </div>
               {modelStats.length > 0 ? (
                 <>
@@ -588,7 +598,7 @@ export default function UsagePage() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Icon name="calendar" size={16} className="text-accent" />
-                  <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>مصرف روزانه</h2>
+                  <h2 className="card-title">مصرف روزانه</h2>
                 </div>
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>۳۰ روز گذشته</span>
               </div>
@@ -634,7 +644,7 @@ export default function UsagePage() {
             <FadeInCard className="card" delay={380} style={{ marginBottom: 16, overflow: 'hidden' }}>
               <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Icon name="models" size={16} className="text-accent" />
-                <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>مصرف به تفکیک مدل</h2>
+                <h2 className="card-title">مصرف به تفکیک مدل</h2>
               </div>
 
               <div style={{ padding: '20px 20px 8px' }}>
@@ -673,8 +683,8 @@ export default function UsagePage() {
           <FadeInCard className="card overflow-hidden" delay={440}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Icon name="chart" size={16} className="text-accent" />
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>تاریخچه مصرف</h2>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)', marginInlineStart: 'auto' }}>{rangedEvents.length} مورد</span>
+              <h2 className="card-title">تاریخچه مصرف</h2>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', marginInlineStart: 'auto' }}>{faNum(rangedEvents.length)} مورد</span>
             </div>
 
             {rangedEvents.length === 0 ? (

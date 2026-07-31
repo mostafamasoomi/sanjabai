@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth'
+import { faNum } from '@/lib/format'
 
 type DocType = 'pptx' | 'docx' | 'mdx'
 
@@ -312,9 +313,9 @@ export default function DocumentsPage() {
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.25rem' }}>{result.title}</h3>
                 <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                  {result.type === 'pptx' && `${result.slides_count} اسلاید`}
-                  {result.type === 'docx' && `${result.sections_count} بخش`}
-                  {result.type === 'mdx' && `${result.slides_count} اسلاید`}
+                  {result.type === 'pptx' && `${faNum(result.slides_count)} اسلاید`}
+                  {result.type === 'docx' && `${faNum(result.sections_count)} بخش`}
+                  {result.type === 'mdx' && `${faNum(result.slides_count)} اسلاید`}
                   {' · '}
                   {formatSize(result.file_size)}
                   {' · '}

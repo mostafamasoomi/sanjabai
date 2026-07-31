@@ -112,7 +112,10 @@ export default function LoginPage() {
               onChange={(e) => setCaptchaAnswer(e.target.value)}
               dir="ltr"
             />
-            <button type="button" onClick={fetchCaptcha} className="text-xs text-[var(--accent)] mt-1">تصویر جدید</button>
+            <button type="button" onClick={fetchCaptcha} className="auth-inline-link mt-1">
+              <Icon name="refresh" size={12} />
+              تصویر جدید
+            </button>
           </div>
           <button className="btn btn-primary w-full" type="submit" disabled={busy}>
             {busy ? (
@@ -125,11 +128,11 @@ export default function LoginPage() {
         </form>
 
         <p className="text-center text-sm text-[var(--text-muted)] mt-4">
-          <Link href="/forgot-password" className="text-[var(--accent)] hover:underline">رمز عبور را فراموش کردهاید؟</Link>
+          <Link href="/forgot-password" className="auth-inline-link">رمز عبور را فراموش کرده‌اید؟</Link>
         </p>
         <p className="text-center text-sm text-[var(--text-muted)] mt-2">
           حساب کاربری ندارید؟{' '}
-          <Link href="/signup" className="text-[var(--accent)] hover:underline">ثبت‌نام</Link>
+          <Link href="/signup" className="auth-inline-link">ثبت‌نام</Link>
         </p>
 
         {/* Trust signals */}

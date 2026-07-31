@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth'
 import { useCatalog } from '@/lib/useCatalog'
 import { type ModelCatalogItem } from '@/types/catalog'
 import { Icon } from '@/components/ui/Icon'
+import { faNum } from '@/lib/format'
 import { Skeleton, EmptyState, toast } from '@/components/ui'
 import MarkdownRenderer from '@/app/chat/components/MarkdownRenderer'
 import ModelPicker from '@/app/chat/components/ModelPicker'
@@ -186,11 +187,11 @@ export default function ComparePage() {
             </div>
             <div className="compare-stat">
               <span className="compare-stat-label">توکن ورودی</span>
-              <span className="compare-stat-value">{result.input_tokens.toLocaleString()}</span>
+              <span className="compare-stat-value num">{faNum(result.input_tokens)}</span>
             </div>
             <div className="compare-stat">
               <span className="compare-stat-label">توکن خروجی</span>
-              <span className="compare-stat-value">{result.output_tokens.toLocaleString()}</span>
+              <span className="compare-stat-value num">{faNum(result.output_tokens)}</span>
             </div>
             <div className="compare-stat">
               <span className="compare-stat-label">هزینه</span>

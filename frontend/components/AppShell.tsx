@@ -53,6 +53,15 @@ const NAV: NavItem[] = [
  */
 const CHROME_LESS_ROUTES = new Set(['/', '/login', '/signup', '/forgot-password'])
 
+/**
+ * Routes that manage their own vertical space and must not get the shell's
+ * gutters or a scrolling document: they size themselves against the viewport
+ * minus the chrome (see `.layout-content--flush` in globals.css). /chat is the
+ * only one today — a fixed model bar, a scrolling transcript and a composer
+ * pinned to the bottom only work if the container is exactly one screen tall.
+ */
+const FLUSH_ROUTES = new Set(['/chat'])
+
 /** Routes reachable without a session. Everything else redirects to /login. */
 const PUBLIC_ROUTES = [
   '/',
@@ -83,6 +92,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   // second, conflicting navigation. They still need the provider tree above
   // this component, which is why they render through here at all.
   const bare = CHROME_LESS_ROUTES.has(pathname ?? '')
+  const flush = FLUSH_ROUTES.has(pathname ?? '')
 
   useEffect(() => { setSidebarOpen(false) }, [pathname])
   // Close user menu on outside click
@@ -245,7 +255,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       )}
 
       {/* ── Main Area ──────────────────────────────────────── */}
-      <div className="layout-main">
+      <div className={`layout-main${flush ? ' layout-main--flush' : ''}`}>
         {/* Top bar */}
         <header className="topbar-glass">
           <div className="flex items-center gap-2">
@@ -262,12 +272,37 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
             {/* The brand used to be `md:hidden`, which left signed-out visitors
                 on a desktop with no logo and no way back to the home page —
-                /models and /pricing were dead ends. It is now always present,
-                and stands in for the marketing header on public routes. */}
-            <Link href="/" className="topbar-brand">
+                /models and /pricing were dead ends. It is now always present
+                for them, and stands in for the marketing header.
+
+                For a signed-in user on a wide screen the sidebar carries the
+                same lockup ~200px away, so this copy is marked as the
+                duplicate and hidden from md up. Below md there is no sidebar,
+                so it is the only brand and the only route home. */}
+            <Link
+              href="/"
+              className={`topbar-brand${user ? ' topbar-brand--duplicate' : ''}`}
+            >
               <img src="/logo.svg" alt="" width={24} height={24} />
               <span>Multiai</span>
             </Link>
+
+            {/* Command palette. It lives at the start of the bar rather than
+                the end because that is where the removed duplicate brand left
+                a hole, and because it is the only thing in the topbar a user
+                reaches for repeatedly — the language and theme toggles are
+                set-once controls and belong out of the way. */}
+            {user && (
+              <button
+                onClick={() => openPalette(true)}
+                className="topbar-search hidden sm:flex"
+                aria-label="جستجو در منوها"
+              >
+                <Icon name="search" size={14} />
+                <span>جستجو</span>
+                <kbd>⌘K</kbd>
+              </button>
+            )}
 
             {/* Public pages get the marketing links inline, since they have no
                 sidebar to carry them. */}
@@ -281,16 +316,6 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex items-center gap-2">
-            {user && (
-              <button
-                onClick={() => openPalette(true)}
-                className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-md)] border border-[var(--border)] text-xs text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text-secondary)] transition-all"
-              >
-                <Icon name="search" size={14} />
-                <span>جستجو</span>
-                <kbd className="text-[10px] bg-[var(--bg-surface)] px-1 rounded">⌘K</kbd>
-              </button>
-            )}
             <LanguageToggle />
             <ThemeToggle />
             {!loading && !user && (
@@ -303,7 +328,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Content */}
-        <main className="layout-content">{children}</main>
+        <main className={`layout-content${flush ? ' layout-content--flush' : ''}`}>{children}</main>
 
         {/* Mobile bottom nav — hidden when not logged in */}
         {user && (
@@ -330,7 +355,9 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         </nav>
         )}
 
-        <div className="md:hidden h-14" />
+        {/* Clears the fixed mobile bottom nav. Suppressed on flush routes,
+            which already subtract --bottomnav-h from their own height. */}
+        <div className="md:hidden h-14 layout-bottomnav-spacer" />
       </div>
 
       {/* ── Mobile sidebar overlay ─────────────────────────── */}

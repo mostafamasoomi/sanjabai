@@ -151,7 +151,10 @@ export default function SignupPage() {
               onChange={(e) => setCaptchaAnswer(e.target.value)}
               dir="ltr"
             />
-            <button type="button" onClick={fetchCaptcha} className="text-xs text-[var(--accent)] mt-1">تصویر جدید</button>
+            <button type="button" onClick={fetchCaptcha} className="auth-inline-link mt-1">
+              <Icon name="refresh" size={12} />
+              تصویر جدید
+            </button>
           </div>
           <button className="aurora-signup-btn btn btn-primary w-full" type="submit" disabled={busy}>
             {busy ? (
@@ -164,8 +167,8 @@ export default function SignupPage() {
         </form>
 
         <p className="text-center text-sm text-[var(--text-dim)] mt-5">
-          قبلاً ثبت‌نام کردهاید؟{' '}
-          <Link href="/login" className="text-[var(--accent)] hover:underline">ورود</Link>
+          قبلاً ثبت‌نام کرده‌اید؟{' '}
+          <Link href="/login" className="auth-inline-link">ورود</Link>
         </p>
 
         {/* Trust signals */}

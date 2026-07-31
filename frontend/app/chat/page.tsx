@@ -8,6 +8,7 @@ import { useCatalog } from '@/lib/useCatalog'
 import { type ModelCatalogItem } from '@/types/catalog'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { Skeleton, EmptyState, toast } from '@/components/ui'
+import { Num, faNum } from '@/lib/format'
 import MarkdownRenderer from './components/MarkdownRenderer'
 import ModelPicker from './components/ModelPicker'
 
@@ -874,6 +875,13 @@ export default function ChatPage() {
 
         {/* ── Main chat area ─────────────────────────────────────────── */}
         <div className="chat-main-area">
+          {/* The application view had no page heading at all, so the document
+              outline started at h3 and screen-reader users landed on a route
+              with nothing to announce. Visually hidden because the model bar
+              below already says which model you are talking to — a second,
+              visible title would be noise in a surface this dense. */}
+          <h1 className="sr-only">چت با مدل‌های هوش مصنوعی</h1>
+
           {/* ── Model bar ───────────────────────────────────────────── */}
           <div className="chat-model-bar">
             <div className="flex items-center gap-2">
@@ -904,19 +912,22 @@ export default function ChatPage() {
               )}
             </div>
             <div className="flex items-center gap-2">
-              {/* Smart Mode toggle */}
-              <label className="smart-mode-toggle" title={smartMode ? 'حالت هوشمند فعال' : 'حالت هوشمند غیرفعال'}>
-                <input
-                  type="checkbox"
-                  checked={smartMode}
-                  onChange={() => setSmartMode(prev => !prev)}
-                  className="sr-only"
-                />
+              {/* Smart Mode toggle. Was a <label> wrapping an .sr-only
+                  checkbox — a 1×1px hit target in the tab order. role="switch"
+                  announces the state without needing the hidden input. */}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={smartMode}
+                onClick={() => setSmartMode(prev => !prev)}
+                className="smart-mode-toggle"
+                title={smartMode ? 'حالت هوشمند فعال' : 'حالت هوشمند غیرفعال'}
+              >
                 <span className={`smart-mode-switch ${smartMode ? 'smart-mode-on' : ''}`}>
                   <span className="smart-mode-knob" />
                 </span>
-                <span className="text-xs text-[var(--text-secondary)] select-none">Smart Mode</span>
-              </label>
+                <span className="select-none">Smart Mode</span>
+              </button>
               {smartMode && smartModel && (
                 <span className="badge badge-accent text-[9px]" dir="ltr" title="مدل انتخابی توسط Smart Mode">
                   🧠 {smartModel}
@@ -1032,7 +1043,7 @@ export default function ChatPage() {
           <div ref={scrollContainerRef} onScroll={handleScroll} className="chat-messages">
             {showPresets && messages.length <= 1 && (
               <div className="chat-presets">
-                <h3 className="chat-presets-title">از کجا شروع کنیم؟</h3>
+                <h2 className="chat-presets-title">از کجا شروع کنیم؟</h2>
                 <div className="chat-presets-grid">
                   {PRESETS.map(p => (
                     <button
@@ -1193,20 +1204,22 @@ export default function ChatPage() {
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
                   </svg>
-                  ~{preSendEstimate.tokens.toLocaleString('fa-IR')} tokens
+                  ~<Num value={preSendEstimate.tokens} unit="توکن" />
                   <span className="cost-estimate-sep">·</span>
-                  ~{preSendEstimate.cost.toLocaleString('fa-IR', { maximumFractionDigits: 1 })} تومان
+                  ~<Num value={preSendEstimate.cost} decimals={1} unit="تومان" />
                 </span>
               )}
               {usageStats.totalTokens > 0 && (
-                <span className="usage-badge" title={`پرامپت: ${usageStats.promptTokens.toLocaleString('fa-IR')} | پاسخ: ${usageStats.completionTokens.toLocaleString('fa-IR')}`}>
+                <span className="usage-badge" title={`پرامپت: ${faNum(usageStats.promptTokens)} | پاسخ: ${faNum(usageStats.completionTokens)}`}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
                   </svg>
-                  <span dir="ltr">{usageStats.totalTokens.toLocaleString('fa-IR')} tokens</span>
-                  <span className="usage-cost" dir="ltr">{usageStats.estimatedCost.toLocaleString('fa-IR')} تومان</span>
+                  <Num value={usageStats.totalTokens} unit="توکن" />
+                  {/* The cost span was dir="ltr" with a Persian unit, which put
+                      "تومان" on the wrong side of the amount. */}
+                  <Num className="usage-cost" value={usageStats.estimatedCost} unit="تومان" />
                   {streaming && tokensPerSec > 0 && (
-                    <span className="usage-tps" dir="ltr">{tokensPerSec.toLocaleString('fa-IR')} tok/s</span>
+                    <Num className="usage-tps" value={tokensPerSec} unit="tok/s" />
                   )}
                 </span>
               )}
@@ -1225,7 +1238,7 @@ export default function ChatPage() {
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8z"/>
                   </svg>
-                  {(walletBalance / 10).toLocaleString('fa-IR')} تومان
+                  <Num value={walletBalance / 10} unit="تومان" />
                 </span>
               )}
               {/* ── Prompt Library button ───────────────────────────── */}
@@ -1236,7 +1249,7 @@ export default function ChatPage() {
                 پرامپت‌ها
               </a>
               <span className="text-[10px] text-[var(--text-muted)]">
-                {input.length > 0 && `${input.length.toLocaleString('fa-IR')} کاراکتر`}
+                {input.length > 0 && `${faNum(input.length)} کاراکتر`}
               </span>
             </div>
           </form>

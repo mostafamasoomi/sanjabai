@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
+import { faNum, faPrice } from '@/lib/format'
 
 const AUTONOMY_LEVELS = [
   {
@@ -337,7 +338,7 @@ export default function ProfilePage() {
           <div className="profile-header-icon">
             <Icon name="user" size={20} className="text-accent" />
           </div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <h1 className="page-title">
             {isFa ? 'پروفایل کاربری' : 'User Profile'}
           </h1>
         </div>
@@ -399,7 +400,7 @@ export default function ProfilePage() {
             <div>
               <span className="profile-stat-label">{isFa ? 'موجودی' : 'Balance'}</span>
               <span className="profile-stat-value text-gradient">
-                {balance !== null ? `${balance.toLocaleString(isFa ? 'fa-IR' : 'en-US')} ${isFa ? 'تومان' : 'IRR'}` : '—'}
+                {balance === null ? '—' : isFa ? faPrice(balance) : `${balance.toLocaleString('en-US')} IRR`}
               </span>
             </div>
           </div>
@@ -408,7 +409,11 @@ export default function ProfilePage() {
             <div>
               <span className="profile-stat-label">{isFa ? 'مصرف ماهانه' : 'Monthly usage'}</span>
               <span className="profile-stat-value">
-                {usage?.monthly ? `${(usage.monthly.inp + usage.monthly.out || 0).toLocaleString(isFa ? 'fa-IR' : 'en-US')} ${isFa ? 'توکن' : 'tokens'}` : '—'}
+                {!usage?.monthly
+                  ? '—'
+                  : isFa
+                    ? `${faNum(usage.monthly.inp + usage.monthly.out || 0)} توکن`
+                    : `${(usage.monthly.inp + usage.monthly.out || 0).toLocaleString('en-US')} tokens`}
               </span>
             </div>
           </div>
@@ -426,7 +431,7 @@ export default function ProfilePage() {
       <div className="card profile-section-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="user" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <h2 className="card-title">
             {isFa ? 'اطلاعات شخصی' : 'Personal Info'}
           </h2>
         </div>
@@ -454,7 +459,7 @@ export default function ProfilePage() {
               style={{ resize: 'vertical', minHeight: 80 }}
             />
             <span style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'left', display: 'block' }}>
-              {bio.length}/500
+              {faNum(bio.length)}/۵۰۰
             </span>
           </div>
           <div className="profile-input-group">
@@ -477,7 +482,7 @@ export default function ProfilePage() {
       <div className="card profile-section-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="cpu" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <h2 className="card-title">
             {isFa ? 'تنظیمات هوش مصنوعی' : 'AI Preferences'}
           </h2>
         </div>
@@ -530,7 +535,7 @@ export default function ProfilePage() {
       <div className="card profile-section-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="rocket" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <h2 className="card-title">
             {isFa ? 'سطح خودمختاری' : 'Autonomy Level'}
           </h2>
         </div>
@@ -582,7 +587,7 @@ export default function ProfilePage() {
       <div className="card profile-section-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="palette" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <h2 className="card-title">
             {isFa ? 'ظاهر و زبان' : 'Appearance & Language'}
           </h2>
         </div>
@@ -647,7 +652,7 @@ export default function ProfilePage() {
       <div className="card profile-section-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="bell" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <h2 className="card-title">
             {isFa ? 'اعلان‌ها' : 'Notifications'}
           </h2>
         </div>
@@ -718,7 +723,7 @@ export default function ProfilePage() {
       <div className="card profile-section-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="lock" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <h2 className="card-title">
             {isFa ? 'تغییر رمز عبور' : 'Change Password'}
           </h2>
         </div>
@@ -773,7 +778,7 @@ export default function ProfilePage() {
       <div className="card profile-section-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Icon name="send" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <h2 className="card-title">
             {isFa ? 'اتصال تلگرام' : 'Link Telegram'}
           </h2>
         </div>
@@ -816,7 +821,7 @@ export default function ProfilePage() {
       <div className="card profile-section-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Icon name="gift" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>
+          <h2 className="card-title">
             {isFa ? 'دعوت دوستان' : 'Invite Friends'}
           </h2>
         </div>

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon, type IconName } from '@/components/ui/Icon'
+import { faNum, faPrice, toFaDigits } from '@/lib/format'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type LedgerEntry = {
@@ -45,16 +46,20 @@ const MIN_TOPUP = 10_000
 const MAX_TOPUP = 100_000_000_000
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-const fmtIRR = (n: number) => n.toLocaleString('fa-IR')
-const fmtToman = (n: number) => `${n.toLocaleString('fa-IR')} تومان`
+// Numerals and money go through lib/format so every surface agrees; see the
+// note there on why toLocaleString is not called directly.
+const fmtIRR = (n: number) => faNum(n)
+const fmtToman = (n: number) => faPrice(n)
 const fmtDate = (s: string) =>
-  new Date(s).toLocaleDateString('fa-IR', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  toFaDigits(
+    new Date(s).toLocaleDateString('fa-IR', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+  )
 
 const statusLabel: Record<string, { text: string; badge: string }> = {
   paid: { text: 'موفق', badge: 'badge-positive' },
@@ -321,7 +326,7 @@ export default function WalletPage() {
           <div className="wallet-header-icon">
             <Icon name="wallet" size={20} className="text-accent" />
           </div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>کیف پول</h1>
+          <h1 className="page-title">کیف پول</h1>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 24 }}>
           <BalanceSkeleton />
@@ -342,7 +347,7 @@ export default function WalletPage() {
           <div className="wallet-header-icon">
             <Icon name="wallet" size={20} className="text-accent" />
           </div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>کیف پول</h1>
+          <h1 className="page-title">کیف پول</h1>
         </div>
         <button
           className="btn btn-sm btn-secondary"
@@ -470,7 +475,7 @@ export default function WalletPage() {
       <div className="card" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
           <Icon name="gift" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>بسته‌های اعتباری</h2>
+          <h2 className="card-title">بسته‌های اعتباری</h2>
           {creditPackages.length > 0 && (
             <span className="badge badge-accent" style={{ marginLeft: 4 }}>{fmtIRR(creditPackages.length)}</span>
           )}
@@ -482,9 +487,9 @@ export default function WalletPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
             {creditPackages.map((pkg) => {
               const isPurchasing = purchasingPkgId === pkg.id
-              const baseToman = (pkg.base_amount / 10).toLocaleString('fa-IR')
+              const baseToman = faNum(pkg.base_amount / 10)
               const bonusToman = pkg.bonus_percent > 0
-                ? ((pkg.total_credits - pkg.base_amount) / 10).toLocaleString('fa-IR')
+                ? faNum((pkg.total_credits - pkg.base_amount) / 10)
                 : null
               return (
                 <div
@@ -571,7 +576,7 @@ export default function WalletPage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon name="history" size={16} className="text-accent" />
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>تاریخچه تراکنش‌ها</h2>
+            <h2 className="card-title">تاریخچه تراکنش‌ها</h2>
             <span className="badge badge-accent" style={{ marginLeft: 4 }}>{fmtIRR(ledger.length)}</span>
           </div>
 
@@ -645,7 +650,7 @@ export default function WalletPage() {
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
           <Icon name="payment" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>تاریخچه پرداخت‌ها</h2>
+          <h2 className="card-title">تاریخچه پرداخت‌ها</h2>
         </div>
 
         {payments.length === 0 ? (

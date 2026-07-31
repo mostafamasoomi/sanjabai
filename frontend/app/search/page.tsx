@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
+import { faNum } from '@/lib/format'
 
 /* ═══════════════════════════════════════════════════════════════
    Types
@@ -34,11 +35,11 @@ const faRelative = (iso: string) => {
   const diff = Date.now() - new Date(iso).getTime()
   const mins = Math.floor(diff / 60000)
   if (mins < 1) return 'همین الان'
-  if (mins < 60) return `${mins.toLocaleString('fa-IR')} دقیقه پیش`
+  if (mins < 60) return `${faNum(mins)} دقیقه پیش`
   const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs.toLocaleString('fa-IR')} ساعت پیش`
+  if (hrs < 24) return `${faNum(hrs)} ساعت پیش`
   const days = Math.floor(hrs / 24)
-  if (days < 7) return `${days.toLocaleString('fa-IR')} روز پیش`
+  if (days < 7) return `${faNum(days)} روز پیش`
   return faDate(iso)
 }
 
@@ -298,7 +299,7 @@ export default function SearchPage() {
           </h1>
           <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
             {hasQuery
-              ? `${results.length.toLocaleString('fa-IR')} نتیجه یافت شد`
+              ? `${faNum(results.length)} نتیجه یافت شد`
               : 'آخرین مکالمات شما'}
           </p>
         </div>

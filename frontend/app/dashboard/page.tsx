@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon, type IconName } from '@/components/ui/Icon'
+import { Num, faNum, faPercent, faDate, faTime } from '@/lib/format'
 
 /* ═══════════════════════════════════════════════════════════════
    Types
@@ -70,9 +71,8 @@ type BillingSettings = {
    Helpers
    ═══════════════════════════════════════════════════════════════ */
 
-const faNum = (n: number) => n.toLocaleString('fa-IR')
-const faDate = (iso: string) => new Date(iso).toLocaleDateString('fa-IR', { year: 'numeric', month: 'long', day: 'numeric' })
-const faTime = (iso: string) => new Date(iso).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })
+/* Numerals, dates and money all come from lib/format — see the note there on
+   why this page no longer calls toLocaleString directly. */
 
 const planLabels: Record<string, string> = {
   free: 'رایگان',
@@ -127,32 +127,26 @@ function StatCard({
   icon,
   label,
   value,
-  sub,
-  accentColor,
+  unit,
+  lead = false,
 }: {
   icon: IconName
   label: string
-  value: string
-  sub?: string
-  accentColor?: string
+  value: number
+  unit?: string
+  /** The one card on the page allowed the top step of the type scale. */
+  lead?: boolean
 }) {
   return (
-    <div className="card flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-[var(--text-secondary)] font-medium">{label}</span>
-        <div
-          className="w-8 h-8 rounded-[var(--radius-sm)] flex items-center justify-center"
-          style={{ background: accentColor ? `${accentColor}15` : 'var(--accent-dim)' }}
-        >
-          <Icon name={icon} size={16} className="text-[var(--accent)]" />
+    <div className={`card stat-card${lead ? ' stat-card--lead' : ''}`}>
+      <div className="stat-card__head">
+        <span className="stat-card__label">{label}</span>
+        <div className="stat-card__icon">
+          <Icon name={icon} size={16} />
         </div>
       </div>
-      <div className="text-[1.75rem] font-bold text-[var(--text-primary)] tracking-tight">
-        {value}
-      </div>
-      {sub && (
-        <div className="text-[11px] text-[var(--text-muted)]">{sub}</div>
-      )}
+      <Num className="stat-card__value" value={value} />
+      {unit && <div className="stat-card__unit">{unit}</div>}
     </div>
   )
 }
@@ -250,10 +244,10 @@ function LedgerRow({ entry }: { entry: LedgerEntry }) {
           className="text-sm font-semibold"
           style={{ color: isCredit ? 'var(--positive)' : 'var(--danger)' }}
         >
-          {isCredit ? '+' : ''}{faNum(entry.amount)} <span className="text-[10px] font-normal">تومان</span>
+          <Num value={entry.amount} unit="تومان" signed />
         </div>
         <div className="text-[10px] text-[var(--text-muted)] text-end">
-          موجودی: {faNum(entry.balance_after)}
+          موجودی: <Num value={entry.balance_after} />
         </div>
       </div>
     </div>
@@ -412,7 +406,8 @@ export default function DashboardPage() {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1.5rem' }}>
         <Icon name="security" size={48} className="text-[var(--text-muted)]" />
         <div className="text-center">
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>وارد شوید</h2>
+          {/* h1: this branch replaces the whole page, so it owns the outline. */}
+          <h1 className="page-title" style={{ marginBottom: '0.5rem' }}>وارد شوید</h1>
           <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>برای مشاهده داشبورد، ابتدا وارد حساب کاربری خود شوید.</p>
         </div>
         <button className="btn" onClick={() => router.push('/login')}>
@@ -460,7 +455,10 @@ export default function DashboardPage() {
     )
   }
 
-  const displayName = profile?.username || profile?.email?.split('@')[0] || 'کاربر'
+  // Deliberately no email-local-part fallback: it produced greetings like
+  // "سلام، user" — a Latin fragment of an address presented as a person's
+  // name. A generic Persian noun is less wrong than a wrong name.
+  const displayName = profile?.username || 'کاربر'
   const plan = profile?.plan || 'free'
   const recentLedger = ledger.slice(0, 10)
 
@@ -474,14 +472,17 @@ export default function DashboardPage() {
   const planName = subscriptionPlan?.name_fa || planLabels[plan] || plan
 
   return (
-    <div className="flex flex-col gap-6">
+    // One 12-column grid for the whole page. Each card declares how much of
+    // the measure it takes, so every row fills the width instead of collapsing
+    // to a half-width column pinned to the inline-start edge.
+    <div className="dash-grid">
       {/* ─── Header ─── */}
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+      <header className="dash-span-12" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.03em', lineHeight: 1.3 }}>
+          <h1 className="page-title">
             سلام، {displayName}
           </h1>
-          <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+          <p className="page-subtitle">
             خوش آمدید به داشبورد مولتیای
           </p>
         </div>
@@ -504,41 +505,22 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* ─── Stat Cards Grid ─── */}
-      <section
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: '1rem',
-        }}
-      >
-        <StatCard
-          icon="wallet"
-          label="موجودی کیف پول"
-          value={`${faNum(balance ?? 0)}`}
-          sub="تومان"
-        />
-        <StatCard
-          icon="payment"
-          label="کل هزینه"
-          value={`${faNum(usage?.total_spent_this_month ?? 0)}`}
-          sub="تومان"
-        />
-        <StatCard
-          icon="chat"
-          label="تعداد مکالمات"
-          value={faNum((usage as any)?.event_count_this_month ?? 0)}
-          sub="مکالمه"
-        />
-        <StatCard
-          icon="code"
-          label="کل توکنها"
-          value={faNum(usage?.total_input_tokens_this_month ?? 0)}
-          sub="توکن"
-        />
+      {/* ─── Stat row: four equal columns across the full measure ─── */}
+      <div className="dash-span-3">
+        <StatCard icon="wallet" label="موجودی کیف پول" value={balance ?? 0} unit="تومان" lead />
+      </div>
+      <div className="dash-span-3">
+        <StatCard icon="payment" label="کل هزینه" value={usage?.total_spent_this_month ?? 0} unit="تومان" />
+      </div>
+      <div className="dash-span-3">
+        <StatCard icon="chat" label="تعداد مکالمات" value={(usage as any)?.event_count_this_month ?? 0} unit="مکالمه" />
+      </div>
+      <div className="dash-span-3">
+        <StatCard icon="code" label="کل توکن‌ها" value={usage?.total_input_tokens_this_month ?? 0} unit="توکن" />
+      </div>
 
-        {/* ─── Subscription Status Card ─── */}
-        <div className="card flex flex-col gap-3">
+      {/* ─── Subscription + activity row ─── */}
+        <div className="card dash-span-4 flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>وضعیت اشتراک</span>
             <div
@@ -584,7 +566,7 @@ export default function DashboardPage() {
                 <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
                   توکن مصرف شده
                 </span>
-                <span style={{ fontSize: '0.6875rem', color: 'var(--text-secondary)', fontFeatureSettings: '"tnum"' }}>
+                <span className="num" style={{ fontSize: 'var(--fs-2xs)', color: 'var(--text-secondary)' }}>
                   {faNum(tokensUsed)} / {faNum(tokenQuota)}
                 </span>
               </div>
@@ -627,25 +609,16 @@ export default function DashboardPage() {
             تغییر پلن
           </button>
         </div>
-      </section>
 
-      {/* ─── Main Content Grid ─── */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-          gap: '1.5rem',
-          alignItems: 'start',
-        }}
-      >
-        {/* Recent Activity / Ledger */}
-        <div className="card overflow-hidden">
+        {/* Recent Activity / Ledger — the widest card on the page, because it
+            is a list of long rows and the only one that benefits from run. */}
+        <div className="card dash-span-8 overflow-hidden">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
             <div className="flex items-center gap-2">
               <span className="text-[var(--accent)]">
                 <Icon name="history" size={18} />
               </span>
-              <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>فعالیت اخیر</h2>
+              <h2 className="card-title">فعالیت اخیر</h2>
             </div>
             <button
               className="btn btn-sm"
@@ -658,14 +631,15 @@ export default function DashboardPage() {
           </div>
 
           {recentLedger.length === 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '2.5rem 1rem', gap: '0.75rem' }}>
-              <span className="text-[var(--text-muted)] opacity-50">
-                <Icon name="history" size={32} />
+            <div className="empty-state">
+              <span className="empty-state__icon">
+                <Icon name="history" size={22} />
               </span>
-              <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-                هنوز تراکنشی ثبت نشده است
+              <p className="empty-state__title">هنوز تراکنشی ثبت نشده است</p>
+              <p className="empty-state__desc">
+                پس از اولین شارژ یا مصرف، تراکنش‌ها اینجا فهرست می‌شوند.
               </p>
-              <button className="btn btn-sm" onClick={() => router.push('/wallet')}>
+              <button className="btn btn-sm btn-secondary" onClick={() => router.push('/wallet')}>
                 <Icon name="wallet" size={14} />
                 شارژ کیف پول
               </button>
@@ -679,15 +653,14 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Right column: Quick Actions + Account + PAYG */}
-        <div className="flex flex-col gap-6">
+        {/* ─── Bottom row: three equal thirds ─── */}
           {/* Quick Actions */}
-          <div className="card">
+          <div className="card dash-span-4">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
               <span className="text-[var(--accent)]">
                 <Icon name="dashboard" size={18} />
               </span>
-              <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>دسترسی سریع</h2>
+              <h2 className="card-title">دسترسی سریع</h2>
             </div>
             <div className="flex flex-col gap-3">
               <QuickAction
@@ -727,12 +700,12 @@ export default function DashboardPage() {
           </div>
 
           {/* Account Info */}
-          <div className="card">
+          <div className="card dash-span-4">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
               <span className="text-[var(--accent)]">
                 <Icon name="profile" size={18} />
               </span>
-              <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>اطلاعات حساب</h2>
+              <h2 className="card-title">اطلاعات حساب</h2>
             </div>
             <div className="flex flex-col gap-3">
               <InfoRow icon="profile" label="ایمیل" value={profile?.email || '—'} />
@@ -757,12 +730,12 @@ export default function DashboardPage() {
           </div>
 
           {/* ─── PAYG Toggle Section ─── */}
-          <div className="card" id="payg-section">
+          <div className="card dash-span-4" id="payg-section">
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
               <span className="text-[var(--accent)]">
                 <Icon name="payment" size={18} />
               </span>
-              <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)' }}>پرداخت به ازای مصرف</h2>
+              <h2 className="card-title">پرداخت به ازای مصرف</h2>
             </div>
 
             {/* Toggle row */}
@@ -819,7 +792,7 @@ export default function DashboardPage() {
             <div style={{ padding: '0.5rem 0', borderTop: '1px solid var(--border)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>سقف هزینه</span>
-                <span style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>
+                <span className="num" style={{ fontSize: 'var(--fs-sm)', fontWeight: 500, color: 'var(--text-primary)' }}>
                   {billingSettings?.payg_hard_limit != null
                     ? `${faNum(billingSettings.payg_hard_limit)} تومان`
                     : 'تعیین نشده'
@@ -876,8 +849,8 @@ export default function DashboardPage() {
             {billingSettings?.notify_on_usage_pct != null && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0', borderTop: '1px solid var(--border)' }}>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>اعلام درصد مصرف</span>
-                <span style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>
-                  {faNum(billingSettings.notify_on_usage_pct)}٪
+                <span className="num" style={{ fontSize: 'var(--fs-sm)', fontWeight: 500, color: 'var(--text-primary)' }}>
+                  {faPercent(billingSettings.notify_on_usage_pct)}
                 </span>
               </div>
             )}
@@ -897,8 +870,6 @@ export default function DashboardPage() {
               با فعال بودن پرداخت به ازای مصرف، از موجودی کیف پول شما کسر می‌شود
             </div>
           </div>
-        </div>
-      </div>
     </div>
   )
 }

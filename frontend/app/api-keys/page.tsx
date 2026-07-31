@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
+import { faNum } from '@/lib/format'
 
 type ApiKeyInfo = {
   id: number
@@ -113,7 +114,7 @@ export default function ApiKeysPage() {
           <Icon name="key" size={20} className="text-accent" />
         </div>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>کلیدهای API</h1>
+          <h1 className="page-title">کلیدهای API</h1>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>مدیریت کلیدهای دسترسی به API</p>
         </div>
       </div>
@@ -122,7 +123,7 @@ export default function ApiKeysPage() {
       <div className="card apikeys-generate-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="plus" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>ساخت کلید جدید</h2>
+          <h2 className="card-title">ساخت کلید جدید</h2>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <input
@@ -171,9 +172,9 @@ export default function ApiKeysPage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon name="key" size={16} className="text-accent" />
-            <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>کلیدهای شما</h2>
+            <h2 className="card-title">کلیدهای شما</h2>
             {keys.length > 0 && (
-              <span className="badge badge-accent">{keys.length}</span>
+              <span className="badge badge-accent">{faNum(keys.length)}</span>
             )}
           </div>
         </div>
@@ -245,7 +246,7 @@ export default function ApiKeysPage() {
                         {k.usage_count !== undefined && (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                             <Icon name="chart" size={11} />
-                            {k.usage_count.toLocaleString('fa-IR')} درخواست
+                            {faNum(k.usage_count)} درخواست
                           </span>
                         )}
                       </div>
@@ -273,7 +274,7 @@ export default function ApiKeysPage() {
       <div className="card" style={{ marginTop: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
           <Icon name="code" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>نحوه استفاده</h2>
+          <h2 className="card-title">نحوه استفاده</h2>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>

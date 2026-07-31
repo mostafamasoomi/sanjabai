@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth'
 import { useCatalog } from '@/lib/useCatalog'
 import { type ModelCatalogItem } from '@/types/catalog'
 import { Icon } from '@/components/ui/Icon'
+import { faNum } from '@/lib/format'
 import { Skeleton, EmptyState, toast } from '@/components/ui'
 import MarkdownRenderer from '@/app/chat/components/MarkdownRenderer'
 import ModelPicker from '@/app/chat/components/ModelPicker'
@@ -225,7 +226,7 @@ export default function PlaygroundPage() {
               </div>
               <div className="compare-stat">
                 <span className="compare-stat-label">مجموع</span>
-                <span className="compare-stat-value">{response.usage.total_tokens}</span>
+                <span className="compare-stat-value num">{faNum(response.usage.total_tokens)}</span>
               </div>
             </div>
           )}

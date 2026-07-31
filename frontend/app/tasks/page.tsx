@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/lib/auth'
 import { toast, Modal, EmptyState, Skeleton, Tabs } from '@/components/ui'
 import { Icon, type IconName } from '@/components/ui/Icon'
+import { faNum, faPrice, toFaDigits } from '@/lib/format'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Scheduled Tasks Page
@@ -88,10 +89,12 @@ function describeCron(expr: string): string {
 
 function formatDateTime(s: string | null): string {
   if (!s) return '—'
-  return new Date(s).toLocaleString('fa-IR', {
-    year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  })
+  return toFaDigits(
+    new Date(s).toLocaleString('fa-IR', {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    }),
+  )
 }
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
@@ -414,7 +417,7 @@ export default function TasksPage() {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                     <Icon name="history" size={12} />
-                    اجرا: {task.run_count.toLocaleString('fa-IR')} بار
+                    اجرا: {faNum(task.run_count)} بار
                   </span>
                   {task.last_run_at && (
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -674,10 +677,10 @@ export default function TasksPage() {
                   )}
                   <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
                     {ex.tokens_used > 0 && (
-                      <span>{ex.tokens_used.toLocaleString('fa-IR')} توکن</span>
+                      <span>{faNum(ex.tokens_used)} توکن</span>
                     )}
                     {ex.cost_toman > 0 && (
-                      <span>{ex.cost_toman.toLocaleString('fa-IR')} تومان</span>
+                      <span>{faPrice(ex.cost_toman)}</span>
                     )}
                   </div>
                 </div>

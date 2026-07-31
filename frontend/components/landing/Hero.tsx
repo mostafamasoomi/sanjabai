@@ -1,9 +1,14 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { CheckGlyph, ForwardArrow, ProviderLogo } from './primitives'
 import { HERO_ROTATION, HERO_TRUST, PREVIEW_THREADS } from './content'
 import { useTilt } from './useTilt'
+import { useScrollParallax } from './useScrollParallax'
+
+/** Each blob drifts at its own fraction of scroll speed — the closer the
+ * fraction is to 0, the farther back the layer reads as sitting. */
+const AURA_DEPTHS = [0.06, 0.1, 0.15] as const
 
 /* ── Rotating headline word ───────────────────────────────────────────────── */
 
@@ -151,14 +156,20 @@ export function Hero() {
   const sectionRef = useRef<HTMLElement>(null)
   useTilt(sectionRef, true, 2.5)
 
+  const blobRef1 = useRef<HTMLSpanElement>(null)
+  const blobRef2 = useRef<HTMLSpanElement>(null)
+  const blobRef3 = useRef<HTMLSpanElement>(null)
+  const blobLayers = useMemo(() => [blobRef1, blobRef2, blobRef3], [])
+  useScrollParallax(sectionRef, blobLayers, AURA_DEPTHS)
+
   return (
     <section className="lp-hero" ref={sectionRef}>
       {/* Ambient layers sit behind everything via z-index: -1 on .lp-aura. */}
       <div className="lp-grid-lines" aria-hidden="true" />
       <div className="lp-aura" aria-hidden="true">
-        <span className="lp-aura__blob" />
-        <span className="lp-aura__blob" />
-        <span className="lp-aura__blob" />
+        <span className="lp-aura__blob" ref={blobRef1} />
+        <span className="lp-aura__blob" ref={blobRef2} />
+        <span className="lp-aura__blob" ref={blobRef3} />
       </div>
 
       <div className="lp-container">

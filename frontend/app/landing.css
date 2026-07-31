@@ -369,7 +369,8 @@ a.lp-pill:hover {
 
 .lp-reveal {
   opacity: 0;
-  transform: translateY(18px);
+  transform: perspective(800px) translateY(18px) rotateX(-6deg);
+  transform-origin: 50% 100%;
   transition: opacity 0.7s var(--lp-ease), transform 0.7s var(--lp-ease);
   transition-delay: var(--lp-delay, 0ms);
 }
@@ -385,17 +386,21 @@ a.lp-pill:hover {
    compositor and never touches layout. Falls back to the plain .lp-reveal
    transform when no pointer is driving it (touch, keyboard, reduced motion),
    since --tx/--ty default to 0deg. */
+/* No local perspective() here on purpose — .lp-bento and .lp-plans each
+   declare `perspective` as a plain CSS property on the grid, so every card
+   in a row tilts around one shared vanishing point instead of each card
+   being its own isolated 3D scene. */
 .lp-reveal.lp-tilt {
   --tx: 0deg;
   --ty: 0deg;
-  transform: translateY(18px) perspective(1000px) rotateX(var(--tx)) rotateY(var(--ty));
+  transform: translateY(18px) rotateX(calc(-6deg + var(--tx))) rotateY(var(--ty));
   transition: opacity 0.7s var(--lp-ease), transform 0.7s var(--lp-ease),
     border-color var(--lp-fast), background var(--lp-fast);
   transform-style: preserve-3d;
 }
 
 .lp-reveal.lp-tilt[data-visible='true'] {
-  transform: perspective(1000px) rotateX(var(--tx)) rotateY(var(--ty));
+  transform: rotateX(var(--tx)) rotateY(var(--ty));
 }
 
 .lp-reveal.lp-tilt[data-visible='true']:hover,
@@ -454,7 +459,7 @@ a.lp-pill:hover {
   border-radius: 50%;
   filter: blur(90px);
   opacity: 0.5;
-  will-change: transform;
+  will-change: transform, translate;
 }
 
 .lp-aura__blob:nth-child(1) {
@@ -1101,6 +1106,8 @@ a.lp-pill:hover {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   gap: 1rem;
+  /* One shared camera for the whole row — see the note on .lp-reveal.lp-tilt. */
+  perspective: 1400px;
 }
 
 /* 3 / 3 — 2 / 2 / 2 — 6. Two headline cards, a row of three supporting ones,
@@ -1444,6 +1451,8 @@ a.lp-pill:hover {
   grid-template-columns: repeat(3, 1fr);
   gap: 1.25rem;
   align-items: stretch;
+  /* One shared camera for the whole row — see the note on .lp-reveal.lp-tilt. */
+  perspective: 1600px;
 }
 
 .lp-plan {

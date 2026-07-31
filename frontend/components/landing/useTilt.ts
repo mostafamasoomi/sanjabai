@@ -54,6 +54,8 @@ export function useTilt<T extends HTMLElement>(
       frame = 0
       el.style.setProperty('--tx', '0deg')
       el.style.setProperty('--ty', '0deg')
+      el.style.setProperty('--mx', '50%')
+      el.style.setProperty('--my', '50%')
     }
 
     el.addEventListener('pointermove', onMove)

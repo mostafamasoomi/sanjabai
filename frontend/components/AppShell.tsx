@@ -28,6 +28,7 @@ const NAV: NavItem[] = [
   { href: '/chat', label: 'چت', icon: 'chat', section: 'main' },
   { href: '/models', label: 'مدل\u200cها', icon: 'models', section: 'main' },
   { href: '/compare', label: 'مقایسه', icon: 'compare', section: 'main' },
+  { href: '/status', label: 'وضعیت مدل‌ها', icon: 'chart', section: 'main' },
   { href: '/dashboard', label: 'داشبورد', icon: 'dashboard', section: 'tools' },
   { href: '/wallet', label: 'کیف پول', icon: 'wallet', section: 'tools' },
   { href: '/pricing', label: 'تعرفه\u200cها', icon: 'pricing', section: 'tools' },
@@ -62,6 +63,7 @@ const PUBLIC_ROUTES = [
   '/pricing',
   '/models',
   '/developer',
+  '/status',
 ]
 
 /* ═══════════════════════════════════════════════════════════════════════════

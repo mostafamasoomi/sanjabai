@@ -1,31 +1,66 @@
 'use client'
 
-// Single source of truth — synced with backend _WORKING_SET (2026-07-16 live test)
-export const WORKING_MODEL_IDS = [
-  'tencent-hy3',
-  'mistral-large',
-  'mistral-medium-3-5',
-  'deepseek-v4-pro',
-  'deepseek-v4-flash-bynara',
-  'deepseek-v4-pro-bynara',
-  'mimo-v2.5-pro',
-  'mimo-v2.5-pro-ultraspeed',
-] as const
+import type { HealthStatus, ModelCatalogItem, ModelHealth } from '@/types/catalog'
 
-const WORKING_SET = new Set<string>(WORKING_MODEL_IDS.map(s => s.toLowerCase()))
+/* ═══════════════════════════════════════════════════════════════════════════
+   Model health
 
-export function isWorkingModel(id: string): boolean {
-  if (!id) return false
-  const nid = id.toLowerCase()
-  if (WORKING_SET.has(nid)) return true
-  // fuzzy: check includes core token for bynara models
+   This file used to export a hard-coded WORKING_MODEL_IDS array, described in
+   its own comment as "synced with backend _WORKING_SET (2026-07-16 live
+   test)" — a snapshot of one afternoon's manual testing that nothing kept up
+   to date, plus a fuzzy substring match that guessed at anything not on the
+   list.
+
+   Health now comes from the backend, which measures it continuously from
+   synthetic probes and the outcomes of real requests. These helpers only
+   interpret what the API reports.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/** Health of a catalog entry, defaulting to unknown on an older backend. */
+export function healthOf(m: Pick<ModelCatalogItem, 'health'>): ModelHealth {
   return (
-    nid.includes('tencent-hy3') ||
-    nid.includes('mistral-large') ||
-    nid.includes('mistral-medium') ||
-    nid.includes('deepseek-v4') ||
-    nid.includes('mimo-v2.5-pro')
+    m.health ?? {
+      status: 'unknown',
+      successRate: null,
+      latencyP50Ms: null,
+      latencyP95Ms: null,
+      sampleCount: 0,
+      lastOkAt: null,
+      lastError: null,
+      checkedAt: null,
+    }
   )
+}
+
+/**
+ * Is this model worth offering to a user?
+ *
+ * `unknown` counts as usable — it means nobody has exercised the model
+ * recently, not that it is broken. Excluding it would empty the picker on a
+ * fresh deployment, before the first probe sweep has run.
+ */
+export function isUsableModel(m: Pick<ModelCatalogItem, 'health'>): boolean {
+  return healthOf(m).status !== 'down'
+}
+
+/** True only when the model is actively answering. */
+export function isHealthyModel(m: Pick<ModelCatalogItem, 'health'>): boolean {
+  return healthOf(m).status === 'healthy'
+}
+
+export const HEALTH_LABEL: Record<HealthStatus, string> = {
+  healthy: 'سالم',
+  degraded: 'ناپایدار',
+  down: 'در دسترس نیست',
+  unknown: 'نامشخص',
+}
+
+/** Maps to the semantic colour tokens in globals.css. */
+export const HEALTH_TONE: Record<HealthStatus, string> = {
+  healthy: 'var(--positive)',
+  degraded: 'var(--warning)',
+  down: 'var(--danger)',
+  unknown: 'var(--text-dim)',
 }
 
 export function getModelIcon(capabilities: string[] = [], recommendedFor: string[] = []): string {
@@ -91,10 +126,12 @@ export function isRecommendedModel(m: {
   id: string
   recommendedFor?: string[]
   capabilities?: string[]
+  health?: ModelHealth
 }): boolean {
   const rec = (m.recommendedFor || []).map(s => s.toLowerCase())
   if (rec.includes('common') || rec.includes('general') || rec.includes('recommended')) return true
-  if (isWorkingModel(m.id)) return true
+  // A model that is measurably answering right now is worth recommending.
+  if (m.health?.status === 'healthy') return true
   if ((m.capabilities?.length ?? 0) > 1) return true
   return false
 }

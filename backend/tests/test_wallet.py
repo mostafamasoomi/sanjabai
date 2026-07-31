@@ -3,7 +3,7 @@ Tests for wallet, ledger, topup, and conversations
 """
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
-from conftest import make_result, make_row
+from tests.conftest import make_result, make_row
 
 
 class TestWallet:

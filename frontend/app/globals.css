@@ -618,12 +618,39 @@ img, svg, video, canvas {
 .model-card { border-radius: var(--radius-md); cursor: pointer; }
 .model-card-selected { background: var(--accent-dim); }
 .model-card-focused { outline: 1px solid var(--accent); }
-.model-working-dot { width: 0.4rem; height: 0.4rem; border-radius: 50%; flex-shrink: 0; }
-.model-working-dot-yes { background: var(--positive); }
-.model-working-dot-warn { background: var(--warning); }
-.model-working-badge { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.65rem; padding: 0.1rem 0.4rem; border-radius: var(--radius-full); }
-.model-working-yes { background: rgba(52,211,153,0.12); color: var(--positive); }
-.model-working-warn { background: rgba(251,191,36,0.12); color: var(--warning); }
+/* ── Measured model health ────────────────────────────────────────────────
+   Replaces the old two-state "working / limited" badge, which was driven by a
+   hard-coded id list. Four states, because "we have not measured this yet" is
+   genuinely different information from "this is flaky". */
+.model-health-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.model-health-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--radius-full);
+  font-size: 0.65rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.model-health-healthy  { background: rgba(52,211,153,0.12); color: var(--positive); }
+.model-health-degraded { background: rgba(251,191,36,0.12); color: var(--warning); }
+.model-health-down     { background: var(--danger-dim);     color: var(--danger); }
+.model-health-unknown  { background: var(--bg-hover);       color: var(--text-dim); }
+
+/* A live model is worth a little motion; the others are static so the page
+   isn't a christmas tree. */
+.model-health-healthy .model-health-dot { animation: healthPulse 2.4s ease-in-out infinite; }
+@keyframes healthPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(52,211,153,0.5); }
+  50%      { box-shadow: 0 0 0 4px rgba(52,211,153,0); }
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Shared page layout primitives
@@ -807,3 +834,84 @@ img, svg, video, canvas {
 .model-select-wrapper { position: relative; width: 100%; }
 .chat-row-assistant { flex-direction: row; }
 .topbar-menu-btn { flex-shrink: 0; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Status page (/status)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.status-page { display: flex; flex-direction: column; gap: var(--space-6); max-width: 1000px; margin: 0 auto; }
+.status-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+.status-skeletons { display: flex; flex-direction: column; gap: var(--space-3); }
+
+.status-banner { display: flex; align-items: center; gap: var(--space-3); border-width: 1px; }
+.status-banner-dot { width: 0.7rem; height: 0.7rem; }
+
+/* Each count is its own element with real spacing. A "·" separator sits flush
+   against the preceding Persian digit, so "۱ ناپایدار · ۱ ..." read as "۱۰". */
+.status-counts { display: flex; flex-wrap: wrap; gap: 0.35rem 1.1rem; margin-top: 0.2rem; }
+.status-count { display: inline-flex; align-items: baseline; gap: 0.3rem; }
+.status-count-value { font-weight: 700; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+.status-section { display: flex; flex-direction: column; gap: var(--space-2); }
+.status-upstreams { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-3); }
+.status-upstream { display: flex; align-items: center; gap: 0.6rem; padding: var(--space-4); }
+.status-upstream-text { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+
+.status-table-wrap { padding: 0; overflow-x: auto; }
+.status-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.status-table th {
+  text-align: start; padding: 0.7rem 0.9rem; font-size: 0.72rem; font-weight: 700;
+  color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.03em;
+  border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+.status-table td { padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.status-table tbody tr:last-child td { border-bottom: none; }
+.status-row:hover { background: var(--bg-hover); }
+
+.status-model { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+.status-model-text { display: flex; flex-direction: column; gap: 0.05rem; min-width: 0; }
+.status-model-name { font-weight: 600; color: var(--text-primary); }
+.status-model-id { font-size: 0.7rem; color: var(--text-dim); font-family: var(--font-mono); }
+
+/* Latency and rate columns read as numbers, so keep the digits aligned. */
+.status-num { font-variant-numeric: tabular-nums; color: var(--text-secondary); white-space: nowrap; }
+.status-muted { color: var(--text-dim); font-size: 0.8rem; }
+.status-error { color: var(--danger); font-family: var(--font-mono); font-size: 0.75rem; }
+
+.status-empty { padding: var(--space-8); text-align: center; color: var(--text-muted); font-size: 0.85rem; }
+.status-error-card { display: flex; align-items: flex-start; gap: var(--space-3); color: var(--warning); }
+.status-footnote { font-size: 0.75rem; color: var(--text-dim); text-align: center; }
+
+/* Below 640px a six-column table cannot fit: the latency column was clipped
+   and model names wrapped onto three lines. Each row becomes a card instead,
+   with the header text reinstated per cell from data-label. */
+@media (max-width: 640px) {
+  .status-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .status-table, .status-table tbody, .status-row, .status-table td { display: block; width: 100%; }
+
+  .status-row {
+    padding: var(--space-4);
+    border-bottom: 1px solid var(--border);
+  }
+  .status-table tbody tr:last-child { border-bottom: none; }
+
+  .status-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: 0.3rem 0;
+    border-bottom: none;
+  }
+  .status-table td::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+  }
+  /* The model cell is the card's title, so it keeps the full width and drops
+     its label. */
+  .status-table td[data-label='مدل'] { padding-bottom: 0.6rem; }
+  .status-table td[data-label='مدل']::before { content: none; }
+
+  .status-model-name, .status-model-id { white-space: normal; word-break: break-word; }
+}

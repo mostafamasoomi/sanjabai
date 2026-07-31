@@ -1,11 +1,13 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
-import { type ModelCatalogItem } from '@/types/catalog'
+import { type HealthStatus, type ModelCatalogItem } from '@/types/catalog'
 import { Icon } from '@/components/ui/Icon'
 import {
-  WORKING_MODEL_IDS,
-  isWorkingModel,
+  healthOf,
+  isUsableModel,
+  HEALTH_LABEL,
+  HEALTH_TONE,
   getModelIcon,
   formatPriceIRT,
   formatContextWindow,
@@ -109,9 +111,13 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
   }, [open])
 
   const filtered = useMemo(() => {
+    // Models the backend has measured as down are dropped before anything else
+    // — offering one guarantees the user an error. `unknown` and `degraded`
+    // stay: unknown just means unexercised, and degraded still answers.
+    const usable = models.filter(isUsableModel)
     const q = normalize(query)
-    if (!q) return models
-    return models.filter(m => {
+    if (!q) return usable
+    return usable.filter(m => {
       const hay = [
         m.displayName,
         m.id,
@@ -224,7 +230,7 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
     )
   }
 
-  const working = selected ? isWorkingModel(selected.id) : false
+  const selectedHealth = selected ? healthOf(selected) : null
 
   return (
     <div className="model-picker-root" ref={rootRef} dir="rtl" onKeyDown={onKeyDown}>
@@ -253,9 +259,14 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
             {selected ? (
               <>
                 <span className="model-picker-trigger-ctx" dir="ltr">{formatContextWindow(selected.contextWindow)} ctx</span>
-                <span className={`model-working-dot ${working ? 'model-working-dot-yes' : 'model-working-dot-warn'}`} title={working ? 'کار می‌کند' : 'ممکن است محدود باشد'}>
-                  {working ? '✅' : '⚠️'}
-                </span>
+                {selectedHealth && (
+                  <span
+                    className="model-health-dot"
+                    style={{ background: HEALTH_TONE[selectedHealth.status] }}
+                    title={`وضعیت: ${HEALTH_LABEL[selectedHealth.status]}`}
+                    aria-label={`وضعیت مدل: ${HEALTH_LABEL[selectedHealth.status]}`}
+                  />
+                )}
               </>
             ) : (
               <span className="text-muted">—</span>
@@ -325,14 +336,14 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
                           const flatIdx = flatList.findIndex(x => x.id === m.id)
                           const isSel = selected?.id === m.id
                           const isFocused = flatIdx === focusedIdx
-                          const w = isWorkingModel(m.id)
+                          const w = healthOf(m).status
                           return (
                             <ModelCard
                               key={`rec-${m.id}`}
                               model={m}
                               isSelected={isSel}
                               isFocused={isFocused}
-                              isWorking={w}
+                              healthStatus={w}
                               focusIdx={flatIdx}
                               onClick={() => handleSelect(m)}
                             />
@@ -367,14 +378,14 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
                             // avoid duplicate highlight already in recommended? still show, but distinguish
                             const isSel = selected?.id === m.id
                             const isFocused = flatIdx === focusedIdx
-                            const w = isWorkingModel(m.id)
+                            const w = healthOf(m).status
                             return (
                               <ModelCard
                                 key={`${provider}-${m.id}`}
                                 model={m}
                                 isSelected={isSel}
                                 isFocused={isFocused}
-                                isWorking={w}
+                                healthStatus={w}
                                 focusIdx={flatIdx}
                                 onClick={() => handleSelect(m)}
                               />
@@ -399,11 +410,11 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
   )
 }
 
-function ModelCard({ model: m, isSelected, isFocused, isWorking, focusIdx, onClick }: {
+function ModelCard({ model: m, isSelected, isFocused, healthStatus, focusIdx, onClick }: {
   model: ModelCatalogItem
   isSelected: boolean
   isFocused: boolean
-  isWorking: boolean
+  healthStatus: HealthStatus
   focusIdx: number
   onClick: () => void
 }) {
@@ -428,8 +439,11 @@ function ModelCard({ model: m, isSelected, isFocused, isWorking, focusIdx, onCli
             <span className="model-card-id" dir="ltr">{m.id}</span>
           </div>
         </div>
-        <span className={`model-working-badge ${isWorking ? 'model-working-yes' : 'model-working-warn'}`}>
-          {isWorking ? '✅ کار می‌کند' : '⚠️ محدود'}
+        {/* Reports measured health rather than a yes/no guess from a static
+            list, so "نامشخص" is now distinguishable from "ناپایدار". */}
+        <span className={`model-health-badge model-health-${healthStatus}`}>
+          <span className="model-health-dot" style={{ background: HEALTH_TONE[healthStatus] }} />
+          {HEALTH_LABEL[healthStatus]}
         </span>
       </div>
 

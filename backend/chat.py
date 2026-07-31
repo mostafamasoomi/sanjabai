@@ -39,6 +39,36 @@ from middleware.compression import compress_messages, estimate_savings
 
 logger = logging.getLogger(__name__)
 
+import time as _time
+
+
+def _record_model_health(
+    model_id: str, *, ok: bool, latency_ms: int | None = None, error: str | None = None
+) -> None:
+    """Record a passive health sample for a real request, off the response path.
+
+    Fire-and-forget on purpose: the user's completion has already succeeded or
+    failed by this point, and a health-table write must never add latency to it
+    or turn a good response into an error. Imported lazily so chat.py does not
+    depend on model_health at import time.
+    """
+    if not model_id:
+        return
+    try:
+        from model_health import record_traffic
+
+        task = asyncio.create_task(
+            record_traffic(model_id, ok, latency_ms=latency_ms, error=error)
+        )
+        # Hold a reference so the task is not garbage-collected mid-flight.
+        _HEALTH_TASKS.add(task)
+        task.add_done_callback(_HEALTH_TASKS.discard)
+    except Exception:
+        pass
+
+
+_HEALTH_TASKS: set[asyncio.Task] = set()
+
 router = APIRouter()
 
 
@@ -676,8 +706,18 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
     if stream:
         await _release_reservation(reservation, uid, 'before_stream')
         return await _chat_stream(payload_dict, request)
+    _hc_model = str(payload_dict.get('model') or '')
+    _hc_started = _time.monotonic()
     try:
         r = await _http.post(f"{LITELLM_HOST}/v1/chat/completions", json=payload_dict, headers={'Accept': 'application/json'})
+        # Passive health sample. Real traffic is the best signal we have about
+        # whether a model works, and it costs nothing extra to record.
+        _record_model_health(
+            _hc_model,
+            ok=r.status_code == 200,
+            latency_ms=int((_time.monotonic() - _hc_started) * 1000),
+            error=None if r.status_code == 200 else f'http_{r.status_code}',
+        )
         if r.status_code == 200:
             cost_info = await _track_usage(request, payload_dict, r.json())
             resp_data = r.json()
@@ -697,6 +737,12 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
         return Response(content=r.content, status_code=r.status_code, media_type='application/json')
     except Exception as e:
         logger.warning(f"chat gateway error uid={uid} model={payload_dict.get('model')}: {e}")
+        _record_model_health(
+            _hc_model,
+            ok=False,
+            latency_ms=int((_time.monotonic() - _hc_started) * 1000),
+            error=type(e).__name__,
+        )
         await _release_reservation(reservation, uid, 'on_error')
         return JSONResponse({'detail': 'سرویس موقتاً در دسترس نیست', 'code': 'gateway_error'}, status_code=502)
 

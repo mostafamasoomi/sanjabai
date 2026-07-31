@@ -186,6 +186,29 @@ async def catalog_models(request: Request) -> JSONResponse:
     else:
         data = await _litellm_fallback_catalog()
         source = 'fallback'
+
+    # Attach live health so clients can hide models that are not answering,
+    # instead of shipping their own hard-coded list of "working" ids.
+    try:
+        from model_health import health_map
+
+        states = await health_map()
+        for item in data:
+            state = states.get(item.get('providerModelId')) or states.get(item.get('id'))
+            item['health'] = state or {
+                'status': 'unknown',
+                'successRate': None,
+                'latencyP50Ms': None,
+                'latencyP95Ms': None,
+                'sampleCount': 0,
+                'lastOkAt': None,
+                'lastError': None,
+                'checkedAt': None,
+            }
+    except Exception:
+        for item in data:
+            item.setdefault('health', {'status': 'unknown', 'sampleCount': 0})
+
     result = jsonable_encoder({
         'data': data,
         'generatedAt': datetime.now(timezone.utc),

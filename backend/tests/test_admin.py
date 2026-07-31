@@ -3,7 +3,7 @@ Tests for admin endpoints: pricing, features, analytics, discounts, proxy, about
 """
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
-from conftest import make_result, make_row, ADMIN_TOKEN
+from tests.conftest import make_result, make_row, ADMIN_TOKEN
 
 
 class TestAdminAuth:

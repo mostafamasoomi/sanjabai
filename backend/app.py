@@ -142,8 +142,39 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     _pricing_task = asyncio.create_task(_pricing_refresh_loop())
 
+    # Model discovery + health.
+    #
+    # Discovery keeps model_catalog in step with what the upstreams expose;
+    # the health loop probes each catalog model on a slow cycle and rolls the
+    # results up with the passive samples chat.py records from real traffic.
+    # Both are best-effort: neither may take the API down if an upstream is
+    # unreachable at boot.
+    async def _discovery_loop():
+        await asyncio.sleep(20)
+        while True:
+            try:
+                from model_discovery import sync_all
+                print(f"[model-discovery] {await sync_all()}")
+            except Exception as e:
+                print(f"[model-discovery] error: {e}")
+            await asyncio.sleep(int(os.getenv('MODEL_DISCOVERY_INTERVAL', '3600')))
+
+    async def _health_loop():
+        try:
+            from model_health import health_loop
+            await health_loop()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[model-health] loop stopped: {e}")
+
+    _discovery_task = asyncio.create_task(_discovery_loop())
+    _health_task = asyncio.create_task(_health_loop())
+
     yield
 
+    _health_task.cancel()
+    _discovery_task.cancel()
     _pricing_task.cancel()
     if _db._real_http:
         await _db._real_http.aclose()
@@ -209,7 +240,9 @@ from tasks import router as tasks_router
 from websocket import router as websocket_router
 from rag_endpoints import router as rag_router
 from document_generator import router as doc_gen_router
+from model_health import router as model_health_router
 
+app.include_router(model_health_router)
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(content_router)

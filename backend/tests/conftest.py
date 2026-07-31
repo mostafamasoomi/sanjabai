@@ -19,7 +19,19 @@ _mock_redis_instance.delete.return_value = True
 _mock_redis_module = MagicMock()
 _mock_redis_module.Redis = MagicMock()
 _mock_redis_module.Redis.from_url = MagicMock(return_value=_mock_redis_instance)
+
+# database.py does `import redis.asyncio as aioredis`, which needs the parent
+# to behave like a package: Python resolves the submodule through
+# sys.modules['redis.asyncio'], and a bare MagicMock in sys.modules['redis']
+# raises "'redis' is not a package". Registering the submodule explicitly is
+# what makes the whole suite importable — without it conftest fails to load
+# and every backend test errors during collection.
+_mock_aioredis = MagicMock()
+_mock_aioredis.from_url = MagicMock(return_value=_mock_redis_instance)
+_mock_redis_module.asyncio = _mock_aioredis
+
 sys.modules['redis'] = _mock_redis_module
+sys.modules['redis.asyncio'] = _mock_aioredis
 
 # ── Mock asyncpg ──────────────────────────────────────────
 sys.modules['asyncpg'] = MagicMock()
@@ -30,9 +42,12 @@ _mock_migrate_module = MagicMock()
 _mock_migrate_module.migrate = AsyncMock()
 sys.modules['migrate'] = _mock_migrate_module
 
-# ── Set test ADMIN_TOKEN ──────────────────────────────────
+# ── Import-time required secrets ──────────────────────────
+# Both database.py and dependencies.py refuse to import without these, so they
+# have to be set before `from app import ...` below. Values are throwaway.
 import os
 os.environ['ADMIN_TOKEN'] = 'test-admin-token'
+os.environ.setdefault('API_KEY_PEPPER', 'test-api-key-pepper')
 
 # ── Now import app ────────────────────────────────────────
 from app import app, _gen_token, _hash_password
@@ -40,60 +55,19 @@ from app import app, _gen_token, _hash_password
 ADMIN_TOKEN = 'test-admin-token'
 
 # ── TestClient without the deprecated httpx `app=` shortcut ──────────────────
-# starlette's TestClient passes *both* `app=` and `transport=` to
-# `httpx.Client.__init__`.  httpx 0.27 deprecates the `app=` shortcut and
-# emits a DeprecationWarning even when an explicit transport is provided.
-# We subclass so we build the same ASGI transport but hand only `transport=`
-# to httpx -- eliminating the 55 DeprecationWarnings the suite produced.
-from starlette.testclient import (
-    TestClient as _StarletteTestClient,
-    _AsyncBackend,
-    _TestClientTransport,
-    _is_asgi3,
-    _WrapASGI2,
-)
-import httpx
-
-
-class TestClient(_StarletteTestClient):
-    """FastAPI/Starlette TestClient that uses an explicit ASGI transport.
-
-    Identical behaviour to ``starlette.testclient.TestClient`` except the
-    deprecated ``app=`` positional shortcut is never forwarded to
-    ``httpx.Client`` -- we only pass the explicit ``transport=`` argument.
-    """
-
-    def __init__(self, app, base_url="http://testserver",
-                 raise_server_exceptions=True, root_path="", backend="asyncio",
-                 backend_options=None, cookies=None, headers=None):
-        self.async_backend = _AsyncBackend(
-            backend=backend, backend_options=backend_options or {}
-        )
-        if _is_asgi3(app):
-            asgi_app = app
-        else:
-            asgi_app = _WrapASGI2(app)
-        self.app = asgi_app
-        self.app_state = {}
-        transport = _TestClientTransport(
-            self.app,
-            portal_factory=self._portal_factory,
-            raise_server_exceptions=raise_server_exceptions,
-            root_path=root_path,
-            app_state=self.app_state,
-        )
-        if headers is None:
-            headers = {}
-        headers.setdefault("user-agent", "testclient")
-        # Explicit transport only -- no deprecated `app=` shortcut.
-        httpx.Client.__init__(
-            self,
-            base_url=base_url,
-            headers=headers,
-            transport=transport,
-            follow_redirects=True,
-            cookies=cookies,
-        )
+# The suite previously subclassed starlette's TestClient to build the ASGI
+# transport by hand, working around an httpx DeprecationWarning about the
+# `app=` shortcut. Starlette no longer uses that shortcut, so the workaround is
+# obsolete — and it reached into private internals (`_TestClientTransport`,
+# `_AsyncBackend`, `_WrapASGI2`) whose signatures have since changed, which
+# made every client-based test error with:
+#
+#     TypeError: _TestClientTransport.__init__() missing 1 required
+#                keyword-only argument: 'client'
+#
+# starlette is not pinned in requirements.txt, so this broke on any fresh
+# install. Using the public TestClient directly is both correct and stable.
+from starlette.testclient import TestClient
 
 
 def pytest_configure(config):
@@ -107,8 +81,6 @@ def client():
         mock_eng = MagicMock()
         mock_eng.dispose = AsyncMock()
         mock_engine_fn.return_value = mock_eng
-        # Use our subclass that builds the ASGI transport explicitly
-        # (no deprecated httpx `app=` shortcut).
         with TestClient(app) as c:
             yield c
 

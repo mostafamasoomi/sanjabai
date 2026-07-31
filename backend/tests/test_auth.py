@@ -4,7 +4,7 @@ Tests for auth endpoints: signup, login, me, logout
 import pytest
 from unittest.mock import patch, AsyncMock, MagicMock
 from app import _hash_password, _verify_password
-from conftest import make_result, make_row
+from tests.conftest import make_result, make_row
 
 
 class TestPasswordHashing:

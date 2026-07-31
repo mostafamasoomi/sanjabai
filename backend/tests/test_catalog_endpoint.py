@@ -1,6 +1,6 @@
 """Contract test: backend /catalog/models must return the agreed shape."""
 import pytest
-from conftest import client
+from tests.conftest import client
 
 
 def test_catalog_models_shape(client):

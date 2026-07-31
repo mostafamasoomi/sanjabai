@@ -29,6 +29,8 @@ export function PricingSection() {
               key={column.name}
               as="article"
               delay={i * 90}
+              tilt
+              tiltDeg={4}
               className={`lp-card lp-plan${column.featured ? ' lp-plan--featured' : ''}`}
             >
               {column.featured && <span className="lp-plan__badge">روش اصلی</span>}

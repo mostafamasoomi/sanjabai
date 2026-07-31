@@ -71,6 +71,14 @@ export default function LandingPage() {
 
       <SiteFooter />
 
+      {/* Reveal only ever turns visible via an IntersectionObserver callback
+          (see Reveal.tsx) — with JS disabled or failing before hydration,
+          there is no event left to fire it and every section would stay at
+          opacity: 0 forever. */}
+      <noscript>
+        <style>{'.lp-reveal{opacity:1!important;transform:none!important}'}</style>
+      </noscript>
+
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}

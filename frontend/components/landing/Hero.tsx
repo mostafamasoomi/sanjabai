@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { CheckGlyph, ForwardArrow, ProviderLogo } from './primitives'
 import { HERO_ROTATION, HERO_TRUST, PREVIEW_THREADS } from './content'
+import { useTilt } from './useTilt'
 
 /* ── Rotating headline word ───────────────────────────────────────────────── */
 
@@ -37,6 +38,8 @@ function Rotator() {
 function ProductPreview() {
   const [active, setActive] = useState(0)
   const thread = PREVIEW_THREADS[active]
+  const previewRef = useRef<HTMLDivElement>(null)
+  useTilt(previewRef, true, 5)
 
   // Types the answer out when the reader switches model tabs.
   //
@@ -77,7 +80,8 @@ function ProductPreview() {
   const done = typed.length >= thread.answer.length
 
   return (
-    <div className="lp-preview">
+    <div className="lp-preview" ref={previewRef}>
+      <div className="lp-preview__sheen" aria-hidden="true" />
       <div className="lp-preview__bar">
         <span className="lp-preview__dots" aria-hidden="true">
           <i />
@@ -138,8 +142,17 @@ function ProductPreview() {
 /* ── Hero ─────────────────────────────────────────────────────────────────── */
 
 export function Hero() {
+  // Tilt is attached to the section, not .lp-aura itself: the aura has
+  // pointer-events: none (so it never steals clicks from the content sitting
+  // on top of it) and so can never *receive* the pointermove that would
+  // drive it. Setting --tx/--ty here and reading them on .lp-aura (a plain
+  // inherited custom property) lets the background read depth from the
+  // cursor while the foreground content stays perfectly still and legible.
+  const sectionRef = useRef<HTMLElement>(null)
+  useTilt(sectionRef, true, 2.5)
+
   return (
-    <section className="lp-hero">
+    <section className="lp-hero" ref={sectionRef}>
       {/* Ambient layers sit behind everything via z-index: -1 on .lp-aura. */}
       <div className="lp-grid-lines" aria-hidden="true" />
       <div className="lp-aura" aria-hidden="true">

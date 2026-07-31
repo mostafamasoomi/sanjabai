@@ -24,6 +24,7 @@ export function FeatureBento() {
               key={feature.title}
               as="article"
               delay={i * 60}
+              tilt
               className={`lp-card lp-feature${
                 i === FEATURES.length - 1 ? ' lp-feature--wide' : ''
               }`}

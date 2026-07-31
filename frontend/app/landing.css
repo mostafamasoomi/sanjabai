@@ -379,6 +379,50 @@ a.lp-pill:hover {
   transform: none;
 }
 
+/* ── 3D tilt + spotlight — opt-in via <Reveal tilt> ─────────────────────────
+   Pointer position drives --tx/--ty/--mx/--my (see useTilt.ts); everything
+   here is transform + a masked radial-gradient, so it stays on the
+   compositor and never touches layout. Falls back to the plain .lp-reveal
+   transform when no pointer is driving it (touch, keyboard, reduced motion),
+   since --tx/--ty default to 0deg. */
+.lp-reveal.lp-tilt {
+  --tx: 0deg;
+  --ty: 0deg;
+  transform: translateY(18px) perspective(1000px) rotateX(var(--tx)) rotateY(var(--ty));
+  transition: opacity 0.7s var(--lp-ease), transform 0.7s var(--lp-ease),
+    border-color var(--lp-fast), background var(--lp-fast);
+  transform-style: preserve-3d;
+}
+
+.lp-reveal.lp-tilt[data-visible='true'] {
+  transform: perspective(1000px) rotateX(var(--tx)) rotateY(var(--ty));
+}
+
+.lp-reveal.lp-tilt[data-visible='true']:hover,
+.lp-reveal.lp-tilt[data-visible='true']:focus-within {
+  transition: transform 0.12s linear, border-color var(--lp-fast), background var(--lp-fast);
+}
+
+.lp-tilt::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: radial-gradient(
+    280px circle at var(--mx, 50%) var(--my, 50%),
+    color-mix(in srgb, var(--lp-brand) 16%, transparent),
+    transparent 72%
+  );
+  opacity: 0;
+  transition: opacity 0.3s var(--lp-ease);
+  pointer-events: none;
+}
+
+.lp-tilt:hover::after,
+.lp-tilt:focus-within::after {
+  opacity: 1;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Ambient background — replaces four stacked WebGL canvases (two three.js
    mesh gradients, a vortex, and a water-trail) with three blurred CSS blobs.
@@ -395,6 +439,14 @@ a.lp-pill:hover {
   pointer-events: none;
   mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
   -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
+  /* --tx/--ty are set by useTilt on .lp-hero (the aura itself has
+     pointer-events: none, so it can never receive the pointermove that
+     would drive its own tilt) and reach here as an ordinary inherited
+     custom property. The background reads depth from the cursor while the
+     foreground content — a plain descendant, not inside this layer — never
+     moves. */
+  transform: perspective(1400px) rotateX(var(--tx, 0deg)) rotateY(var(--ty, 0deg));
+  transition: transform 0.6s var(--lp-ease);
 }
 
 .lp-aura__blob {
@@ -718,6 +770,8 @@ a.lp-pill:hover {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .lp-preview {
+  --tx: 0deg;
+  --ty: 0deg;
   position: relative;
   margin-block-start: clamp(3rem, 6vw, 4.5rem);
   border-radius: var(--lp-r-lg);
@@ -727,6 +781,46 @@ a.lp-pill:hover {
   -webkit-backdrop-filter: blur(12px);
   box-shadow: var(--lp-shadow-lg);
   overflow: hidden;
+  /* The hero's one true 3D object: perspective is a transform function here
+     (not the parent-establishing CSS property) so the whole tilt stays
+     scoped to this element and touches nothing else on the page. Pointer
+     position drives --tx/--ty via useTilt; it rests flat at 0deg. */
+  transform: perspective(1400px) rotateX(var(--tx)) rotateY(var(--ty));
+  transition: transform 0.5s var(--lp-ease), box-shadow 0.5s var(--lp-ease);
+}
+
+.lp-preview:hover,
+.lp-preview:focus-within {
+  box-shadow: var(--lp-shadow-lg), 0 0 0 1px var(--lp-line-hi);
+  transition: transform 0.1s linear, box-shadow 0.5s var(--lp-ease);
+}
+
+/* A glass sheen that slides to meet the cursor — the classic "premium
+   screenshot" reflection, driven by the same --mx/--my as the tilt cards.
+   `mix-blend-mode: overlay` keeps it from ever washing out the content
+   underneath, in either theme. */
+.lp-preview__sheen {
+  position: absolute;
+  inset: -20%;
+  z-index: 5;
+  background: radial-gradient(
+    480px circle at var(--mx, 50%) var(--my, 40%),
+    color-mix(in srgb, white 22%, transparent),
+    transparent 60%
+  );
+  mix-blend-mode: overlay;
+  opacity: 0;
+  transition: opacity 0.4s var(--lp-ease);
+  pointer-events: none;
+}
+
+.lp-preview:hover .lp-preview__sheen,
+.lp-preview:focus-within .lp-preview__sheen {
+  opacity: 1;
+}
+
+[data-theme='light'] .lp-preview__sheen {
+  mix-blend-mode: soft-light;
 }
 
 .lp-preview__bar {

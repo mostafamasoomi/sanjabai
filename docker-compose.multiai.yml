@@ -72,6 +72,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://multiai-multiai_api-1:8000
     restart: unless-stopped
     depends_on:
       - multiai_api

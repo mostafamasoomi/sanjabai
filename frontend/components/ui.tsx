@@ -65,14 +65,36 @@ export function Skeleton({ className = '', width, height }: { className?: string
    Empty state
    ═══════════════════════════════ */
 
-export function EmptyState({ icon = 'models', title, description }: { icon?: IconName; title: string; description?: string }) {
+/**
+ * The one empty state. Surfaces used to improvise: some centred a 40px icon,
+ * some printed a bare "—", some nothing at all. The icon now sits in the same
+ * tinted disc used by the wallet and api-key empty states so all three read as
+ * the same component.
+ *
+ * The title is a <p>, not a heading: an empty state appears inside a section
+ * that already has one, and emitting an h3 under a page h1 was what put a
+ * skipped level into the outline on several routes.
+ */
+export function EmptyState({
+  icon = 'models',
+  title,
+  description,
+  children,
+}: {
+  icon?: IconName
+  title: string
+  description?: string
+  /** Optional recovery action — "شارژ کیف پول", "ایجاد اسکیل". */
+  children?: React.ReactNode
+}) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 text-center">
-      <div className="mb-3 text-[var(--text-muted)]">
-        <Icon name={icon} size={40} />
-      </div>
-      <h3 className="text-lg font-semibold text-[var(--text-dim)]">{title}</h3>
-      {description && <p className="text-sm text-[var(--text-muted)] mt-1 max-w-sm">{description}</p>}
+    <div className="empty-state">
+      <span className="empty-state__icon">
+        <Icon name={icon} size={22} />
+      </span>
+      <p className="empty-state__title">{title}</p>
+      {description && <p className="empty-state__desc">{description}</p>}
+      {children}
     </div>
   )
 }

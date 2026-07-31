@@ -287,6 +287,23 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               <span>Multiai</span>
             </Link>
 
+            {/* Command palette. It lives at the start of the bar rather than
+                the end because that is where the removed duplicate brand left
+                a hole, and because it is the only thing in the topbar a user
+                reaches for repeatedly — the language and theme toggles are
+                set-once controls and belong out of the way. */}
+            {user && (
+              <button
+                onClick={() => openPalette(true)}
+                className="topbar-search hidden sm:flex"
+                aria-label="جستجو در منوها"
+              >
+                <Icon name="search" size={14} />
+                <span>جستجو</span>
+                <kbd>⌘K</kbd>
+              </button>
+            )}
+
             {/* Public pages get the marketing links inline, since they have no
                 sidebar to carry them. */}
             {!loading && !user && (
@@ -299,16 +316,6 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex items-center gap-2">
-            {user && (
-              <button
-                onClick={() => openPalette(true)}
-                className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-[var(--radius-md)] border border-[var(--border)] text-xs text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text-secondary)] transition-all"
-              >
-                <Icon name="search" size={14} />
-                <span>جستجو</span>
-                <kbd className="text-[10px] bg-[var(--bg-surface)] px-1 rounded">⌘K</kbd>
-              </button>
-            )}
             <LanguageToggle />
             <ThemeToggle />
             {!loading && !user && (

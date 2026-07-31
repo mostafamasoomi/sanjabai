@@ -114,6 +114,10 @@
   font-family: var(--font-sans);
   font-size: 0.78rem;
   min-width: 0;
+  /* 12.5px text in a wrapper with 4px of padding left the field itself a
+     22px-tall target. The wrapper's own padding is what pads the *icons*; the
+     input needs its own to clear 24px. */
+  min-height: var(--tap-min);
 }
 
 .conv-search-input::placeholder {

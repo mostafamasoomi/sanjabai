@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Icon, type IconName } from '@/components/ui/Icon'
+import { faNum } from '@/lib/format'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Multiai Prompt Library — 10 Persian prompt templates with search & filter
@@ -205,7 +206,7 @@ export default function PromptsPage() {
 
       {/* Results count */}
       <div className="prompts-count">
-        {filteredPrompts.length} پرامپت
+        {faNum(filteredPrompts.length)} پرامپت
         {activeCategory !== 'all' && ` در دسته «${activeCategory}»`}
         {search && ` برای «${search}»`}
       </div>

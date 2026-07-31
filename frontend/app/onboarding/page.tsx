@@ -455,7 +455,7 @@ export default function OnboardingPage() {
 
                 {favoriteIds.length > 0 && (
                   <p className="text-center text-xs text-[var(--accent)] mt-3">
-                    {favoriteIds.length} مدل انتخاب شده
+                    {faNum(favoriteIds.length)} مدل انتخاب شده
                   </p>
                 )}
 

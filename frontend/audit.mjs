@@ -1,8 +1,21 @@
 import { chromium } from '@playwright/test'
 import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 
-const OUT = process.env.OUT || '/tmp/claude-0/-home-user-sanjabai/5b87ab0a-3ac6-5bca-af2c-a5b3b86723d2/scratchpad/audit'
+const OUT = process.env.OUT || path.join(os.tmpdir(), 'multiai-frontend-audit')
 fs.mkdirSync(OUT, { recursive: true })
+
+// Prefer Playwright's own managed browser. This container ships a pinned build
+// at a fixed path and no managed one, so fall back to it when it exists —
+// but never hard-code it, or the audit only runs on this one machine.
+const PINNED_CHROMIUM = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
+const executablePath =
+  process.env.CHROMIUM_PATH ||
+  (fs.existsSync(PINNED_CHROMIUM) ? PINNED_CHROMIUM : undefined)
+if (process.env.CHROMIUM_PATH && !fs.existsSync(process.env.CHROMIUM_PATH)) {
+  throw new Error(`CHROMIUM_PATH is set but does not exist: ${process.env.CHROMIUM_PATH}`)
+}
 
 const CATALOG = {
   data: [
@@ -52,16 +65,15 @@ const VIEWPORTS = {
   mobile: { width: 390, height: 844 },
 }
 
-const browser = await chromium.launch({
-  executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-})
+const browser = await chromium.launch({ executablePath })
 
 const findings = []
 
 for (const [vpName, viewport] of Object.entries(VIEWPORTS)) {
   for (const theme of vpName === 'desktop' ? ['dark', 'light'] : ['dark']) {
-    for (const [name, path, needsAuth] of PAGES) {
+    for (const [name, pagePath, needsAuth] of PAGES) {
       const ctx = await browser.newContext({ viewport, locale: 'fa-IR' })
+      try {
       await ctx.addInitScript((t) => localStorage.setItem('theme', t), theme)
       if (needsAuth) {
         await ctx.addInitScript(() => {
@@ -84,9 +96,18 @@ for (const [vpName, viewport] of Object.entries(VIEWPORTS)) {
       await page.route((u) => u.toString().includes('/api/models/health'), (r) => r.fulfill(J(HEALTH)))
       await page.route((u) => u.toString().includes('/api/catalog/models'), (r) => r.fulfill(J(CATALOG)))
 
+      // 'load', not 'networkidle': anything that polls (the /status page
+      // refreshes on a timer) can keep the network busy forever, and a
+      // navigation that times out here would be silently reported as a pile of
+      // layout problems on a blank page. Settle on idle afterwards on a best
+      // effort basis, without letting it fail the render.
+      let navError = null
       try {
-        await page.goto(`http://localhost:3003${path}`, { waitUntil: 'networkidle', timeout: 20000 })
-      } catch { /* keep going; a slow page is itself a finding */ }
+        await page.goto(`http://localhost:3003${pagePath}`, { waitUntil: 'load', timeout: 20000 })
+      } catch (e) {
+        navError = String(e).split('\n')[0].slice(0, 140)
+      }
+      await page.waitForLoadState('networkidle', { timeout: 4000 }).catch(() => {})
       await page.waitForTimeout(700)
 
       const metrics = await page.evaluate(() => {
@@ -128,9 +149,19 @@ for (const [vpName, viewport] of Object.entries(VIEWPORTS)) {
       })
 
       const key = `${vpName}-${theme}-${name}`
-      findings.push({ key, path, ...metrics, errors: errs })
+      findings.push({ key, path: pagePath, navError, ...metrics, errors: errs })
       await page.screenshot({ path: `${OUT}/${key}.png`, fullPage: vpName === 'desktop' })
-      await ctx.close()
+      } catch (e) {
+        findings.push({
+          key: `${vpName}-${theme}-${name}`,
+          path: pagePath,
+          navError: `audit-threw: ${String(e).split('\n')[0].slice(0, 140)}`,
+          overflowX: 0, escaping: [], small: [], h1Count: 1,
+          headingSkips: [], title: '', bodyText: 0, errors: [],
+        })
+      } finally {
+        await ctx.close().catch(() => {})
+      }
     }
   }
 }
@@ -140,6 +171,7 @@ fs.writeFileSync(`${OUT}/findings.json`, JSON.stringify(findings, null, 2))
 // Terse console report: only rows with something worth looking at.
 for (const f of findings) {
   const problems = []
+  if (f.navError) problems.push(`NAV-FAILED(${f.navError})`)
   if (f.overflowX > 0) problems.push(`overflowX=${f.overflowX}`)
   if (f.escaping.length) problems.push(`escaping=[${f.escaping.join(', ')}]`)
   if (f.small.length) problems.push(`tiny-targets=[${f.small.join(', ')}]`)
@@ -151,4 +183,4 @@ for (const f of findings) {
 }
 console.log(`\n${findings.length} page renders captured -> ${OUT}`)
 
-await browser.close()
+await browser.close().catch(() => {})

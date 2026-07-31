@@ -291,11 +291,11 @@ img, svg, video, canvas {
 .card-interactive { cursor: pointer; transition: border-color var(--motion-fast), transform var(--motion-fast); }
 .card-interactive:hover { border-color: var(--border-strong); }
 .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-4); }
-.card-title { font-size: 1rem; font-weight: 700; color: var(--text-primary); }
+.card-title { font-size: var(--fs-lg); font-weight: 700; line-height: 1.45; color: var(--text-primary); }
 .card-title-row { display: flex; align-items: center; gap: var(--space-2); }
 .card-title-col { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
-.card-desc { font-size: 0.85rem; color: var(--text-muted); line-height: 1.6; }
-.card-meta { font-size: 0.75rem; color: var(--text-dim); }
+.card-desc { font-size: var(--fs-sm); color: var(--text-muted); line-height: 1.7; }
+.card-meta { font-size: var(--fs-xs); color: var(--text-dim); }
 .card-icon { width: 2rem; height: 2rem; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; background: var(--accent-dim); color: var(--accent); flex-shrink: 0; }
 .card-pricing { display: flex; align-items: center; gap: var(--space-3); }
 .card-pricing-item { display: flex; flex-direction: column; gap: 0.1rem; }
@@ -464,6 +464,30 @@ img, svg, video, canvas {
    and the only route home. */
 @media (min-width: 768px) {
   .topbar-brand--duplicate { display: none; }
+}
+
+/* Command-palette trigger. Moved from the end of the topbar to the start,
+   where the duplicated brand used to sit — see AppShell for why. */
+.topbar-search {
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--tap-min);
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  transition: border-color var(--motion-fast), color var(--motion-fast);
+}
+.topbar-search:hover { border-color: var(--border-strong); color: var(--text-secondary); }
+.topbar-search kbd {
+  padding: 0.05rem 0.3rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  font-size: 0.625rem;
 }
 
 /* Marketing links, shown only when signed out (there is no sidebar then). */
@@ -881,7 +905,9 @@ img, svg, video, canvas {
 .wallet-amount-dot { display: inline-block; width: 0.4rem; height: 0.4rem; border-radius: 50%; margin-inline-end: 0.3rem; }
 .wallet-amount-dot.positive { background: var(--positive); }
 .wallet-amount-dot.negative { background: var(--danger); }
-.wallet-empty-state { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.5rem; padding: var(--space-8); color: var(--text-muted); }
+/* Aliases of .empty-state / .empty-state__icon — kept so the wallet markup
+   does not have to change, but with no independent definition to drift. */
+.wallet-empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-3); padding: var(--space-10) var(--space-4); text-align: center; color: var(--text-muted); }
 .wallet-empty-icon-wrap { width: 3rem; height: 3rem; border-radius: var(--radius-full); background: var(--bg-hover); color: var(--text-dim); display: flex; align-items: center; justify-content: center; }
 .wallet-modal-overlay { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: var(--bg-overlay); backdrop-filter: blur(4px); padding: 1rem; }
 .wallet-modal-card { max-width: 26rem; width: 100%; text-align: center; }
@@ -919,9 +945,11 @@ img, svg, video, canvas {
 /* Label first, value second — the label is the smaller, dimmer step, so the
    value is what the eye lands on. */
 .profile-stat-label { font-size: var(--fs-xs); color: var(--text-dim); }
-/* An email is a single unbreakable token; without this it is what pushed the
-   card past the viewport edge. */
-.profile-stat-value { font-size: var(--fs-lg); font-weight: 700; color: var(--text-primary); overflow-wrap: anywhere; }
+/* One step below the dashboard's stat value: these three are supporting
+   facts on a settings page, not the reason the page exists. An email is a
+   single unbreakable token, and it is what pushed the card past the viewport
+   edge before `anywhere`. */
+.profile-stat-value { font-size: var(--fs-md); font-weight: 700; color: var(--text-primary); overflow-wrap: anywhere; }
 .profile-toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0; }
 /* 2.4×1.3rem was a 21px-tall target. Kept the same visual width, raised the
    track to the 24px minimum. */
@@ -948,7 +976,7 @@ img, svg, video, canvas {
 .apikeys-eye-btn, .apikeys-revoke-btn { display: inline-flex; align-items: center; gap: 0.3rem; }
 .apikeys-doc-num { display: inline-flex; align-items: center; justify-content: center; width: 1.4rem; height: 1.4rem; border-radius: 50%; background: var(--accent-dim); color: var(--accent); font-size: 0.7rem; font-weight: 700; flex-shrink: 0; }
 .apikeys-spinner { width: 1rem; height: 1rem; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: chatTyping 0.6s linear infinite; }
-.apikeys-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 0.5rem; padding: var(--space-8); color: var(--text-muted); }
+.apikeys-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-3); padding: var(--space-10) var(--space-4); text-align: center; color: var(--text-muted); }
 .apikeys-empty-icon { width: 3rem; height: 3rem; border-radius: var(--radius-full); background: var(--bg-hover); color: var(--text-dim); display: flex; align-items: center; justify-content: center; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -958,8 +986,8 @@ img, svg, video, canvas {
 .prompts-header { display: flex; align-items: center; gap: var(--space-3); }
 .prompts-header-icon { width: 2.5rem; height: 2.5rem; border-radius: var(--radius-md); background: var(--accent-dim); color: var(--accent); display: flex; align-items: center; justify-content: center; }
 .prompts-header-title { display: flex; flex-direction: column; }
-.prompts-title { font-size: 1.3rem; font-weight: 800; color: var(--text-primary); }
-.prompts-subtitle { font-size: 0.82rem; color: var(--text-muted); }
+.prompts-title { font-size: var(--fs-xl); font-weight: 800; line-height: 1.35; color: var(--text-primary); }
+.prompts-subtitle { font-size: var(--fs-sm); color: var(--text-muted); }
 .prompts-toolbar { display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: center; }
 .prompts-search-wrapper { flex: 1; min-width: 12rem; display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.75rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); }
 .prompts-search-icon { display: flex; color: var(--text-dim); }
@@ -1015,11 +1043,14 @@ img, svg, video, canvas {
 .models-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
 .models-toolbar { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .models-search { position: relative; flex: 0 1 20rem; min-width: 12rem; }
-.models-filters { display: flex; gap: 0.4rem; flex-wrap: wrap; flex: 1 1 auto; }
-/* Sits at the end of the toolbar row rather than on a line of its own. */
-.models-count { margin-inline-start: auto; font-size: var(--fs-xs); color: var(--text-dim); white-space: nowrap; }
+.models-filters { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+/* Follows the chips on the same line instead of occupying a row of its own —
+   it is the result of the filters, so it belongs next to them. */
+.models-count { font-size: var(--fs-xs); color: var(--text-dim); white-space: nowrap; }
 
-.models-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: var(--space-4); }
+/* auto-fit, not auto-fill: with a short catalog auto-fill reserved an empty
+   fourth column and left a third of the measure blank. */
+.models-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr)); gap: var(--space-4); }
 
 .model-tile { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-elevated); transition: border-color var(--motion-fast); }
 .model-tile:hover { border-color: var(--border-strong); }
@@ -1027,10 +1058,10 @@ img, svg, video, canvas {
 .model-tile__name { font-size: var(--fs-lg); font-weight: 700; line-height: 1.35; color: var(--text-primary); }
 .model-tile__provider { font-size: var(--fs-xs); color: var(--text-dim); }
 .model-tile__desc { font-size: var(--fs-sm); color: var(--text-secondary); line-height: 1.7; flex: 1; }
-/* Specs read as a small table, so the labels align and the values share a
-   baseline across cards. */
-.model-tile__specs { display: flex; gap: var(--space-5); padding-top: var(--space-3); border-top: 1px solid var(--border); }
-.model-tile__spec { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+/* Equal columns rather than a flex row, so the three specs line up across
+   every card in the grid and can be scanned down a column. */
+.model-tile__specs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.model-tile__spec { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
 .model-tile__spec-label { font-size: var(--fs-2xs); color: var(--text-dim); }
 .model-tile__spec-value { font-size: var(--fs-sm); font-weight: 600; color: var(--text-secondary); }
 .model-tile__caps { display: flex; gap: 0.3rem; flex-wrap: wrap; }

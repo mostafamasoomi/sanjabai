@@ -212,7 +212,7 @@ export default function DeveloperPage() {
           <Icon name="code" size={20} style={{ color: 'var(--text-on-accent)' }} />
         </div>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+          <h1 className="page-title">
             پلتفرم توسعه‌دهندگان
           </h1>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
@@ -225,7 +225,7 @@ export default function DeveloperPage() {
       <div className="card" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="external" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>اطلاعات API</h2>
+          <h2 className="card-title">اطلاعات API</h2>
         </div>
 
         <div style={{
@@ -281,7 +281,7 @@ export default function DeveloperPage() {
         <div className="card" style={{ marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
             <Icon name="key" size={16} className="text-accent" />
-            <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>کلیدهای API</h2>
+            <h2 className="card-title">کلیدهای API</h2>
             {keys.length > 0 && <span className="badge badge-accent">{keys.length}</span>}
           </div>
 
@@ -404,7 +404,7 @@ export default function DeveloperPage() {
       <div className="card" style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="code" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>نمونه کد</h2>
+          <h2 className="card-title">نمونه کد</h2>
         </div>
 
         <Tabs
@@ -470,7 +470,7 @@ export default function DeveloperPage() {
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="external" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>مستندات endpoint‌ها</h2>
+          <h2 className="card-title">مستندات endpoint‌ها</h2>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

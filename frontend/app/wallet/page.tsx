@@ -326,7 +326,7 @@ export default function WalletPage() {
           <div className="wallet-header-icon">
             <Icon name="wallet" size={20} className="text-accent" />
           </div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>کیف پول</h1>
+          <h1 className="page-title">کیف پول</h1>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 24 }}>
           <BalanceSkeleton />
@@ -347,7 +347,7 @@ export default function WalletPage() {
           <div className="wallet-header-icon">
             <Icon name="wallet" size={20} className="text-accent" />
           </div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>کیف پول</h1>
+          <h1 className="page-title">کیف پول</h1>
         </div>
         <button
           className="btn btn-sm btn-secondary"
@@ -475,7 +475,7 @@ export default function WalletPage() {
       <div className="card" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
           <Icon name="gift" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>بسته‌های اعتباری</h2>
+          <h2 className="card-title">بسته‌های اعتباری</h2>
           {creditPackages.length > 0 && (
             <span className="badge badge-accent" style={{ marginLeft: 4 }}>{fmtIRR(creditPackages.length)}</span>
           )}
@@ -576,7 +576,7 @@ export default function WalletPage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon name="history" size={16} className="text-accent" />
-            <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>تاریخچه تراکنش‌ها</h2>
+            <h2 className="card-title">تاریخچه تراکنش‌ها</h2>
             <span className="badge badge-accent" style={{ marginLeft: 4 }}>{fmtIRR(ledger.length)}</span>
           </div>
 
@@ -650,7 +650,7 @@ export default function WalletPage() {
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
           <Icon name="payment" size={16} className="text-accent" />
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>تاریخچه پرداخت‌ها</h2>
+          <h2 className="card-title">تاریخچه پرداخت‌ها</h2>
         </div>
 
         {payments.length === 0 ? (

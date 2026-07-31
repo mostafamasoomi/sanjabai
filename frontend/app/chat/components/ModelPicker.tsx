@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { type HealthStatus, type ModelCatalogItem } from '@/types/catalog'
 import { Icon } from '@/components/ui/Icon'
+import { faNum } from '@/lib/format'
 import {
   healthOf,
   isUsableModel,
@@ -329,7 +330,7 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
                     <div className="model-picker-section">
                       <div className="model-picker-section-title">
                         <span>⭐ پیشنهادی</span>
-                        <span className="model-picker-section-count">{recommended.length}</span>
+                        <span className="model-picker-section-count">{faNum(recommended.length)}</span>
                       </div>
                       <div className="model-picker-cards">
                         {recommended.map(m => {
@@ -356,7 +357,7 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
                   <div className="model-picker-section">
                     <div className="model-picker-section-title">
                       <span>همه مدل‌ها</span>
-                      <span className="model-picker-section-count">{filtered.length}</span>
+                      <span className="model-picker-section-count">{faNum(filtered.length)}</span>
                     </div>
 
                     {groupedByProvider.map(([provider, groupModels]) => (
@@ -369,7 +370,7 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
                             <span className="model-provider-badge" dir="ltr">
                               {getProviderLabel(provider)}
                             </span>
-                            <span className="text-muted" style={{ fontSize: '10px' }}>{groupModels.length} مدل</span>
+                            <span className="text-muted" style={{ fontSize: '10px' }}>{faNum(groupModels.length)} مدل</span>
                           </div>
                         )}
                         <div className="model-picker-cards">
@@ -401,7 +402,7 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
 
             <div className="model-picker-footer" dir="rtl">
               <span className="model-picker-footer-hint"><kbd>↑↓</kbd> پیمایش · <kbd>Enter</kbd> انتخاب · <kbd>Esc</kbd> بستن</span>
-              <span className="model-picker-footer-count" dir="ltr">{models.length} models</span>
+              <span className="model-picker-footer-count">{faNum(models.length)} مدل</span>
             </div>
           </div>
         </>
@@ -447,6 +448,12 @@ function ModelCard({ model: m, isSelected, isFocused, healthStatus, focusIdx, on
         </span>
       </div>
 
+      {/* The whole row is an LTR island: model ids, `128K ctx` and the
+          capability names are all Latin, and mixing them into the RTL
+          paragraph reorders the unit in front of its number. Latin digits are
+          deliberate *inside* this island — a Persian numeral followed by a
+          Latin unit inside an LTR run has the same reordering problem in
+          reverse. Everywhere outside the picker, numerals are Persian. */}
       <div className="model-card-meta" dir="ltr">
         <span className="model-card-ctx">{formatContextWindow(m.contextWindow)} ctx</span>
         {(m.capabilities || []).slice(0, 3).map(c => (
@@ -460,14 +467,17 @@ function ModelCard({ model: m, isSelected, isFocused, healthStatus, focusIdx, on
         </div>
       )}
 
-      <div className="model-card-pricing" dir="ltr">
-        <span className="model-card-pricing-item" title="ورودی">
-          <span className="model-card-pricing-label">in:</span>
+      {/* dir stays with the document: the labels and the unit are Persian
+          now, so forcing LTR here would put "تومان/میلیون" on the wrong side
+          of its amount. */}
+      <div className="model-card-pricing">
+        <span className="model-card-pricing-item" title="ورودی هر میلیون توکن">
+          <span className="model-card-pricing-label">ورودی</span>
           <span className="model-card-pricing-value">{formatPriceIRT(m.pricing?.inputPerMillion ?? 0)}</span>
         </span>
         <span className="model-card-pricing-sep">·</span>
-        <span className="model-card-pricing-item" title="خروجی">
-          <span className="model-card-pricing-label">out:</span>
+        <span className="model-card-pricing-item" title="خروجی هر میلیون توکن">
+          <span className="model-card-pricing-label">خروجی</span>
           <span className="model-card-pricing-value">{formatPriceIRT(m.pricing?.outputPerMillion ?? 0)}</span>
         </span>
       </div>

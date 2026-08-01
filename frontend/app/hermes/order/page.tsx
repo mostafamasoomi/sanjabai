@@ -222,7 +222,12 @@ function SkillPicker({
   return (
     <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '0.875rem' }}>
       <label className="flex items-center gap-2" style={{ cursor: 'pointer' }}>
-        <input type="checkbox" checked={checked} onChange={onToggle} />
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={onToggle}
+          style={{ width: '1.5rem', height: '1.5rem', accentColor: 'var(--accent)', flexShrink: 0 }}
+        />
         <span style={{ fontWeight: 600 }}>{skill.name_fa}</span>
         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{skill.description_fa}</span>
       </label>

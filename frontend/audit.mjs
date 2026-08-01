@@ -41,6 +41,22 @@ const HEALTH = {
 
 const J = (b) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(b) })
 
+const HERMES_OFFERINGS = [
+  { id: 'hermes-standard', name_fa: 'هرمس استاندارد', name_en: 'Hermes Standard', description_fa: 'حداقل توصیه‌شده برای اجرای هرمس', description_en: 'Recommended minimum', arch: 'amd64', vcpu: 4, ram_mb: 8192, disk_gb: 80, traffic_tb: 20, max_skills: 5, included_credit: 0, setup_price_irt: 0, monthly_price_irt: 610000, currency: 'IRT' },
+  { id: 'hermes-pro', name_fa: 'هرمس پرو', name_en: 'Hermes Pro', description_fa: 'برای چند اسکیل هم‌زمان', description_en: 'For several concurrent skills', arch: 'amd64', vcpu: 8, ram_mb: 16384, disk_gb: 160, traffic_tb: 20, max_skills: 10, included_credit: 100000, setup_price_irt: 0, monthly_price_irt: 1470000, currency: 'IRT' },
+]
+const HERMES_SKILLS = [
+  { id: 'coding', name_fa: 'برنامه‌نویسی', name_en: 'Coding', description_fa: 'دستیار کدنویسی با زبان‌های انتخابی', category: 'development', options_schema: { languages: { type: 'multiselect', values: ['python', 'go', 'typescript'], max: 5 } }, requires_cron: false },
+  { id: 'news-watch', name_fa: 'رصد اخبار', name_en: 'News Watch', description_fa: 'رصد و خلاصه‌سازی دوره‌ای اخبار', category: 'monitoring', options_schema: { topics: { type: 'tags', max: 10 }, schedule: { type: 'cron', default: '0 9 * * *' } }, requires_cron: true },
+]
+const HERMES_ORDERS = [
+  { id: 1, offering_id: 'hermes-standard', status: 'active', setup_price_irt: 0, monthly_price_irt: 610000, created_at: '2026-07-01T10:00:00Z', delivered_at: '2026-07-02T09:00:00Z' },
+  { id: 2, offering_id: 'hermes-pro', status: 'pending_payment', setup_price_irt: 0, monthly_price_irt: 1470000, created_at: '2026-07-20T10:00:00Z', delivered_at: null },
+]
+const HERMES_SERVERS = [
+  { id: 1, hostname: 'hermes-01', ip_address: '203.0.113.10', status: 'active', monthly_price_irt: 610000, in_sync: true, last_heartbeat_at: '2026-07-31T10:00:00Z' },
+]
+
 const PAGES = [
   ['landing', '/', false],
   ['models', '/models', false],
@@ -58,6 +74,10 @@ const PAGES = [
   ['api-keys', '/api-keys', true],
   ['profile', '/profile', true],
   ['prompts', '/prompts', true],
+  ['hermes', '/hermes', false],
+  ['hermes-order', '/hermes/order', true],
+  ['hermes-orders', '/hermes/orders', true],
+  ['hermes-servers', '/hermes/servers', true],
 ]
 
 const VIEWPORTS = {
@@ -95,6 +115,10 @@ for (const [vpName, viewport] of Object.entries(VIEWPORTS)) {
       await page.route((u) => u.toString().includes('/api/auth/me'), (r) => r.fulfill(J({ id: 1, email: 'user@example.com' })))
       await page.route((u) => u.toString().includes('/api/models/health'), (r) => r.fulfill(J(HEALTH)))
       await page.route((u) => u.toString().includes('/api/catalog/models'), (r) => r.fulfill(J(CATALOG)))
+      await page.route((u) => u.toString().includes('/api/hermes/offerings'), (r) => r.fulfill(J(HERMES_OFFERINGS)))
+      await page.route((u) => u.toString().includes('/api/hermes/skill-catalog'), (r) => r.fulfill(J(HERMES_SKILLS)))
+      await page.route((u) => u.toString().includes('/api/hermes/orders'), (r) => r.fulfill(J(HERMES_ORDERS)))
+      await page.route((u) => u.toString().includes('/api/hermes/servers'), (r) => r.fulfill(J(HERMES_SERVERS)))
 
       // 'load', not 'networkidle': anything that polls (the /status page
       // refreshes on a timer) can keep the network busy forever, and a

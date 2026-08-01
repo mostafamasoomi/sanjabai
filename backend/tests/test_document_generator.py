@@ -42,6 +42,7 @@ def _file_type(path: str) -> str:
 
 
 @pytest.mark.skipif(not HAVE_HTTPX, reason="httpx required for live tests")
+@pytest.mark.live
 class TestDocumentGeneratorLive:
     def setup_method(self):
         self.headers = _login()

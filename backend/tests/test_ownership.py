@@ -24,6 +24,7 @@ from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
 
+import database as _database
 from app import app
 
 
@@ -153,6 +154,40 @@ class _SessionCapture:
             result.fetchall.return_value = [agg]
             return result
 
+        # /me/usage issues three more queries against usage_events beyond
+        # the ledger balance above: a monthly aggregate (fetchone, needs
+        # .spent/.inp/.out/.cnt), a per-model breakdown, and a recent-events
+        # list (both fetchall). None of these tests seed a "usage_events"
+        # store, so without this the generic per-table branch below falls
+        # through to a bare `None`/`[]` default result — fine for fetchall,
+        # but `monthly.spent` on a None fetchone() crashes with
+        # AttributeError instead of just reporting zero usage.
+        if tname == "usage_events":
+            if "spent" in sql and "cnt" in sql:
+                result.fetchone.return_value = types.SimpleNamespace(inp=0, out=0, spent=0, cnt=0)
+            else:
+                result.fetchall.return_value = []
+            return result
+
+        # /conversations and /wallet/ledger paginate: a
+        # `SELECT COUNT(*) as c FROM <table> WHERE user_id = :uid` followed
+        # by the page of rows. Without this, fetchone() falls through to the
+        # generic per-table branch below and returns an actual row instead
+        # of a `.c` count, so `count_res.fetchone().c` raises AttributeError.
+        # Anchored to the *start* of the query on purpose: /me/usage's
+        # monthly-aggregate query also selects a `COUNT(*) as cnt` column
+        # alongside several SUM(...) columns, so a bare "count(*) in sql"
+        # search matched that query too and hijacked it into returning a
+        # bare `.c` count instead of the `.spent`/`.inp`/`.out`/`.cnt` row
+        # its caller actually needs — a real regression from an earlier,
+        # too-broad version of this exact fix.
+        if re.match(r"select\s+count\(\*\)", sql.strip(), re.IGNORECASE):
+            rows = self.store.get(tname, []) if tname else []
+            if owner is not None:
+                rows = [r for r in rows if getattr(r, "user_id", None) == owner]
+            result.fetchone.return_value = types.SimpleNamespace(c=len(rows))
+            return result
+
         if tname and tname in self.store:
             rows = self.store[tname]
             if owner is not None:
@@ -200,7 +235,11 @@ def _session_for_user(user_id):
         "expires_at": "2999-01-01T00:00:00",
     })
 
-    def fake_get(key):
+    async def fake_get(key):
+        # app.rds is redis.asyncio, so real callers do `await rds.get(...)`.
+        # A plain `def` here would make `side_effect` return the payload
+        # string (or None) directly instead of a coroutine, and awaiting
+        # that raises TypeError — this must be async to be awaitable.
         if isinstance(key, str) and key.startswith("session:"):
             return payload
         return None
@@ -217,11 +256,12 @@ def _call_as(user_id, method, path, json_body=None, store=None):
     with patch("app.create_async_engine", return_value=eng):
         with TestClient(app) as c:
             with patch("app.async_session", maker), \
+                 patch.object(_database, '_real_async_session', maker), \
                  patch("app.rds.get", side_effect=fake_get), \
-                 patch("app.rds.expire", return_value=True), \
-                 patch("app.rds.sadd", return_value=True), \
-                 patch("app.rds.srem", return_value=True), \
-                 patch("app.rds.delete", return_value=True):
+                 patch("app.rds.expire", new_callable=AsyncMock, return_value=True), \
+                 patch("app.rds.sadd", new_callable=AsyncMock, return_value=True), \
+                 patch("app.rds.srem", new_callable=AsyncMock, return_value=True), \
+                 patch("app.rds.delete", new_callable=AsyncMock, return_value=True):
                 fn = getattr(c, method)
                 kwargs: dict = {"cookies": {"session": f"tok{user_id}"}}
                 # CSRF middleware requires X-Requested-With for cookie mutations
@@ -242,11 +282,12 @@ def _call_anon(method, path, json_body=None):
     with patch("app.create_async_engine", return_value=eng):
         with TestClient(app) as c:
             with patch("app.async_session", maker), \
-                 patch("app.rds.get", return_value=None), \
-                 patch("app.rds.expire", return_value=True), \
-                 patch("app.rds.sadd", return_value=True), \
-                 patch("app.rds.srem", return_value=True), \
-                 patch("app.rds.delete", return_value=True):
+                 patch.object(_database, '_real_async_session', maker), \
+                 patch("app.rds.get", new_callable=AsyncMock, return_value=None), \
+                 patch("app.rds.expire", new_callable=AsyncMock, return_value=True), \
+                 patch("app.rds.sadd", new_callable=AsyncMock, return_value=True), \
+                 patch("app.rds.srem", new_callable=AsyncMock, return_value=True), \
+                 patch("app.rds.delete", new_callable=AsyncMock, return_value=True):
                 fn = getattr(c, method)
                 kwargs = {}
                 if json_body is not None:
@@ -275,7 +316,7 @@ WRITE_ENDPOINTS = [
 @pytest.mark.parametrize("method,path", READ_ENDPOINTS + WRITE_ENDPOINTS)
 def test_unauthenticated_is_rejected(method, path):
     json_body = {"title": "t", "model": "m", "messages": []} if method == "post" and "conversations" in path \
-        else {"amount": 100} if "topup" in path else {"name": "k"}
+        else {"amount": 100, "payment_order_id": "1"} if "topup" in path else {"name": "k"}
     resp = _call_anon(method, path, json_body=json_body if method == "post" else None)
     assert resp.status_code == 401, f"{method} {path} should reject anon (got {resp.status_code})"
 
@@ -308,9 +349,18 @@ def test_conversation_create_owned_by_caller():
 
 
 def test_wallet_topup_owned_by_caller():
-    resp, cap, ev = _call_as(USER_A, "post", "/wallet/topup", json_body={"amount": 500})
+    # topup() requires a pre-existing *completed* payment order looked up by
+    # payment_order_id (and captcha is not required here — only signup and
+    # login check that).
+    store = {"payment_orders": [
+        _row(id=1, status="completed", amount=500, user_id=USER_A),
+    ]}
+    resp, cap, ev = _call_as(
+        USER_A, "post", "/wallet/topup",
+        json_body={"amount": 500, "payment_order_id": "1"}, store=store,
+    )
     entry = next((o for o in cap.added if type(o).__name__ == "Ledger"), None)
-    assert entry is not None, f"expected a Ledger to be added; added={cap.added}"
+    assert entry is not None, f"expected a Ledger to be added; added={cap.added} (resp={resp.status_code} {resp.text})"
     assert entry.user_id == USER_A
     assert entry.user_id != USER_B
 
@@ -349,8 +399,10 @@ def test_conversation_list_is_per_user():
     store = _seed_conversations()
     resp_a, _, _ = _call_as(USER_A, "get", "/conversations", store=store)
     resp_b, _, _ = _call_as(USER_B, "get", "/conversations", store=store)
-    a_ids = [c["id"] for c in resp_a.json()]
-    b_ids = [c["id"] for c in resp_b.json()]
+    # /conversations paginates now: {'items': [...], 'total': ..., ...}, not
+    # a bare list.
+    a_ids = [c["id"] for c in resp_a.json()["items"]]
+    b_ids = [c["id"] for c in resp_b.json()["items"]]
     assert a_ids == [6], f"A should only see their own conversation; got {a_ids}"
     assert b_ids == [5], f"B should only see their own conversation; got {b_ids}"
 
@@ -362,9 +414,12 @@ def test_cannot_read_other_users_ledger():
     ]}
     resp_a, _, _ = _call_as(USER_A, "get", "/wallet/ledger", store=store)
     resp_b, _, _ = _call_as(USER_B, "get", "/wallet/ledger", store=store)
-    assert [r["id"] for r in resp_a.json()] == [2], \
-        f"A should only see their own ledger rows; got {resp_a.json()}"
-    assert len(resp_b.json()) == 1 and resp_b.json()[0]["id"] == 1
+    # /wallet/ledger paginates now: {'items': [...], 'total': ..., ...}.
+    items_a = resp_a.json()["items"]
+    items_b = resp_b.json()["items"]
+    assert [r["id"] for r in items_a] == [2], \
+        f"A should only see their own ledger rows; got {items_a}"
+    assert len(items_b) == 1 and items_b[0]["id"] == 1
 
 
 def test_cannot_read_other_users_wallet_balance():
@@ -393,18 +448,21 @@ def test_cannot_read_other_users_api_keys():
 
 
 def test_cannot_read_other_users_usage():
-    store = {"quota": [
-        _row(user_id=USER_B, daily_limit=9999, used_today=3),
-        _row(user_id=USER_A, daily_limit=500, used_today=1),
+    # /me/usage's current_balance comes from the same owner-scoped
+    # SUM(amount) ledger query /wallet does (see the "SUM(amount)" branch
+    # above) — there's no more per-user quota shape to assert on; the
+    # response is a wallet-usage summary keyed by current_balance /
+    # total_spent_this_month / monthly / per_model_breakdown / recent_events.
+    store = {"ledger": [
+        _row(id=1, user_id=USER_B, amount=9999, balance_after=9999),
+        _row(id=2, user_id=USER_A, amount=500, balance_after=500),
     ]}
     resp_a, _, _ = _call_as(USER_A, "get", "/me/usage", store=store)
     resp_b, _, _ = _call_as(USER_B, "get", "/me/usage", store=store)
-    assert resp_a.json()["user_id"] == USER_A
-    assert resp_a.json()["daily_limit"] == 500
-    assert resp_b.json()["user_id"] == USER_B
-    assert resp_b.json()["daily_limit"] == 9999
-    # Make sure A's payload never carries B's quota numbers.
-    assert resp_a.json()["daily_limit"] != 9999
+    assert resp_a.json()["current_balance"] == 500
+    assert resp_b.json()["current_balance"] == 9999
+    # Make sure A's payload never carries B's balance.
+    assert resp_a.json()["current_balance"] != 9999
 
 
 def test_revoke_api_key_is_scoped():
@@ -418,11 +476,12 @@ def test_revoke_api_key_is_scoped():
     with patch("app.create_async_engine", return_value=eng):
         with TestClient(app) as c:
             with patch("app.async_session", maker), \
+                 patch.object(_database, '_real_async_session', maker), \
                  patch("app.rds.get", side_effect=fake_get), \
-                 patch("app.rds.expire", return_value=True), \
-                 patch("app.rds.sadd", return_value=True), \
-                 patch("app.rds.srem", return_value=True), \
-                 patch("app.rds.delete", return_value=True):
+                 patch("app.rds.expire", new_callable=AsyncMock, return_value=True), \
+                 patch("app.rds.sadd", new_callable=AsyncMock, return_value=True), \
+                 patch("app.rds.srem", new_callable=AsyncMock, return_value=True), \
+                 patch("app.rds.delete", new_callable=AsyncMock, return_value=True):
                 c.delete("/api-keys/999", cookies={"session": "tokA"}, headers={"X-Requested-With": "XMLHttpRequest"})
     ev = " ".join(_statement_evidence(s, p) for s, p in cap.executed)
     assert str(USER_A) in ev, f"revoke must be scoped to owner A; evidence={ev!r}"

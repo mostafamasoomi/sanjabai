@@ -63,7 +63,15 @@ services:
       multiai_tunnel:
         condition: service_started
     env_file: .env
-    # env vars loaded from .env via env_file above
+    # env vars loaded from .env via env_file above. ADMIN_TOKEN is also
+    # required explicitly here (Compose's ${VAR:?msg} syntax) so a missing
+    # value fails at `docker compose up` — before the container even
+    # starts — rather than only at Python import time inside it
+    # (database.py already raises RuntimeError there, but that requires the
+    # container to boot first; this is strictly earlier and has no insecure
+    # default to fall back to).
+    environment:
+      - ADMIN_TOKEN=${ADMIN_TOKEN:?ADMIN_TOKEN must be set in .env}
     ports:
       - "0.0.0.0:8001:8000"
     networks: [multiai_net]

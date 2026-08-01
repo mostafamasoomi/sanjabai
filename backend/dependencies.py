@@ -50,12 +50,21 @@ def _hash_password(password: str) -> str:
     return ph.hash(password)
 def _verify_password(password: str, stored: str) -> bool:
     """Verify password against argon2 hash."""
-    from argon2 import PasswordHasher, VerificationMismatchError
+    # argon2-cffi has never exported an exception literally named
+    # VerificationMismatchError, from either `argon2` or `argon2.exceptions`
+    # — the real name is VerifyMismatchError, and it only ever lived in
+    # `argon2.exceptions`, never re-exported from the top-level package.
+    # That made every single call here raise ImportError before the `try`
+    # even started, which the broad `except Exception` below can't catch
+    # since it doesn't wrap the import — meaning every password check
+    # (login) unconditionally crashed instead of returning True/False.
+    from argon2 import PasswordHasher
+    from argon2.exceptions import VerifyMismatchError
     ph = PasswordHasher()
     try:
         ph.verify(stored, password)
         return True
-    except VerificationMismatchError:
+    except VerifyMismatchError:
         return False
     except Exception:
         # Fallback to old format if hash doesn't contain $argon2

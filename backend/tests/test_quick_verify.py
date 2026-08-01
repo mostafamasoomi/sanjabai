@@ -34,7 +34,7 @@ class TestPasswordHashing:
         assert '$' in hashed
     
     def test_verify_password(self):
-        from app import _verify_password
+        from app import _hash_password, _verify_password
         hashed = _hash_password("test123")
         assert _verify_password("test123", hashed) is True
         assert _verify_password("wrong", hashed) is False

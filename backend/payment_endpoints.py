@@ -14,10 +14,11 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
 from database import async_session, BASE_URL
-from models import Payment, Ledger, Plan, CreditPackage, Subscription
+from models import Payment, Plan, CreditPackage, Subscription
 from dependencies import _get_user_id, _write_audit_log
 from payment import create_payment, verify_payment, PaymentRequest, handle_payment_callback, CallbackResult
 from services.billing import SqlBillingRepo
+from services.money import Money
 
 router = APIRouter()
 
@@ -79,9 +80,34 @@ async def payment_callback(request: Request) -> JSONResponse:
             payment_type = getattr(p, 'payment_type', 'wallet_topup') or 'wallet_topup'
             reference_id = getattr(p, 'reference_id', None)
 
+    # For a credit package the wallet must be credited total_credits (which
+    # may include a bonus above what Zarinpal actually charged/verified,
+    # i.e. base_amount) -- resolve that *before* the callback so it can be
+    # passed straight into handle_payment_callback's single atomic credit.
+    # Previously this was done with a second, separate Ledger insert after
+    # the callback, which double-credited the wallet's ledger history
+    # without touching Wallet.balance (desyncing the two) and always
+    # credited total_credits regardless of what was actually charged,
+    # making the bonus_percent field ineffective. reference_id is a
+    # CreditPackage.id, which is a string primary key -- not int().
+    credit_pkg = None
+    if payment_type == 'credit_package' and reference_id:
+        async with async_session() as session:
+            pkg_res = await session.execute(select(CreditPackage).where(CreditPackage.id == reference_id))
+            pkg_row = pkg_res.fetchone()
+            credit_pkg = pkg_row[0] if pkg_row else None
+
+    callback_kwargs: dict[str, Any] = {}
+    if credit_pkg is not None:
+        callback_kwargs['credit_amount'] = Money(credit_pkg.total_credits)
+        callback_kwargs['credit_reason'] = (
+            f"بسته اعتباری: {credit_pkg.name_fa} "
+            f"({credit_pkg.base_amount:,} + {credit_pkg.bonus_percent}% پاداش)"
+        )
+
     async with async_session() as session:
         repo = SqlBillingRepo(session)
-        result = await handle_payment_callback(repo, authority=authority or "", status=status)
+        result = await handle_payment_callback(repo, authority=authority or "", status=status, **callback_kwargs)
 
     if not result.ok:
         fail_redirect = {
@@ -124,29 +150,12 @@ async def payment_callback(request: Request) -> JSONResponse:
                 extra_data['subscription'] = plan.name_en
         redirect_path = '/dashboard?subscription=active'
 
-    elif payment_type == 'credit_package' and reference_id:
-        uid = p.user_id if pay_row else 0
-        async with async_session() as session:
-            pkg_res = await session.execute(select(CreditPackage).where(CreditPackage.id == int(reference_id)))
-            pkg = pkg_res.fetchone()
-            if pkg:
-                credit_amount = pkg.total_credits
-                bal_res = await session.execute(
-                    sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid'),
-                    {'uid': uid}
-                )
-                bal_row = bal_res.fetchone()
-                current_balance = bal_row.balance if bal_row else 0
-                new_balance = current_balance + credit_amount
-                entry = Ledger(
-                    user_id=uid, amount=credit_amount, balance_after=new_balance,
-                    reason=f"بسته اعتباری: {pkg.name_fa} ({pkg.base_amount:,} + {pkg.bonus_percent}% پاداش)",
-                    idempotency_key=f"credit-pkg:{reference_id}:{result.ref_id}",
-                )
-                session.add(entry)
-                await session.commit()
-                extra_data['credits_added'] = credit_amount
-                extra_data['package'] = pkg.name_fa
+    elif payment_type == 'credit_package' and credit_pkg is not None:
+        # Wallet was already credited total_credits atomically inside
+        # handle_payment_callback above (via credit_amount=); nothing left
+        # to do here but report what happened.
+        extra_data['credits_added'] = credit_pkg.total_credits
+        extra_data['package'] = credit_pkg.name_fa
         redirect_path = '/wallet?payment=success'
 
     return JSONResponse({

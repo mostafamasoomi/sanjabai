@@ -448,23 +448,32 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
 
     result['cost'] = cost
 
-    res = await session.execute(
-        sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid'),
-        {'uid': uid},
-    )
-    row = res.fetchone()
-    current = row.balance if row else 0
-    new_balance = current - cost if current >= cost else current
-    if current >= cost:
-        entry = Ledger(user_id=uid, amount=-cost, balance_after=new_balance, reason=f'مصرف {model}')
-        session.add(entry)
+    # Charge against Wallet.balance itself (the source of truth that
+    # BillingService.reserve() gates future requests against), not just the
+    # ledger's running SUM. Previously this only ever appended a Ledger row
+    # and Wallet.balance was left untouched by real usage — it only moved on
+    # top-ups — so the pre-flight reserve() check against `balance - reserved`
+    # never reflected actual spend and users could keep chatting for free
+    # indefinitely once their true (ledger) balance ran out. Locked via
+    # lock_wallet_for_update to avoid a concurrent-request race on the same
+    # wallet row.
+    from services.billing import SqlBillingRepo
+    _repo = SqlBillingRepo(session)
+    async with _repo.lock_wallet_for_update(uid):
+        wallet = await _repo.ensure_wallet(uid)
+        current = wallet['balance']
+        if current >= cost:
+            new_balance = current - cost
+            await _repo.set_wallet_balance(uid, new_balance)
+            entry = Ledger(user_id=uid, amount=-cost, balance_after=new_balance, reason=f'مصرف {model}')
+            session.add(entry)
+        else:
+            new_balance = current
     result['balance_after'] = new_balance
 
     try:
-        from services.billing import SqlBillingRepo
         from services.metering import record_usage
         from services.money import Money
-        _repo = SqlBillingRepo(session)
         await record_usage(
             _repo,
             request_id=secrets.token_hex(8),

@@ -15,12 +15,18 @@ Current release includes:
 - Developer API keys and OpenAI-compatible API workflow
 - Pay-as-you-go wallet and approved promotional credit
 - Versioned model/pricing metadata
+- Hermes server product: a purchasable VPS with the Hermes agent pre-installed and a
+  self-service catalog of installable skills (see §15). This is a bounded, explicitly
+  defined product line — it does not imply general infrastructure hosting, SLA-backed
+  uptime, or any commitment beyond what §15 states.
 
 Current release does **not** promise:
 
 - Team workspaces, shared budgets, SSO, invitations, or organization billing
 - A guaranteed number of models/providers
-- Guaranteed uptime, dedicated servers, VPN availability, or universal provider availability
+- Guaranteed uptime, VPN availability, or universal provider availability
+- Any dedicated-server capability beyond the bounded Hermes server product defined in §15
+  (no SLA, no custom hardware, no infrastructure outside what §15 lists)
 - “No third-party processing” for prompts sent to upstream providers
 - A signup gift unless a published grant record exists for that user
 - Subscription plans unless quota/subscription APIs and tables are active
@@ -61,6 +67,8 @@ When implemented, tenant isolation is mandatory. Roles will be `owner`, `admin`,
 | Wallet | Append-only ledger + reservations | `GET /wallet`, `GET /wallet/ledger` | Billing service only |
 | Usage | Immutable usage events | `GET /usage` | Metering service |
 | Sessions | Server-side session store | Cookie/session endpoints | Auth service |
+| Hermes offerings & prices | `hermes_offerings` (EUR cost + margin) | `GET /hermes/offerings` (live-converted to IRT) | Admin Hermes workflow |
+| Hermes orders/servers | `hermes_orders`, `hermes_servers` | `GET /hermes/orders`, `GET /hermes/servers` | Order/provisioning flow (§15) |
 
 Frontend must never be authoritative for models, prices, balances, quota, credits, claims, or permissions.
 
@@ -88,7 +96,9 @@ Rules:
 2. Uptime claims require measurement source, time window, sample size, and expiry.
 3. Model-count claims require a live catalog query.
 4. Privacy claims must match actual upstream data processing.
-5. Provider, VPN, dedicated-server, support, gift-credit, and “no sharing” claims require explicit evidence.
+5. Provider, VPN, support, gift-credit, and “no sharing” claims require explicit evidence.
+   Dedicated-server claims for the Hermes product must match §15 exactly — no uptime,
+   SLA, or delivery-time figure may be published without a registered claim.
 6. CI must reject forbidden literals in production copy unless they are registered and approved.
 
 ## 5. Model catalog contract
@@ -273,7 +283,44 @@ Error messages must not expose provider credentials, SQL, internal topology, or 
 - Pricing changes create new versions; historical events never mutate.
 - Deprecated models expose deprecation and sunset dates before removal.
 
-## 15. Acceptance invariants
+## 15. Hermes server product
+
+The Hermes server product sells a VPS with the Hermes agent pre-installed, plus a
+catalog of installable skills the buyer selects at checkout and can add/remove
+afterward from the dashboard (`/hermes/*`, `backend/hermes.py`).
+
+**What is promised:**
+
+- The exact specs (vCPU/RAM/disk/traffic), max concurrent skills, and price shown on
+  `GET /hermes/offerings` at the time of purchase.
+- Manual delivery: an admin provisions the server and installs Hermes; there is no
+  automated-provisioning SLA in the current release. Any delivery-time claim (e.g.
+  "within 24 hours") must be a registered claim (§4), not a hardcoded promise.
+- Skill add/remove requests are honored on a best-effort pull cycle by the agent
+  daemon running on the server — not synchronously. The dashboard's "in sync" badge
+  reflects `desired_state_version` vs `applied_state_version`, never a guarantee of
+  completion time.
+
+**What is not promised:** uptime SLA, custom hardware, choice of underlying cloud
+provider, or infrastructure beyond the offerings listed in the live catalog.
+
+**Pricing rule:** offering cost is stored in EUR (the hosting provider's billing
+currency) plus a margin; `GET /hermes/offerings` converts to integer IRT live using
+the current EUR→IRT rate. **EUR figures are never returned by user-facing endpoints**
+— only the resulting Toman price. Once an order is created, its price
+(`setup_price_irt`, `monthly_price_irt`) is snapshotted on the order/server row and
+never recalculated by a rate change; only a new order or explicit admin action can
+change what an existing customer is charged. This mirrors the model-catalog pricing
+pattern in §5–§6 (versioned snapshot, no float arithmetic, integer Toman only).
+
+**Billing:** the one-time setup fee and first month are charged through the existing
+Zarinpal + wallet path (§8–§9): the payment callback credits the wallet, then debits
+the equivalent amount so a server purchase is not also usable as spendable wallet
+credit. Monthly renewal debits the wallet on the locked `monthly_price_irt`, is
+idempotent per calendar month, and suspends the server after a grace period on
+insufficient balance — never a silent charge failure.
+
+## 16. Acceptance invariants
 
 - No request runs without successful reservation when billing is enabled.
 - No duplicate callback creates duplicate credit.

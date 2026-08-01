@@ -103,10 +103,21 @@ curl -X POST http://localhost:8081/v1/documents/generate \
 - Query معنایی روی اسناد کاربر
 - Endpoints: `POST /v1/rag/upload` · `POST /v1/rag/query` · `GET/DELETE /v1/rag/documents`
 
+### 🖥️ سرور هرمس (Hermes Server)
+یک VPS آماده با ایجنت **Hermes** از پیش نصب‌شده، به‌همراه مارکت‌پلیس اسکیل قابل نصب (برنامه‌نویسی، رصد اخبار، پژوهش، ...):
+- **کاتالوگ زنده** — پلن‌ها (`GET /hermes/offerings`) با قیمت همیشه تازه‌محاسبه‌شده به تومان؛ هزینه‌ی زیرساخت به یورو (Hetzner) ذخیره و فقط سمت ادمین دیده می‌شود.
+- **قفل قیمت سفارش** — قیمت لحظه‌ی خرید روی خود سفارش/سرور snapshot می‌شود؛ نوسان نرخ ارز بعداً چیزی را برای مشتری موجود عوض نمی‌کند.
+- **مدیریت اسکیل** — افزودن/حذف/ویرایش اسکیل از داشبورد؛ یک دیمن ایجنت روی سرور با poll دوره‌ای (`GET/POST /hermes/agent/*`، احراز هویت با توکن اختصاصی) وضعیت مطلوب را اعمال و گزارش می‌کند.
+- **تحویل و صف ادمین** — تحویل دستی از `/admin/hermes/orders`؛ پس از تحویل، کلید API اختصاصی سرور از همان مسیر بیلینگ wallet/reserve-settle موجود مصرف می‌شود.
+- **تمدید خودکار** — کسر ماهانه‌ی idempotent از کیف پول با مهلت ۷ روزه پیش از تعلیق.
+- UI: مسیر `/hermes` (کاتالوگ)، `/hermes/order` (ویزارد سفارش)، `/hermes/orders`، `/hermes/servers/[id]` (داشبورد سرور).
+- قرارداد کامل دیمن ایجنت: [`docs/hermes-agent-contract.md`](./docs/hermes-agent-contract.md).
+
 ### 💱 نرخ دلار لحظه‌ای (tgju)
 - `GET /api/exchange-rate` و `GET /exchange-rate` (سازگار با rewrite فرانت `/api/*`)
 - منبع اصلی: **tgju.org** (دلار آزاد) با cache Redis و fallback
 - تیکر «دلار آزاد» در صفحه اصلی پنل
+- نرخ **یورو** هم به همین الگو موازی محاسبه می‌شود (`eur_to_irt`، کش `exchange_rate:eur_irt`) — فقط برای قیمت‌گذاری داخلی سرور هرمس، هرگز به‌عنوان واحد پرداخت کاربر
 
 ### 🌐 Proxy / Egress پروایدرها
 - ترافیک مدل‌های Bynara از **backhaul HTTP proxy** (`HTTP(S)_PROXY` → `10.10.11.2:8888`) عبور می‌کند
@@ -218,6 +229,7 @@ sanjhubai/
 │   ├── rag_endpoints.py    # RAG document management
 │   ├── api_keys.py         # API key management
 │   ├── content.py          # Public content & catalog
+│   ├── hermes.py           # Hermes server product (catalog/orders/agent/admin)
 │   ├── pricing.py          # Plans & subscriptions
 │   ├── notifications.py    # Notification system
 │   ├── health.py           # Health check endpoints
@@ -250,8 +262,10 @@ sanjhubai/
 │   │   ├── usage/          # Usage analytics
 │   │   ├── compare/        # Model comparison
 │   │   ├── playground/     # API playground
-│   │   └── documents/      # Document Generator (سندساز)
+│   │   ├── documents/      # Document Generator (سندساز)
+│   │   └── hermes/         # Hermes server catalog/order/dashboard
 │   └── components/         # Shared components
+├── security/                # Black-box smoke + security test suite (deployed instance)
 ├── docker-compose.sanjhubai.yml
 └── README.md
 ```
@@ -316,6 +330,34 @@ sanjhubai/
 | DELETE | `/v1/rag/documents/{id}` | حذف سند |
 | GET | `/v1/rag/documents/{id}/status` | وضعیت ایندکس |
 
+### سرور هرمس — کاربر (Auth Required، جز کاتالوگ)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/hermes/offerings` | کاتالوگ پلن‌ها (عمومی، قیمت زنده به تومان) |
+| GET | `/hermes/skill-catalog` | کاتالوگ اسکیل‌های قابل نصب (عمومی) |
+| POST | `/hermes/orders` | ثبت سفارش + ایجاد پرداخت زرین‌پال |
+| GET | `/hermes/orders` · `/hermes/orders/{id}` | سفارش‌های کاربر |
+| GET | `/hermes/servers` · `/hermes/servers/{id}` | سرورهای کاربر + وضعیت اسکیل‌ها |
+| POST/PUT/DELETE | `/hermes/servers/{id}/skills[/{skill_id}]` | افزودن/ویرایش/حذف اسکیل روی سرور |
+| POST | `/hermes/servers/{id}/rotate-agent-token` | چرخش توکن دیمن ایجنت |
+
+### سرور هرمس — دیمن ایجنت (احراز هویت با توکن `hsa-...`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/hermes/agent/state` | دریافت وضعیت مطلوب اسکیل‌ها |
+| POST | `/hermes/agent/report` | گزارش نتیجه‌ی نصب/حذف اسکیل‌ها |
+
+> قرارداد کامل: [`docs/hermes-agent-contract.md`](./docs/hermes-agent-contract.md)
+
+### سرور هرمس — ادمین (`/admin/hermes/*`)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/admin/hermes/orders` | صف سفارش‌ها برای تحویل |
+| POST | `/admin/hermes/orders/{id}/provision` | ثبت اتصال سرور + صدور توکن ایجنت/کلید API |
+| POST | `/admin/hermes/servers/{id}/suspend` · `/terminate` | تعلیق/خاتمه سرور |
+| GET/POST | `/admin/hermes/offerings` | مدیریت پلن‌ها |
+| GET/POST | `/admin/hermes/skill-catalog` | مدیریت کاتالوگ اسکیل |
+
 > 📖 مستندات کامل API: `http://localhost:8081/docs` (فقط در حالت DEBUG)
 
 ## 🔒 امنیت
@@ -339,6 +381,9 @@ sanjhubai/
 - [x] **RAG Core** — upload/query/pgvector
 - [x] **Live FX (tgju)** — نرخ دلار آزاد + تیکر هوم
 - [x] **Provider backhaul proxy** — egress مدل‌ها از پروکسی
+- [x] **Hermes Server Product** — کاتالوگ/سفارش/تحویل سرور + مارکت‌پلیس اسکیل + دیمن ایجنت
+- [ ] **Hermes Agent Daemon** — پیاده‌سازی خودِ دیمن (این ریپو فقط قرارداد HTTP را تعریف می‌کند)
+- [ ] **Automated Hermes Provisioning** — تحویل خودکار به‌جای دستی (API ابری Hetzner)
 - [ ] **Persistent Document Storage** — انتقال رجیستری درون‌حافظه به PostgreSQL + Object Storage (MinIO/S3)
 - [ ] **DocGen Billing** — reserve/settle روی wallet (فعلاً MVP بدون کسر جداگانه)
 - [ ] **Templates** — قالب‌های آماده ارائه (کسب‌وکار، آموزشی، فروش)
@@ -351,10 +396,10 @@ sanjhubai/
 
 | متریک | مقدار |
 |-------|-------|
-| API Endpoints | 150 |
-| Frontend Pages | 29 |
-| Database Tables | 31+ |
-| SQLAlchemy Models | 30 |
+| API Endpoints | 170+ |
+| Frontend Pages | 34 |
+| Database Tables | 37+ |
+| SQLAlchemy Models | 36 |
 | AI Models (available) | 8 Bynara |
 | Document formats | PPTX · DOCX · MD |
 | Security baseline | `/docs` hidden, authz on wallet/usage/rag/docs |

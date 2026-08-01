@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
 from database import async_session, BASE_URL
-from models import Payment, Plan, CreditPackage, Subscription
+from models import Payment, Plan, CreditPackage, Subscription, HermesOrder, HermesOffering
 from dependencies import _get_user_id, _write_audit_log
 from payment import create_payment, verify_payment, PaymentRequest, handle_payment_callback, CallbackResult
 from services.billing import SqlBillingRepo
@@ -97,6 +97,22 @@ async def payment_callback(request: Request) -> JSONResponse:
             pkg_row = pkg_res.fetchone()
             credit_pkg = pkg_row[0] if pkg_row else None
 
+    # A Hermes server purchase is not a wallet top-up -- the wallet must not
+    # be credited the amount charged (that's handle_payment_callback's
+    # default). Only the offering's included_credit, if any, should land as
+    # spendable balance, so credit_amount is forced to that (or zero) via
+    # the same sanctioned path credit_package uses -- never a second,
+    # separate Ledger write (see handle_payment_callback's docstring for why).
+    hermes_order = None
+    hermes_offering = None
+    if payment_type == 'hermes_order' and reference_id:
+        async with async_session() as session:
+            order_res = await session.execute(select(HermesOrder).where(HermesOrder.id == int(reference_id)))
+            hermes_order = order_res.scalar_one_or_none()
+            if hermes_order is not None:
+                off_res = await session.execute(select(HermesOffering).where(HermesOffering.id == hermes_order.offering_id))
+                hermes_offering = off_res.scalar_one_or_none()
+
     callback_kwargs: dict[str, Any] = {}
     if credit_pkg is not None:
         callback_kwargs['credit_amount'] = Money(credit_pkg.total_credits)
@@ -104,6 +120,10 @@ async def payment_callback(request: Request) -> JSONResponse:
             f"بسته اعتباری: {credit_pkg.name_fa} "
             f"({credit_pkg.base_amount:,} + {credit_pkg.bonus_percent}% پاداش)"
         )
+    elif hermes_order is not None:
+        included_credit = hermes_offering.included_credit if hermes_offering else 0
+        callback_kwargs['credit_amount'] = Money(included_credit)
+        callback_kwargs['credit_reason'] = f'اعتبار همراه سرور هرمس #{hermes_order.id}' if included_credit > 0 else f'خرید سرور هرمس #{hermes_order.id}'
 
     async with async_session() as session:
         repo = SqlBillingRepo(session)
@@ -113,6 +133,7 @@ async def payment_callback(request: Request) -> JSONResponse:
         fail_redirect = {
             'subscription': f'{BASE_URL}/plans?payment=failed',
             'credit_package': f'{BASE_URL}/credits?payment=failed',
+            'hermes_order': f'{BASE_URL}/hermes/order?payment=failed',
         }.get(payment_type, f'{BASE_URL}/wallet?payment=failed')
         return JSONResponse({'detail': result.detail, 'redirect': fail_redirect}, status_code=result.code)
 
@@ -162,6 +183,28 @@ async def payment_callback(request: Request) -> JSONResponse:
         extra_data['credits_added'] = credit_pkg.total_credits
         extra_data['package'] = credit_pkg.name_fa
         redirect_path = '/wallet?payment=success'
+
+    elif payment_type == 'hermes_order' and hermes_order is not None:
+        # The wallet effect (crediting only included_credit, never the full
+        # amount charged) already happened atomically inside
+        # handle_payment_callback above. This just flips the order to 'paid'
+        # so it shows up in the admin delivery queue.
+        # replay-safe: handle_payment_callback's payment-row lock already
+        # rejected a duplicate callback before we get here, but re-check
+        # since this branch reads the order row separately.
+        if hermes_order.status == 'pending_payment':
+            async with async_session() as session:
+                order_res = await session.execute(select(HermesOrder).where(HermesOrder.id == hermes_order.id))
+                order = order_res.scalar_one_or_none()
+                if order and order.status == 'pending_payment':
+                    order.status = 'paid'
+                    order.paid_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                    order.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                    await session.commit()
+        if hermes_offering and hermes_offering.included_credit > 0:
+            extra_data['included_credit'] = hermes_offering.included_credit
+        extra_data['order_id'] = hermes_order.id
+        redirect_path = f'/hermes/orders/{hermes_order.id}?payment=success'
 
     return JSONResponse({
         'status': 'ok', 'ref_id': result.ref_id, 'amount': result.amount,

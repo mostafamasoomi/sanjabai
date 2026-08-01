@@ -36,6 +36,7 @@ const NAV: NavItem[] = [
   { href: '/api-keys', label: 'کلید API', icon: 'key', section: 'tools' },
   { href: '/search', label: 'جستجو', icon: 'search', section: 'tools' },
   { href: '/skills', label: 'اسکیل\u200cها', icon: 'cpu', section: 'tools' },
+  { href: '/hermes', label: 'سرور هرمس', icon: 'rocket', section: 'tools' },
   { href: '/assistants', label: 'دستیارها', icon: 'sparkles', section: 'tools' },
   { href: '/memory', label: 'حافظه', icon: 'clock', section: 'tools' },
   { href: '/tasks', label: 'تسک\u200cها', icon: 'calendar', section: 'tools' },

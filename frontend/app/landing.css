@@ -807,17 +807,22 @@ a.lp-pill:hover {
 
 /* All variants occupy the same grid cell: the element sizes to the widest
    word, so swapping the active one never reflows the headline. Transitions
-   (not an animation) so each change re-triggers without a remount. */
+   (not an animation) so each change re-triggers without a remount. The
+   outgoing phrase fades out with no delay; the incoming one delays its
+   fade-in by the same duration so the two never sit at overlapping opacity
+   at once — a straight crossfade left two differently-worded, mixed-script
+   phrases visibly stacked mid-swap. */
 .lp-hero__rotator > span {
   grid-area: 1 / 1;
   opacity: 0;
   transform: translateY(0.35em);
-  transition: opacity 0.45s var(--lp-ease), transform 0.45s var(--lp-ease);
+  transition: opacity 0.32s var(--lp-ease), transform 0.32s var(--lp-ease);
 }
 
 .lp-hero__rotator > span[data-active='true'] {
   opacity: 1;
   transform: none;
+  transition-delay: 0.32s;
 }
 
 .lp-hero__lead {

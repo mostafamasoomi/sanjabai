@@ -11,7 +11,7 @@ When an admin runs `POST /admin/hermes/orders/{order_id}/provision`, the respons
 includes two secrets, shown **exactly once**:
 
 - `agent_token` — `hsa-<random>`, the daemon's credential for the endpoints below.
-- `api_key` — `sk-<random>`, a normal Multiai API key (same shape as
+- `api_key` — `sk-<random>`, a normal Sanjhubai API key (same shape as
   `POST /api-keys`) scoped to the buyer's account, meant to be dropped into the
   daemon's LLM-calling config so Hermes' own model usage bills through the
   buyer's wallet via the existing `chat.py` reserve/settle path.

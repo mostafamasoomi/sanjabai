@@ -52,7 +52,7 @@ const NAV: NavItem[] = [
  * the auth screens supply their own marketing chrome; wrapping them in the
  * app shell would give them two competing navigations.
  */
-const CHROME_LESS_ROUTES = new Set(['/', '/login', '/signup', '/forgot-password'])
+const CHROME_LESS_ROUTES = new Set(['/', '/login', '/signup', '/forgot-password', '/admin'])
 
 /**
  * Routes that manage their own vertical space and must not get the shell's
@@ -74,6 +74,12 @@ const PUBLIC_ROUTES = [
   '/models',
   '/developer',
   '/status',
+  // AdminPanel has its own independent admin-token login screen (hits
+  // /api/admin/analytics directly) -- a separate auth mechanism from the
+  // regular user session on purpose. It must stay reachable without one,
+  // otherwise an admin who isn't also a regular logged-in user gets bounced
+  // to /login before ever seeing the admin login screen.
+  '/admin',
 ]
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -132,9 +138,13 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     }
   }, [loading, user, token, pathname, router, bare])
 
-  const isPublic = PUBLIC_ROUTES.some(
-    (p) => pathname === p || pathname?.startsWith(p + '/'),
-  )
+  // Exact-match only: unlike the PUBLIC_ROUTES entries above (none of which
+  // have real sub-routes today), /hermes has auth-gated children
+  // (/hermes/order, /hermes/orders, /hermes/servers) that must still bounce
+  // to /login -- only the catalog listing itself is browsable before
+  // signing up, same as /pricing and /models.
+  const isPublic = pathname === '/hermes'
+    || PUBLIC_ROUTES.some((p) => pathname === p || pathname?.startsWith(p + '/'))
 
   // Send signed-out visitors to /login for anything that needs a session.
   // Done in an effect, not during render: calling router.push() while

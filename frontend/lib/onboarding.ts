@@ -9,7 +9,7 @@
    and prevents re-showing it on later visits.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const ONBOARDED_KEY = 'sanjabai_onboarded'
+const ONBOARDED_KEY = 'sanjhubai_onboarded'
 
 export function markOnboarded() {
   try {

@@ -1,7 +1,7 @@
 'use client'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Sanjabai Icon System — SVG-based, no emoji in production.
+   Sanjhubai Icon System — SVG-based, no emoji in production.
    Each icon is a 24x24 SVG path for crisp rendering at all sizes.
    ═══════════════════════════════════════════════════════════════════════════ */
 

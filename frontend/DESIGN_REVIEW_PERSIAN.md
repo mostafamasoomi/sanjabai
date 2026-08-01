@@ -1,4 +1,4 @@
-# بررسی سطح ارشد طراحی فرانت‌اند Sanjabai
+# بررسی سطح ارشد طراحی فرانت‌اند Sanjhubai
 
 > نویسنده: بررسی مستقل طراحی (Senior Design Review)
 > تاریخ: 2026-07-18
@@ -30,7 +30,7 @@
 تعریف یک **Type Scale** واحد در `globals.css`:
 
 ```css
-/* ── Sanjabai Type Scale (این را به globals.css اضافه کنید) ── */
+/* ── Sanjhubai Type Scale (این را به globals.css اضافه کنید) ── */
 .display { font-size: clamp(2.5rem, 5vw, 4rem); font-weight: 800; line-height: 1.1; letter-spacing: -0.03em; }
 .h1 { font-size: 1.75rem; font-weight: 800; line-height: 1.3; letter-spacing: -0.02em; }
 .h2 { font-size: 1.375rem; font-weight: 700; line-height: 1.35; }
@@ -230,7 +230,7 @@ body { transition: background-color var(--motion-normal), color var(--motion-nor
 
 ## ۹. مقایسه با رقبا (ChatGPT / Claude / v0.dev)
 
-| ویژگی | Sanjabai فعلی | ChatGPT/Claude | v0.dev |
+| ویژگی | Sanjhubai فعلی | ChatGPT/Claude | v0.dev |
 |------|-------------|---------------|--------|
 | تم روشن | ❌ غیرفعال (باگ) | ✅ کامل | ✅ کامل |
 | Type scale واحد | ❌ پراکنده | ✅ دقیق | ✅ دقیق |

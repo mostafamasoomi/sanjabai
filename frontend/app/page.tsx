@@ -16,7 +16,7 @@ import { FAQ } from '@/components/landing/content'
 import './landing.css'
 
 export const metadata: Metadata = {
-  title: 'Sanjabai — دسترسی به همه‌ی مدل‌های هوش مصنوعی با یک اشتراک',
+  title: 'Sanjhubai — دسترسی به همه‌ی مدل‌های هوش مصنوعی با یک اشتراک',
   description:
     'با ۲۳ مدل هوش مصنوعی — DeepSeek، Mistral، Gemini، Llama و بیشتر — چت کنید، عامل بسازید و همه را با یک API سازگار با OpenAI به محصولتان وصل کنید. پرداخت به تومان به‌ازای مصرف، بدون اشتراک ماهانه و بدون نیاز به فیلترشکن.',
   alternates: { canonical: '/' },

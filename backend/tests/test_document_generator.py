@@ -14,7 +14,7 @@ import subprocess
 import pytest
 
 BASE = "http://localhost:8081"
-DEMO_EMAIL = "demo@sanjabai.com"
+DEMO_EMAIL = "demo@sanjhubai.com"
 DEMO_PASS = "Demo@2026"
 
 try:

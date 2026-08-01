@@ -147,7 +147,7 @@ async def list_models(request: Request) -> dict[str, Any]:
                     usd_out = float(row.usd_output_per_million or 0)
                     models.append({
                         'id': row.provider_model_id, 'object': 'model', 'created': 0,
-                        'owned_by': 'sanjabai', 'display_name': row.display_name,
+                        'owned_by': 'sanjhubai', 'display_name': row.display_name,
                         'context_window': row.context_window,
                         'pricing': {
                             'currency': row.currency or 'IRT',

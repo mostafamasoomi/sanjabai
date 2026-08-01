@@ -60,7 +60,7 @@ export default function LoginPage() {
             <Icon name="chat" size={26} className="text-white" />
           </div>
           <h1 className="text-xl font-extrabold mb-1 text-gradient">ورود به حساب</h1>
-          <p className="text-sm text-[var(--text-muted)]">به Sanjabai خوش آمدید</p>
+          <p className="text-sm text-[var(--text-muted)]">به Sanjhubai خوش آمدید</p>
         </div>
 
         {error && (

@@ -1,4 +1,4 @@
-"""Usage metering for Sanjabai.
+"""Usage metering for Sanjhubai.
 
 Records a *usage event* for every upstream model call: which request, which
 model and price version were used, the token breakdown (input / output /

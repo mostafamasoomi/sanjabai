@@ -1,4 +1,4 @@
-"""Money value object for Sanjabai billing.
+"""Money value object for Sanjhubai billing.
 
 Canonical unit is integer TOMAN (irt). The original codebase uses
 ``Money(amount)`` where ``amount`` is an integer toman value and reads

@@ -9,7 +9,7 @@ import dynamic from 'next/dynamic'
 const AdminCharts = dynamic(() => import('./components/AdminCharts'), { ssr: false })
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Sanjabai Admin Panel — Aurora Design System
+   Sanjhubai Admin Panel — Aurora Design System
    RTL Persian, dark theme, Stripe/Linear inspired
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -563,7 +563,7 @@ export default function AdminPage() {
               <Icon name="settings" size={28} className="text-accent" />
             </div>
             <h1 className="text-xl font-bold text-primary">پنل مدیریت</h1>
-            <p className="text-sm mt-1 text-muted">داشبورد مدیریت Sanjabai</p>
+            <p className="text-sm mt-1 text-muted">داشبورد مدیریت Sanjhubai</p>
           </div>
 
           <div className="space-y-4">
@@ -639,7 +639,7 @@ export default function AdminPage() {
                 <Icon name="settings" size={18} className="text-accent" />
               </div>
               <div>
-                <h2 className="text-sm font-bold text-primary">Sanjabai</h2>
+                <h2 className="text-sm font-bold text-primary">Sanjhubai</h2>
                 <p className="text-[10px] text-muted">Admin Panel</p>
               </div>
             </div>
@@ -1343,7 +1343,7 @@ export default function AdminPage() {
               <div className="admin-card">
                 <div className="space-y-4">
                   <Field label="عنوان">
-                    <input className="input w-full" value={abTitle} onChange={(e) => setAbTitle(e.target.value)} placeholder="درباره Sanjabai" />
+                    <input className="input w-full" value={abTitle} onChange={(e) => setAbTitle(e.target.value)} placeholder="درباره Sanjhubai" />
                   </Field>
                   <Field label="متن">
                     <textarea

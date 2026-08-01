@@ -41,7 +41,7 @@ export function LandingHeader() {
         <div className="lp-container lp-header__inner">
           <a href="/" className="lp-brand">
             <BrandMark />
-            Sanjabai
+            Sanjhubai
           </a>
 
           <nav className="lp-nav" aria-label="پیمایش اصلی">
@@ -79,7 +79,7 @@ export function LandingHeader() {
           <div className="lp-drawer__top">
             <a href="/" className="lp-brand" onClick={() => setMenuOpen(false)}>
               <BrandMark />
-              Sanjabai
+              Sanjhubai
             </a>
             <button
               type="button"

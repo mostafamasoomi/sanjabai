@@ -1,4 +1,4 @@
-"""Billing repository + wallet credit for Sanjabai.
+"""Billing repository + wallet credit for Sanjhubai.
 
 Provides repository implementations:
 

@@ -1,5 +1,5 @@
 """
-Comprehensive unit tests for Sanjabai backend.
+Comprehensive unit tests for Sanjhubai backend.
 Tests all major components: auth, chat, models, wallet, pricing, memory.
 """
 import pytest

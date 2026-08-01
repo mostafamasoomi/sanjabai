@@ -1,31 +1,45 @@
+# Explicit project name: Compose defaults the project name (and therefore
+# every container's internal DNS name, e.g. <project>-<service>-1) to the
+# directory this file lives in. Pinning it here means the container/network
+# names below are fixed regardless of what the checkout directory is called
+# on any given host — important since this file was renamed as part of the
+# Multiai -> Sanjhubai rebrand, but the *directory* it's deployed from on an
+# existing server may not have been renamed yet (see the volume mount below).
+name: sanjhubai
+
 services:
-  multiai_pg:
+  sanjhubai_pg:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: multiai
-      POSTGRES_PASSWORD: multiai
-      POSTGRES_DB: multiai
+      POSTGRES_USER: sanjhubai
+      POSTGRES_PASSWORD: sanjhubai
+      POSTGRES_DB: sanjhubai
     volumes:
-      - multiai_pg_data:/var/lib/postgresql/data
-      - /root/multiai/infra/pgvector/vector.so:/usr/local/lib/postgresql/vector.so:ro
+      - sanjhubai_pg_data:/var/lib/postgresql/data
+      # This host path must match wherever this repo is actually checked
+      # out on the server. It reads /root/sanjhubai here, matching this
+      # rebrand — if the real checkout directory hasn't been renamed to
+      # match yet, change this one line back to the real path rather than
+      # renaming the checkout, and don't fix it silently.
+      - /root/sanjhubai/infra/pgvector/vector.so:/usr/local/lib/postgresql/vector.so:ro
       # ponytail: no host port needed — API connects via Docker network
-    networks: [multiai_net]
+    networks: [sanjhubai_net]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U multiai"]
+      test: ["CMD-SHELL", "pg_isready -U sanjhubai"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  multiai_redis:
+  sanjhubai_redis:
     image: redis:7-alpine
     restart: unless-stopped
     command: ["redis-server", "--save", "60", "1", "--appendonly", "yes"]
     volumes:
-      - multiai_redis_data:/data
-    networks: [multiai_net]
+      - sanjhubai_redis_data:/data
+    networks: [sanjhubai_net]
 
-  multiai_litellm:
+  sanjhubai_litellm:
     build:
       context: ./backend
       dockerfile: Dockerfile.litellm
@@ -38,29 +52,29 @@ services:
       BYNARA_API_KEY_2: ${BYNARA_API_KEY_2:?BYNARA_API_KEY_2 must be set in .env}
       SOCKS5_PROXY_URL: ${SOCKS5_PROXY_URL:?SOCKS5_PROXY_URL must be set in .env}
     depends_on:
-      - multiai_tunnel
-    networks: [multiai_net]
+      - sanjhubai_tunnel
+    networks: [sanjhubai_net]
 
-  multiai_tunnel:
+  sanjhubai_tunnel:
     build:
       context: ./infra
       dockerfile: Dockerfile.tunnel
     restart: unless-stopped
-    networks: [multiai_net]
+    networks: [sanjhubai_net]
 
-  multiai_api:
+  sanjhubai_api:
     build:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
-      multiai_pg:
+      sanjhubai_pg:
         condition: service_healthy
-      multiai_redis:
+      sanjhubai_redis:
         condition: service_started
-      multiai_litellm:
+      sanjhubai_litellm:
         condition: service_started
-      multiai_tunnel:
+      sanjhubai_tunnel:
         condition: service_started
     env_file: .env
     # env vars loaded from .env via env_file above. ADMIN_TOKEN is also
@@ -74,40 +88,40 @@ services:
       - ADMIN_TOKEN=${ADMIN_TOKEN:?ADMIN_TOKEN must be set in .env}
     ports:
       - "0.0.0.0:8001:8000"
-    networks: [multiai_net]
+    networks: [sanjhubai_net]
 
-  multiai_frontend:
+  sanjhubai_frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: http://multiai-multiai_api-1:8000
+        NEXT_PUBLIC_API_URL: http://sanjhubai-sanjhubai_api-1:8000
     restart: unless-stopped
     depends_on:
-      - multiai_api
+      - sanjhubai_api
     environment:
-      NEXT_PUBLIC_API_URL: http://multiai-multiai_api-1:8000
+      NEXT_PUBLIC_API_URL: http://sanjhubai-sanjhubai_api-1:8000
       HOSTNAME: 0.0.0.0
     ports:
       - "0.0.0.0:3003:3000"
-    networks: [multiai_net]
+    networks: [sanjhubai_net]
 
-  multiai_bot:
+  sanjhubai_bot:
     build:
       context: ./bot
       dockerfile: Dockerfile
     restart: on-failure:3
     depends_on:
-      - multiai_api
+      - sanjhubai_api
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-      API_URL: http://multiai-multiai_api-1:8000
-    networks: [multiai_net]
+      API_URL: http://sanjhubai-sanjhubai_api-1:8000
+    networks: [sanjhubai_net]
 
 volumes:
-  multiai_pg_data:
-  multiai_redis_data:
+  sanjhubai_pg_data:
+  sanjhubai_redis_data:
 
 networks:
-  multiai_net:
+  sanjhubai_net:
     driver: bridge

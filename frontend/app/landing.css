@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   Sanjabai — Landing design system
+   Sanjhubai — Landing design system
    ───────────────────────────────────────────────────────────────────────────
    Everything here is scoped under `.lp` so the marketing page can have its
    own visual language without leaking into the product UI (dashboard, chat,
@@ -108,7 +108,7 @@
 }
 
 /* Latin / technical runs inside Persian prose. Isolates bidi so identifiers
-   like "api.multiai.ir/v1" never get reordered by the RTL paragraph. */
+   like "api.sanjhubai.ir/v1" never get reordered by the RTL paragraph. */
 .lp-latin {
   unicode-bidi: isolate;
   direction: ltr;

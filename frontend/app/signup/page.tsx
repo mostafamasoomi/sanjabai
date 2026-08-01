@@ -68,7 +68,7 @@ export default function SignupPage() {
           <div className="aurora-signup-logo w-14 h-14 rounded-xl flex items-center justify-center mx-auto mb-4" style={{background: 'linear-gradient(135deg, #6366f1, #a855f7)', boxShadow: '0 0 32px rgba(99,102,241,0.4), 0 0 64px rgba(99,102,241,0.15)'}}>
             <Icon name="sparkles" size={28} className="text-white" />
           </div>
-          <h1 className="text-xl font-extrabold mb-1 text-gradient">ثبت‌نام در Sanjabai</h1>
+          <h1 className="text-xl font-extrabold mb-1 text-gradient">ثبت‌نام در Sanjhubai</h1>
           <p className="text-sm text-[var(--text-dim)]">دسترسی به همه مدل‌های هوش مصنوعی</p>
         </div>
 

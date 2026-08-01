@@ -1,5 +1,5 @@
 /**
- * Sanjabai Admin — Utility JS
+ * Sanjhubai Admin — Utility JS
  * Vanilla JS utilities for the admin panel.
  */
 

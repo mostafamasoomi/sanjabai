@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Restore session on mount
   useEffect(() => {
-    const t = localStorage.getItem('sanjabai_auth_token')
+    const t = localStorage.getItem('sanjhubai_auth_token')
     if (t) {
       setToken(t)
       fetch('/api/auth/me', { headers: { Authorization: `Bearer ${t}` } })
@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Only clear token on definitive auth failures (401/403).
           // Transient errors (500, 502, network) should NOT destroy a valid session.
           if (r.status === 401 || r.status === 403) {
-            localStorage.removeItem('sanjabai_auth_token')
+            localStorage.removeItem('sanjhubai_auth_token')
             setToken(null)
           }
           return Promise.reject()
@@ -61,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
     if (!res.ok) throw new Error((await res.json()).detail || 'login failed')
     const data = await res.json()
-    localStorage.setItem('sanjabai_auth_token', data.token)
+    localStorage.setItem('sanjhubai_auth_token', data.token)
     setToken(data.token)
     setUser(data.user)
   }, [])
@@ -75,14 +75,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
     if (!res.ok) throw new Error((await res.json()).detail || 'signup failed')
     const data = await res.json()
-    localStorage.setItem('sanjabai_auth_token', data.token)
+    localStorage.setItem('sanjhubai_auth_token', data.token)
     setToken(data.token)
     setUser(data.user)
   }, [])
 
   const logout = useCallback(() => {
     if (token) fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {})
-    localStorage.removeItem('sanjabai_auth_token')
+    localStorage.removeItem('sanjhubai_auth_token')
     setToken(null)
     setUser(null)
   }, [token])

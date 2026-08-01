@@ -2,7 +2,7 @@
 """Fetch free models from OpenRouter, update pricing table and litellm config.
 
 Run periodically (e.g. every 15 minutes via cron).  Logs to
-/root/multiai/scripts/update_models.log.
+/root/sanjhubai/scripts/update_models.log.
 """
 from __future__ import annotations
 
@@ -20,10 +20,10 @@ import yaml
 # ── Paths ──────────────────────────────────────────────────────────────────
 SCRIPT_DIR = Path(__file__).resolve().parent
 LOG_FILE = SCRIPT_DIR / "update_models.log"
-CONFIG_PATH = Path("/root/multiai/backend/litellm_config.yaml")
+CONFIG_PATH = Path("/root/sanjhubai/backend/litellm_config.yaml")
 DB_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql+asyncpg://multiai:multiai@127.0.0.1:5432/multiai",
+    "postgresql+asyncpg://sanjhubai:sanjhubai@127.0.0.1:5432/sanjhubai",
 )
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
@@ -228,7 +228,7 @@ def update_pricing_via_subprocess(models: list[dict], irr_rate: float) -> int:
     sql_lines.append("COMMIT;")
     sql_file = SCRIPT_DIR / "_pricing_update.sql"
     sql_file.write_text("\n".join(sql_lines))
-    log.info("Wrote SQL to %s — run manually via: docker exec -i multiai-multiai_pg-1 psql -U multiai < %s", sql_file, sql_file)
+    log.info("Wrote SQL to %s — run manually via: docker exec -i sanjhubai-sanjhubai_pg-1 psql -U sanjhubai < %s", sql_file, sql_file)
     return len(models)
 
 

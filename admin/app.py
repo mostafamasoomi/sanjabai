@@ -15,7 +15,7 @@ from typing import Optional
 # ---------------------------------------------------------------------------
 DATABASE_URL = os.getenv(
     'DATABASE_URL',
-    'postgresql+asyncpg://multiai:multiai@multiai_pg:5432/multiai'
+    'postgresql+asyncpg://sanjhubai:sanjhubai@sanjhubai_pg:5432/sanjhubai'
 )
 SECRET_KEY = os.getenv('ADMIN_SECRET_KEY', '')
 if not SECRET_KEY:

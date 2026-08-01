@@ -1,5 +1,5 @@
 """
-Quick verification tests for Sanjabai backend.
+Quick verification tests for Sanjhubai backend.
 These tests use minimal mocking to verify core functionality.
 """
 import pytest

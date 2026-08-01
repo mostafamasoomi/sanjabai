@@ -1,4 +1,4 @@
--- Phase 0 baseline: core tables for Sanjabai.
+-- Phase 0 baseline: core tables for Sanjhubai.
 -- Idempotent — uses IF NOT EXISTS.
 
 CREATE TABLE IF NOT EXISTS schema_migrations (

@@ -1,5 +1,5 @@
 """
-Verification tests for Sanjabai backend - simplified version.
+Verification tests for Sanjhubai backend - simplified version.
 Tests core functionality without full app initialization.
 """
 import pytest

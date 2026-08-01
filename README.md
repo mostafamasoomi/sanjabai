@@ -162,8 +162,8 @@ curl -X POST http://localhost:8081/v1/documents/generate \
 
 ```bash
 # 1. Clone
-git clone https://github.com/mostafamasoomi/sanjabai.git
-cd sanjabai
+git clone https://github.com/mostafamasoomi/sanjhubai.git
+cd sanjhubai
 
 # 2. Configure environment
 cp .env.example .env
@@ -378,6 +378,6 @@ MIT — see [LICENSE](./LICENSE).
 
 **ساخته شده با ❤️ برای جامعه فارسی‌زبان**
 
-[GitHub](https://github.com/mostafamasoomi/sanjabai) • [sanjhubai.ir](https://sanjhubai.ir)
+[GitHub](https://github.com/mostafamasoomi/sanjhubai) • [sanjhubai.ir](https://sanjhubai.ir)
 
 </div>

@@ -31,6 +31,14 @@ interface PricingRow {
   input_per_million: number
   output_per_million: number
   currency: string
+  availability?: string
+}
+
+interface ModelTestResult {
+  ok: boolean
+  latency_ms: number
+  error: string | null
+  upstream?: string
 }
 
 interface FeatureRow {
@@ -200,6 +208,9 @@ export default function AdminPage() {
   const [models, setModels] = useState<string[]>([])
   const [users, setUsers] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [togglingModel, setTogglingModel] = useState<string | null>(null)
+  const [testingModel, setTestingModel] = useState<string | null>(null)
+  const [testResults, setTestResults] = useState<Record<string, ModelTestResult>>({})
 
   // ─── Pricing Form ────────────────────────────────────────────────────────
   const [pzModel, setPzModel] = useState('')
@@ -389,6 +400,37 @@ export default function AdminPage() {
       setPzModel(''); setPzIn(''); setPzOut(''); setPzCur('IRT')
       loadAll()
     } catch { toast('خطا در ذخیره تعرفه', 'error') }
+  }
+
+  const toggleModel = async (model: string, currentAvailability?: string) => {
+    setTogglingModel(model)
+    try {
+      const r = await api(`/api/admin/models/${encodeURIComponent(model)}/toggle`, { method: 'POST' })
+      const data = await r.json()
+      toast(
+        data.availability === 'available' ? `${model} فعال شد` : `${model} غیرفعال شد`,
+        'success',
+      )
+      setPrices((prev) => prev.map((p) => (p.model === model ? { ...p, availability: data.availability } : p)))
+    } catch {
+      toast('خطا در تغییر وضعیت مدل', 'error')
+    } finally {
+      setTogglingModel(null)
+    }
+  }
+
+  const testModel = async (model: string) => {
+    setTestingModel(model)
+    try {
+      const r = await api(`/api/admin/models/${encodeURIComponent(model)}/test`, { method: 'POST' })
+      const data = await r.json()
+      setTestResults((prev) => ({ ...prev, [model]: data }))
+      toast(data.ok ? `${model} پاسخ داد (${data.latency_ms}ms)` : `${model} پاسخ نداد: ${data.error || 'نامشخص'}`, data.ok ? 'success' : 'error')
+    } catch {
+      toast('خطا در تست مدل', 'error')
+    } finally {
+      setTestingModel(null)
+    }
   }
 
   // ─── Features Actions ────────────────────────────────────────────────────
@@ -1119,30 +1161,63 @@ export default function AdminPage() {
                       <th className="text-right p-3">ورودی</th>
                       <th className="text-right p-3">خروجی</th>
                       <th className="text-right p-3">واحد</th>
+                      <th className="text-right p-3">وضعیت</th>
+                      <th className="text-right p-3">تست</th>
                       <th className="text-right p-3">عملیات</th>
                     </tr>
                   </thead>
                   <tbody>
                     {prices.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="p-6 text-center text-sm text-muted">
+                        <td colSpan={7} className="p-6 text-center text-sm text-muted">
                           تعرفه‌ای ثبت نشده
                         </td>
                       </tr>
                     ) : (
-                      prices.map((p: any) => (
-                        <tr key={p.model}>
-                          <td className="p-3 text-sm font-mono font-medium text-primary">{p.model}</td>
-                          <td className="p-3 text-xs">{faNum(p.input_per_million)}</td>
-                          <td className="p-3 text-xs">{faNum(p.output_per_million)}</td>
-                          <td className="p-3"><span className="badge">{p.currency}</span></td>
-                          <td className="p-3">
-                            <button className="btn btn-sm" onClick={() => { setPzModel(p.model); setPzIn(String(p.input_per_million)); setPzOut(String(p.output_per_million)); setPzCur(p.currency) }}>
-                              <Icon name="settings" size={14} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
+                      prices.map((p: any) => {
+                        const testResult = testResults[p.model]
+                        const isDisabled = p.availability === 'disabled'
+                        return (
+                          <tr key={p.model}>
+                            <td className="p-3 text-sm font-mono font-medium text-primary">{p.model}</td>
+                            <td className="p-3 text-xs">{faNum(p.input_per_million)}</td>
+                            <td className="p-3 text-xs">{faNum(p.output_per_million)}</td>
+                            <td className="p-3"><span className="badge">{p.currency}</span></td>
+                            <td className="p-3">
+                              <button
+                                className="badge"
+                                style={{
+                                  cursor: 'pointer',
+                                  background: isDisabled ? 'var(--danger-dim, #4a1a1a)' : 'var(--success-dim, #143a1e)',
+                                  color: isDisabled ? 'var(--danger, #e35d5d)' : 'var(--success, #4ade80)',
+                                }}
+                                disabled={togglingModel === p.model}
+                                onClick={() => toggleModel(p.model, p.availability)}
+                                title="کلیک برای تغییر وضعیت"
+                              >
+                                {togglingModel === p.model ? '...' : (isDisabled ? 'غیرفعال' : 'فعال')}
+                              </button>
+                            </td>
+                            <td className="p-3">
+                              <button className="btn btn-sm" disabled={testingModel === p.model} onClick={() => testModel(p.model)}>
+                                {testingModel === p.model ? (
+                                  <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
+                                ) : 'تست'}
+                              </button>
+                              {testResult && (
+                                <span className="text-xs mr-2" style={{ color: testResult.ok ? 'var(--success, #4ade80)' : 'var(--danger, #e35d5d)' }}>
+                                  {testResult.ok ? `${faNum(testResult.latency_ms)}ms` : (testResult.error || 'خطا')}
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3">
+                              <button className="btn btn-sm" onClick={() => { setPzModel(p.model); setPzIn(String(p.input_per_million)); setPzOut(String(p.output_per_million)); setPzCur(p.currency) }}>
+                                <Icon name="settings" size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })
                     )}
                   </tbody>
                 </table>

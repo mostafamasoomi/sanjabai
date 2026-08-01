@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
 from database import async_session, BASE_URL
-from models import Payment, Ledger, Plan, CreditPackage, Subscription
+from models import Payment, Ledger, Plan, CreditPackage, Subscription, HermesOrder, HermesOffering
 from dependencies import _get_user_id, _write_audit_log
 from payment import create_payment, verify_payment, PaymentRequest, handle_payment_callback, CallbackResult
 from services.billing import SqlBillingRepo
@@ -87,6 +87,7 @@ async def payment_callback(request: Request) -> JSONResponse:
         fail_redirect = {
             'subscription': f'{BASE_URL}/plans?payment=failed',
             'credit_package': f'{BASE_URL}/credits?payment=failed',
+            'hermes_order': f'{BASE_URL}/hermes/order?payment=failed',
         }.get(payment_type, f'{BASE_URL}/wallet?payment=failed')
         return JSONResponse({'detail': result.detail, 'redirect': fail_redirect}, status_code=result.code)
 
@@ -148,6 +149,54 @@ async def payment_callback(request: Request) -> JSONResponse:
                 extra_data['credits_added'] = credit_amount
                 extra_data['package'] = pkg.name_fa
         redirect_path = '/wallet?payment=success'
+
+    elif payment_type == 'hermes_order' and reference_id:
+        order_id = int(reference_id)
+        async with async_session() as session:
+            order_res = await session.execute(select(HermesOrder).where(HermesOrder.id == order_id))
+            order = order_res.scalar_one_or_none()
+            # Idempotent: a duplicate callback (Zarinpal retry) must not
+            # double-charge the offsetting debit or double-grant credit.
+            if order and order.status == 'pending_payment':
+                uid = order.user_id
+                total_charged = order.setup_price_irt + order.monthly_price_irt
+
+                bal_res = await session.execute(
+                    sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid'),
+                    {'uid': uid}
+                )
+                current_balance = bal_res.fetchone().balance or 0
+
+                # handle_payment_callback() above already credited the full
+                # paid amount to the wallet (that's its job for a generic
+                # top-up). A server purchase isn't wallet credit, so offset
+                # it here with an equal debit -- otherwise the user would
+                # get both a server AND the purchase amount as spendable
+                # balance.
+                new_balance = current_balance - total_charged
+                session.add(Ledger(
+                    user_id=uid, amount=-total_charged, balance_after=new_balance,
+                    reason=f'خرید سرور هرمس #{order.id}',
+                    idempotency_key=f"hermes-order:{order.id}:{result.ref_id}",
+                ))
+
+                offering_res = await session.execute(select(HermesOffering).where(HermesOffering.id == order.offering_id))
+                offering = offering_res.scalar_one_or_none()
+                if offering and offering.included_credit > 0:
+                    credit_balance = new_balance + offering.included_credit
+                    session.add(Ledger(
+                        user_id=uid, amount=offering.included_credit, balance_after=credit_balance,
+                        reason=f'اعتبار همراه سرور هرمس #{order.id}',
+                        idempotency_key=f"hermes-credit:{order.id}:{result.ref_id}",
+                    ))
+                    extra_data['included_credit'] = offering.included_credit
+
+                order.status = 'paid'
+                order.paid_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                order.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+                await session.commit()
+                extra_data['order_id'] = order.id
+        redirect_path = f'/hermes/orders/{order_id}?payment=success'
 
     return JSONResponse({
         'status': 'ok', 'ref_id': result.ref_id, 'amount': result.amount,

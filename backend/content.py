@@ -327,9 +327,15 @@ async def api_exchange_rate() -> JSONResponse:
 
         rate_irt = rate_irr / 10  # IRR → IRT (Toman)
 
+    eur_to_irt = await _get_cached_eur_to_irt()
+
     result = jsonable_encoder({
         'usd_to_irt': round(rate_irt),
         'usd_to_irr': round(rate_irt * 10),
+        # EUR rate is used internally to price the Hermes server product
+        # (Hetzner bills in EUR); exposed here for admin/ops visibility only
+        # -- never surfaced as a currency choice to end users.
+        'eur_to_irt': round(eur_to_irt),
         'markup_pct': markup_pct,
         'source': source,
         'cached_at': datetime.now(timezone.utc).isoformat(),
@@ -406,6 +412,93 @@ async def _get_exchange_rate() -> tuple[float, int]:
 
     rate_irt = rate_irr / 10  # IRR → IRT (Toman)
     return rate_irt, markup_pct
+
+
+async def _fetch_tgju_eur_rate() -> float | None:
+    """Fetch live EUR→IRR market rate from tgju.org via the HTTP proxy.
+
+    Returns the rate in IRR (Rial); callers convert to IRT (Toman) by /10.
+    Returns None on any failure so callers can fall back.
+    """
+    try:
+        import re
+        import urllib.request as _ur
+        proxy_url = os.getenv("HTTP_PROXY", os.getenv("HTTPS_PROXY", "http://10.10.11.2:8888"))
+        _proxy = _ur.ProxyHandler({"http": proxy_url, "https": proxy_url})
+        _opener = _ur.build_opener(_proxy)
+        _resp = _opener.open("https://www.tgju.org/profile/price_eur", timeout=15)
+        _text = _resp.read().decode()
+        _m = re.search(r'class="price"[^>]*>([\d,]+)<', _text)
+        if _m:
+            return float(_m.group(1).replace(",", ""))
+    except Exception as e:
+        print(f"[warn] _fetch_tgju_eur_rate failed: {e}")
+    return None
+
+
+async def _get_eur_exchange_rate() -> tuple[float, int]:
+    """Return the live EUR→IRT (Toman) rate and markup percentage.
+
+    Mirrors ``_get_exchange_rate`` (USD) exactly, used by the Hermes server
+    product to price Hetzner's EUR-denominated hosting cost in Toman. Order
+    of resolution:
+      1. A manual DB override (exchange_rate_overrides, EUR->IRT) if present.
+      2. Live tgju.org market rate.
+      3. Fallback to open.er-api.com.
+      4. Hardcoded fallback constant.
+    """
+    markup_pct = 0
+    rate_irr = None
+
+    # 1. Manual DB override (highest priority)
+    try:
+        if async_session is not None:
+            async with async_session() as session:
+                res = await session.execute(sqlalchemy.text(
+                    "SELECT rate FROM exchange_rate_overrides "
+                    "WHERE from_currency='EUR' AND to_currency='IRT' AND active=TRUE "
+                    "ORDER BY id DESC LIMIT 1"
+                ))
+                row = res.fetchone()
+                if row:
+                    # stored value is already IRT (Toman)
+                    return float(row.rate), markup_pct
+    except Exception:
+        pass
+
+    # 2. Live tgju.org
+    rate_irr = await _fetch_tgju_eur_rate()
+
+    # 3. Fallback to open.er-api.com
+    if rate_irr is None:
+        try:
+            resp2 = await _http.get('https://open.er-api.com/v6/latest/EUR', follow_redirects=True, timeout=10)
+            resp2.raise_for_status()
+            rate_irr = float(resp2.json()['rates']['IRR'])
+        except Exception:
+            pass
+
+    # 4. Hardcoded fallback (approximate, reviewed periodically)
+    if rate_irr is None:
+        rate_irr = 1_370_000
+
+    rate_irt = rate_irr / 10  # IRR → IRT (Toman)
+    return rate_irt, markup_pct
+
+
+async def _get_cached_eur_to_irt() -> float:
+    """Return the EUR→IRT rate, cached in Redis for EXCHANGE_RATE_CACHE_TTL.
+
+    Separate cache key from the USD rate (``exchange_rate:eur_irt``) so the
+    two currencies refresh independently. Used by hermes.py to price
+    offerings without ever exposing the EUR figure to end users.
+    """
+    cached = await rds.get('exchange_rate:eur_irt')
+    if cached:
+        return float(json.loads(cached)['eur_to_irt'])
+    rate_irt, _markup = await _get_eur_exchange_rate()
+    await rds.setex('exchange_rate:eur_irt', EXCHANGE_RATE_CACHE_TTL, json.dumps({'eur_to_irt': round(rate_irt, 2)}))
+    return rate_irt
 
 
 @router.get('/pricing-table')

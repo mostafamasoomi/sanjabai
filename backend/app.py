@@ -41,6 +41,8 @@ from models import (
     CreditPackage, UserBillingSetting, UserMemory, SkillTemplate,
     SkillTemplateRating, ScheduledTask, TaskExecution,
     RagDocument, RagChunk, RagEmbeddingUsage,
+    HermesOffering, HermesSkillCatalog, HermesOrder, HermesServer,
+    HermesServerSkill, HermesAgentEvent,
 )
 
 # ── Import shared helpers (for backward compat: from app import _gen_token, etc.) ──
@@ -142,6 +144,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     _pricing_task = asyncio.create_task(_pricing_refresh_loop())
 
+    # Hermes server product: charge active servers past their paid_through_at
+    # for another month, once a day. Idempotent per calendar month (see
+    # hermes.run_renewal_cycle), so a missed/late tick just catches up.
+    async def _hermes_renewal_loop():
+        await asyncio.sleep(60)  # initial delay for startup
+        while True:
+            try:
+                from hermes import run_renewal_cycle
+                result = await run_renewal_cycle()
+                print(f"[hermes-renewal] {result}")
+            except Exception as e:
+                print(f"[hermes-renewal] error: {e}")
+            await asyncio.sleep(86400)  # 24 hours
+
+    _hermes_renewal_task = asyncio.create_task(_hermes_renewal_loop())
+
     # Model discovery + health.
     #
     # Discovery keeps model_catalog in step with what the upstreams expose;
@@ -176,6 +194,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _health_task.cancel()
     _discovery_task.cancel()
     _pricing_task.cancel()
+    _hermes_renewal_task.cancel()
     if _db._real_http:
         await _db._real_http.aclose()
     await _eng.dispose()
@@ -241,6 +260,7 @@ from websocket import router as websocket_router
 from rag_endpoints import router as rag_router
 from document_generator import router as doc_gen_router
 from model_health import router as model_health_router
+from hermes import router as hermes_router
 
 app.include_router(model_health_router)
 app.include_router(health_router)
@@ -261,3 +281,4 @@ app.include_router(tasks_router)
 app.include_router(websocket_router)
 app.include_router(rag_router)
 app.include_router(doc_gen_router)
+app.include_router(hermes_router)

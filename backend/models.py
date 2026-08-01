@@ -49,6 +49,12 @@ class Subscription(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(sqlalchemy.ForeignKey('users.id'), index=True)
     plan: Mapped[str] = mapped_column(sqlalchemy.String(32))
+    # Column has existed in the DB since migrations/0005_pricing_system.sql;
+    # it was never mapped here, so payment_endpoints.py's paid-subscription
+    # checkout completion (Subscription(..., plan_id=plan.id, ...)) raised
+    # TypeError on every successful payment ("plan_id is an invalid keyword
+    # argument for Subscription") before this was added.
+    plan_id: Mapped[str | None] = mapped_column(sqlalchemy.ForeignKey('plans.id'), nullable=True)
     starts_at: Mapped[datetime] = mapped_column(default=_utcnow)
     ends_at: Mapped[datetime | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(default='active')

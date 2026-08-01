@@ -122,7 +122,12 @@ async def payment_callback(request: Request) -> JSONResponse:
     if payment_type == 'subscription' and reference_id:
         uid = p.user_id if pay_row else 0
         async with async_session() as session:
-            plan_res = await session.execute(select(Plan).where(Plan.id == int(reference_id)))
+            # Plan.id is a string primary key (admin-chosen, e.g. "pro"),
+            # not numeric -- int(reference_id) raised ValueError for any
+            # non-numeric plan id, crashing this branch after the user had
+            # already been charged. See the identical bug fixed for
+            # CreditPackage.id above.
+            plan_res = await session.execute(select(Plan).where(Plan.id == reference_id))
             plan_row = plan_res.fetchone()
             plan = plan_row[0] if plan_row else None
             if plan:

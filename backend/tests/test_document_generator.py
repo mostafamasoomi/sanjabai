@@ -14,7 +14,7 @@ import subprocess
 import pytest
 
 BASE = "http://localhost:8081"
-DEMO_EMAIL = "demo@multiai.com"
+DEMO_EMAIL = "demo@sanjhubai.com"
 DEMO_PASS = "Demo@2026"
 
 try:
@@ -42,6 +42,7 @@ def _file_type(path: str) -> str:
 
 
 @pytest.mark.skipif(not HAVE_HTTPX, reason="httpx required for live tests")
+@pytest.mark.live
 class TestDocumentGeneratorLive:
     def setup_method(self):
         self.headers = _login()

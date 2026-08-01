@@ -133,7 +133,7 @@ export default function ModelsPage() {
     setTesting(true)
     setTestResults([])
     try {
-      const t = token || localStorage.getItem('multiai_auth_token')
+      const t = token || localStorage.getItem('sanjhubai_auth_token')
       const r = await fetch('/api/admin/test-models', { headers: { Authorization: `Bearer ${t}` } })
       const d = await r.json()
       setTestResults(d.results || [])

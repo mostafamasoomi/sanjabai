@@ -9,7 +9,7 @@ import dynamic from 'next/dynamic'
 const AdminCharts = dynamic(() => import('./components/AdminCharts'), { ssr: false })
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Multiai Admin Panel — Aurora Design System
+   Sanjhubai Admin Panel — Aurora Design System
    RTL Persian, dark theme, Stripe/Linear inspired
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -31,6 +31,26 @@ interface PricingRow {
   input_per_million: number
   output_per_million: number
   currency: string
+  availability?: string
+}
+
+interface ModelTestResult {
+  ok: boolean
+  latency_ms: number
+  error: string | null
+  upstream?: string
+}
+
+interface CreditPackageRow {
+  id: string
+  name_fa: string
+  name_en: string
+  base_amount: number
+  bonus_percent: number
+  total_credits: number
+  model_id: string | null
+  active: boolean
+  sort_order: number
 }
 
 interface FeatureRow {
@@ -194,18 +214,32 @@ export default function AdminPage() {
   // ─── Data State ──────────────────────────────────────────────────────────
   const [analytics, setAnalytics] = useState<Analytics | null>(null)
   const [prices, setPrices] = useState<PricingRow[]>([])
+  const [creditPackages, setCreditPackages] = useState<CreditPackageRow[]>([])
   const [features, setFeatures] = useState<FeatureRow[]>([])
   const [discounts, setDiscounts] = useState<DiscountRow[]>([])
   const [proxyConfig, setProxyConfig] = useState<ProxyConfig>({ proxy_type: 'socks5', proxy_url: '', active: false })
   const [models, setModels] = useState<string[]>([])
   const [users, setUsers] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [togglingModel, setTogglingModel] = useState<string | null>(null)
+  const [testingModel, setTestingModel] = useState<string | null>(null)
+  const [testResults, setTestResults] = useState<Record<string, ModelTestResult>>({})
 
   // ─── Pricing Form ────────────────────────────────────────────────────────
   const [pzModel, setPzModel] = useState('')
   const [pzIn, setPzIn] = useState('')
   const [pzOut, setPzOut] = useState('')
   const [pzCur, setPzCur] = useState('IRT')
+
+  // ─── Credit / Token Package Form ─────────────────────────────────────────
+  const [cpId, setCpId] = useState('')
+  const [cpNameFa, setCpNameFa] = useState('')
+  const [cpNameEn, setCpNameEn] = useState('')
+  const [cpBaseAmount, setCpBaseAmount] = useState('')
+  const [cpTotalCredits, setCpTotalCredits] = useState('')
+  const [cpBonusPercent, setCpBonusPercent] = useState('0')
+  const [cpModelId, setCpModelId] = useState('')
+  const [cpSaving, setCpSaving] = useState(false)
 
   // ─── Features Form ───────────────────────────────────────────────────────
   const [ftId, setFtId] = useState('')
@@ -261,6 +295,7 @@ export default function AdminPage() {
       { fn: async () => { const r = await api('/api/admin/pricing'); setPrices(await r.json()) }, label: 'pricing' },
       { fn: async () => { const r = await api('/api/admin/features'); setFeatures(await r.json()) }, label: 'features' },
       { fn: async () => { const r = await api('/api/admin/discounts'); setDiscounts(await r.json()) }, label: 'discounts' },
+      { fn: async () => { const r = await api('/api/admin/credit-packages'); setCreditPackages(await r.json()) }, label: 'credit-packages' },
       { fn: async () => {
         const r = await api('/api/admin/about')
         const d = await r.json()
@@ -389,6 +424,76 @@ export default function AdminPage() {
       setPzModel(''); setPzIn(''); setPzOut(''); setPzCur('IRT')
       loadAll()
     } catch { toast('خطا در ذخیره تعرفه', 'error') }
+  }
+
+  const saveCreditPackage = async () => {
+    if (!cpId.trim()) { toast('شناسه بسته الزامی است', 'error'); return }
+    setCpSaving(true)
+    try {
+      await api('/api/admin/credit-packages', {
+        method: 'POST',
+        body: JSON.stringify({
+          id: cpId,
+          name_fa: cpNameFa,
+          name_en: cpNameEn,
+          base_amount: +cpBaseAmount || 0,
+          bonus_percent: +cpBonusPercent || 0,
+          total_credits: +cpTotalCredits || +cpBaseAmount || 0,
+          model_id: cpModelId || null,
+          active: true,
+        }),
+      })
+      toast('بسته ذخیره شد', 'success')
+      setCpId(''); setCpNameFa(''); setCpNameEn(''); setCpBaseAmount(''); setCpTotalCredits(''); setCpBonusPercent('0'); setCpModelId('')
+      loadAll()
+    } catch {
+      toast('خطا در ذخیره بسته', 'error')
+    } finally {
+      setCpSaving(false)
+    }
+  }
+
+  const toggleCreditPackageActive = async (pkg: CreditPackageRow) => {
+    try {
+      await api('/api/admin/credit-packages', {
+        method: 'POST',
+        body: JSON.stringify({ id: pkg.id, active: !pkg.active }),
+      })
+      setCreditPackages((prev) => prev.map((p) => (p.id === pkg.id ? { ...p, active: !p.active } : p)))
+    } catch {
+      toast('خطا در تغییر وضعیت بسته', 'error')
+    }
+  }
+
+  const toggleModel = async (model: string, currentAvailability?: string) => {
+    setTogglingModel(model)
+    try {
+      const r = await api(`/api/admin/models/${encodeURIComponent(model)}/toggle`, { method: 'POST' })
+      const data = await r.json()
+      toast(
+        data.availability === 'available' ? `${model} فعال شد` : `${model} غیرفعال شد`,
+        'success',
+      )
+      setPrices((prev) => prev.map((p) => (p.model === model ? { ...p, availability: data.availability } : p)))
+    } catch {
+      toast('خطا در تغییر وضعیت مدل', 'error')
+    } finally {
+      setTogglingModel(null)
+    }
+  }
+
+  const testModel = async (model: string) => {
+    setTestingModel(model)
+    try {
+      const r = await api(`/api/admin/models/${encodeURIComponent(model)}/test`, { method: 'POST' })
+      const data = await r.json()
+      setTestResults((prev) => ({ ...prev, [model]: data }))
+      toast(data.ok ? `${model} پاسخ داد (${data.latency_ms}ms)` : `${model} پاسخ نداد: ${data.error || 'نامشخص'}`, data.ok ? 'success' : 'error')
+    } catch {
+      toast('خطا در تست مدل', 'error')
+    } finally {
+      setTestingModel(null)
+    }
   }
 
   // ─── Features Actions ────────────────────────────────────────────────────
@@ -563,7 +668,7 @@ export default function AdminPage() {
               <Icon name="settings" size={28} className="text-accent" />
             </div>
             <h1 className="text-xl font-bold text-primary">پنل مدیریت</h1>
-            <p className="text-sm mt-1 text-muted">داشبورد مدیریت Multiai</p>
+            <p className="text-sm mt-1 text-muted">داشبورد مدیریت Sanjhubai</p>
           </div>
 
           <div className="space-y-4">
@@ -639,7 +744,7 @@ export default function AdminPage() {
                 <Icon name="settings" size={18} className="text-accent" />
               </div>
               <div>
-                <h2 className="text-sm font-bold text-primary">Multiai</h2>
+                <h2 className="text-sm font-bold text-primary">Sanjhubai</h2>
                 <p className="text-[10px] text-muted">Admin Panel</p>
               </div>
             </div>
@@ -1119,30 +1224,63 @@ export default function AdminPage() {
                       <th className="text-right p-3">ورودی</th>
                       <th className="text-right p-3">خروجی</th>
                       <th className="text-right p-3">واحد</th>
+                      <th className="text-right p-3">وضعیت</th>
+                      <th className="text-right p-3">تست</th>
                       <th className="text-right p-3">عملیات</th>
                     </tr>
                   </thead>
                   <tbody>
                     {prices.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="p-6 text-center text-sm text-muted">
+                        <td colSpan={7} className="p-6 text-center text-sm text-muted">
                           تعرفه‌ای ثبت نشده
                         </td>
                       </tr>
                     ) : (
-                      prices.map((p: any) => (
-                        <tr key={p.model}>
-                          <td className="p-3 text-sm font-mono font-medium text-primary">{p.model}</td>
-                          <td className="p-3 text-xs">{faNum(p.input_per_million)}</td>
-                          <td className="p-3 text-xs">{faNum(p.output_per_million)}</td>
-                          <td className="p-3"><span className="badge">{p.currency}</span></td>
-                          <td className="p-3">
-                            <button className="btn btn-sm" onClick={() => { setPzModel(p.model); setPzIn(String(p.input_per_million)); setPzOut(String(p.output_per_million)); setPzCur(p.currency) }}>
-                              <Icon name="settings" size={14} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
+                      prices.map((p: any) => {
+                        const testResult = testResults[p.model]
+                        const isDisabled = p.availability === 'disabled'
+                        return (
+                          <tr key={p.model}>
+                            <td className="p-3 text-sm font-mono font-medium text-primary">{p.model}</td>
+                            <td className="p-3 text-xs">{faNum(p.input_per_million)}</td>
+                            <td className="p-3 text-xs">{faNum(p.output_per_million)}</td>
+                            <td className="p-3"><span className="badge">{p.currency}</span></td>
+                            <td className="p-3">
+                              <button
+                                className="badge"
+                                style={{
+                                  cursor: 'pointer',
+                                  background: isDisabled ? 'var(--danger-dim, #4a1a1a)' : 'var(--success-dim, #143a1e)',
+                                  color: isDisabled ? 'var(--danger, #e35d5d)' : 'var(--success, #4ade80)',
+                                }}
+                                disabled={togglingModel === p.model}
+                                onClick={() => toggleModel(p.model, p.availability)}
+                                title="کلیک برای تغییر وضعیت"
+                              >
+                                {togglingModel === p.model ? '...' : (isDisabled ? 'غیرفعال' : 'فعال')}
+                              </button>
+                            </td>
+                            <td className="p-3">
+                              <button className="btn btn-sm" disabled={testingModel === p.model} onClick={() => testModel(p.model)}>
+                                {testingModel === p.model ? (
+                                  <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
+                                ) : 'تست'}
+                              </button>
+                              {testResult && (
+                                <span className="text-xs mr-2" style={{ color: testResult.ok ? 'var(--success, #4ade80)' : 'var(--danger, #e35d5d)' }}>
+                                  {testResult.ok ? `${faNum(testResult.latency_ms)}ms` : (testResult.error || 'خطا')}
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3">
+                              <button className="btn btn-sm" onClick={() => { setPzModel(p.model); setPzIn(String(p.input_per_million)); setPzOut(String(p.output_per_million)); setPzCur(p.currency) }}>
+                                <Icon name="settings" size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })
                     )}
                   </tbody>
                 </table>
@@ -1173,6 +1311,113 @@ export default function AdminPage() {
                   </button>
                   {pzModel && (
                     <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={() => { setPzModel(''); setPzIn(''); setPzOut(''); setPzCur('IRT') }}>
+                      انصراف
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Token / Credit Packages — "N million tokens of <model> for <price>" bundles */}
+              <SectionHeader title="بسته‌های اعتباری / توکن" subtitle="بسته‌هایی که در کیف پول کاربران قابل خریدند — با برچسب مدل، به‌صورت «N میلیون توکن مدل X» نمایش داده می‌شوند" />
+
+              <div className="admin-card overflow-x-auto">
+                <table className="admin-table w-full text-sm">
+                  <thead>
+                    <tr>
+                      <th className="text-right p-3">شناسه</th>
+                      <th className="text-right p-3">نام</th>
+                      <th className="text-right p-3">مدل</th>
+                      <th className="text-right p-3">مبلغ (تومان)</th>
+                      <th className="text-right p-3">وضعیت</th>
+                      <th className="text-right p-3">عملیات</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {creditPackages.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="p-6 text-center text-sm text-muted">
+                          بسته‌ای ثبت نشده — از فرم پایین برای افزودن یک بسته استفاده کنید
+                        </td>
+                      </tr>
+                    ) : (
+                      creditPackages.map((pkg) => (
+                        <tr key={pkg.id}>
+                          <td className="p-3 text-sm font-mono text-primary">{pkg.id}</td>
+                          <td className="p-3 text-sm">{pkg.name_fa}</td>
+                          <td className="p-3 text-xs font-mono">{pkg.model_id || '—'}</td>
+                          <td className="p-3 text-xs">{faNum(Math.round(pkg.base_amount / 10))}</td>
+                          <td className="p-3">
+                            <button
+                              className="badge"
+                              style={{
+                                cursor: 'pointer',
+                                background: pkg.active ? 'var(--success-dim, #143a1e)' : 'var(--danger-dim, #4a1a1a)',
+                                color: pkg.active ? 'var(--success, #4ade80)' : 'var(--danger, #e35d5d)',
+                              }}
+                              onClick={() => toggleCreditPackageActive(pkg)}
+                            >
+                              {pkg.active ? 'فعال' : 'غیرفعال'}
+                            </button>
+                          </td>
+                          <td className="p-3">
+                            <button
+                              className="btn btn-sm"
+                              onClick={() => {
+                                setCpId(pkg.id); setCpNameFa(pkg.name_fa); setCpNameEn(pkg.name_en)
+                                setCpBaseAmount(String(pkg.base_amount)); setCpTotalCredits(String(pkg.total_credits))
+                                setCpBonusPercent(String(pkg.bonus_percent)); setCpModelId(pkg.model_id || '')
+                              }}
+                            >
+                              <Icon name="settings" size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="admin-card">
+                <h3 className="font-semibold text-sm mb-4 text-primary">
+                  {cpId ? `ویرایش بسته ${cpId}` : 'افزودن بسته جدید'}
+                </h3>
+                <p className="text-xs text-muted mb-4">
+                  «مبلغ پرداختی» همان چیزی است که واقعاً از کاربر گرفته می‌شود؛ «اعتبار دریافتی» چیزی است که به کیف پول اضافه می‌شود — اگر اعتبار دریافتی بیشتر از مبلغ پرداختی باشد، تفاوت همان بونوس واقعی است. هر دو به ریال هستند. مدل انتخابی صرفاً برچسب است؛ اعتبار در کیف پول عمومی کاربر شارژ می‌شود و طبق قیمت زنده هر مدل مصرف می‌شود.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <Field label="شناسه بسته (یکتا)">
+                    <input className="input w-full" value={cpId} onChange={(e) => setCpId(e.target.value)} placeholder="pkg_mimo_20m" disabled={!!cpId && creditPackages.some((p) => p.id === cpId)} />
+                  </Field>
+                  <Field label="نام فارسی">
+                    <input className="input w-full" value={cpNameFa} onChange={(e) => setCpNameFa(e.target.value)} placeholder="۲۰ میلیون توکن mimo" />
+                  </Field>
+                  <Field label="نام انگلیسی">
+                    <input className="input w-full" value={cpNameEn} onChange={(e) => setCpNameEn(e.target.value)} placeholder="20M mimo tokens" />
+                  </Field>
+                  <Field label="مدل مرتبط (اختیاری)">
+                    <select className="input w-full" value={cpModelId} onChange={(e) => setCpModelId(e.target.value)} style={{ appearance: 'auto' }}>
+                      <option value="">— بدون مدل (اعتبار عمومی) —</option>
+                      {models.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="مبلغ پرداختی (ریال)">
+                    <input className="input w-full" type="number" value={cpBaseAmount} onChange={(e) => setCpBaseAmount(e.target.value)} placeholder="200000" />
+                  </Field>
+                  <Field label="اعتبار دریافتی (ریال)">
+                    <input className="input w-full" type="number" value={cpTotalCredits} onChange={(e) => setCpTotalCredits(e.target.value)} placeholder="200000" />
+                  </Field>
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <button className="btn" onClick={saveCreditPackage} disabled={cpSaving}>
+                    {cpSaving ? (
+                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
+                    ) : (<><Icon name="check" size={16} /><span>ذخیره</span></>)}
+                  </button>
+                  {cpId && (
+                    <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={() => { setCpId(''); setCpNameFa(''); setCpNameEn(''); setCpBaseAmount(''); setCpTotalCredits(''); setCpBonusPercent('0'); setCpModelId('') }}>
                       انصراف
                     </button>
                   )}
@@ -1343,7 +1588,7 @@ export default function AdminPage() {
               <div className="admin-card">
                 <div className="space-y-4">
                   <Field label="عنوان">
-                    <input className="input w-full" value={abTitle} onChange={(e) => setAbTitle(e.target.value)} placeholder="درباره Multiai" />
+                    <input className="input w-full" value={abTitle} onChange={(e) => setAbTitle(e.target.value)} placeholder="درباره Sanjhubai" />
                   </Field>
                   <Field label="متن">
                     <textarea

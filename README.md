@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🤖 Multiai
+# 🤖 Sanjhubai
 
 ### پلتفرم هوش مصنوعی فارسی | Persian AI Agent Platform
 
@@ -17,9 +17,9 @@
 
 </div>
 
-## 🌟 چرا Multiai؟
+## 🌟 چرا Sanjhubai؟
 
-Multiai یک **پلتفرم جامع هوش مصنوعی** است که به کاربران فارسی‌زبان امکان دسترسی به مدل‌های پیشرفته AI را فراهم می‌کند. برخلاف سرویس‌های ساده API gateway، Multiai یک **AI Agent Platform** کامل است با قابلیت‌های مدیریت مکالمه، دستیار شخصی، حافظه بلندمدت، و سیستم billing حرفه‌ای.
+Sanjhubai یک **پلتفرم جامع هوش مصنوعی** است که به کاربران فارسی‌زبان امکان دسترسی به مدل‌های پیشرفته AI را فراهم می‌کند. برخلاف سرویس‌های ساده API gateway، Sanjhubai یک **AI Agent Platform** کامل است با قابلیت‌های مدیریت مکالمه، دستیار شخصی، حافظه بلندمدت، و سیستم billing حرفه‌ای.
 
 <div align="center">
 
@@ -70,7 +70,7 @@ Multiai یک **پلتفرم جامع هوش مصنوعی** است که به کا
 - **Tasks** — تسکهای زمانبندیشده
 
 ### 📄 تولید سند و ارائه (Document Generator)
-با یک پرامپت ساده، Multiai به‌صورت خودکار **اسلاید، گزارش و ارائه** حرفه‌ای می‌سازد — بدون نیاز به قالب یا طراحی دستی:
+با یک پرامپت ساده، Sanjhubai به‌صورت خودکار **اسلاید، گزارش و ارائه** حرفه‌ای می‌سازد — بدون نیاز به قالب یا طراحی دستی:
 
 | خروجی | پسوند | کتابخانه | کاربرد |
 |-------|-------|----------|--------|
@@ -78,9 +78,9 @@ Multiai یک **پلتفرم جامع هوش مصنوعی** است که به کا
 | Word | `.docx` | `python-docx` | سند ساختاریافته با سرفصل/زیربخش و فوتر برند |
 | Markdown Deck | `.md` | built-in | سازگار با Marp / reveal.js برای HTML/PDF |
 
-- **بله — Multiai می‌تواند پاورپوینت، ورد و اسلاید بسازد** (API + UI «سندساز»).
+- **بله — Sanjhubai می‌تواند پاورپوینت، ورد و اسلاید بسازد** (API + UI «سندساز»).
 - مدل پیش‌فرض تولید محتوا: `mimo-v2.5-pro` (allow-list مدل‌های Bynara).
-- فایل‌ها روی volume `multiai_docs` (`/tmp/multiai_docs`)؛ metadata رجیستری فعلاً in-memory (تا restart API).
+- فایل‌ها روی volume `sanjhubai_docs` (`/tmp/sanjhubai_docs`)؛ metadata رجیستری فعلاً in-memory (تا restart API).
 - UI: مسیر `/documents` در منوی «سندساز».
 - Auth الزامی است (Bearer/session).
 
@@ -122,7 +122,7 @@ curl -X POST http://localhost:8081/v1/documents/generate \
 ### 🌐 Proxy / Egress پروایدرها
 - ترافیک مدل‌های Bynara از **backhaul HTTP proxy** (`HTTP(S)_PROXY` → `10.10.11.2:8888`) عبور می‌کند
 - `NO_PROXY` سرویس‌های داخلی Docker را مستقیم نگه می‌دارد
-- تونل SOCKS (`multiai_tunnel:9090`) برای web-search/آینده؛ اگر SSH jump down باشد، LiteLLM روی backhaul می‌ماند
+- تونل SOCKS (`sanjhubai_tunnel:9090`) برای web-search/آینده؛ اگر SSH jump down باشد، LiteLLM روی backhaul می‌ماند
 
 ### 💰 سیستم Billing
 - **Wallet** — کیف پول با شارژ ریالی
@@ -173,15 +173,15 @@ curl -X POST http://localhost:8081/v1/documents/generate \
 
 ```bash
 # 1. Clone
-git clone https://github.com/mostafamasoomi/multiai.git
-cd multiai
+git clone https://github.com/mostafamasoomi/sanjhubai.git
+cd sanjhubai
 
 # 2. Configure environment
 cp .env.example .env
 # Edit .env with your API keys
 
 # 3. Start all services
-docker compose -f docker-compose.multiai.yml up -d
+docker compose -f docker-compose.sanjhubai.yml up -d
 
 # 4. Access
 # Frontend: http://localhost:3003
@@ -198,9 +198,9 @@ API_KEY_PEPPER=your-random-pepper-string
 ADMIN_TOKEN=your-admin-token
 
 # Database
-POSTGRES_USER=multiai
+POSTGRES_USER=sanjhubai
 POSTGRES_PASSWORD=your-db-password
-POSTGRES_DB=multiai
+POSTGRES_DB=sanjhubai
 
 # Redis
 REDIS_URL=redis://localhost:6379
@@ -214,7 +214,7 @@ SMTP_PASS=your-smtp-password
 ## 📁 ساختار پروژه
 
 ```
-multiai/
+sanjhubai/
 ├── backend/
 │   ├── app.py              # FastAPI application entry
 │   ├── auth.py             # Authentication endpoints
@@ -266,7 +266,7 @@ multiai/
 │   │   └── hermes/         # Hermes server catalog/order/dashboard
 │   └── components/         # Shared components
 ├── security/                # Black-box smoke + security test suite (deployed instance)
-├── docker-compose.multiai.yml
+├── docker-compose.sanjhubai.yml
 └── README.md
 ```
 
@@ -423,6 +423,6 @@ MIT — see [LICENSE](./LICENSE).
 
 **ساخته شده با ❤️ برای جامعه فارسی‌زبان**
 
-[GitHub](https://github.com/mostafamasoomi/multiai) • [multiai.ir](https://multiai.ir)
+[GitHub](https://github.com/mostafamasoomi/sanjhubai) • [sanjhubai.ir](https://sanjhubai.ir)
 
 </div>

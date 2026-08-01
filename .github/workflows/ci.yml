@@ -1,10 +1,10 @@
-name: Multiai CI/CD
+name: Sanjhubai CI/CD
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
 
 jobs:
   test-backend:
@@ -49,7 +49,7 @@ jobs:
 
   deploy:
     name: Deploy
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     needs: [test-backend, build-frontend]
     runs-on: ubuntu-latest
     steps:
@@ -61,10 +61,15 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # NOTE: this path and the compose file name both assume the
+          # server-side checkout has been renamed from /root/multiai to
+          # /root/sanjhubai to match this rebrand. If it hasn't been (yet),
+          # change just this `cd` line back — don't silently rename the
+          # actual directory from a deploy script.
           script: |
-            cd /root/multiai
-            git pull origin main
-            docker compose -f docker-compose.multiai.yml build --pull=false multiai_frontend multiai_api
-            docker compose -f docker-compose.multiai.yml up -d multiai_api multiai_frontend
-            docker compose -f docker-compose.multiai.yml restart multiai_bot || true
+            cd /root/sanjhubai
+            git pull origin master
+            docker compose -f docker-compose.sanjhubai.yml build --pull=false sanjhubai_frontend sanjhubai_api
+            docker compose -f docker-compose.sanjhubai.yml up -d sanjhubai_api sanjhubai_frontend
+            docker compose -f docker-compose.sanjhubai.yml restart sanjhubai_bot || true
             echo "✅ Deploy complete"

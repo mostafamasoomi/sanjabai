@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 MAX_SOUL_CHARS = 2000
 MAX_MEMORY_ENTRY = 500
 MAX_MEMORIES_INJECTED = 5
+# The pinned context is a single user-authored note or pasted .md file
+# (profile 'پرونده دائمی' / persistent document), not one of the 5
+# auto-selected memory facts, so it gets its own, larger budget.
+MAX_PINNED_CONTEXT_CHARS = 6000
 
 def _sanitize_injection(s: str, limit: int) -> str:
     """Strip, truncate, and break injection patterns."""
@@ -86,6 +90,24 @@ async def get_injection_messages(uid: int) -> list[dict[str, str]]:
                     "content": f"[User Soul — این شخصیت و لحن مورد انتظار کاربر است. طبق این رفتار کن:]\n{soul_clean}",
                 }
             )
+
+    # --- Pinned context (persistent note / uploaded .md, profile-level) ---
+    try:
+        from dependencies import _get_user_pinned_context as dep_pinned
+        raw_pinned = await dep_pinned(uid)
+    except Exception as e:
+        logger.warning(f"get_injection_messages: _get_user_pinned_context failed uid={uid}: {e}")
+        raw_pinned = ""
+
+    if raw_pinned:
+        pinned_clean = _sanitize_injection(raw_pinned, MAX_PINNED_CONTEXT_CHARS)
+        if pinned_clean:
+            injections.append(
+                {
+                    "role": "system",
+                    "content": f"[User Pinned Context — یادداشت دائمی کاربر که در تمام چت‌ها باید در نظر گرفته شود:]\n{pinned_clean}",
+                }
+            )
     return injections
 
 
@@ -109,6 +131,10 @@ def inject_messages(
         isinstance(m, dict) and "[User Soul" in (m.get("content") or "")
         for m in msgs
     )
+    has_pinned = any(
+        isinstance(m, dict) and "[User Pinned Context" in (m.get("content") or "")
+        for m in msgs
+    )
 
     to_inject: list[dict[str, str]] = []
     for inj in injections:
@@ -116,6 +142,8 @@ def inject_messages(
         if "[User Memories]" in c and has_mem:
             continue
         if "[User Soul" in c and has_soul:
+            continue
+        if "[User Pinned Context" in c and has_pinned:
             continue
         to_inject.append(inj)
 

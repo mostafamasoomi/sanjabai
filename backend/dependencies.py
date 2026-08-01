@@ -50,12 +50,21 @@ def _hash_password(password: str) -> str:
     return ph.hash(password)
 def _verify_password(password: str, stored: str) -> bool:
     """Verify password against argon2 hash."""
-    from argon2 import PasswordHasher, VerificationMismatchError
+    # argon2-cffi has never exported an exception literally named
+    # VerificationMismatchError, from either `argon2` or `argon2.exceptions`
+    # — the real name is VerifyMismatchError, and it only ever lived in
+    # `argon2.exceptions`, never re-exported from the top-level package.
+    # That made every single call here raise ImportError before the `try`
+    # even started, which the broad `except Exception` below can't catch
+    # since it doesn't wrap the import — meaning every password check
+    # (login) unconditionally crashed instead of returning True/False.
+    from argon2 import PasswordHasher
+    from argon2.exceptions import VerifyMismatchError
     ph = PasswordHasher()
     try:
         ph.verify(stored, password)
         return True
-    except VerificationMismatchError:
+    except VerifyMismatchError:
         return False
     except Exception:
         # Fallback to old format if hash doesn't contain $argon2
@@ -348,13 +357,33 @@ async def _get_user_soul(uid: int) -> str:
     return ''
 
 
+async def _get_user_pinned_context(uid: int) -> str:
+    """Fetch the user's persistent context note (profile 'pinned_context'
+    preference — a free-form note or pasted .md file the user wants
+    available in every chat, distinct from the auto-extracted memory facts
+    and the AI-personality/soul text) for injection."""
+    if async_session is None:
+        return ''
+    try:
+        async with async_session() as session:
+            res = await session.execute(
+                User.__table__.select().where(User.id == uid)
+            )
+            row = res.fetchone()
+            if row and row.preferences:
+                return (row.preferences or {}).get('pinned_context', '')
+    except Exception:
+        pass
+    return ''
+
+
 # ── Email ───────────────────────────────────────────────────────
 
 SMTP_HOST = os.getenv('SMTP_HOST', '')
 SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
 SMTP_USER = os.getenv('SMTP_USER', '')
 SMTP_PASS = os.getenv('SMTP_PASS', '')
-SMTP_FROM = os.getenv('SMTP_FROM', 'noreply@multiai.ir')
+SMTP_FROM = os.getenv('SMTP_FROM', 'noreply@sanjhubai.ir')
 
 
 async def send_email(to: str, subject: str, body: str) -> bool:

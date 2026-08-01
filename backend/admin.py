@@ -117,6 +117,63 @@ async def set_pricing(request: Request, payload: dict[str, Any]) -> JSONResponse
     return JSONResponse({'status': 'updated', 'model': model})
 
 
+@router.post('/admin/models/{model_id}/toggle')
+async def toggle_model(request: Request, model_id: str) -> JSONResponse:
+    """Admin: flip a model between 'available' and 'disabled'.
+
+    Same effect as the legacy admin/app.py toggle endpoints, exposed here so
+    the React admin panel (the one actually in front of admins day-to-day)
+    doesn't need the separate Jinja admin app just to kill a broken model.
+    """
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+    async with async_session() as session:
+        res = await session.execute(sqlalchemy.text(
+            'SELECT availability FROM model_catalog WHERE id = :id'
+        ), {'id': model_id})
+        row = res.fetchone()
+        if row is None:
+            return JSONResponse({'detail': 'مدل در کاتالوگ یافت نشد'}, status_code=404)
+        new_avail = 'disabled' if row.availability == 'available' else 'available'
+        await session.execute(sqlalchemy.text(
+            'UPDATE model_catalog SET availability = :a, updated_at = now() WHERE id = :id'
+        ), {'a': new_avail, 'id': model_id})
+        await session.commit()
+    await _write_audit_log('admin.model.toggle', target_type='model_catalog', target_id=model_id,
+                           details={'availability': new_avail})
+    if rds:
+        await rds.delete('cache:catalog:models', 'cache:catalog:pricing', 'cache:api:pricing')
+    return JSONResponse({'status': 'ok', 'model': model_id, 'availability': new_avail})
+
+
+@router.post('/admin/models/{model_id}/test')
+async def test_model(request: Request, model_id: str) -> JSONResponse:
+    """Admin: send a minimal live probe to a model and report the result.
+
+    Reuses providers.probe_model (the same probe model_health.py runs on a
+    schedule) so "test now" in the admin panel and the status page's
+    background health checks agree on what "working" means.
+    """
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    from chat import _resolve_provider
+    from providers import probe_model
+    provider = await _resolve_provider(model_id)
+    result = await probe_model(provider, model_id)
+    await _write_audit_log('admin.model.test', target_type='model_catalog', target_id=model_id,
+                           details={'ok': result.ok, 'latency_ms': result.latency_ms, 'error': result.error})
+    return JSONResponse({
+        'model': model_id,
+        'upstream': provider.name,
+        'ok': result.ok,
+        'latency_ms': result.latency_ms,
+        'error': result.error,
+        'status_code': result.status_code,
+    })
+
+
 # ── Features ────────────────────────────────────────────────────
 
 @router.get('/admin/features')
@@ -832,7 +889,7 @@ async def admin_create_credit_package(request: Request) -> JSONResponse:
 
         if existing:
             fields = ['name_fa', 'name_en', 'base_amount', 'bonus_percent',
-                       'total_credits', 'active', 'sort_order']
+                       'total_credits', 'model_id', 'active', 'sort_order']
             set_parts = []
             params = {'pid': pkg_id, 'now': now}
             for f in fields:
@@ -848,9 +905,9 @@ async def admin_create_credit_package(request: Request) -> JSONResponse:
             await session.execute(
                 sqlalchemy.text(
                     "INSERT INTO credit_packages (id, name_fa, name_en, base_amount, bonus_percent, "
-                    "total_credits, active, sort_order) "
+                    "total_credits, model_id, active, sort_order) "
                     "VALUES (:id, :name_fa, :name_en, :base_amount, :bonus_percent, "
-                    ":total_credits, :active, :sort_order)"
+                    ":total_credits, :model_id, :active, :sort_order)"
                 ),
                 {
                     'id': pkg_id,
@@ -859,6 +916,7 @@ async def admin_create_credit_package(request: Request) -> JSONResponse:
                     'base_amount': payload.get('base_amount', 0),
                     'bonus_percent': payload.get('bonus_percent', 0),
                     'total_credits': payload.get('total_credits', 0),
+                    'model_id': payload.get('model_id'),
                     'active': payload.get('active', True),
                     'sort_order': payload.get('sort_order', 0),
                 }
@@ -1402,8 +1460,8 @@ async def admin_mfa_setup(request: Request) -> JSONResponse:
     secret = pyotp.random_base32()
     totp = pyotp.TOTP(secret)
     provisioning_uri = totp.provisioning_uri(
-        name='Multiai Admin',
-        issuer_name='Multiai',
+        name='Sanjhubai Admin',
+        issuer_name='Sanjhubai',
     )
 
     # Store the pending secret in Redis so we can verify it later

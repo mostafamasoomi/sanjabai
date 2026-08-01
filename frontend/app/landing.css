@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   Multiai — Landing design system
+   Sanjhubai — Landing design system
    ───────────────────────────────────────────────────────────────────────────
    Everything here is scoped under `.lp` so the marketing page can have its
    own visual language without leaking into the product UI (dashboard, chat,
@@ -108,7 +108,7 @@
 }
 
 /* Latin / technical runs inside Persian prose. Isolates bidi so identifiers
-   like "api.multiai.ir/v1" never get reordered by the RTL paragraph. */
+   like "api.sanjhubai.ir/v1" never get reordered by the RTL paragraph. */
 .lp-latin {
   unicode-bidi: isolate;
   direction: ltr;
@@ -262,9 +262,18 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px -8px var(--lp-brand);
 }
 
+/* Lift on hover, punch back down past rest on :active (translateY(1px),
+   above) — a full press arc instead of just a colour fade, on the one
+   button most likely to actually get clicked. */
 .lp-btn--primary:hover {
   background: color-mix(in srgb, var(--lp-brand) 88%, #fff);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 12px 32px -8px var(--lp-brand);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 16px 36px -10px var(--lp-brand);
+  transform: translateY(-2px);
+}
+
+.lp-btn--primary:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 6px 16px -8px var(--lp-brand);
 }
 
 .lp-btn--secondary {
@@ -369,13 +378,86 @@ a.lp-pill:hover {
 
 .lp-reveal {
   opacity: 0;
-  transform: translateY(18px);
+  transform: perspective(800px) translateY(18px) rotateX(-6deg);
+  transform-origin: 50% 100%;
   transition: opacity 0.7s var(--lp-ease), transform 0.7s var(--lp-ease);
   transition-delay: var(--lp-delay, 0ms);
 }
 
 .lp-reveal[data-visible='true'] {
   opacity: 1;
+  transform: none;
+}
+
+/* ── 3D tilt + spotlight — opt-in via <Reveal tilt> ─────────────────────────
+   Pointer position drives --tx/--ty/--mx/--my (see useTilt.ts); everything
+   here is transform + a masked radial-gradient, so it stays on the
+   compositor and never touches layout. Falls back to the plain .lp-reveal
+   transform when no pointer is driving it (touch, keyboard, reduced motion),
+   since --tx/--ty default to 0deg. */
+/* No local perspective() here on purpose — .lp-bento and .lp-plans each
+   declare `perspective` as a plain CSS property on the grid, so every card
+   in a row tilts around one shared vanishing point instead of each card
+   being its own isolated 3D scene. */
+.lp-reveal.lp-tilt {
+  --tx: 0deg;
+  --ty: 0deg;
+  transform: translateY(18px) rotateX(calc(-6deg + var(--tx))) rotateY(var(--ty));
+  transition: opacity 0.7s var(--lp-ease), transform 0.7s var(--lp-ease),
+    border-color var(--lp-fast), background var(--lp-fast);
+  transform-style: preserve-3d;
+}
+
+.lp-reveal.lp-tilt[data-visible='true'] {
+  transform: rotateX(var(--tx)) rotateY(var(--ty));
+}
+
+.lp-reveal.lp-tilt[data-visible='true']:hover,
+.lp-reveal.lp-tilt[data-visible='true']:focus-within {
+  transition: transform 0.12s linear, border-color var(--lp-fast), background var(--lp-fast);
+}
+
+.lp-tilt::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: radial-gradient(
+    280px circle at var(--mx, 50%) var(--my, 50%),
+    color-mix(in srgb, var(--lp-brand) 16%, transparent),
+    transparent 72%
+  );
+  opacity: 0;
+  transition: opacity 0.3s var(--lp-ease);
+  pointer-events: none;
+}
+
+.lp-tilt:focus-within::after {
+  opacity: 1;
+}
+
+/* :hover alone would leave this glow "stuck" centered on a touch device —
+   tapping a card fires :hover with no matching pointerleave to clear it,
+   since useTilt never attached a listener there in the first place (it's
+   gated on pointer: fine). Real mice/trackpads are what (hover: hover)
+   actually detects; :focus-within above still covers keyboard use on any
+   device. */
+@media (hover: hover) and (pointer: fine) {
+  .lp-tilt:hover::after {
+    opacity: 1;
+  }
+}
+
+/* ── Flap reveal — a steeper, more theatrical rotateX than the site's
+   default subtle unfold. Reserved for the stats band: a moment the page
+   deliberately makes more dramatic than everywhere else, like a split-flap
+   departure board landing on a value. ────────────────────────────────── */
+.lp-reveal.lp-flip {
+  transform: rotateX(-72deg);
+  transform-origin: 50% 100%;
+}
+
+.lp-reveal.lp-flip[data-visible='true'] {
   transform: none;
 }
 
@@ -395,6 +477,14 @@ a.lp-pill:hover {
   pointer-events: none;
   mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
   -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
+  /* --tx/--ty are set by useTilt on .lp-hero (the aura itself has
+     pointer-events: none, so it can never receive the pointermove that
+     would drive its own tilt) and reach here as an ordinary inherited
+     custom property. The background reads depth from the cursor while the
+     foreground content — a plain descendant, not inside this layer — never
+     moves. */
+  transform: perspective(1400px) rotateX(var(--tx, 0deg)) rotateY(var(--ty, 0deg));
+  transition: transform 0.6s var(--lp-ease);
 }
 
 .lp-aura__blob {
@@ -402,7 +492,7 @@ a.lp-pill:hover {
   border-radius: 50%;
   filter: blur(90px);
   opacity: 0.5;
-  will-change: transform;
+  will-change: transform, translate;
 }
 
 .lp-aura__blob:nth-child(1) {
@@ -457,6 +547,61 @@ a.lp-pill:hover {
 @keyframes lp-drift-c {
   to {
     transform: translate3d(5vw, -4vh, 0) scale(1.15);
+  }
+}
+
+/* Hub-and-spoke node graph — the one 3D/motion element on the page that's
+   actually about the product (23 models converging into one workspace)
+   rather than a generic tilt/glow applied to whatever section needed one.
+   Sits inside .lp-aura as a fourth child, after the three blobs, so the
+   existing :nth-child(1/2/3) blob rules above are untouched and it rides
+   along with the same pointer-tilt the aura already gets. */
+.lp-constellation {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.28;
+  /* Every other shape in the aura is a 90px-blurred blob — it reads as
+     ambient light, never as a hard line. A crisp 1px stroke at the same
+     opacity looked like a technical diagram pasted over the headline
+     (round 2's first attempt at this); blurring it into the same register
+     as the blobs is what actually makes it sit in the background. */
+  filter: blur(1.5px);
+}
+
+[data-theme='light'] .lp-constellation {
+  opacity: 0.14;
+}
+
+.lp-constellation__lines line {
+  stroke: var(--lp-brand);
+  stroke-width: 1;
+  opacity: 0.3;
+}
+
+.lp-constellation__node {
+  fill: var(--lp-ink-2);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: lp-node-pulse 3.6s ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * -0.45s);
+}
+
+.lp-constellation__hub {
+  fill: var(--lp-cyan);
+  filter: drop-shadow(0 0 4px var(--lp-cyan));
+}
+
+@keyframes lp-node-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.4);
   }
 }
 
@@ -662,17 +807,22 @@ a.lp-pill:hover {
 
 /* All variants occupy the same grid cell: the element sizes to the widest
    word, so swapping the active one never reflows the headline. Transitions
-   (not an animation) so each change re-triggers without a remount. */
+   (not an animation) so each change re-triggers without a remount. The
+   outgoing phrase fades out with no delay; the incoming one delays its
+   fade-in by the same duration so the two never sit at overlapping opacity
+   at once — a straight crossfade left two differently-worded, mixed-script
+   phrases visibly stacked mid-swap. */
 .lp-hero__rotator > span {
   grid-area: 1 / 1;
   opacity: 0;
   transform: translateY(0.35em);
-  transition: opacity 0.45s var(--lp-ease), transform 0.45s var(--lp-ease);
+  transition: opacity 0.32s var(--lp-ease), transform 0.32s var(--lp-ease);
 }
 
 .lp-hero__rotator > span[data-active='true'] {
   opacity: 1;
   transform: none;
+  transition-delay: 0.32s;
 }
 
 .lp-hero__lead {
@@ -717,9 +867,59 @@ a.lp-pill:hover {
    instead of decorative physics boxes.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-.lp-preview {
+/* Real Z-depth, not another rotateX: two faint panels sit behind the preview
+   at translateZ(-70px)/-140px inside this wrapper's own perspective, so they
+   read as physically farther from the camera — foreshortened and dimmed by
+   actual 3D projection, not a faked scale/opacity guess. Everywhere else on
+   this page "3D" means rotation; this is the one place it means depth. */
+.lp-preview-stack {
   position: relative;
   margin-block-start: clamp(3rem, 6vw, 4.5rem);
+  perspective: 1800px;
+}
+
+.lp-preview-ghost {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--lp-r-lg);
+  border: 1px solid var(--lp-line-hi);
+  /* Deliberately lighter than the page background (unlike .lp-preview,
+     which sits close to it) — a dim near-black panel on a near-black page
+     has no edge to read at all. This is what actually makes the peek below
+     the front card visible, not the translateZ/translateY math alone. */
+  background: color-mix(in srgb, var(--lp-bg-soft) 65%, var(--lp-ink) 14%);
+  pointer-events: none;
+}
+
+/* Same footprint as .lp-preview (inset: 0) on purpose — perspective already
+   shrinks each ghost toward the wrapper's center as translateZ pushes it
+   back, so the peek comes from that projection plus translateY, not from
+   also hand-narrowing the box. */
+.lp-preview-ghost--1 {
+  transform: translateZ(-70px) translateY(26px);
+  opacity: 0.85;
+  z-index: 0;
+}
+
+.lp-preview-ghost--2 {
+  transform: translateZ(-160px) translateY(48px);
+  opacity: 0.5;
+  z-index: -1;
+}
+
+[data-theme='light'] .lp-preview-ghost--1 {
+  opacity: 0.4;
+}
+
+[data-theme='light'] .lp-preview-ghost--2 {
+  opacity: 0.2;
+}
+
+.lp-preview {
+  --tx: 0deg;
+  --ty: 0deg;
+  position: relative;
+  z-index: 1;
   border-radius: var(--lp-r-lg);
   border: 1px solid var(--lp-line);
   background: color-mix(in srgb, var(--lp-bg-soft) 88%, transparent);
@@ -727,6 +927,55 @@ a.lp-pill:hover {
   -webkit-backdrop-filter: blur(12px);
   box-shadow: var(--lp-shadow-lg);
   overflow: hidden;
+  /* The hero's one true 3D object: perspective is a transform function here
+     (not the parent-establishing CSS property) so the whole tilt stays
+     scoped to this element and touches nothing else on the page. Pointer
+     position drives --tx/--ty via useTilt; it rests flat at 0deg. */
+  transform: perspective(1400px) rotateX(var(--tx)) rotateY(var(--ty));
+  transition: transform 0.5s var(--lp-ease), box-shadow 0.5s var(--lp-ease);
+}
+
+.lp-preview:hover,
+.lp-preview:focus-within {
+  box-shadow: var(--lp-shadow-lg), 0 0 0 1px var(--lp-line-hi);
+  transition: transform 0.1s linear, box-shadow 0.5s var(--lp-ease);
+}
+
+/* A glass sheen that slides to meet the cursor — the classic "premium
+   screenshot" reflection, driven by the same --mx/--my as the tilt cards.
+   `mix-blend-mode: overlay` keeps it from ever washing out the content
+   underneath, in either theme. */
+.lp-preview__sheen {
+  position: absolute;
+  inset: -20%;
+  z-index: 5;
+  background: radial-gradient(
+    480px circle at var(--mx, 50%) var(--my, 40%),
+    color-mix(in srgb, white 22%, transparent),
+    transparent 60%
+  );
+  mix-blend-mode: overlay;
+  opacity: 0;
+  transition: opacity 0.4s var(--lp-ease);
+  pointer-events: none;
+}
+
+.lp-preview:focus-within .lp-preview__sheen {
+  opacity: 1;
+}
+
+/* Same stuck-glow risk as .lp-tilt above: the preview's tabs are real
+   buttons, so a tap on touch would otherwise leave this bright sheen
+   patch parked wherever the tap landed until the user touches elsewhere
+   on the page. */
+@media (hover: hover) and (pointer: fine) {
+  .lp-preview:hover .lp-preview__sheen {
+    opacity: 1;
+  }
+}
+
+[data-theme='light'] .lp-preview__sheen {
+  mix-blend-mode: soft-light;
 }
 
 .lp-preview__bar {
@@ -906,6 +1155,9 @@ a.lp-pill:hover {
   overflow: hidden;
   mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
   -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  /* Gives the whole strip a shared vanishing point so it reads as one
+     inclined plane receding into the page, not a flat list of logos. */
+  perspective: 900px;
 }
 
 .lp-marquee__track {
@@ -915,6 +1167,10 @@ a.lp-pill:hover {
   flex-shrink: 0;
   min-width: 100%;
   animation: lp-marquee var(--lp-marquee-duration) linear infinite;
+  /* Without this, the track's own 2D translateX flattens its children into
+     its own plane and .lp-marquee__item's rotateX below would render with
+     no foreshortening at all. */
+  transform-style: preserve-3d;
 }
 
 .lp-marquee__viewport:hover .lp-marquee__track {
@@ -946,12 +1202,23 @@ a.lp-pill:hover {
   color: var(--lp-ink-3);
   font-size: 0.92rem;
   white-space: nowrap;
-  transition: color var(--lp-fast);
+  transition: color var(--lp-fast), transform var(--lp-slow);
   --lp-logo-size: 24px;
+  transform: rotateX(42deg);
 }
 
 .lp-marquee__item:hover {
   color: var(--lp-ink);
+  transform: rotateX(0deg) scale(1.1);
+}
+
+@media (max-width: 640px) {
+  /* The lane tilt reads fine at desktop width; on a narrow viewport the
+     items are close enough to the eye that 22deg starts clipping labels
+     against their own line-height. Flat is the right call there. */
+  .lp-marquee__item {
+    transform: none;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -966,6 +1233,9 @@ a.lp-pill:hover {
   border: 1px solid var(--lp-line);
   border-radius: var(--lp-r);
   overflow: hidden;
+  /* Shared camera for the whole row's flap-in, same pattern as .lp-bento
+     and .lp-plans. */
+  perspective: 1200px;
 }
 
 /* column-reverse: the markup is dt → dd (label defines value), the display is
@@ -1007,6 +1277,8 @@ a.lp-pill:hover {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   gap: 1rem;
+  /* One shared camera for the whole row — see the note on .lp-reveal.lp-tilt. */
+  perspective: 1400px;
 }
 
 /* 3 / 3 — 2 / 2 / 2 — 6. Two headline cards, a row of three supporting ones,
@@ -1146,6 +1418,14 @@ a.lp-pill:hover {
   padding-block-start: 2.75rem;
 }
 
+/* This was previously the plainest section on the page: a static numbered
+   circle and a flat 1px line, no motion of its own beyond the generic
+   fade-in every other section also gets. Now each marker pops in (scale +
+   rotate) and the connector after it draws in like a line being traced
+   between them — reusing Reveal's own --lp-delay stagger so the sequence
+   still lands in step order, just with an extra beat so the line visibly
+   grows out of the marker that was already there rather than both
+   appearing at once. */
 .lp-step::before {
   counter-increment: lp-step;
   content: counter(lp-step, persian);
@@ -1162,6 +1442,15 @@ a.lp-pill:hover {
   color: var(--lp-brand);
   font-size: 0.85rem;
   font-weight: 700;
+  opacity: 0;
+  transform: scale(0.4) rotate(-45deg);
+  transition: opacity 0.5s var(--lp-ease), transform 0.5s var(--lp-ease);
+  transition-delay: var(--lp-delay, 0ms);
+}
+
+.lp-step[data-visible='true']::before {
+  opacity: 1;
+  transform: none;
 }
 
 /* Connector between step markers. A flat colour rather than a gradient, so it
@@ -1172,8 +1461,20 @@ a.lp-pill:hover {
   inset-block-start: 1rem;
   inset-inline-start: 2.5rem;
   inset-inline-end: -1.5rem;
-  height: 1px;
-  background: var(--lp-line);
+  height: 2px;
+  background: linear-gradient(90deg, var(--lp-brand), var(--lp-cyan));
+  transform: scaleX(0);
+  transform-origin: 0% 50%;
+  transition: transform 0.7s var(--lp-ease);
+  transition-delay: calc(var(--lp-delay, 0ms) + 280ms);
+}
+
+[dir='rtl'] .lp-step:not(:last-child)::after {
+  transform-origin: 100% 50%;
+}
+
+.lp-step[data-visible='true']:not(:last-child)::after {
+  transform: scaleX(1);
 }
 
 .lp-step__title {
@@ -1350,6 +1651,8 @@ a.lp-pill:hover {
   grid-template-columns: repeat(3, 1fr);
   gap: 1.25rem;
   align-items: stretch;
+  /* One shared camera for the whole row — see the note on .lp-reveal.lp-tilt. */
+  perspective: 1600px;
 }
 
 .lp-plan {
@@ -1359,11 +1662,29 @@ a.lp-pill:hover {
   padding: clamp(1.5rem, 3vw, 2rem);
 }
 
-/* The featured plan lifts out of the row rather than just changing colour. */
+/* The featured plan lifts out of the row rather than just changing colour —
+   and, alone among the three, idles with a slow vertical bob so it reads as
+   the one actually floating above the row. Driven by the standalone
+   `translate` property rather than `transform`, so it composes with (rather
+   than fights) the rotateX/rotateY this card also gets from `.lp-tilt`'s
+   pointer-driven hover — an animation always wins over a static value for
+   whichever property it targets, so the two effects have to live on
+   different properties to coexist. */
 .lp-plan--featured {
   border-color: color-mix(in srgb, var(--lp-brand) 55%, transparent);
   background: linear-gradient(180deg, var(--lp-brand-soft), transparent 55%);
   box-shadow: 0 24px 60px -32px var(--lp-brand);
+  animation: lp-plan-idle-float 6.5s var(--lp-ease) infinite;
+}
+
+@keyframes lp-plan-idle-float {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -10px;
+  }
 }
 
 .lp-plan__badge {
@@ -1722,13 +2043,22 @@ a.lp-pill:hover {
   }
   .lp-aura__blob,
   .lp-marquee__track,
-  .lp-msg__caret {
+  .lp-msg__caret,
+  .lp-constellation__node,
+  .lp-plan--featured {
     animation: none !important;
+    translate: 0 0;
   }
   .lp-marquee__viewport {
     overflow-x: auto;
   }
-  .lp-reveal {
+  /* Matches .lp-tilt/.lp-flip's own specificity (0,0,2,0) rather than relying
+     on [data-visible='true'] (which also overrides them, but only once
+     Reveal's effect has actually run) to win the cascade — this way "reduced
+     motion" holds regardless of observer timing, not as a side effect of it. */
+  .lp-reveal,
+  .lp-reveal.lp-tilt,
+  .lp-reveal.lp-flip {
     opacity: 1;
     transform: none;
   }

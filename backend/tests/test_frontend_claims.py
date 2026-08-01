@@ -20,7 +20,10 @@ ALLOWLIST = {"lib/claims.ts"}
 
 FORBIDDEN = [
     (re.compile(r"۵۰\s*\+|(?<!\d)50\s*\+"), "unverified model-count claim (50+)"),
-    (re.compile(r"99[.,]9|۹۹[.,]۹"), "unverified uptime percentage (99.9)"),
+    # Anchored to a percent sign — a bare "99[.,]9|۹۹[.,]۹" also matches any
+    # coincidental occurrence of that digit sequence in unrelated numeric
+    # data, e.g. SVG path coordinates in components/ui/Icon.tsx.
+    (re.compile(r"99[.,]9\s*%|۹۹[.,]۹\s*(%|٪)"), "unverified uptime percentage (99.9%)"),
     (re.compile(r"uptime", re.IGNORECASE), "uptime claim"),
     (
         re.compile(r"(۱۰[،,]?۰۰۰|10[,]?000)\s*(تومان|toman)", re.IGNORECASE),

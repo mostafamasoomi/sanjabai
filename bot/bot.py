@@ -1,5 +1,5 @@
 """
-Multiai Telegram Bot — AI chat + wallet + account linking.
+Sanjhubai Telegram Bot — AI chat + wallet + account linking.
 Uses python-telegram-bot (v20+ async).
 """
 import os
@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN', '')
-API_URL = os.getenv('API_URL', 'http://multiai_api:8000')
+API_URL = os.getenv('API_URL', 'http://sanjhubai_api:8000')
 
 if not BOT_TOKEN or BOT_TOKEN == 'your-bot-token':
     print('⚠️  TELEGRAM_BOT_TOKEN not set or placeholder. Exiting gracefully.')
@@ -26,7 +26,7 @@ from telegram.constants import ParseMode
 # ── API helpers ────────────────────────────────────────────
 
 async def api_request(method: str, path: str, token: str = '', json_data: dict = None) -> dict:
-    """Make authenticated API request to Multiai backend"""
+    """Make authenticated API request to Sanjhubai backend"""
     headers = {'Content-Type': 'application/json'}
     if token:
         headers['Authorization'] = f'Bearer {token}'
@@ -55,7 +55,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if token:
         context.user_data['token'] = token
         await update.message.reply_text(
-            '👋 *سلام! به Multiai Bot خوش آمدید*\n\n'
+            '👋 *سلام! به Sanjhubai Bot خوش آمدید*\n\n'
             '✅ حساب شما قبلاً متصل شده است.\n\n'
             '📋 *دستورات:*\n'
             '/chat _متن_ — گفتگو با هوش مصنوعی\n'
@@ -66,9 +66,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
     else:
         await update.message.reply_text(
-            '👋 *سلام! به Multiai Bot خوش آمدید*\n\n'
+            '👋 *سلام! به Sanjhubai Bot خوش آمدید*\n\n'
             'برای استفاده از ربات، ابتدا حساب خود را متصل کنید:\n\n'
-            '1️⃣ در سایت [multiai.ir](https://multiai.ir) ثبت‌نام کنید\n'
+            '1️⃣ در سایت [sanjhubai.ir](https://sanjhubai.ir) ثبت‌نام کنید\n'
             '2️⃣ به بخش *پروفایل* بروید\n'
             '3️⃣ روی *اتصال تلگرام* کلیک کنید\n\n'
             'یا از دستور /link _ایمیل_ _رمزعبور_ استفاده کنید.',
@@ -182,7 +182,7 @@ async def cmd_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
     balance = r['data'].get('balance', 0)
     await update.message.reply_text(
         f'💰 *موجودی کیف پول:* {balance:,} تومان\n\n'
-        f'برای شارژ حساب به [multiai.ir/wallet](https://multiai.ir/wallet) مراجعه کنید.',
+        f'برای شارژ حساب به [sanjhubai.ir/wallet](https://sanjhubai.ir/wallet) مراجعه کنید.',
         parse_mode=ParseMode.MARKDOWN,
         disable_web_page_preview=True,
     )
@@ -212,7 +212,7 @@ async def cmd_models(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show help"""
     await update.message.reply_text(
-        '📋 *راهنمای Multiai Bot*\n\n'
+        '📋 *راهنمای Sanjhubai Bot*\n\n'
         '/start — شروع\n'
         '/link _ایمیل_ _رمز_ — اتصال حساب\n'
         '/chat _متن_ — گفتگو با AI\n'
@@ -237,7 +237,7 @@ def main():
     app.add_handler(CommandHandler('help', cmd_help))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    print('🤖 Multiai Bot started...')
+    print('🤖 Sanjhubai Bot started...')
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 

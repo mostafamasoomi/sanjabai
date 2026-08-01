@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
 from models import Base, Pricing, Feature, Discount, AboutContent, ProxyConfig
 
-DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql+asyncpg://multiai:multiai@127.0.0.1:5432/multiai')
+DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql+asyncpg://sanjhubai:sanjhubai@127.0.0.1:5432/sanjhubai')
 
 def get_engine():
     return create_async_engine(DATABASE_URL)
@@ -63,10 +63,13 @@ async def init_db():
             session.add(AboutContent(title="درباره ما", body="ما یک پلتفرم هوش مصنوعی فارسی هستیم که با هدف ارائه بهترین تجربه کاربری و دسترسی به جدیدترین مدلهای هوش مصنوعی ایجاد شده‌ایم. تیم ما متشکل از متخصصان حوزه فناوری و هوش مصنوعی است که با عشق به زبان فارسی و فرهنگ ایرانی، این پلتفرم را توسعه داده‌اند."))
         
         # Proxy
+        # NOTE: this credential is hardcoded and has been sitting in git
+        # history — flagged separately as needing rotation, independent of
+        # this rename. Only the hostname changed here.
         stmt = select(ProxyConfig)
         res = await session.execute(stmt)
         if not res.scalar_one_or_none():
-            session.add(ProxyConfig(proxy_url="socks5://ted:T%23d%40123234@multiai_tunnel:9090", proxy_type="socks5", active=True))
+            session.add(ProxyConfig(proxy_url="socks5://ted:T%23d%40123234@sanjhubai_tunnel:9090", proxy_type="socks5", active=True))
         
         await session.commit()
 

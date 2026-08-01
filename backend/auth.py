@@ -423,6 +423,7 @@ async def get_profile(request: Request) -> JSONResponse:
                 'default_model': prefs.get('default_model', ''),
                 'theme': prefs.get('theme', 'dark'),
                 'ai_personality': prefs.get('ai_personality', ''),
+                'pinned_context': prefs.get('pinned_context', ''),
                 'autonomy_level': prefs.get('autonomy_level', 'medium'),
                 'notification_settings': prefs.get('notification_settings', {
                     'email': True,
@@ -469,6 +470,13 @@ async def update_profile(request: Request, payload: UpdateProfileRequest) -> JSO
             level = payload.preferences['autonomy_level']
             if level not in ('low', 'medium', 'high'):
                 return JSONResponse({'detail': 'سطح خودمختاری باید low، medium یا high باشد'}, status_code=400)
+
+        if 'pinned_context' in payload.preferences:
+            pinned = payload.preferences['pinned_context']
+            if not isinstance(pinned, str):
+                return JSONResponse({'detail': 'یادداشت دائمی باید متن باشد'}, status_code=400)
+            if len(pinned) > 20000:
+                return JSONResponse({'detail': 'یادداشت دائمی نباید بیشتر از ۲۰,۰۰۰ کاراکتر باشد'}, status_code=400)
 
         existing_prefs.update(payload.preferences)
         update_data['preferences'] = existing_prefs
@@ -643,6 +651,6 @@ async def send_welcome_email(request: Request) -> JSONResponse:
         user = res.fetchone()
         if not user or not user.email:
             return JSONResponse({'detail': 'ایمیلی ثبت نشده است'}, status_code=400)
-    body = f'<div dir="rtl" style="font-family:Tahoma;max-width:600px;margin:auto;padding:20px;"><h1 style="color:#6c5cf5;">به Multiai خوش آمدید! 🎉</h1><p>سلام {user.email}،</p><p>حساب شما با موفقیت ساخته شد.</p><p><a href="{BASE_URL}/chat" style="background:#6c5cf5;color:white;padding:10px 20px;text-decoration:none;border-radius:8px;">شروع چت</a></p></div>'
-    ok = await send_email(user.email, 'به Multiai خوش آمدید!', body)
+    body = f'<div dir="rtl" style="font-family:Tahoma;max-width:600px;margin:auto;padding:20px;"><h1 style="color:#6c5cf5;">به Sanjhubai خوش آمدید! 🎉</h1><p>سلام {user.email}،</p><p>حساب شما با موفقیت ساخته شد.</p><p><a href="{BASE_URL}/chat" style="background:#6c5cf5;color:white;padding:10px 20px;text-decoration:none;border-radius:8px;">شروع چت</a></p></div>'
+    ok = await send_email(user.email, 'به Sanjhubai خوش آمدید!', body)
     return JSONResponse({'status': 'sent' if ok else 'queued'})

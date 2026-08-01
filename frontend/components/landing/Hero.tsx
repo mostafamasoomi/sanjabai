@@ -1,8 +1,22 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { CheckGlyph, ForwardArrow, ProviderLogo } from './primitives'
 import { HERO_ROTATION, HERO_TRUST, PREVIEW_THREADS } from './content'
+import { useTilt } from './useTilt'
+import { useScrollParallax } from './useScrollParallax'
+import { Constellation } from './Constellation'
+
+/** Each blob drifts at its own fraction of scroll speed — the closer the
+ * fraction is to 0, the farther back the layer reads as sitting. `baseX`
+ * mirrors each blob's own CSS `translate` x-component (blob 1 is centered
+ * via `inset-inline-start: 50%` + `translate: -50% 0`), since the parallax
+ * hook writes the whole `translate` property and would otherwise wipe it. */
+const AURA_DEPTHS = [
+  { depth: 0.06, baseX: '-50%' },
+  { depth: 0.1, baseX: '0' },
+  { depth: 0.15, baseX: '0' },
+] as const
 
 /* ── Rotating headline word ───────────────────────────────────────────────── */
 
@@ -37,6 +51,8 @@ function Rotator() {
 function ProductPreview() {
   const [active, setActive] = useState(0)
   const thread = PREVIEW_THREADS[active]
+  const previewRef = useRef<HTMLDivElement>(null)
+  useTilt(previewRef, true, 5)
 
   // Types the answer out when the reader switches model tabs.
   //
@@ -77,58 +93,63 @@ function ProductPreview() {
   const done = typed.length >= thread.answer.length
 
   return (
-    <div className="lp-preview">
-      <div className="lp-preview__bar">
-        <span className="lp-preview__dots" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </span>
-
-        <div className="lp-preview__tabs" role="tablist" aria-label="انتخاب مدل">
-          {PREVIEW_THREADS.map((t, i) => (
-            <button
-              key={t.id}
-              type="button"
-              role="tab"
-              className="lp-preview__tab"
-              aria-selected={i === active}
-              onClick={() => setActive(i)}
-            >
-              {t.logo && <ProviderLogo src={t.logo} size={14} />}
-              <span dir="ltr">{t.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="lp-preview__body">
-        <div className="lp-msg lp-msg--user">
-          <span className="lp-msg__avatar">شما</span>
-          <p className="lp-msg__bubble">{thread.question}</p>
-        </div>
-
-        <div className="lp-msg lp-msg--ai">
-          <span className="lp-msg__avatar">
-            {thread.logo ? <ProviderLogo src={thread.logo} size={15} /> : '؟'}
+    <div className="lp-preview-stack">
+      <span className="lp-preview-ghost lp-preview-ghost--2" aria-hidden="true" />
+      <span className="lp-preview-ghost lp-preview-ghost--1" aria-hidden="true" />
+      <div className="lp-preview" ref={previewRef}>
+        <div className="lp-preview__sheen" aria-hidden="true" />
+        <div className="lp-preview__bar">
+          <span className="lp-preview__dots" aria-hidden="true">
+            <i />
+            <i />
+            <i />
           </span>
-          {/* No aria-live here on purpose: announcing a decorative typewriter
-              two characters at a time would flood a screen reader. The bubble
-              is ordinary content and is read when the user reaches it. */}
-          <p className="lp-msg__bubble">
-            {typed}
-            {!done && <span className="lp-msg__caret" aria-hidden="true" />}
-          </p>
+
+          <div className="lp-preview__tabs" role="tablist" aria-label="انتخاب مدل">
+            {PREVIEW_THREADS.map((t, i) => (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                className="lp-preview__tab"
+                aria-selected={i === active}
+                onClick={() => setActive(i)}
+              >
+                {t.logo && <ProviderLogo src={t.logo} size={14} />}
+                <span dir="ltr">{t.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Deliberately no latency or per-message price here: any number we
-            printed would be invented. The real figures are computed per
-            request and shown in the product itself. */}
-        <div className="lp-preview__meta">
-          <span>
-            مدل: <b dir="ltr">{thread.label}</b>
-          </span>
-          <span>هزینه‌ی تخمینی هر پیام، پیش از ارسال در خود چت نمایش داده می‌شود</span>
+        <div className="lp-preview__body">
+          <div className="lp-msg lp-msg--user">
+            <span className="lp-msg__avatar">شما</span>
+            <p className="lp-msg__bubble">{thread.question}</p>
+          </div>
+
+          <div className="lp-msg lp-msg--ai">
+            <span className="lp-msg__avatar">
+              {thread.logo ? <ProviderLogo src={thread.logo} size={15} /> : '؟'}
+            </span>
+            {/* No aria-live here on purpose: announcing a decorative typewriter
+                two characters at a time would flood a screen reader. The bubble
+                is ordinary content and is read when the user reaches it. */}
+            <p className="lp-msg__bubble">
+              {typed}
+              {!done && <span className="lp-msg__caret" aria-hidden="true" />}
+            </p>
+          </div>
+
+          {/* Deliberately no latency or per-message price here: any number we
+              printed would be invented. The real figures are computed per
+              request and shown in the product itself. */}
+          <div className="lp-preview__meta">
+            <span>
+              مدل: <b dir="ltr">{thread.label}</b>
+            </span>
+            <span>هزینه‌ی تخمینی هر پیام، پیش از ارسال در خود چت نمایش داده می‌شود</span>
+          </div>
         </div>
       </div>
     </div>
@@ -138,14 +159,37 @@ function ProductPreview() {
 /* ── Hero ─────────────────────────────────────────────────────────────────── */
 
 export function Hero() {
+  // Tilt is attached to the section, not .lp-aura itself: the aura has
+  // pointer-events: none (so it never steals clicks from the content sitting
+  // on top of it) and so can never *receive* the pointermove that would
+  // drive it. Setting --tx/--ty here and reading them on .lp-aura (a plain
+  // inherited custom property) lets the background read depth from the
+  // cursor while the foreground content stays perfectly still and legible.
+  const sectionRef = useRef<HTMLElement>(null)
+  useTilt(sectionRef, true, 2.5)
+
+  const blobRef1 = useRef<HTMLSpanElement>(null)
+  const blobRef2 = useRef<HTMLSpanElement>(null)
+  const blobRef3 = useRef<HTMLSpanElement>(null)
+  const blobLayers = useMemo(
+    () => [
+      { ref: blobRef1, ...AURA_DEPTHS[0] },
+      { ref: blobRef2, ...AURA_DEPTHS[1] },
+      { ref: blobRef3, ...AURA_DEPTHS[2] },
+    ],
+    [],
+  )
+  useScrollParallax(sectionRef, blobLayers)
+
   return (
-    <section className="lp-hero">
+    <section className="lp-hero" ref={sectionRef}>
       {/* Ambient layers sit behind everything via z-index: -1 on .lp-aura. */}
       <div className="lp-grid-lines" aria-hidden="true" />
       <div className="lp-aura" aria-hidden="true">
-        <span className="lp-aura__blob" />
-        <span className="lp-aura__blob" />
-        <span className="lp-aura__blob" />
+        <span className="lp-aura__blob" ref={blobRef1} />
+        <span className="lp-aura__blob" ref={blobRef2} />
+        <span className="lp-aura__blob" ref={blobRef3} />
+        <Constellation />
       </div>
 
       <div className="lp-container">

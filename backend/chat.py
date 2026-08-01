@@ -28,7 +28,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database import async_session, _http, LITELLM_HOST
+from database import async_session, _http
 from models import Quota, Assistant, Ledger, Subscription
 from dependencies import _get_user_id, _to_fa
 from services.context_injection import get_injection_messages, inject_messages
@@ -112,6 +112,46 @@ _HARDCODED_WORKING = frozenset({
 
 # Cache of available model ids (refreshed on each call when DB is reachable).
 _WORKING_SET_CACHE: set[str] | None = None
+
+# Cache of model id -> upstream name ('litellm' / 'ninerouter' / ...), for
+# models model_discovery.py tagged with a non-default upstream. Models an
+# admin curated by hand (the whole pre-9Router catalog) have upstream=NULL
+# and always fall through to providers.chat_provider() (litellm) below, so
+# enabling 9Router for discovery never silently reroutes existing traffic —
+# only models actually verified to exist behind it get sent there.
+_UPSTREAM_CACHE: dict[str, str] = {}
+
+
+async def _get_model_upstream(model_id: str) -> str | None:
+    """Which named upstream (providers.Provider.name) serves this model, if any."""
+    global _UPSTREAM_CACHE
+    if async_session is None:
+        return _UPSTREAM_CACHE.get(model_id)
+    try:
+        async with async_session() as session:
+            res = await session.execute(sqlalchemy.text(
+                "SELECT id, provider_model_id, upstream FROM model_catalog WHERE upstream IS NOT NULL"
+            ))
+            cache: dict[str, str] = {}
+            for row in res.fetchall():
+                if row.upstream:
+                    cache[str(row.id)] = row.upstream
+                    cache[str(row.provider_model_id)] = row.upstream
+            _UPSTREAM_CACHE = cache
+    except Exception as e:
+        logger.warning(f"_get_model_upstream DB read failed: {e}")
+    return _UPSTREAM_CACHE.get(model_id)
+
+
+async def _resolve_provider(model_id: str):
+    """The providers.Provider that should serve a chat completion for this model."""
+    from providers import get_provider, chat_provider
+    upstream = await _get_model_upstream(model_id)
+    if upstream:
+        p = get_provider(upstream)
+        if p:
+            return p
+    return chat_provider()
 
 
 async def get_working_models() -> frozenset[str]:
@@ -383,7 +423,7 @@ async def _web_search(query: str, max_results: int = 5) -> str:
                         'srprop': 'snippet',
                         'format': 'json',
                     },
-                    headers={'User-Agent': 'Multiai/1.0 (web search fallback)'},
+                    headers={'User-Agent': 'Sanjhubai/1.0 (web search fallback)'},
                 )
             if r.status_code == 200:
                 data = r.json()
@@ -448,23 +488,32 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
 
     result['cost'] = cost
 
-    res = await session.execute(
-        sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid'),
-        {'uid': uid},
-    )
-    row = res.fetchone()
-    current = row.balance if row else 0
-    new_balance = current - cost if current >= cost else current
-    if current >= cost:
-        entry = Ledger(user_id=uid, amount=-cost, balance_after=new_balance, reason=f'مصرف {model}')
-        session.add(entry)
+    # Charge against Wallet.balance itself (the source of truth that
+    # BillingService.reserve() gates future requests against), not just the
+    # ledger's running SUM. Previously this only ever appended a Ledger row
+    # and Wallet.balance was left untouched by real usage — it only moved on
+    # top-ups — so the pre-flight reserve() check against `balance - reserved`
+    # never reflected actual spend and users could keep chatting for free
+    # indefinitely once their true (ledger) balance ran out. Locked via
+    # lock_wallet_for_update to avoid a concurrent-request race on the same
+    # wallet row.
+    from services.billing import SqlBillingRepo
+    _repo = SqlBillingRepo(session)
+    async with _repo.lock_wallet_for_update(uid):
+        wallet = await _repo.ensure_wallet(uid)
+        current = wallet['balance']
+        if current >= cost:
+            new_balance = current - cost
+            await _repo.set_wallet_balance(uid, new_balance)
+            entry = Ledger(user_id=uid, amount=-cost, balance_after=new_balance, reason=f'مصرف {model}')
+            session.add(entry)
+        else:
+            new_balance = current
     result['balance_after'] = new_balance
 
     try:
-        from services.billing import SqlBillingRepo
         from services.metering import record_usage
         from services.money import Money
-        _repo = SqlBillingRepo(session)
         await record_usage(
             _repo,
             request_id=secrets.token_hex(8),
@@ -543,12 +592,13 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
             if isinstance(payload['stream_options'], dict):
                 payload['stream_options']['include_usage'] = True
             import httpx
+            _provider = await _resolve_provider(payload.get('model', ''))
             # Streaming timeout: 90s total, 10s connect
             async with _http.stream(
                 'POST',
-                f"{LITELLM_HOST}/v1/chat/completions",
+                f'{_provider.v1}/chat/completions',
                 json=payload,
-                headers={'Accept': 'text/event-stream'},
+                headers={**_provider.headers(), 'Accept': 'text/event-stream'},
                 timeout=httpx.Timeout(90, connect=10, read=90),
             ) as r:
                 async for line in r.aiter_lines():
@@ -709,7 +759,8 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
     _hc_model = str(payload_dict.get('model') or '')
     _hc_started = _time.monotonic()
     try:
-        r = await _http.post(f"{LITELLM_HOST}/v1/chat/completions", json=payload_dict, headers={'Accept': 'application/json'})
+        _provider = await _resolve_provider(_hc_model)
+        r = await _http.post(f'{_provider.v1}/chat/completions', json=payload_dict, headers={**_provider.headers(), 'Accept': 'application/json'})
         # Passive health sample. Real traffic is the best signal we have about
         # whether a model works, and it costs nothing extra to record.
         _record_model_health(
@@ -822,9 +873,10 @@ async def chat_with_file(
         await _release_reservation(reservation, uid, 'before_stream')
         return await _chat_stream(payload, request)
     try:
+        _provider = await _resolve_provider(selected_model)
         r = await _http.post(
-            f'{LITELLM_HOST}/v1/chat/completions', json=payload,
-            headers={'Accept': 'application/json'},
+            f'{_provider.v1}/chat/completions', json=payload,
+            headers={**_provider.headers(), 'Accept': 'application/json'},
         )
         if r.status_code == 200:
             cost_info = await _track_usage(request, payload, r.json())
@@ -890,10 +942,11 @@ async def _call_model_once(
         logger.debug(f"Compression skipped in compare: {e}")
 
     try:
+        _provider = await _resolve_provider(model)
         r = await _http.post(
-            f'{LITELLM_HOST}/v1/chat/completions',
+            f'{_provider.v1}/chat/completions',
             json=payload,
-            headers={'Accept': 'application/json'},
+            headers={**_provider.headers(), 'Accept': 'application/json'},
         )
         elapsed = round(time.monotonic() - start, 3)
         if r.status_code == 200:
@@ -1285,10 +1338,11 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
         return await _smart_chat_stream(payload_dict, request, selected_model, category)
 
     try:
+        _provider = await _resolve_provider(selected_model)
         r = await _http.post(
-            f'{LITELLM_HOST}/v1/chat/completions',
+            f'{_provider.v1}/chat/completions',
             json=payload_dict,
-            headers={'Accept': 'application/json'},
+            headers={**_provider.headers(), 'Accept': 'application/json'},
         )
         if r.status_code == 200:
             cost_info = await _track_usage(request, payload_dict, r.json())
@@ -1366,11 +1420,12 @@ async def _smart_chat_stream(
             if isinstance(payload['stream_options'], dict):
                 payload['stream_options']['include_usage'] = True
             import httpx
+            _provider = await _resolve_provider(selected_model)
             async with _http.stream(
                 'POST',
-                f'{LITELLM_HOST}/v1/chat/completions',
+                f'{_provider.v1}/chat/completions',
                 json=payload,
-                headers={'Accept': 'text/event-stream'},
+                headers={**_provider.headers(), 'Accept': 'text/event-stream'},
                 timeout=httpx.Timeout(90, connect=10, read=90),
             ) as r:
                 yield f'data: {json.dumps({"type": "smart_info", "model": selected_model, "category": category})}\n\n'

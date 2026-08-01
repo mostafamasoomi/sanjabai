@@ -30,6 +30,7 @@ type CreditPackage = {
   base_amount: number
   bonus_percent: number
   total_credits: number
+  model_id: string | null
 }
 
 type LedgerFilter = 'all' | 'credit' | 'debit'
@@ -155,6 +156,10 @@ export default function WalletPage() {
   const [showConfirm, setShowConfirm] = useState(false)
   const [copied, setCopied] = useState(false)
   const [purchasingPkgId, setPurchasingPkgId] = useState<string | null>(null)
+  // model id -> live output-token rate (Toman per million tokens), for the
+  // "≈ N tokens" estimate on model-labeled credit packages. Server-authoritative:
+  // fetched from /catalog/models, never hardcoded here.
+  const [modelOutputRates, setModelOutputRates] = useState<Record<string, number>>({})
 
   // ── Data fetching ────────────────────────────────────────────────────────
   const fetchData = useCallback(
@@ -181,6 +186,22 @@ export default function WalletPage() {
         if (ledgerData) setLedger(Array.isArray(ledgerData) ? ledgerData : [])
         if (payData) setPayments(Array.isArray(payData) ? payData : [])
         if (pkgData) setCreditPackages(Array.isArray(pkgData) ? pkgData : [])
+
+        try {
+          const catRes = await fetch('/api/catalog/models')
+          if (catRes.ok) {
+            const catData = await catRes.json()
+            const rates: Record<string, number> = {}
+            for (const m of catData.data || []) {
+              const rate = m?.pricing?.outputPerMillion
+              if (typeof rate === 'number' && rate > 0) {
+                if (m.id) rates[m.id] = rate
+                if (m.providerModelId) rates[m.providerModelId] = rate
+              }
+            }
+            setModelOutputRates(rates)
+          }
+        } catch {}
       } catch {
         if (!silent) toast('خطا در دریافت اطلاعات', 'error')
       } finally {
@@ -491,6 +512,8 @@ export default function WalletPage() {
               const bonusToman = pkg.bonus_percent > 0
                 ? faNum((pkg.total_credits - pkg.base_amount) / 10)
                 : null
+              const outputRate = pkg.model_id ? modelOutputRates[pkg.model_id] : undefined
+              const approxTokens = outputRate ? Math.round((pkg.total_credits / 10 / outputRate) * 1_000_000) : null
               return (
                 <div
                   key={pkg.id}
@@ -526,9 +549,17 @@ export default function WalletPage() {
                   <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
                     {pkg.name_fa}
                   </h3>
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: pkg.model_id ? 6 : 16 }}>
                     {pkg.name_en}
                   </p>
+                  {pkg.model_id && (
+                    <span
+                      className="badge"
+                      style={{ alignSelf: 'flex-start', marginBottom: 16, fontFamily: 'monospace', fontSize: 11 }}
+                    >
+                      {pkg.model_id}
+                    </span>
+                  )}
 
                   <div className="flex-1">
                     <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 4, fontFeatureSettings: '"tnum"' }}>
@@ -545,6 +576,11 @@ export default function WalletPage() {
                     <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                       معادل {fmtToman(pkg.total_credits)}
                     </p>
+                    {approxTokens !== null && (
+                      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                        ≈ {faNum(Math.round(approxTokens / 1_000_000))} میلیون توکن {pkg.model_id} (بر اساس نرخ خروجی فعلی)
+                      </p>
+                    )}
                   </div>
 
                   <button

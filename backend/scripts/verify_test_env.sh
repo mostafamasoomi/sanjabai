@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "[verify] Multiai backend test environment check"
+echo "[verify] Sanjhubai backend test environment check"
 
 PY_BIN=${PYTHON:-python3}
 if ! command -v "$PY_BIN" >/dev/null 2>&1; then

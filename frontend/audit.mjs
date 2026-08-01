@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-const OUT = process.env.OUT || path.join(os.tmpdir(), 'multiai-frontend-audit')
+const OUT = process.env.OUT || path.join(os.tmpdir(), 'sanjhubai-frontend-audit')
 fs.mkdirSync(OUT, { recursive: true })
 
 // Prefer Playwright's own managed browser. This container ships a pinned build
@@ -77,8 +77,8 @@ for (const [vpName, viewport] of Object.entries(VIEWPORTS)) {
       await ctx.addInitScript((t) => localStorage.setItem('theme', t), theme)
       if (needsAuth) {
         await ctx.addInitScript(() => {
-          localStorage.setItem('multiai_auth_token', 'test-token')
-          localStorage.setItem('multiai_onboarded', '1')
+          localStorage.setItem('sanjhubai_auth_token', 'test-token')
+          localStorage.setItem('sanjhubai_onboarded', '1')
         })
       }
       const page = await ctx.newPage()

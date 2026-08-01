@@ -9,7 +9,7 @@
    Every factual claim below is sourced from the codebase, not invented:
 
    - Model list        backend/litellm_config.yaml  (23 chat models)
-   - API base URL      app/developer/page.tsx       (https://multiai.ir/v1)
+   - API base URL      app/developer/page.tsx       (https://sanjhubai.ir/v1)
    - Billing model     app/pricing/page.tsx         (per-token, wallet, no
                                                      monthly subscription)
    - Top-up amounts    app/wallet/page.tsx          (PRESET_AMOUNTS, MIN_TOPUP)
@@ -19,8 +19,8 @@
 
 import type { IconName } from '../ui/Icon'
 
-/** Documented in app/developer/page.tsx. Not `api.multiai.ir`. */
-export const API_BASE_URL = 'https://multiai.ir/v1'
+/** Documented in app/developer/page.tsx. Not `api.sanjhubai.ir`. */
+export const API_BASE_URL = 'https://sanjhubai.ir/v1'
 
 /** app/wallet/page.tsx → MIN_TOPUP */
 export const MIN_TOPUP_LABEL = '۱۰ هزار تومان'
@@ -216,7 +216,7 @@ from openai import OpenAI
 
 client = OpenAI(
     base_url="${API_BASE_URL}",
-    api_key=os.environ["MULTIAI_API_KEY"],
+    api_key=os.environ["SANJHUBAI_API_KEY"],
 )
 
 stream = client.chat.completions.create(
@@ -232,7 +232,7 @@ for chunk in stream:
 
 const client = new OpenAI({
   baseURL: "${API_BASE_URL}",
-  apiKey: process.env.MULTIAI_API_KEY,
+  apiKey: process.env.SANJHUBAI_API_KEY,
 })
 
 const stream = await client.chat.completions.create({
@@ -246,7 +246,7 @@ for await (const chunk of stream) {
 }`,
 
   cURL: `curl ${API_BASE_URL}/chat/completions \\
-  -H "Authorization: Bearer $MULTIAI_API_KEY" \\
+  -H "Authorization: Bearer $SANJHUBAI_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "model": "gemini-3.5-flash",
@@ -258,7 +258,7 @@ for await (const chunk of stream) {
 }
 
 /* ── Pricing ──────────────────────────────────────────────────────────────────
-   Multiai bills per token against a prepaid wallet — there is no monthly
+   Sanjhubai bills per token against a prepaid wallet — there is no monthly
    subscription. These three columns describe how that works rather than
    inventing tiers, so the page cannot contradict /pricing. */
 
@@ -339,7 +339,7 @@ export const FAQ = [
   },
   {
     q: 'API چطور کار می‌کند؟',
-    a: `API ما با OpenAI سازگار است. کافی است آدرس پایه را روی ${API_BASE_URL} بگذارید و کلید Multiai خودتان را جایگزین کنید؛ بقیه‌ی کد دست‌نخورده باقی می‌ماند. استریم و embeddings هم پشتیبانی می‌شوند.`,
+    a: `API ما با OpenAI سازگار است. کافی است آدرس پایه را روی ${API_BASE_URL} بگذارید و کلید Sanjhubai خودتان را جایگزین کنید؛ بقیه‌ی کد دست‌نخورده باقی می‌ماند. استریم و embeddings هم پشتیبانی می‌شوند.`,
   },
   {
     q: 'به فیلترشکن نیاز دارم؟',

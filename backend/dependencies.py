@@ -357,6 +357,26 @@ async def _get_user_soul(uid: int) -> str:
     return ''
 
 
+async def _get_user_pinned_context(uid: int) -> str:
+    """Fetch the user's persistent context note (profile 'pinned_context'
+    preference — a free-form note or pasted .md file the user wants
+    available in every chat, distinct from the auto-extracted memory facts
+    and the AI-personality/soul text) for injection."""
+    if async_session is None:
+        return ''
+    try:
+        async with async_session() as session:
+            res = await session.execute(
+                User.__table__.select().where(User.id == uid)
+            )
+            row = res.fetchone()
+            if row and row.preferences:
+                return (row.preferences or {}).get('pinned_context', '')
+    except Exception:
+        pass
+    return ''
+
+
 # ── Email ───────────────────────────────────────────────────────
 
 SMTP_HOST = os.getenv('SMTP_HOST', '')

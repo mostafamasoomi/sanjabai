@@ -55,6 +55,7 @@ export default function ProfilePage() {
   // Preferences
   const [defaultModel, setDefaultModel] = useState('')
   const [aiPersonality, setAiPersonality] = useState('')
+  const [pinnedContext, setPinnedContext] = useState('')
   const [autonomyLevel, setAutonomyLevel] = useState('medium')
   const [theme, setTheme] = useState('dark')
   const [emailNotif, setEmailNotif] = useState(true)
@@ -84,6 +85,7 @@ export default function ProfilePage() {
 
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const mdFileInputRef = useRef<HTMLInputElement>(null)
 
   // Track original values for dirty checking
   const [originalValues, setOriginalValues] = useState<any>({})
@@ -113,6 +115,7 @@ export default function ProfilePage() {
         const prefs = data.preferences || {}
         setDefaultModel(prefs.default_model || '')
         setAiPersonality(prefs.ai_personality || '')
+        setPinnedContext(prefs.pinned_context || '')
         setAutonomyLevel(prefs.autonomy_level || 'medium')
         setTheme(prefs.theme || 'dark')
         setEmailNotif(prefs.notification_settings?.email !== false)
@@ -124,6 +127,7 @@ export default function ProfilePage() {
           language: data.language || 'fa',
           default_model: prefs.default_model || '',
           ai_personality: prefs.ai_personality || '',
+          pinned_context: prefs.pinned_context || '',
           autonomy_level: prefs.autonomy_level || 'medium',
           theme: prefs.theme || 'dark',
           email_notif: prefs.notification_settings?.email !== false,
@@ -179,6 +183,7 @@ export default function ProfilePage() {
           preferences: {
             default_model: defaultModel,
             ai_personality: aiPersonality,
+            pinned_context: pinnedContext,
             autonomy_level: autonomyLevel,
             theme,
             notification_settings: {
@@ -205,6 +210,7 @@ export default function ProfilePage() {
         setOriginalValues({
           display_name: displayName, bio, timezone, language,
           default_model: defaultModel, ai_personality: aiPersonality,
+          pinned_context: pinnedContext,
           autonomy_level: autonomyLevel, theme,
           email_notif: emailNotif, telegram_notif: telegramNotif,
         })
@@ -216,6 +222,26 @@ export default function ProfilePage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const handlePinnedContextFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (file.size > 1024 * 1024) {
+      toast(language === 'fa' ? 'حجم فایل نباید بیشتر از ۱ مگابایت باشد' : 'File must be under 1MB', 'error')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const text = String(reader.result || '').slice(0, 20000)
+      setPinnedContext(text)
+      toast(language === 'fa' ? 'فایل بارگذاری شد — برای ذخیره، «ذخیره تغییرات» را بزنید' : 'File loaded — click Save to apply', 'success')
+    }
+    reader.onerror = () => {
+      toast(language === 'fa' ? 'خطا در خواندن فایل' : 'Error reading file', 'error')
+    }
+    reader.readAsText(file)
   }
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -526,6 +552,47 @@ export default function ProfilePage() {
               {isFa
                 ? 'این دستورالعمل به عنوان سیستم پرامپت در هر چت جدید ارسال می‌شود'
                 : 'This instruction is sent as a system prompt in every new chat'}
+            </p>
+          </div>
+
+          {/* Pinned Context (persistent note / .md upload) */}
+          <div className="profile-input-group">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <label className="profile-input-label" style={{ marginBottom: 0 }}>
+                {isFa ? 'یادداشت دائمی (قابل استفاده در همه چت‌ها)' : 'Pinned context (used in every chat)'}
+              </label>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => mdFileInputRef.current?.click()}
+              >
+                <Icon name="paperclip" size={14} />
+                <span>{isFa ? 'آپلود فایل md' : 'Upload .md file'}</span>
+              </button>
+              <input
+                ref={mdFileInputRef}
+                type="file"
+                accept=".md,.markdown,.txt,text/markdown,text/plain"
+                style={{ display: 'none' }}
+                onChange={handlePinnedContextFileUpload}
+              />
+            </div>
+            <textarea dir="rtl"
+              value={pinnedContext}
+              onChange={(e) => setPinnedContext(e.target.value)}
+              placeholder={isFa
+                ? 'یادداشتی که می‌خواهی هوش مصنوعی همیشه بداند — مثلاً پروژه‌هایت، اصطلاحات تیمت، یا محتوای یک فایل md. برخلاف حافظه‌های خودکار، این متن کامل در هر چت جدید تزریق می‌شود.'
+                : "Anything you want the AI to always know — your projects, team jargon, or the contents of an .md file. Unlike auto-extracted memories, this whole note is injected into every new chat."
+              }
+              className="input"
+              rows={8}
+              maxLength={20000}
+              style={{ resize: 'vertical', minHeight: 160, fontFamily: 'monospace', fontSize: 13 }}
+            />
+            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+              {isFa
+                ? `این یادداشت (تا ۶۰۰۰ کاراکتر ابتدایی آن) در تمام چت‌ها و مستقل از دستیار انتخابی تزریق می‌شود. ${pinnedContext.length.toLocaleString('fa-IR')} / ۲۰,۰۰۰ کاراکتر`
+                : `This note (up to its first 6000 characters) is injected into every chat regardless of the selected assistant. ${pinnedContext.length}/20,000 characters`}
             </p>
           </div>
         </div>

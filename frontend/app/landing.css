@@ -2039,8 +2039,10 @@ a.lp-pill:hover {
   .lp-aura__blob,
   .lp-marquee__track,
   .lp-msg__caret,
-  .lp-constellation__node {
+  .lp-constellation__node,
+  .lp-plan--featured {
     animation: none !important;
+    translate: 0 0;
   }
   .lp-marquee__viewport {
     overflow-x: auto;

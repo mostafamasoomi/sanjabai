@@ -4,21 +4,21 @@ import './globals.css'
 import '../styles-chat-sidebar.css'
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://multiai.ir'),
+  metadataBase: new URL('https://sanjhubai.ir'),
   title: {
-    default: 'Multiai — پلتفرم هوش مصنوعی فارسی',
-    template: '%s | Multiai',
+    default: 'Sanjhubai — پلتفرم هوش مصنوعی فارسی',
+    template: '%s | Sanjhubai',
   },
   description:
     'دسترسی به ۲۳ مدل هوش مصنوعی از یک پنل: چت چندمدلی، ساخت عامل، و API سازگار با OpenAI — با پرداخت به تومان به‌ازای مصرف و پشتیبانی فارسی.',
-  applicationName: 'Multiai',
+  applicationName: 'Sanjhubai',
   // Only models the platform actually serves (backend/litellm_config.yaml).
   keywords: ['هوش مصنوعی', 'DeepSeek', 'Mistral', 'Gemini', 'Llama', 'API هوش مصنوعی'],
   openGraph: {
     type: 'website',
     locale: 'fa_IR',
-    siteName: 'Multiai',
-    title: 'Multiai — پلتفرم هوش مصنوعی فارسی',
+    siteName: 'Sanjhubai',
+    title: 'Sanjhubai — پلتفرم هوش مصنوعی فارسی',
     description:
       'چت با ۲۳ مدل هوش مصنوعی، ساخت عامل، و یک API سازگار با OpenAI. پرداخت به تومان به‌ازای مصرف، بدون فیلترشکن.',
   },

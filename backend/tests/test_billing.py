@@ -291,6 +291,71 @@ def test_callback_rejects_cancelled_status():
     _run(run())
 
 
+# ── Bonus credit packages: credit_amount may differ from charged amount ──────
+# credit_package_checkout charges base_amount via Zarinpal but the wallet
+# should receive total_credits (base_amount + bonus). Previously the wallet
+# was credited whatever was charged (no real bonus, base_amount==total_credits
+# always) and payment_endpoints.py bolted on a *second*, separate Ledger
+# insert of total_credits after the callback -- crediting the ledger twice
+# while only updating Wallet.balance once, and doing it unconditionally
+# instead of only for actually-successful payments outside replay protection.
+def test_callback_credits_bonus_amount_above_charged_amount():
+    async def run():
+        repo = MemoryBillingRepo()
+        # Charged/verified 100_000, but the package promises 120_000 total.
+        repo.seed_payment(1, user_id=1, amount=100_000, authority="AUTH1", status="pending")
+        r = await handle_payment_callback(
+            repo, authority="AUTH1", status="OK", verify_fn=_verify_ok,
+            credit_amount=Money(120_000), credit_reason="بسته اعتباری: تست",
+        )
+        assert r.ok
+        # Wallet gets the bonus-inclusive amount, exactly once.
+        assert repo.wallets[1]["balance"] == 120_000
+        # Exactly one ledger entry was written for this credit.
+        credit_entries = [e for e in repo.ledger if e["reason"] == "بسته اعتباری: تست"]
+        assert len(credit_entries) == 1
+        assert credit_entries[0]["amount"] == 120_000
+
+    _run(run())
+
+
+def test_callback_verification_still_uses_charged_amount_not_credit_amount():
+    async def run():
+        seen_amounts = []
+
+        async def verify_and_record(amount, authority):
+            seen_amounts.append(amount)
+            return {"status": "verified", "ref_id": "REF123"}
+
+        repo = MemoryBillingRepo()
+        repo.seed_payment(1, user_id=1, amount=100_000, authority="AUTH1", status="pending")
+        r = await handle_payment_callback(
+            repo, authority="AUTH1", status="OK", verify_fn=verify_and_record,
+            credit_amount=Money(120_000),
+        )
+        assert r.ok
+        # The gateway is asked to verify what was actually charged, never
+        # the (possibly larger) credited amount.
+        assert seen_amounts == [100_000]
+
+    _run(run())
+
+
+def test_callback_without_credit_amount_still_credits_charged_amount():
+    """Non-bonus payments (plain top-up, subscription) are unaffected: no
+    credit_amount given means credit == charged, as before."""
+    async def run():
+        repo = MemoryBillingRepo()
+        repo.seed_payment(1, user_id=1, amount=50_000, authority="AUTH1", status="pending")
+        r = await handle_payment_callback(
+            repo, authority="AUTH1", status="OK", verify_fn=_verify_ok,
+        )
+        assert r.ok
+        assert repo.wallets[1]["balance"] == 50_000
+
+    _run(run())
+
+
 # ── Metering ─────────────────────────────────────────────────────────────────
 def test_compute_charge_is_exact_integer_math():
     price = {

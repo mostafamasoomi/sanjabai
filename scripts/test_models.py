@@ -11,7 +11,7 @@ os.environ["no_proxy"] = "*"
 _proxy_handler = urllib.request.ProxyHandler({})
 _opener = urllib.request.build_opener(_proxy_handler)
 
-LITELLM = "http://multiai_litellm:4000"
+LITELLM = "http://sanjhubai_litellm:4000"
 
 MODELS = """tencent-hy3
 mistral-large

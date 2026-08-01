@@ -24,7 +24,7 @@ audit/
 audit-v2/
 API_REVIEW_REPORT.md
 COMPETITIVE_STRATEGY.md
-DESIGN_AUDIT_MULTIAI.md
+DESIGN_AUDIT_SANJHUBAI.md
 FINAL_REPORT.md
 FINAL_REVIEW_REPORT.md
 FINAL_SENIOR_REVIEW.md
@@ -47,7 +47,7 @@ demo_test_results.json
 # Wazuh agent registration key — do not commit
 wazuh-agent/client.keys
 AUDIT_PLAN.md
-MULTIAI_AUDIT_REPORT.md
+SANJHUBAI_AUDIT_REPORT.md
 MVP_STATUS.md
 TEST_RESULTS.md
 test_results.json

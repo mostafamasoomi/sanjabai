@@ -21,7 +21,7 @@ from sqlalchemy.orm import sessionmaker, DeclarativeBase
 load_dotenv()
 
 # ── Configuration ────────────────────────────────────────────────
-DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql+asyncpg://multiai:multiai@127.0.0.1:5432/multiai')
+DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql+asyncpg://sanjhubai:sanjhubai@127.0.0.1:5432/sanjhubai')
 REDIS_URL = os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0')
 LITELLM_HOST = os.getenv('LITELLM_HOST', 'http://127.0.0.1:4000')
 ADMIN_TOKEN = os.getenv('ADMIN_TOKEN', '')

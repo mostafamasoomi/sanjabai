@@ -1,5 +1,5 @@
 /** @type {import('next').NextConfig} */
-const API_BACKEND = process.env.NEXT_PUBLIC_API_URL || 'http://multiai-multiai_api-1:8000'
+const API_BACKEND = process.env.NEXT_PUBLIC_API_URL || 'http://sanjhubai-sanjhubai_api-1:8000'
 
 const nextConfig = {
   output: 'standalone',

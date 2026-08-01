@@ -11,7 +11,7 @@ import { faNum, faCompact } from '@/lib/format'
 import { markOnboarded, isOnboarded, displayName } from '@/lib/onboarding'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Multiai Onboarding — Aurora v2
+   Sanjhubai Onboarding — Aurora v2
    A guided, premium first-time experience (Linear / Stripe style).
 
    Steps:
@@ -146,7 +146,7 @@ function formatContext(n?: number): string {
   return `${faCompact(n)} توکن`
 }
 
-const FAVORITES_KEY = 'multiai_favorite_models'
+const FAVORITES_KEY = 'sanjhubai_favorite_models'
 
 function loadFavorites(): string[] {
   if (typeof window === 'undefined') return []
@@ -257,7 +257,7 @@ export default function OnboardingPage() {
             <div className="w-7 h-7 rounded-lg bg-[var(--accent)] flex items-center justify-center">
               <span className="text-white text-sm font-bold">M</span>
             </div>
-            <span className="text-base font-bold text-gradient tracking-tight">Multiai</span>
+            <span className="text-base font-bold text-gradient tracking-tight">Sanjhubai</span>
           </div>
           <span className="badge badge-accent">تنظیمات اولیه</span>
         </div>
@@ -314,7 +314,7 @@ export default function OnboardingPage() {
                     </>
                   ) : (
                     <>
-                      به <span className="text-gradient">Multiai</span> خوش آمدید
+                      به <span className="text-gradient">Sanjhubai</span> خوش آمدید
                     </>
                   )}
                 </h1>

@@ -16,7 +16,7 @@ import { FAQ } from '@/components/landing/content'
 import './landing.css'
 
 export const metadata: Metadata = {
-  title: 'Multiai — دسترسی به همه‌ی مدل‌های هوش مصنوعی با یک اشتراک',
+  title: 'Sanjhubai — دسترسی به همه‌ی مدل‌های هوش مصنوعی با یک اشتراک',
   description:
     'با ۲۳ مدل هوش مصنوعی — DeepSeek، Mistral، Gemini، Llama و بیشتر — چت کنید، عامل بسازید و همه را با یک API سازگار با OpenAI به محصولتان وصل کنید. پرداخت به تومان به‌ازای مصرف، بدون اشتراک ماهانه و بدون نیاز به فیلترشکن.',
   alternates: { canonical: '/' },
@@ -70,6 +70,14 @@ export default function LandingPage() {
       </main>
 
       <SiteFooter />
+
+      {/* Reveal only ever turns visible via an IntersectionObserver callback
+          (see Reveal.tsx) — with JS disabled or failing before hydration,
+          there is no event left to fire it and every section would stay at
+          opacity: 0 forever. */}
+      <noscript>
+        <style>{'.lp-reveal{opacity:1!important;transform:none!important}'}</style>
+      </noscript>
 
       <script
         type="application/ld+json"

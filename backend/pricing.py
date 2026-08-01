@@ -554,7 +554,13 @@ async def credit_package_checkout(request: Request, payload: CreditPackageChecko
         if not pkg:
             return JSONResponse({'detail': 'بسته یافت نشد'}, status_code=404)
 
-        price = pkg.total_credits
+        # What the user is actually charged via Zarinpal. total_credits (which
+        # may be higher, when bonus_percent > 0) is what the wallet gets
+        # credited on success -- see payment_endpoints.py::payment_callback,
+        # which passes total_credits as handle_payment_callback's
+        # credit_amount. Charging total_credits here would mean users pay for
+        # their own bonus, making bonus_percent a no-op.
+        price = pkg.base_amount
         if price <= 0:
             return JSONResponse({'detail': 'invalid package price'}, status_code=400)
 
@@ -570,7 +576,7 @@ async def credit_package_checkout(request: Request, payload: CreditPackageChecko
 
         payment = Payment(
             user_id=uid, amount=price, authority=result['authority'],
-            status='pending', payment_type='credit_package', reference_id=str(pkg.id),
+            status='pending', payment_type='credit_package', reference_id=pkg.id,
         )
         session.add(payment)
         await session.commit()

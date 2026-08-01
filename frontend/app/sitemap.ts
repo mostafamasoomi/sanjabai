@@ -1,7 +1,7 @@
 import { MetadataRoute } from 'next'
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = 'https://multiai.ir'
+  const baseUrl = 'https://sanjhubai.ir'
 
   const pages = [
     { path: '', priority: 1, changeFreq: 'weekly' as const },

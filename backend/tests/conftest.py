@@ -1,5 +1,5 @@
 """
-Test fixtures and configuration for Multiai backend.
+Test fixtures and configuration for Sanjhubai backend.
 Uses TestClient with dependency overrides for async DB and Redis.
 """
 import sys
@@ -9,12 +9,28 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from unittest.mock import AsyncMock, MagicMock, patch
 
 # ── Mock Redis BEFORE app import ──────────────────────────
-_mock_redis_instance = MagicMock()
-_mock_redis_instance.incr.return_value = 1
-_mock_redis_instance.expire.return_value = True
-_mock_redis_instance.get.return_value = None
-_mock_redis_instance.set.return_value = True
-_mock_redis_instance.delete.return_value = True
+# The real client is redis.asyncio, so every method the app calls is awaited
+# (`await rds.incr(...)`, `await rds.setex(...)`, etc). A plain MagicMock's
+# methods return their return_value directly, not a coroutine — `await <int>`
+# raises TypeError, which RateLimiter.is_allowed() (security.py) catches and
+# "fails closed" on, turning every request in the suite into a 429 regardless
+# of what the test is actually exercising; the same failure mode shows up as
+# a swallowed-and-logged "Lockout check Redis error" from check_lockout(),
+# silently changing login/signup behavior instead of raising loudly.
+#
+# The base object is AsyncMock, not MagicMock: AsyncMock auto-generates any
+# *unconfigured* attribute access as another AsyncMock too, so a Redis method
+# nobody explicitly listed here (setex, sadd, srem, zadd, ...) is still
+# awaitable by default instead of silently reintroducing this exact bug the
+# next time the app starts calling one. The explicit method assignments below
+# exist only to pin a specific return_value for the handful the tests
+# actually assert against.
+_mock_redis_instance = AsyncMock()
+_mock_redis_instance.incr = AsyncMock(return_value=1)
+_mock_redis_instance.expire = AsyncMock(return_value=True)
+_mock_redis_instance.get = AsyncMock(return_value=None)
+_mock_redis_instance.set = AsyncMock(return_value=True)
+_mock_redis_instance.delete = AsyncMock(return_value=True)
 
 _mock_redis_module = MagicMock()
 _mock_redis_module.Redis = MagicMock()
@@ -50,6 +66,7 @@ os.environ['ADMIN_TOKEN'] = 'test-admin-token'
 os.environ.setdefault('API_KEY_PEPPER', 'test-api-key-pepper')
 
 # ── Now import app ────────────────────────────────────────
+import database as _database
 from app import app, _gen_token, _hash_password
 
 ADMIN_TOKEN = 'test-admin-token'
@@ -72,6 +89,32 @@ from starlette.testclient import TestClient
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "slow: marks tests as slow")
+    config.addinivalue_line(
+        "markers", "live: requires a live server on localhost — only runs with --live"
+    )
+
+
+def pytest_addoption(parser):
+    # test_document_generator.py's TestDocumentGeneratorLive documents
+    # itself as "run against the live API: pytest ... --live", but no
+    # --live option was ever actually registered, and nothing skipped that
+    # class without it — so it unconditionally tried a real HTTP connection
+    # to localhost:8081 on every plain `pytest tests/` run (this suite's
+    # standard invocation, including CI), and unconditionally failed with
+    # ConnectError wherever no such server happens to be running.
+    parser.addoption(
+        "--live", action="store_true", default=False,
+        help="Run tests marked @pytest.mark.live against a real local server.",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--live"):
+        return
+    skip_live = pytest.mark.skip(reason="requires a live server; pass --live to run")
+    for item in items:
+        if "live" in item.keywords:
+            item.add_marker(skip_live)
 
 
 @pytest.fixture
@@ -89,7 +132,8 @@ def client():
 def auth_headers():
     """Create a valid auth token and return headers"""
     token = _gen_token()
-    with patch('app.rds.get', return_value='1'), patch('app.rds.expire'):
+    with patch('app.rds.get', new_callable=AsyncMock, return_value='1'), \
+         patch('app.rds.expire', new_callable=AsyncMock):
         yield {'Authorization': f'Bearer {token}'}
 
 
@@ -108,6 +152,18 @@ def mock_async_session():
     ``scalar_one()`` is ``0``).  Individual tests may overwrite
     ``session._execute_result`` or ``session.execute`` (e.g. the analytics
     test that needs different rows per call).
+
+    Patches ``database._real_async_session`` — the state backing
+    ``database.async_session``'s ``_SessionProxy`` — rather than
+    ``app.async_session``. Every route module (wallet.py, chat.py, admin.py,
+    ...) does its own ``from database import async_session``, which binds
+    the *same shared proxy object* into each module's namespace; patching
+    the name ``app.async_session`` only ever affected code living directly
+    in app.py, which is essentially none of the actual endpoints per this
+    project's router-per-domain architecture. Every other endpoint fell
+    through to the proxy's real (unmocked) path — which, once the ratelimit
+    bug above stopped masking it, surfaced as SQLAlchemy trying to run real
+    async engine internals against the `client` fixture's MagicMock engine.
     """
     session = AsyncMock()
     # Default result so any endpoint that executes a query without an explicit
@@ -140,7 +196,7 @@ def mock_async_session():
             pass
 
     maker = MagicMock(return_value=_Ctx())
-    with patch('app.async_session', maker):
+    with patch('app.async_session', maker), patch.object(_database, '_real_async_session', maker):
         yield session
 
 

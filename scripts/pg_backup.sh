@@ -1,15 +1,15 @@
 #!/bin/bash
-# MultiAI PostgreSQL backup — runs on S3. Daily via cron, retain 7 days.
+# SanjhubAI PostgreSQL backup — runs on S3. Daily via cron, retain 7 days.
 # ponytail: plain pg_dump + gzip + find-delete. Add WAL archiving if RPO<24h needed.
 set -euo pipefail
 
-CONTAINER="multiai-multiai_pg-1"
-DB_USER="multiai"
-DB_NAME="multiai"
-DEST="/root/multiai/backups/pg"
+CONTAINER="sanjhubai-sanjhubai_pg-1"
+DB_USER="sanjhubai"
+DB_NAME="sanjhubai"
+DEST="/root/sanjhubai/backups/pg"
 RETAIN_DAYS=7
 TS="$(date +%Y%m%d_%H%M%S)"
-OUT="$DEST/multiai_${TS}.sql.gz"
+OUT="$DEST/sanjhubai_${TS}.sql.gz"
 LOG="$DEST/backup.log"
 
 mkdir -p "$DEST"
@@ -31,5 +31,5 @@ else
 fi
 
 # Prune old backups
-find "$DEST" -name 'multiai_*.sql.gz' -mtime +$RETAIN_DAYS -delete
+find "$DEST" -name 'sanjhubai_*.sql.gz' -mtime +$RETAIN_DAYS -delete
 echo "[$(date -Is)] pruned >$RETAIN_DAYS days" >> "$LOG"

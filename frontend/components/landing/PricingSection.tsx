@@ -3,7 +3,7 @@ import { CheckGlyph, ForwardArrow } from './primitives'
 import { PRICING_COLUMNS } from './content'
 
 /**
- * Multiai bills per token against a prepaid wallet — see app/pricing/page.tsx.
+ * Sanjhubai bills per token against a prepaid wallet — see app/pricing/page.tsx.
  * These columns explain that model rather than inventing subscription tiers,
  * so this section can't end up contradicting the real pricing page. The
  * per-model rate table lives on /pricing; this just links there.
@@ -29,6 +29,8 @@ export function PricingSection() {
               key={column.name}
               as="article"
               delay={i * 90}
+              tilt
+              tiltDeg={4}
               className={`lp-card lp-plan${column.featured ? ' lp-plan--featured' : ''}`}
             >
               {column.featured && <span className="lp-plan__badge">روش اصلی</span>}

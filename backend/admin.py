@@ -889,7 +889,7 @@ async def admin_create_credit_package(request: Request) -> JSONResponse:
 
         if existing:
             fields = ['name_fa', 'name_en', 'base_amount', 'bonus_percent',
-                       'total_credits', 'active', 'sort_order']
+                       'total_credits', 'model_id', 'active', 'sort_order']
             set_parts = []
             params = {'pid': pkg_id, 'now': now}
             for f in fields:
@@ -905,9 +905,9 @@ async def admin_create_credit_package(request: Request) -> JSONResponse:
             await session.execute(
                 sqlalchemy.text(
                     "INSERT INTO credit_packages (id, name_fa, name_en, base_amount, bonus_percent, "
-                    "total_credits, active, sort_order) "
+                    "total_credits, model_id, active, sort_order) "
                     "VALUES (:id, :name_fa, :name_en, :base_amount, :bonus_percent, "
-                    ":total_credits, :active, :sort_order)"
+                    ":total_credits, :model_id, :active, :sort_order)"
                 ),
                 {
                     'id': pkg_id,
@@ -916,6 +916,7 @@ async def admin_create_credit_package(request: Request) -> JSONResponse:
                     'base_amount': payload.get('base_amount', 0),
                     'bonus_percent': payload.get('bonus_percent', 0),
                     'total_credits': payload.get('total_credits', 0),
+                    'model_id': payload.get('model_id'),
                     'active': payload.get('active', True),
                     'sort_order': payload.get('sort_order', 0),
                 }

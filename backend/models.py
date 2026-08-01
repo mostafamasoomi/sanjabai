@@ -316,7 +316,13 @@ class Plan(Base):
 
 
 class CreditPackage(Base):
-    """Pre-paid credit packages with optional bonus."""
+    """Pre-paid credit packages with optional bonus.
+
+    ``model_id`` is optional display metadata (which model this bundle is
+    framed around, e.g. "20M tokens of mimo") -- it does not change the
+    checkout math, which still charges and credits ``total_credits`` 1:1.
+    See migrations/0018_credit_package_model_label.sql.
+    """
     __tablename__ = 'credit_packages'
     id: Mapped[str] = mapped_column(primary_key=True)
     name_fa: Mapped[str]
@@ -324,6 +330,7 @@ class CreditPackage(Base):
     base_amount: Mapped[int] = mapped_column(default=0)
     bonus_percent: Mapped[int] = mapped_column(default=0)
     total_credits: Mapped[int] = mapped_column(default=0)
+    model_id: Mapped[str | None] = mapped_column(sqlalchemy.ForeignKey('model_catalog.id', ondelete='SET NULL'), nullable=True)
     active: Mapped[bool] = mapped_column(default=True)
     sort_order: Mapped[int] = mapped_column(default=0)
     created_at: Mapped[datetime] = mapped_column(default=_utcnow)

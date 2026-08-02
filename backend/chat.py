@@ -787,6 +787,7 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
             # P3: Fire background auto-memory extraction
             _fire_memory_extraction(uid, payload_dict.get('messages', []))
             return Response(content=json.dumps(resp_data), status_code=200, media_type='application/json')
+        await _release_reservation(reservation, uid, 'upstream_error')
         return Response(content=r.content, status_code=r.status_code, media_type='application/json')
     except Exception as e:
         logger.warning(f"chat gateway error uid={uid} model={payload_dict.get('model')}: {e}")
@@ -896,6 +897,7 @@ async def chat_with_file(
             # P3: Fire background auto-memory extraction
             _fire_memory_extraction(uid, msgs)
             return Response(content=json.dumps(resp_data), status_code=200, media_type='application/json')
+        await _release_reservation(reservation, uid, 'upstream_error')
         return Response(content=r.content, status_code=r.status_code, media_type='application/json')
     except Exception as e:
         logger.warning(f"chat_with_file gateway error uid={uid} model={selected_model}: {e}")
@@ -1369,6 +1371,15 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
                     logger.warning(f"BillingService.release after success failed uid={uid}: {_rel_e}")
             resp = Response(content=json.dumps(resp_data), status_code=200, media_type='application/json')
         else:
+            if reservation:
+                try:
+                    async with async_session() as _rel_session:
+                        _rel_repo = SqlBillingRepo(_rel_session)
+                        _rel_svc = BillingService(_rel_repo)
+                        await _rel_svc.release(reservation['reservation_id'])
+                        await _rel_session.commit()
+                except Exception as _rel_e:
+                    logger.warning(f"BillingService.release on upstream error failed uid={uid}: {_rel_e}")
             resp = Response(content=r.content, status_code=r.status_code, media_type='application/json')
         # P3: Fire background auto-memory extraction
         _fire_memory_extraction(uid, payload_dict.get('messages', []))

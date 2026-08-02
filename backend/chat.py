@@ -482,8 +482,8 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
         logger.warning(f"_record_usage price lookup failed model={model} uid={uid}: {e}")
 
     if price_row:
-        inp_rate = float(price_row.input_per_million or 0)
-        out_rate = float(price_row.output_per_million or 0)
+        inp_rate = int(price_row.input_per_million or 0)
+        out_rate = int(price_row.output_per_million or 0)
         cost = max(1, int((input_tokens * inp_rate + output_tokens * out_rate + 500_000) // 1_000_000))
     else:
         cost = max(1, total_tokens // 1000)

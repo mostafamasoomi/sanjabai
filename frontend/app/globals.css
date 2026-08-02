@@ -589,7 +589,7 @@ img, svg, video, canvas {
 .compare-picker-col { flex: 1; display: flex; flex-direction: column; gap: 0.4rem; }
 .compare-picker-label { display: flex; }
 .compare-picker-badge { padding: 0.15rem 0.5rem; border-radius: var(--radius-full); font-size: 0.7rem; font-weight: 700; background: var(--accent-dim); color: var(--accent); }
-.compare-picker-badge.b { background: rgba(168,85,247,0.12); color: var(--accent-purple); }
+.compare-picker-badge.b { background: rgba(63,125,82,0.12); color: var(--accent-purple); }
 .compare-vs { display: flex; align-items: center; justify-content: center; padding: 0 0.5rem; color: var(--text-dim); font-weight: 700; font-size: 0.8rem; }
 .compare-input-row { display: flex; gap: 0.6rem; align-items: flex-start; margin-top: var(--space-4); }
 .compare-submit-btn { flex-shrink: 0; }

@@ -31,6 +31,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from database import async_session, BASE_URL
+from services.billing import SqlBillingRepo
 from models import (
     HermesOffering, HermesSkillCatalog, HermesOrder, HermesServer,
     HermesServerSkill, HermesAgentEvent, ApiKey, Payment, Ledger,
@@ -870,6 +871,7 @@ async def run_renewal_cycle() -> dict:
             )
         )
         servers = [row[0] for row in res.fetchall()]
+        repo = SqlBillingRepo(session)
 
         for server in servers:
             month_key = now.strftime('%Y-%m')
@@ -883,39 +885,38 @@ async def run_renewal_cycle() -> dict:
                 server.paid_through_at = server.paid_through_at + timedelta(days=30)
                 continue
 
-            bal_res = await session.execute(
-                sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid'),
-                {'uid': server.user_id},
-            )
-            current_balance = bal_res.fetchone().balance or 0
+            async with repo.lock_wallet_for_update(server.user_id):
+                wallet = await repo.ensure_wallet(server.user_id)
+                current_balance = wallet['balance']
 
-            if current_balance < server.monthly_price_irt:
-                grace_deadline = server.paid_through_at + timedelta(days=7)
-                if now >= grace_deadline:
-                    server.status = 'suspended'
-                    server.updated_at = now
-                    session.add(Notification(
-                        user_id=server.user_id, type='hermes',
-                        title='سرور هرمس شما به دلیل کسری موجودی متوقف شد',
-                        body='برای فعال‌سازی مجدد، کیف پول خود را شارژ کنید.',
-                    ))
-                    suspended += 1
-                else:
-                    session.add(Notification(
-                        user_id=server.user_id, type='hermes',
-                        title='موجودی کیف پول برای تمدید سرور هرمس کافی نیست',
-                        body=f'لطفاً تا {grace_deadline.date().isoformat()} کیف پول را شارژ کنید تا سرور متوقف نشود.',
-                    ))
-                continue
+                if current_balance < server.monthly_price_irt:
+                    grace_deadline = server.paid_through_at + timedelta(days=7)
+                    if now >= grace_deadline:
+                        server.status = 'suspended'
+                        server.updated_at = now
+                        session.add(Notification(
+                            user_id=server.user_id, type='hermes',
+                            title='سرور هرمس شما به دلیل کسری موجودی متوقف شد',
+                            body='برای فعال‌سازی مجدد، کیف پول خود را شارژ کنید.',
+                        ))
+                        suspended += 1
+                    else:
+                        session.add(Notification(
+                            user_id=server.user_id, type='hermes',
+                            title='موجودی کیف پول برای تمدید سرور هرمس کافی نیست',
+                            body=f'لطفاً تا {grace_deadline.date().isoformat()} کیف پول را شارژ کنید تا سرور متوقف نشود.',
+                        ))
+                    continue
 
-            new_balance = current_balance - server.monthly_price_irt
-            session.add(Ledger(
-                user_id=server.user_id, amount=-server.monthly_price_irt, balance_after=new_balance,
-                reason=f'تمدید ماهانه سرور هرمس #{server.id}', idempotency_key=idem_key,
-            ))
-            server.paid_through_at = server.paid_through_at + timedelta(days=30)
-            server.updated_at = now
-            charged += 1
+                new_balance = current_balance - server.monthly_price_irt
+                await repo.set_wallet_balance(server.user_id, new_balance)
+                session.add(Ledger(
+                    user_id=server.user_id, amount=-server.monthly_price_irt, balance_after=new_balance,
+                    reason=f'تمدید ماهانه سرور هرمس #{server.id}', idempotency_key=idem_key,
+                ))
+                server.paid_through_at = server.paid_through_at + timedelta(days=30)
+                server.updated_at = now
+                charged += 1
 
         await session.commit()
 

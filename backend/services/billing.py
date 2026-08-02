@@ -282,21 +282,22 @@ async def credit_wallet(
     if idempotency_key is not None and await repo.ledger_has_key(idempotency_key):
         return
 
-    row = await repo.get_wallet(user_id)
-    if row is None:
-        await repo.create_wallet(user_id, amount.irt)
-        new_balance = amount.irt
-    else:
-        new_balance = row["balance"] + amount.irt
-        await repo.set_wallet_balance(user_id, new_balance)
+    async with repo.lock_wallet_for_update(user_id):
+        row = await repo.get_wallet(user_id)
+        if row is None:
+            await repo.create_wallet(user_id, amount.irt)
+            new_balance = amount.irt
+        else:
+            new_balance = row["balance"] + amount.irt
+            await repo.set_wallet_balance(user_id, new_balance)
 
-    await repo.append_ledger({
-        "user_id": user_id,
-        "amount": amount.irt,
-        "balance_after": new_balance,
-        "reason": reason,
-        "idempotency_key": idempotency_key,
-    })
+        await repo.append_ledger({
+            "user_id": user_id,
+            "amount": amount.irt,
+            "balance_after": new_balance,
+            "reason": reason,
+            "idempotency_key": idempotency_key,
+        })
 
 
 class MemoryBillingRepo:

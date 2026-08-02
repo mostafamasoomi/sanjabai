@@ -1,6 +1,7 @@
 """
 Tests for wallet, ledger, topup, and conversations
 """
+import types
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from tests.conftest import make_result, make_row
@@ -61,28 +62,84 @@ class TestLedger:
 
 class TestTopup:
     def test_topup_success(self, client, mock_async_session):
-        # topup() makes three sequential session.execute() calls against a
-        # *completed* payment order (looked up by payment_order_id) — the
-        # order row, a duplicate-ledger-entry check, then the current
-        # balance — each needing a different shaped result, so the fixture's
-        # single shared _execute_result isn't enough; override execute with
-        # a call-order-aware stand-in instead.
-        results = [
-            make_result(fetchone=make_row(id='po1', status='completed', amount=50000)),
-            make_result(fetchone=None),  # no duplicate ledger entry
-            make_result(fetchone=make_row(balance=10000)),
-        ]
+        # topup() now routes the actual wallet.balance mutation through
+        # services.billing.credit_wallet (SqlBillingRepo), which issues a
+        # richer query sequence than the old raw-SQL implementation did: a
+        # payment_orders lookup, this route's own duplicate-by-reason check,
+        # credit_wallet's ledger_has_key idempotency check, a FOR UPDATE
+        # wallet lock, a wallet select, a wallet balance update, and a final
+        # wallet re-read for the response. A fixed pop-list can't express
+        # that reliably, so use a small table-name-aware fake session
+        # instead (same pattern as tests/test_wallet_balance_charge.py's
+        # _FakeSession).
+        class _FakeTopupSession:
+            def __init__(self):
+                self.wallet = types.SimpleNamespace(user_id=1, balance=10000, reserved=0)
+                self.added = []
 
-        async def sequenced_execute(*args, **kwargs):
-            return results[sequenced_execute.calls.pop(0)]
-        sequenced_execute.calls = [0, 1, 2]
-        mock_async_session.execute = sequenced_execute
+            @staticmethod
+            def _table_name(stmt):
+                try:
+                    return stmt.table.name
+                except AttributeError:
+                    pass
+                try:
+                    for f in stmt.get_final_froms():
+                        name = getattr(f, "name", None)
+                        if name:
+                            return name
+                except Exception:
+                    pass
+                return None
+
+            async def execute(self, stmt, params=None, *a, **k):
+                result = MagicMock()
+                result.fetchone.return_value = None
+                text_sql = str(stmt)
+                if "payment_orders" in text_sql:
+                    result.fetchone.return_value = types.SimpleNamespace(
+                        id='po1', status='completed', amount=50000
+                    )
+                    return result
+                if "FROM ledger WHERE reason" in text_sql:
+                    return result  # no duplicate topup by reason
+                tname = self._table_name(stmt)
+                if tname == "ledger":
+                    return result  # credit_wallet's ledger_has_key(): no existing key
+                if tname == "wallet":
+                    if type(stmt).__name__ == "Update":
+                        p = stmt.compile().params
+                        if "balance" in p:
+                            self.wallet.balance = p["balance"]
+                    else:
+                        result.fetchone.return_value = (self.wallet,)
+                    return result
+                return result
+
+            def add(self, obj):
+                self.added.append(obj)
+
+            async def commit(self):
+                return None
+
+        fake = _FakeTopupSession()
+        mock_async_session.execute = fake.execute
+        mock_async_session.add = fake.add
+        mock_async_session.commit = fake.commit
 
         with patch('app.rds.get', new_callable=AsyncMock, return_value='1'), patch('app.rds.expire', new_callable=AsyncMock):
             response = client.post('/wallet/topup', json={'amount': 50000, 'payment_order_id': 'po1'},
                                    headers={'Authorization': 'Bearer valid'})
             assert response.status_code == 200
             assert response.json()['balance_after'] == 60000
+
+        # The core regression this test protects: wallet.balance itself is
+        # actually updated, not just a Ledger row appended.
+        assert fake.wallet.balance == 60000
+        ledger_rows = [o for o in fake.added if type(o).__name__ == "Ledger"]
+        assert len(ledger_rows) == 1
+        assert ledger_rows[0].amount == 50000
+        assert ledger_rows[0].idempotency_key == 'topup:po1'
 
     def test_topup_negative_amount(self, client):
         with patch('app.rds.get', new_callable=AsyncMock, return_value='1'), patch('app.rds.expire', new_callable=AsyncMock):

@@ -23,7 +23,7 @@ const config: Config = {
         secondary: 'var(--text-secondary)',
         muted: 'var(--text-muted)',
         'on-accent': 'var(--text-on-accent)',
-        // Accent — Persian indigo
+        // Accent — squirrel chestnut/amber
         accent: {
           DEFAULT: 'var(--accent)',
           hover: 'var(--accent-hover)',

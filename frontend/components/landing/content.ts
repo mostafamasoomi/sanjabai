@@ -176,6 +176,27 @@ export const FEATURES: Feature[] = [
     linkLabel: 'مستندات API',
   },
   {
+    icon: 'cpu',
+    title: 'حافظه‌ای که خودش می‌سازد',
+    desc: 'ترجیحات، پروژه‌ها و مهارت‌هایی که در گفتگو می‌گویید، خودکار به‌عنوان حافظه‌ی بلندمدت ذخیره می‌شود — از دفعه‌ی بعد لازم نیست دوباره توضیح دهید.',
+    href: '/memory',
+    linkLabel: 'مدیریت حافظه',
+  },
+  {
+    icon: 'palette',
+    title: 'خروجی آماده: پاورپوینت، Word و اسلاید',
+    desc: 'یک پرامپت بدهید، فایل PPTX، Word یا اسلاید Markdown آماده‌ی دانلود بگیرید — بدون باز کردن نرم‌افزار جدا.',
+    href: '/documents',
+    linkLabel: 'ساخت سند',
+  },
+  {
+    icon: 'calendar',
+    title: 'وظایف زمان‌بندی‌شده',
+    desc: 'یک پرامپت را روی بازه‌ی دلخواه (روزانه، هفتگی، هر چند ساعت) زمان‌بندی کنید و نتیجه را در داشبورد، ایمیل یا تلگرام دریافت کنید.',
+    href: '/tasks',
+    linkLabel: 'زمان‌بندی وظیفه',
+  },
+  {
     icon: 'chart',
     title: 'هزینه‌ی شفاف، بدون اشتراک ماهانه',
     desc: 'کیف پولتان را شارژ می‌کنید و هزینه‌ی هر درخواست به‌ازای توکن از همان کسر می‌شود. مصرف و مانده را لحظه‌ای در داشبورد می‌بینید.',
@@ -183,6 +204,114 @@ export const FEATURES: Feature[] = [
     linkLabel: 'داشبورد مصرف',
   },
 ]
+
+/* ── Capability showcase (memory / documents / scheduled tasks) ─────────────
+   Deeper, tabbed follow-up to the bento grid above for the three features
+   least obvious from their one-line card — each mockup below reuses the
+   real vocabulary from its own app page (categories, doc types, cron
+   presets, delivery channels) rather than inventing sample content. */
+
+export interface CapabilityTab {
+  id: string
+  icon: IconName
+  tabLabel: string
+  title: string
+  desc: string
+  href: string
+  linkLabel: string
+}
+
+export const CAPABILITY_TABS: CapabilityTab[] = [
+  {
+    id: 'memory',
+    icon: 'cpu',
+    tabLabel: 'حافظه‌ی بلندمدت',
+    title: 'یک‌بار بگویید، همیشه یادش بماند',
+    desc: 'وقتی ترجیح، پروژه یا مهارتی را در گفتگو ذکر می‌کنید، دستیار خودکار آن را دسته‌بندی و ذخیره می‌کند — در گفتگوهای بعدی دوباره لازم نیست از اول توضیح دهید.',
+    href: '/memory',
+    linkLabel: 'مدیریت حافظه',
+  },
+  {
+    id: 'documents',
+    icon: 'palette',
+    tabLabel: 'ساخت سند',
+    title: 'از پرامپت تا فایل آماده‌ی دانلود',
+    desc: 'یک موضوع بدهید، سه فرمت خروجی دارید: پاورپوینت، Word یا اسلاید Markdown — هرکدام با ساختار حرفه‌ای، بدون باز کردن نرم‌افزار دیگری.',
+    href: '/documents',
+    linkLabel: 'ساخت سند',
+  },
+  {
+    id: 'tasks',
+    icon: 'calendar',
+    tabLabel: 'وظایف زمان‌بندی‌شده',
+    title: 'یک بار زمان‌بندی کنید، همیشه اجرا شود',
+    desc: 'پرامپت را روی یک الگوی زمانی ثابت بگذارید تا خودکار اجرا شود و نتیجه‌اش را در داشبورد، ایمیل یا تلگرام دریافت کنید.',
+    href: '/tasks',
+    linkLabel: 'زمان‌بندی وظیفه',
+  },
+]
+
+/** app/memory/page.tsx → CATEGORIES. Sample text is illustrative, the same
+ * way the hero's PREVIEW_THREADS are — not a claim about any real user. */
+export const MEMORY_SAMPLES = [
+  { category: 'ترجیحات', text: 'پاسخ‌ها را کوتاه و فهرست‌وار بده' },
+  { category: 'پروژه‌ها', text: 'در حال توسعه‌ی یک اپلیکیشن حسابداری هستم' },
+  { category: 'مهارت‌ها', text: 'با پایتون و SQL کار می‌کنم' },
+] as const
+
+/** app/documents/page.tsx → DOC_TYPES (labels/descriptions reused verbatim). */
+export const DOCUMENT_TYPES = [
+  { ext: 'PPTX', label: 'پاورپوینت', desc: 'ارائه‌ی حرفه‌ای با اسلایدهای آماده' },
+  { ext: 'DOCX', label: 'Word', desc: 'سند متنی با ساختار حرفه‌ای' },
+  { ext: 'MD', label: 'اسلاید Markdown', desc: 'خروجی Marp / reveal.js' },
+] as const
+
+/** app/tasks/page.tsx → CRON_PRESETS + DELIVERY_CHANNELS. */
+export const TASK_SAMPLES = [
+  { title: 'خلاصه‌ی اخبار روز', schedule: 'هر روز ساعت ۹ صبح', channel: 'تلگرام' },
+  { title: 'گزارش هفتگی وضعیت', schedule: 'هر هفته (دوشنبه)', channel: 'ایمیل' },
+] as const
+
+/* ── Comparison ───────────────────────────────────────────────────────────
+   Every "sanjhubai" cell restates a claim already established elsewhere in
+   this file (STATS, PRICING_COLUMNS, HERO_TRUST, FAQ) — nothing new. The
+   "subscription" column deliberately stays qualitative and unnamed: no
+   competitor, no invented number, just the general pattern those services
+   share. */
+
+export interface ComparisonRow {
+  label: string
+  sanjhubai: string
+  subscription: string
+}
+
+export const COMPARISON_ROWS: ComparisonRow[] = [
+  {
+    label: 'تعداد مدل‌های در دسترس',
+    sanjhubai: '۲۳ مدل، با یک حساب',
+    subscription: 'معمولاً محدود به یک خانواده‌ی مدل',
+  },
+  {
+    label: 'مدل پرداخت',
+    sanjhubai: 'پرداخت به‌ازای مصرف، از کیف پول',
+    subscription: 'اشتراک ماهانه‌ی ثابت، حتی در ماه‌های کم‌مصرف',
+  },
+  {
+    label: 'اعتبار باقی‌مانده',
+    sanjhubai: 'بدون انقضا — هرچه شارژ کنید می‌ماند',
+    subscription: 'معمولاً اعتبار استفاده‌نشده‌ی هر ماه باطل می‌شود',
+  },
+  {
+    label: 'دسترسی از ایران',
+    sanjhubai: 'بدون نیاز به فیلترشکن، پرداخت ریالی',
+    subscription: 'معمولاً نیاز به فیلترشکن و کارت بین‌المللی',
+  },
+  {
+    label: 'اتصال به محصول شما',
+    sanjhubai: 'API سازگار با OpenAI؛ فقط آدرس پایه را عوض کنید',
+    subscription: 'بسته به سرویس، متفاوت',
+  },
+] as const
 
 /* ── Steps ────────────────────────────────────────────────────────────────── */
 

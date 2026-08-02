@@ -53,8 +53,8 @@ export default function LoginPage() {
           <div
             className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-4"
             style={{
-              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-              boxShadow: '0 0 32px rgba(99, 102, 241, 0.4), 0 0 64px rgba(99, 102, 241, 0.15)',
+              background: 'linear-gradient(135deg, var(--accent), var(--accent-purple))',
+              boxShadow: 'var(--shadow-glow)',
             }}
           >
             <Icon name="chat" size={26} className="text-white" />

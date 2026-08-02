@@ -17,6 +17,13 @@ export function ComparisonSection() {
           <p className="lp-lead">تفاوت سنجوبای با سرویس‌های اشتراکی رایج، در یک نگاه.</p>
         </header>
 
+        {/* The table is wider than a phone screen (3 columns of real content
+            don't fit in ~350px) — .lp-compare scrolls horizontally, but a
+            scroll affordance nobody notices is the same as no affordance, so
+            this is a plain-text hint rather than a subtle edge gradient. Only
+            shown under the breakpoint where scrolling is actually needed. */}
+        <p className="lp-compare__hint">برای مقایسه‌ی کامل، جدول را به چپ بکشید ⟵</p>
+
         <div className="lp-compare">
           <table className="lp-compare__table">
             <thead>

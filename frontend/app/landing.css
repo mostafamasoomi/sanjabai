@@ -1992,11 +1992,28 @@ a.lp-pill:hover {
    Comparison table
    ═══════════════════════════════════════════════════════════════════════════ */
 
+.lp-compare__hint {
+  display: none;
+  margin: clamp(2rem, 4vw, 3rem) 0 0.75rem;
+  font-size: 0.8rem;
+  color: var(--lp-ink-3);
+  text-align: center;
+}
+
 .lp-compare {
   margin-block-start: clamp(2rem, 4vw, 3rem);
   overflow-x: auto;
   border-radius: var(--lp-r-lg);
   border: 1px solid var(--lp-line);
+}
+
+@media (max-width: 640px) {
+  .lp-compare__hint {
+    display: block;
+  }
+  .lp-compare {
+    margin-block-start: 0;
+  }
 }
 
 .lp-compare__table {

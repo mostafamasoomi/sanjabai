@@ -33,15 +33,21 @@ function Rotator() {
   }, [])
 
   return (
-    // Every variant is stacked in the same grid cell, so the element is as
-    // wide as the longest word and the headline never reflows mid-rotation.
-    // Only the active one is exposed to assistive tech.
     <span className="lp-hero__rotator">
-      {HERO_ROTATION.map((word, i) => (
-        <span key={word} data-active={i === index} aria-hidden={i !== index}>
-          {word}
-        </span>
-      ))}
+      {/* Invisible stack sizes the box to the widest word, so swapping the
+          visible word below never reflows the headline. */}
+      <span className="lp-hero__rotator-sizer" aria-hidden="true">
+        {HERO_ROTATION.map((word) => (
+          <span key={word}>{word}</span>
+        ))}
+      </span>
+      {/* Only the current word is ever actually mounted -- a key-based
+          remount plus a CSS entrance animation, not a cross-fade of several
+          stacked, simultaneously-opaque elements -- so two different words
+          can never be visible at once. */}
+      <span key={index} className="lp-hero__rotator-word">
+        {HERO_ROTATION[index]}
+      </span>
     </span>
   )
 }

@@ -793,9 +793,15 @@ a.lp-pill:hover {
   text-wrap: balance;
 }
 
-/* The rotating phrase owns its own line: a block-level grid whose variants are
-   all stacked in one cell. That way the headline above it never reflows and
-   the swapped phrase can't leave a dangling word beside a gap. */
+/* The rotating phrase owns its own line: a block-level grid. A previous
+   version kept every variant mounted at once (toggling opacity, delaying the
+   fade-in to avoid overlapping the fade-out) — under real-world jank that
+   timing-based sequencing could still let two differently-worded, mixed-
+   script phrases render simultaneously. Only one word is ever actually
+   mounted now (see Hero.tsx's Rotator): an invisible sizer stack still holds
+   the box at the widest word's width so the headline never reflows, but the
+   visible word is a single element swapped via React `key`, so two words
+   existing in the DOM at once is structurally impossible, not just unlikely. */
 .lp-hero__rotator {
   display: grid;
   justify-items: center;
@@ -805,24 +811,35 @@ a.lp-pill:hover {
   color: transparent;
 }
 
-/* All variants occupy the same grid cell: the element sizes to the widest
-   word, so swapping the active one never reflows the headline. Transitions
-   (not an animation) so each change re-triggers without a remount. The
-   outgoing phrase fades out with no delay; the incoming one delays its
-   fade-in by the same duration so the two never sit at overlapping opacity
-   at once — a straight crossfade left two differently-worded, mixed-script
-   phrases visibly stacked mid-swap. */
-.lp-hero__rotator > span {
-  grid-area: 1 / 1;
-  opacity: 0;
-  transform: translateY(0.35em);
-  transition: opacity 0.32s var(--lp-ease), transform 0.32s var(--lp-ease);
+.lp-hero__rotator-sizer {
+  display: grid;
+  visibility: hidden;
 }
 
-.lp-hero__rotator > span[data-active='true'] {
-  opacity: 1;
-  transform: none;
-  transition-delay: 0.32s;
+.lp-hero__rotator-sizer > span {
+  grid-area: 1 / 1;
+}
+
+.lp-hero__rotator-word {
+  grid-area: 1 / 1;
+  animation: lp-rotator-in 0.32s var(--lp-ease);
+}
+
+@keyframes lp-rotator-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.35em);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-hero__rotator-word {
+    animation: none;
+  }
 }
 
 .lp-hero__lead {

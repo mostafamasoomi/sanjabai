@@ -447,7 +447,7 @@ async def _web_search(query: str, max_results: int = 5) -> str:
     return ''
 
 
-async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any], usage: dict[str, Any]) -> dict[str, Any]:
+async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any], usage: dict[str, Any], idempotency_key: str | None = None) -> dict[str, Any]:
     """Shared billing logic for tracking and billing usage. Returns cost info dict."""
     result = {'input_tokens': 0, 'output_tokens': 0, 'cost': 0, 'balance_after': 0}
     total_tokens = usage.get('total_tokens', 0)
@@ -507,7 +507,7 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
         if current >= cost:
             new_balance = current - cost
             await _repo.set_wallet_balance(uid, new_balance)
-            entry = Ledger(user_id=uid, amount=-cost, balance_after=new_balance, reason=f'مصرف {model}')
+            entry = Ledger(user_id=uid, amount=-cost, balance_after=new_balance, reason=f'مصرف {model}', idempotency_key=idempotency_key)
             session.add(entry)
         else:
             new_balance = current
@@ -540,9 +540,11 @@ async def _track_usage(request: Request, payload: dict[str, Any], response_data:
     usage = response_data.get('usage', {})
     if usage.get('total_tokens', 0) <= 0:
         return {}
+    resp_id = response_data.get('id')
+    idempotency_key = f"usage:{resp_id}" if resp_id else None
     try:
         async with async_session() as session:
-            cost_info = await _record_usage(session, uid, payload, usage)
+            cost_info = await _record_usage(session, uid, payload, usage, idempotency_key=idempotency_key)
             await session.commit()
             return cost_info
     except Exception as e:

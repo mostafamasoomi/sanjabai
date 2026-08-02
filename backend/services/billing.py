@@ -246,6 +246,19 @@ class SqlBillingRepo:
             .values(status="settled", settled_at=_now())
         )
 
+    async def mark_reservation_released(self, reservation_id: str, reason: Optional[str] = None) -> bool:
+        from models import WalletReservation
+        from sqlalchemy import update
+        result = await self.session.execute(
+            update(WalletReservation)
+            .where(
+                WalletReservation.reservation_id == reservation_id,
+                WalletReservation.status == "reserved",
+            )
+            .values(status="released", released_at=_now(), reason=reason)
+        )
+        return result.rowcount > 0
+
 
 async def credit_wallet(
     repo: Any,
@@ -269,21 +282,22 @@ async def credit_wallet(
     if idempotency_key is not None and await repo.ledger_has_key(idempotency_key):
         return
 
-    row = await repo.get_wallet(user_id)
-    if row is None:
-        await repo.create_wallet(user_id, amount.irt)
-        new_balance = amount.irt
-    else:
-        new_balance = row["balance"] + amount.irt
-        await repo.set_wallet_balance(user_id, new_balance)
+    async with repo.lock_wallet_for_update(user_id):
+        row = await repo.get_wallet(user_id)
+        if row is None:
+            await repo.create_wallet(user_id, amount.irt)
+            new_balance = amount.irt
+        else:
+            new_balance = row["balance"] + amount.irt
+            await repo.set_wallet_balance(user_id, new_balance)
 
-    await repo.append_ledger({
-        "user_id": user_id,
-        "amount": amount.irt,
-        "balance_after": new_balance,
-        "reason": reason,
-        "idempotency_key": idempotency_key,
-    })
+        await repo.append_ledger({
+            "user_id": user_id,
+            "amount": amount.irt,
+            "balance_after": new_balance,
+            "reason": reason,
+            "idempotency_key": idempotency_key,
+        })
 
 
 class MemoryBillingRepo:
@@ -355,6 +369,14 @@ class MemoryBillingRepo:
         if r is not None:
             r["status"] = "settled"
             r["charged_amount"] = int(charged_amount)
+
+    async def mark_reservation_released(self, reservation_id: str, reason: Optional[str] = None) -> bool:
+        r = self.reservations.get(reservation_id)
+        if r is None or r.get("status") != "reserved":
+            return False
+        r["status"] = "released"
+        r["released_reason"] = reason
+        return True
 
     # ── usage ──
     async def append_usage_event(self, data: dict) -> None:
@@ -514,9 +536,12 @@ class BillingService:
             )
         hold = resv["hold_amount"]
         user_id = resv["user_id"]
-        wallet = await self.repo.ensure_wallet(user_id)
-        new_reserved = wallet["reserved"] - hold
-        await self.repo.set_wallet_reserved(user_id, new_reserved)
+        async with self.repo.lock_wallet_for_update(user_id):
+            released = await self.repo.mark_reservation_released(reservation_id, reason)
+            if released:
+                wallet = await self.repo.ensure_wallet(user_id)
+                new_reserved = wallet["reserved"] - hold
+                await self.repo.set_wallet_reserved(user_id, new_reserved)
         resv["status"] = "released"
         resv["released_reason"] = reason
         return resv

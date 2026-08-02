@@ -182,7 +182,7 @@ async def _bill_embedding_usage(
 ) -> None:
     """Record embedding usage in rag_embedding_usage and usage_events."""
     # Cost: $0.02/1M tokens ≈ 100 IRT/1M tokens (rough estimate)
-    charged = max(1, int(tokens * 100 / 1_000_000))
+    charged = max(1, (tokens * 100 + 500_000) // 1_000_000)
     request_id = f'emb-{secrets.token_hex(16)}'
 
     try:

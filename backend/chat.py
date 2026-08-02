@@ -234,7 +234,9 @@ async def _release_reservation(reservation: dict | None, uid: int, label: str = 
         return
     try:
         async with async_session() as s:
-            await SqlBillingRepo(s).release(reservation['reservation_id'])
+            _rel_repo = SqlBillingRepo(s)
+            _rel_svc = BillingService(_rel_repo)
+            await _rel_svc.release(reservation['reservation_id'])
             await s.commit()
     except Exception as e:
         logger.warning(f"release_reservation failed uid={uid} {label}: {e}")
@@ -445,7 +447,7 @@ async def _web_search(query: str, max_results: int = 5) -> str:
     return ''
 
 
-async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any], usage: dict[str, Any]) -> dict[str, Any]:
+async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any], usage: dict[str, Any], idempotency_key: str | None = None) -> dict[str, Any]:
     """Shared billing logic for tracking and billing usage. Returns cost info dict."""
     result = {'input_tokens': 0, 'output_tokens': 0, 'cost': 0, 'balance_after': 0}
     total_tokens = usage.get('total_tokens', 0)
@@ -480,8 +482,8 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
         logger.warning(f"_record_usage price lookup failed model={model} uid={uid}: {e}")
 
     if price_row:
-        inp_rate = float(price_row.input_per_million or 0)
-        out_rate = float(price_row.output_per_million or 0)
+        inp_rate = int(price_row.input_per_million or 0)
+        out_rate = int(price_row.output_per_million or 0)
         cost = max(1, int((input_tokens * inp_rate + output_tokens * out_rate + 500_000) // 1_000_000))
     else:
         cost = max(1, total_tokens // 1000)
@@ -505,7 +507,7 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
         if current >= cost:
             new_balance = current - cost
             await _repo.set_wallet_balance(uid, new_balance)
-            entry = Ledger(user_id=uid, amount=-cost, balance_after=new_balance, reason=f'مصرف {model}')
+            entry = Ledger(user_id=uid, amount=-cost, balance_after=new_balance, reason=f'مصرف {model}', idempotency_key=idempotency_key)
             session.add(entry)
         else:
             new_balance = current
@@ -538,9 +540,11 @@ async def _track_usage(request: Request, payload: dict[str, Any], response_data:
     usage = response_data.get('usage', {})
     if usage.get('total_tokens', 0) <= 0:
         return {}
+    resp_id = response_data.get('id')
+    idempotency_key = f"usage:{resp_id}" if resp_id else None
     try:
         async with async_session() as session:
-            cost_info = await _record_usage(session, uid, payload, usage)
+            cost_info = await _record_usage(session, uid, payload, usage, idempotency_key=idempotency_key)
             await session.commit()
             return cost_info
     except Exception as e:
@@ -785,6 +789,7 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
             # P3: Fire background auto-memory extraction
             _fire_memory_extraction(uid, payload_dict.get('messages', []))
             return Response(content=json.dumps(resp_data), status_code=200, media_type='application/json')
+        await _release_reservation(reservation, uid, 'upstream_error')
         return Response(content=r.content, status_code=r.status_code, media_type='application/json')
     except Exception as e:
         logger.warning(f"chat gateway error uid={uid} model={payload_dict.get('model')}: {e}")
@@ -894,6 +899,7 @@ async def chat_with_file(
             # P3: Fire background auto-memory extraction
             _fire_memory_extraction(uid, msgs)
             return Response(content=json.dumps(resp_data), status_code=200, media_type='application/json')
+        await _release_reservation(reservation, uid, 'upstream_error')
         return Response(content=r.content, status_code=r.status_code, media_type='application/json')
     except Exception as e:
         logger.warning(f"chat_with_file gateway error uid={uid} model={selected_model}: {e}")
@@ -1367,6 +1373,15 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
                     logger.warning(f"BillingService.release after success failed uid={uid}: {_rel_e}")
             resp = Response(content=json.dumps(resp_data), status_code=200, media_type='application/json')
         else:
+            if reservation:
+                try:
+                    async with async_session() as _rel_session:
+                        _rel_repo = SqlBillingRepo(_rel_session)
+                        _rel_svc = BillingService(_rel_repo)
+                        await _rel_svc.release(reservation['reservation_id'])
+                        await _rel_session.commit()
+                except Exception as _rel_e:
+                    logger.warning(f"BillingService.release on upstream error failed uid={uid}: {_rel_e}")
             resp = Response(content=r.content, status_code=r.status_code, media_type='application/json')
         # P3: Fire background auto-memory extraction
         _fire_memory_extraction(uid, payload_dict.get('messages', []))

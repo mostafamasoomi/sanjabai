@@ -14,6 +14,8 @@ from pydantic import BaseModel
 from database import async_session
 from models import Ledger
 from dependencies import _get_user_id
+from services.billing import SqlBillingRepo, credit_wallet
+from services.money import Money
 
 router = APIRouter()
 
@@ -89,14 +91,13 @@ async def topup(request: Request, payload: TopupRequest) -> JSONResponse:
         )
         if dup.fetchone():
             return JSONResponse({'detail': 'پرداخت قبلاً ثبت شده است'}, status_code=409)
-        res = await session.execute(
-            sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid'),
-            {'uid': uid}
+        repo = SqlBillingRepo(session)
+        await credit_wallet(
+            repo, uid, Money(pay_row.amount),
+            reason=f'topup:{payload.payment_order_id}',
+            idempotency_key=f'topup:{payload.payment_order_id}',
         )
-        row = res.fetchone()
-        current = row.balance if row else 0
-        new_balance = current + pay_row.amount
-        entry = Ledger(user_id=uid, amount=pay_row.amount, balance_after=new_balance, reason=f'topup:{payload.payment_order_id}')
-        session.add(entry)
+        wallet_row = await repo.get_wallet(uid)
+        new_balance = wallet_row['balance'] if wallet_row else 0
         await session.commit()
     return JSONResponse({'status': 'ok', 'balance_after': new_balance})

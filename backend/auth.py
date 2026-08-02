@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from database import async_session, rds, BASE_URL
-from models import User, Ledger, Quota
+from models import User, Quota
 from dependencies import (
     SESSION_TTL, SESSION_COOKIE_NAME, _hash_password, _verify_password, _gen_token,
     _create_session, _get_session, _get_session_user_id, _set_session_cookie,
@@ -186,15 +186,13 @@ async def signup(payload: AuthSignup) -> JSONResponse:
                         User.__table__.update().where(User.id == user.id),
                         {'referred_by': referrer.id}
                     )
-                    bonus = Ledger(user_id=referrer.id, amount=5000, balance_after=0,
-                                   reason=f'پاداش دعوت کاربر {user.email}')
-                    bal_res = await s2.execute(
-                        sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid'),
-                        {'uid': referrer.id}
+                    from services.billing import SqlBillingRepo, credit_wallet
+                    from services.money import Money
+                    await credit_wallet(
+                        SqlBillingRepo(s2), referrer.id, Money(5000),
+                        reason=f'پاداش دعوت کاربر {user.email}',
+                        idempotency_key=f'referral-bonus:{user.id}',
                     )
-                    bal_row = bal_res.fetchone()
-                    bonus.balance_after = (bal_row.balance if bal_row else 0) + 5000
-                    s2.add(bonus)
                     await s2.commit()
         quota = Quota(user_id=user.id, daily_limit=200000, used_today=0, reset_at=(datetime.now(timezone.utc) + timedelta(days=1)).replace(tzinfo=None))
         session.add(quota)

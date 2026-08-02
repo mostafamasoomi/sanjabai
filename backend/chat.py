@@ -234,7 +234,9 @@ async def _release_reservation(reservation: dict | None, uid: int, label: str = 
         return
     try:
         async with async_session() as s:
-            await SqlBillingRepo(s).release(reservation['reservation_id'])
+            _rel_repo = SqlBillingRepo(s)
+            _rel_svc = BillingService(_rel_repo)
+            await _rel_svc.release(reservation['reservation_id'])
             await s.commit()
     except Exception as e:
         logger.warning(f"release_reservation failed uid={uid} {label}: {e}")

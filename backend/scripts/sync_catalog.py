@@ -4,12 +4,12 @@ import asyncio, asyncpg, yaml, json, httpx
 from datetime import datetime, timezone
 
 # Configuration paths and URLs (adjust as needed)
-LITELLM_CONFIG_PATH = "/root/sanjhubai/backend/litellm_config.yaml" # Adjusted path
-DATABASE_URL = "postgresql://sanjhubai:sanjhubai@sanjhubai_pg:5432/sanjhubai" # Use internal Docker service name
+LITELLM_CONFIG_PATH = "/root/sanjabai/backend/litellm_config.yaml" # Adjusted path
+DATABASE_URL = "postgresql://sanjabai:sanjabai@sanjabai_pg:5432/sanjabai" # Use internal Docker service name
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "sk-or-...") # For fetching latest prices
 
-# LiteLLM config cache - this is for sanjhubai_litellm service, not sanjhubai_api
-# sanjhubai_api reads from model_catalog, which gets data from here
+# LiteLLM config cache - this is for sanjabai_litellm service, not sanjabai_api
+# sanjabai_api reads from model_catalog, which gets data from here
 async def get_litellm_models_from_config():
     try:
         with open(LITELLM_CONFIG_PATH, 'r') as f:

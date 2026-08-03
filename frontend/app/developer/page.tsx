@@ -25,7 +25,7 @@ const CODE_EXAMPLES = {
 
 client = OpenAI(
     api_key="YOUR_API_KEY",
-    base_url="https://sanjhubai.ir/v1"
+    base_url="https://sanjabai.ir/v1"
 )
 
 response = client.chat.completions.create(
@@ -41,7 +41,7 @@ print(response.choices[0].message.content)`,
   },
   curl: {
     label: 'cURL',
-    code: `curl https://sanjhubai.ir/v1/chat/completions \\
+    code: `curl https://sanjabai.ir/v1/chat/completions \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -d '{
@@ -59,7 +59,7 @@ print(response.choices[0].message.content)`,
 
 const client = new OpenAI({
   apiKey: "YOUR_API_KEY",
-  baseURL: "https://sanjhubai.ir/v1",
+  baseURL: "https://sanjabai.ir/v1",
 });
 
 const response = await client.chat.completions.create({
@@ -242,7 +242,7 @@ export default function DeveloperPage() {
             display: 'block', direction: 'ltr', fontFamily: 'var(--font-mono)',
             fontSize: 15, fontWeight: 700, color: 'var(--accent)',
           }}>
-            https://sanjhubai.ir/v1
+            https://sanjabai.ir/v1
           </code>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '6px 0 0' }}>
             API سازگار با فرمت OpenAI — بدون تغییر در کد اصلی ادغام دهید.

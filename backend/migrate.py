@@ -1,4 +1,4 @@
-"""Idempotent SQL migration runner for Sanjhubai backend."""
+"""Idempotent SQL migration runner for Sanjabai backend."""
 from __future__ import annotations
 import asyncio
 from pathlib import Path
@@ -57,7 +57,7 @@ async def migrate(engine: AsyncEngine) -> None:
 
 async def main() -> None:
     import os
-    engine = create_async_engine(os.getenv("DATABASE_URL", "postgresql+asyncpg://sanjhubai:sanjhubai@127.0.0.1:5432/sanjhubai"), echo=False)
+    engine = create_async_engine(os.getenv("DATABASE_URL", "postgresql+asyncpg://sanjabai:sanjabai@127.0.0.1:5432/sanjabai"), echo=False)
     await migrate(engine); await engine.dispose(); print("migrations done")
 
 if __name__ == "__main__": asyncio.run(main())

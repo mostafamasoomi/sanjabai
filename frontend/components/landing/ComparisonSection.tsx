@@ -30,7 +30,7 @@ export function ComparisonSection() {
               <tr>
                 <th scope="col" />
                 <th scope="col" className="lp-compare__col--brand">
-                  <span dir="ltr">Sanjhubai</span>
+                  <span dir="ltr">Sanjabai</span>
                 </th>
                 <th scope="col">سرویس‌های اشتراکی رایج</th>
               </tr>
@@ -42,7 +42,7 @@ export function ComparisonSection() {
                   <td className="lp-compare__col--brand">
                     <span className="lp-compare__value">
                       <CheckGlyph size={14} />
-                      {row.sanjhubai}
+                      {row.sanjabai}
                     </span>
                   </td>
                   <td>{row.subscription}</td>

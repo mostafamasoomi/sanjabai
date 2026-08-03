@@ -1,4 +1,4 @@
-# Sanjhubai Design System
+# Sanjabai Design System
 
 > Auto-generated from `:root` CSS variables in `app/globals.css`.
 > Last updated: 2026-07-18
@@ -12,7 +12,7 @@
 
 ## Identity
 
-- **Product**: Sanjhubai — Persian AI platform (پلتفرم هوش مصنوعی فارسی)
+- **Product**: Sanjabai — Persian AI platform (پلتفرم هوش مصنوعی فارسی)
 - **Direction**: RTL (`dir="rtl"`)
 - **Language**: Farsi (`lang="fa"`)
 - **Theme**: Dark-first

@@ -70,7 +70,7 @@ export default function MemoryPage() {
   /* ── Fetch memories ───────────────────────────────────────── */
   const fetchMemories = useCallback(async (category?: string, q?: string) => {
     try {
-      const token = localStorage.getItem('sanjhubai_auth_token')
+      const token = localStorage.getItem('sanjabai_auth_token')
       if (!token) return
 
       let url = '/api/memories'
@@ -120,7 +120,7 @@ export default function MemoryPage() {
     }
     setSaving(true)
     try {
-      const token = localStorage.getItem('sanjhubai_auth_token')
+      const token = localStorage.getItem('sanjabai_auth_token')
       const r = await fetch('/api/memories', {
         method: 'POST',
         headers: {
@@ -162,7 +162,7 @@ export default function MemoryPage() {
   const saveEdit = async () => {
     if (editingId === null) return
     try {
-      const token = localStorage.getItem('sanjhubai_auth_token')
+      const token = localStorage.getItem('sanjabai_auth_token')
       const r = await fetch(`/api/memories/${editingId}`, {
         method: 'PUT',
         headers: {
@@ -192,7 +192,7 @@ export default function MemoryPage() {
   /* ── Delete memory ────────────────────────────────────────── */
   const deleteMemory = async (id: number) => {
     try {
-      const token = localStorage.getItem('sanjhubai_auth_token')
+      const token = localStorage.getItem('sanjabai_auth_token')
       const r = await fetch(`/api/memories/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },

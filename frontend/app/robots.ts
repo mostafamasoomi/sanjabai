@@ -7,6 +7,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: '/',
       disallow: ['/admin', '/api/'],
     },
-    sitemap: 'https://sanjhubai.ir/sitemap.xml',
+    sitemap: 'https://sanjabai.ir/sitemap.xml',
   }
 }

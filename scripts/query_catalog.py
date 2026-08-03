@@ -4,7 +4,7 @@ os.environ.pop("http_proxy", None); os.environ.pop("https_proxy", None)
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import text
 
-URL = os.environ.get("DATABASE_URL") or "postgresql+asyncpg://sanjhubai:sanjhubai@sanjhubai_pg:5432/sanjhubai"
+URL = os.environ.get("DATABASE_URL") or "postgresql+asyncpg://sanjabai:sanjabai@sanjabai_pg:5432/sanjabai"
 
 async def main():
     eng = create_async_engine(URL)

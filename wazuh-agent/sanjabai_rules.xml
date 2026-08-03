@@ -1,7 +1,7 @@
-<!-- Sanjhubai Custom Wazuh Rules -->
-<!-- Rule IDs: 110000-110099 reserved for sanjhubai application rules -->
+<!-- Sanjabai Custom Wazuh Rules -->
+<!-- Rule IDs: 110000-110099 reserved for sanjabai application rules -->
 
-<group name="local,sanjhubai,">
+<group name="local,sanjabai,">
 
   <!-- ============================================ -->
   <!-- 1. Failed Login / Brute Force Detection      -->
@@ -12,24 +12,24 @@
     <decoded_as>json</decoded_as>
     <field name="log">failed|invalid|unauthorized</field>
     <field name="message">login|authentication|signin|sign_in</field>
-    <description>Sanjhubai: Failed login attempt detected</description>
-    <group>authentication_failures,sanjhubai,</group>
+    <description>Sanjabai: Failed login attempt detected</description>
+    <group>authentication_failures,sanjabai,</group>
   </rule>
 
   <!-- Multiple failed logins from same source (brute force) -->
   <rule id="110002" level="10" frequency="5" timeframe="120">
     <if_matched_sid>110001</if_matched_sid>
     <same_source_ip />
-    <description>Sanjhubai: Brute force attack - multiple failed logins from same IP</description>
-    <group>authentication_failures,pci_dss_10.2.4,hipaa_164.312.b,nist_800_53_AU.14,sanjhubai,</group>
+    <description>Sanjabai: Brute force attack - multiple failed logins from same IP</description>
+    <group>authentication_failures,pci_dss_10.2.4,hipaa_164.312.b,nist_800_53_AU.14,sanjabai,</group>
   </rule>
 
   <!-- Sustained brute force (critical) -->
   <rule id="110003" level="12" frequency="15" timeframe="300">
     <if_matched_sid>110001</if_matched_sid>
     <same_source_ip />
-    <description>Sanjhubai: CRITICAL - Sustained brute force attack (15+ attempts in 5min)</description>
-    <group>authentication_failures,pci_dss_10.2.4,hipaa_164.312.b,sanjhubai,</group>
+    <description>Sanjabai: CRITICAL - Sustained brute force attack (15+ attempts in 5min)</description>
+    <group>authentication_failures,pci_dss_10.2.4,hipaa_164.312.b,sanjabai,</group>
   </rule>
 
   <!-- ============================================ -->
@@ -40,24 +40,24 @@
   <rule id="110010" level="7">
     <decoded_as>json</decoded_as>
     <field name="message">/admin|/admin/|admin_panel|superuser|sudo|root</field>
-    <description>Sanjhubai: Admin endpoint access attempt detected</description>
-    <group>privilege_escalation,sanjhubai,</group>
+    <description>Sanjabai: Admin endpoint access attempt detected</description>
+    <group>privilege_escalation,sanjabai,</group>
   </rule>
 
   <!-- Privilege escalation attempt -->
   <rule id="110011" level="12">
     <decoded_as>json</decoded_as>
     <field name="message">escalat|privilege|role_change|admin.*grant|elevat|promot.*user</field>
-    <description>Sanjhubai: CRITICAL - Privilege escalation attempt detected</description>
-    <group>privilege_escalation,pci_dss_10.2.2,pci_dss_10.2.3,hipaa_164.308.a.4,sanjhubai,</group>
+    <description>Sanjabai: CRITICAL - Privilege escalation attempt detected</description>
+    <group>privilege_escalation,pci_dss_10.2.2,pci_dss_10.2.3,hipaa_164.308.a.4,sanjabai,</group>
   </rule>
 
   <!-- Unauthorized admin access -->
   <rule id="110012" level="10">
     <decoded_as>json</decoded_as>
     <field name="message">/admin.*401|/admin.*403|401.*admin|403.*admin</field>
-    <description>Sanjhubai: Unauthorized access attempt to admin endpoint</description>
-    <group>privilege_escalation,pci_dss_10.2.4,sanjhubai,</group>
+    <description>Sanjabai: Unauthorized access attempt to admin endpoint</description>
+    <group>privilege_escalation,pci_dss_10.2.4,sanjabai,</group>
   </rule>
 
   <!-- ============================================ -->
@@ -68,24 +68,24 @@
   <rule id="110020" level="5">
     <decoded_as>json</decoded_as>
     <field name="message">429|rate.limit|too.many.request|throttl|rate_limit|RateLimit</field>
-    <description>Sanjhubai: Rate limit exceeded</description>
-    <group>rate_limit,sanjhubai,</group>
+    <description>Sanjabai: Rate limit exceeded</description>
+    <group>rate_limit,sanjabai,</group>
   </rule>
 
   <!-- Excessive rate limit violations (potential abuse) -->
   <rule id="110021" level="8" frequency="10" timeframe="60">
     <if_matched_sid>110020</if_matched_sid>
     <same_source_ip />
-    <description>Sanjhubai: Excessive rate limit violations - possible API abuse</description>
-    <group>rate_limit,pci_dss_10.2.1,sanjhubai,</group>
+    <description>Sanjabai: Excessive rate limit violations - possible API abuse</description>
+    <group>rate_limit,pci_dss_10.2.1,sanjabai,</group>
   </rule>
 
   <!-- Sustained rate limit abuse (critical) -->
   <rule id="110022" level="12" frequency="30" timeframe="120">
     <if_matched_sid>110020</if_matched_sid>
     <same_source_ip />
-    <description>Sanjhubai: CRITICAL - Sustained rate limit abuse (30+ violations in 2min)</description>
-    <group>rate_limit,pci_dss_10.2.1,pci_dss_10.2.5,sanjhubai,</group>
+    <description>Sanjabai: CRITICAL - Sustained rate limit abuse (30+ violations in 2min)</description>
+    <group>rate_limit,pci_dss_10.2.1,pci_dss_10.2.5,sanjabai,</group>
   </rule>
 
   <!-- ============================================ -->
@@ -96,24 +96,24 @@
   <rule id="110030" level="5">
     <decoded_as>json</decoded_as>
     <field name="message">exchange.rate|currency|payment|transaction|billing|invoice|wallet|crypto|token.*transfer</field>
-    <description>Sanjhubai: Financial/transaction endpoint accessed</description>
-    <group>financial,sanjhubai,</group>
+    <description>Sanjabai: Financial/transaction endpoint accessed</description>
+    <group>financial,sanjabai,</group>
   </rule>
 
   <!-- Suspicious financial activity -->
   <rule id="110031" level="10">
     <decoded_as>json</decoded_as>
     <field name="message">financial.*anomal|unusual.*transaction|high.value|large.amount|withdraw|transfer.*fund</field>
-    <description>Sanjhubai: Suspicious financial activity detected</description>
-    <group>financial,pci_dss_10.2.5,pci_dss_10.2.7,sanjhubai,</group>
+    <description>Sanjabai: Suspicious financial activity detected</description>
+    <group>financial,pci_dss_10.2.5,pci_dss_10.2.7,sanjabai,</group>
   </rule>
 
   <!-- Financial API error (potential attack) -->
   <rule id="110032" level="8">
     <decoded_as>json</decoded_as>
     <field name="message">exchange.rate.*5[0-9][0-9]|currency.*5[0-9][0-9]|payment.*5[0-9][0-9]</field>
-    <description>Sanjhubai: Financial endpoint returned server error</description>
-    <group>financial,pci_dss_10.2.5,sanjhubai,</group>
+    <description>Sanjabai: Financial endpoint returned server error</description>
+    <group>financial,pci_dss_10.2.5,sanjabai,</group>
   </rule>
 
   <!-- ============================================ -->
@@ -126,8 +126,8 @@
     <if_sid>5716</if_sid>
     <field name="message">404|not.found</field>
     <same_source_ip />
-    <description>Sanjhubai: API endpoint scanning detected - multiple 404s from same IP</description>
-    <group>reconnaissance,pci_dss_10.2.1,sanjhubai,</group>
+    <description>Sanjabai: API endpoint scanning detected - multiple 404s from same IP</description>
+    <group>reconnaissance,pci_dss_10.2.1,sanjabai,</group>
   </rule>
 
   <!-- Unusual API access pattern (off-hours) -->
@@ -135,8 +135,8 @@
     <decoded_as>json</decoded_as>
     <field name="message">POST.*v1|PUT.*v1|DELETE.*v1|PATCH.*v1</field>
     <time>00:00-06:00</time>
-    <description>Sanjhubai: API mutation during off-hours (00:00-06:00)</description>
-    <group>unusual_access,sanjhubai,</group>
+    <description>Sanjabai: API mutation during off-hours (00:00-06:00)</description>
+    <group>unusual_access,sanjabai,</group>
   </rule>
 
   <!-- Mass API requests (possible automation/bot) -->
@@ -144,24 +144,24 @@
     <decoded_as>json</decoded_as>
     <field name="message">POST.*v1/chat|POST.*completions</field>
     <same_source_ip />
-    <description>Sanjhubai: High API request volume - possible automated abuse</description>
-    <group>automation_abuse,sanjhubai,</group>
+    <description>Sanjabai: High API request volume - possible automated abuse</description>
+    <group>automation_abuse,sanjabai,</group>
   </rule>
 
   <!-- Unauthenticated API access attempts -->
   <rule id="110043" level="7">
     <decoded_as>json</decoded_as>
     <field name="message">unauthorized|missing.*token|invalid.*key|no.*auth|token.*expired</field>
-    <description>Sanjhubai: Unauthenticated API access attempt</description>
-    <group>authentication,sanjhubai,</group>
+    <description>Sanjabai: Unauthenticated API access attempt</description>
+    <group>authentication,sanjabai,</group>
   </rule>
 
   <!-- SQL injection / XSS attempt patterns -->
   <rule id="110044" level="12">
     <decoded_as>json</decoded_as>
     <field name="message">SELECT.*FROM|UNION.*SELECT|DROP.*TABLE|&lt;script|javascript:|onerror=|onload=|eval\(|exec\(</field>
-    <description>Sanjhubai: CRITICAL - Possible injection/XSS attack detected</description>
-    <group>attack,pci_dss_11.4,pci_dss_6.5,hipaa_164.312.a.1,nist_800_53_SI.10,sanjhubai,</group>
+    <description>Sanjabai: CRITICAL - Possible injection/XSS attack detected</description>
+    <group>attack,pci_dss_11.4,pci_dss_6.5,hipaa_164.312.a.1,nist_800_53_SI.10,sanjabai,</group>
   </rule>
 
 </group>

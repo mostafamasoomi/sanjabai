@@ -127,7 +127,7 @@ export async function mockSignup(
 /**
  * Put the page in a signed-in state.
  *
- * <AuthProvider> restores a session by reading `sanjhubai_auth_token` from
+ * <AuthProvider> restores a session by reading `sanjabai_auth_token` from
  * localStorage and validating it against /api/auth/me, so a test that wants an
  * authenticated page needs both halves. Without this the app shell's auth
  * guard redirects protected routes to /login — which is the correct behaviour,
@@ -142,9 +142,9 @@ export async function signIn(
   user: MockUser = { id: 1, email: 'test@example.com' },
 ) {
   await page.addInitScript(() => {
-    localStorage.setItem('sanjhubai_auth_token', 'test-token')
+    localStorage.setItem('sanjabai_auth_token', 'test-token')
     // The onboarding guard checks this before hitting the network.
-    localStorage.setItem('sanjhubai_onboarded', '1')
+    localStorage.setItem('sanjabai_onboarded', '1')
   })
   await mockAuthMe(page, user)
   await page.route(

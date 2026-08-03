@@ -143,10 +143,10 @@ export default function HermesOrderPage() {
 
   return (
     <div className="flex flex-col gap-6" style={{ maxWidth: '48rem' }}>
-      <h1 className="page-title">سفارش سرور هرمس</h1>
+      <h1 className="page-title slide-up">سفارش سرور هرمس</h1>
 
       {/* ── Step 1: offering ── */}
-      <section className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      <section className="card slide-up" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', animationDelay: '0.05s' }}>
         <h2 style={{ fontWeight: 700 }}>۱. انتخاب پلن سرور</h2>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
           {offerings.map((o) => (
@@ -162,7 +162,7 @@ export default function HermesOrderPage() {
       </section>
 
       {/* ── Step 2: skills ── */}
-      <section className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      <section className="card slide-up" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', animationDelay: '0.1s' }}>
         <h2 style={{ fontWeight: 700 }}>
           ۲. انتخاب اسکیل‌ها {offering && <span style={{ fontWeight: 400, fontSize: '0.75rem', color: 'var(--text-muted)' }}>(حداکثر {faNum(offering.max_skills)})</span>}
         </h2>
@@ -181,7 +181,7 @@ export default function HermesOrderPage() {
       </section>
 
       {/* ── Step 3: invoice ── */}
-      <section className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+      <section className="card slide-up" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', animationDelay: '0.15s' }}>
         <h2 style={{ fontWeight: 700 }}>۳. فاکتور</h2>
         {offering && (
           <>

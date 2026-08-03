@@ -226,7 +226,7 @@ export default function AssistantDetailPage() {
       </button>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
+      <div className="slide-up" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
         <div
           style={{
             width: '2.5rem',
@@ -256,9 +256,9 @@ export default function AssistantDetailPage() {
       {/* Start chat button for non-owners or quick access */}
       {!isOwner && (
         <button
-          className="btn btn-primary"
+          className="btn btn-primary slide-up"
           onClick={() => router.push(`/chat?assistant=${assistant.id}`)}
-          style={{ marginBottom: '1.5rem', marginTop: '1rem' }}
+          style={{ marginBottom: '1.5rem', marginTop: '1rem', animationDelay: '0.05s' }}
         >
           <Icon name="chat" size={16} />
           شروع گفتگو
@@ -269,6 +269,7 @@ export default function AssistantDetailPage() {
       {isOwner && (
         <form onSubmit={handleUpdate}>
           <div
+            className="slide-up"
             style={{
               background: 'var(--bg-surface)',
               borderRadius: 'var(--radius-lg)',
@@ -278,6 +279,7 @@ export default function AssistantDetailPage() {
               flexDirection: 'column',
               gap: '1.25rem',
               marginTop: '1rem',
+              animationDelay: '0.05s',
             }}
           >
             {/* Name */}
@@ -381,7 +383,7 @@ export default function AssistantDetailPage() {
           </div>
 
           {/* Actions */}
-          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem', justifyContent: 'space-between' }}>
+          <div className="slide-up" style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem', justifyContent: 'space-between', animationDelay: '0.1s' }}>
             <button
               type="button"
               className="btn btn-ghost text-[var(--danger)]"

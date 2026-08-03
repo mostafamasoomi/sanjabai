@@ -62,7 +62,7 @@ export default function SignupPage() {
 
   return (
     <div className="aurora-signup-wrapper min-h-[80vh] flex items-center justify-center">
-      <div className="aurora-signup-card card w-full max-w-sm">
+      <div className="aurora-signup-card card w-full max-w-sm slide-up">
         {/* Header */}
         <div className="text-center mb-6">
           <div className="aurora-signup-logo w-14 h-14 rounded-xl flex items-center justify-center mx-auto mb-4">

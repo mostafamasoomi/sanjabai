@@ -71,7 +71,7 @@ export default function HermesOrdersPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between slide-up">
         <h1 className="page-title">سفارش‌های سرور هرمس</h1>
         <Link href="/hermes" className="btn btn-primary btn-sm">
           <Icon name="plus" size={14} />
@@ -87,8 +87,15 @@ export default function HermesOrdersPage() {
         </EmptyState>
       ) : (
         <div className="flex flex-col gap-3">
-          {orders.map((o) => (
-            <div key={o.id} className="card" style={{ padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+          {orders.map((o, idx) => (
+            <div
+              key={o.id}
+              className="card slide-up"
+              style={{
+                padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                flexWrap: 'wrap', gap: '0.75rem', animationDelay: `${0.1 + Math.min(idx, 10) * 0.03}s`,
+              }}
+            >
               <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-2">
                   <span style={{ fontWeight: 700 }}>سفارش #{o.id}</span>

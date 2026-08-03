@@ -36,12 +36,12 @@ const AVAILABILITY_NOTE: Partial<Record<Availability, string>> = {
    Card
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function ModelTile({ model, probe }: { model: ModelCatalogItem; probe?: { ok: boolean } }) {
+function ModelTile({ model, probe, index = 0 }: { model: ModelCatalogItem; probe?: { ok: boolean }; index?: number }) {
   const health = healthOf(model)
   const note = AVAILABILITY_NOTE[model.availability]
 
   return (
-    <article className="model-tile">
+    <article className="model-tile slide-up" style={{ animationDelay: `${Math.min(index, 10) * 0.03}s` }}>
       <div className="model-tile__head">
         <div style={{ minWidth: 0 }}>
           {/* h2, not h3: the page h1 is the only level above it, and an
@@ -159,7 +159,7 @@ export default function ModelsPage() {
   )
 
   const header = (
-    <header className="models-header">
+    <header className="models-header slide-up">
       <div>
         <h1 className="page-title">مدل‌های هوش مصنوعی</h1>
         <p className="page-subtitle" style={{ maxWidth: '32rem' }}>
@@ -184,7 +184,7 @@ export default function ModelsPage() {
         </div>
         <div className="models-grid">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="model-tile" style={{ animationDelay: `${i * 100}ms` }}>
+            <div key={i} className="model-tile slide-up" style={{ animationDelay: `${i * 100}ms` }}>
               <div className="model-tile__head">
                 <div className="space-y-2 w-full">
                   <Skeleton className="w-1/2" height="1.1rem" />
@@ -221,7 +221,7 @@ export default function ModelsPage() {
       {/* Search sized to its content, chips take the rest of the row, and the
           result count sits at the end of the same row instead of on a line of
           its own. */}
-      <div className="models-toolbar">
+      <div className="models-toolbar slide-up" style={{ animationDelay: '0.05s' }}>
         <div className="models-search">
           <Icon
             name="search"
@@ -274,10 +274,11 @@ export default function ModelsPage() {
         />
       ) : (
         <div className="models-grid">
-          {filtered.map((m) => (
+          {filtered.map((m, idx) => (
             <ModelTile
               key={m.id}
               model={m}
+              index={idx}
               probe={testResults.find((r) => r.id === m.id || r.id === m.providerModelId)}
             />
           ))}
@@ -285,7 +286,7 @@ export default function ModelsPage() {
       )}
 
       {testResults.length > 0 && (
-        <section className="card">
+        <section className="card slide-up">
           <h2 className="card-title" style={{ marginBottom: 'var(--space-3)' }}>
             نتایج تست مدل‌ها — {faNum(testResults.filter((r) => r.ok).length)} از{' '}
             {faNum(testResults.length)} فعال

@@ -145,6 +145,17 @@ const NAV_ITEMS: { key: Page; label: string; icon: IconName }[] = [
   { key: 'security', label: 'امنیت', icon: 'lock' },
 ]
 
+// Security dashboard threat-level colors — derived from design-token vars
+// instead of raw hex so they follow the brand palette (and its light/dark
+// swap) like everything else in the panel. 'high' has no dedicated token, so
+// it's blended from the two nearest ones.
+const THREAT_LEVEL_COLOR: Record<SecurityStats['threat_level'], string> = {
+  critical: 'var(--danger)',
+  high: 'color-mix(in srgb, var(--danger) 55%, var(--warning) 45%)',
+  medium: 'var(--warning)',
+  low: 'var(--positive)',
+}
+
 // ─── API Helper ──────────────────────────────────────────────────────────────
 
 let TOKEN = ''
@@ -167,7 +178,7 @@ function StatCard({ icon, label, value, color }: { icon: React.ComponentProps<ty
   return (
     <div className="admin-card" style={{ borderRight: `3px solid ${color}` }}>
       <div className="flex items-center gap-3 mb-2">
-        <div className="p-2 rounded-lg" style={{ background: `${color}15` }}>
+        <div className="p-2 rounded-lg" style={{ background: `color-mix(in srgb, ${color} 15%, transparent)` }}>
           <Icon name={icon} size={18} className="opacity-80" style={{ color }} />
         </div>
         <span className="text-xs text-muted">{label}</span>
@@ -729,7 +740,7 @@ export default function AdminPage() {
         <aside
           className={`
             fixed lg:sticky top-0 right-0 z-40 h-screen w-64 shrink-0
-            border-l overflow-y-auto transition-transform duration-200
+            border-l overflow-y-auto transition-transform duration-200 slide-up
             lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}
           `}
           style={{
@@ -800,7 +811,7 @@ export default function AdminPage() {
         {/* ─── Main Content ────────────────────────────────────────────── */}
         <main className="admin-main flex-1 min-w-0 p-4 lg:p-8 overflow-y-auto" style={{ background: 'var(--bg-base)' }}>
           {/* Refresh Button */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-6 slide-up">
             <div>
               <h1 className="text-xl font-bold text-primary">{currentNav?.label}</h1>
             </div>
@@ -1027,12 +1038,12 @@ export default function AdminPage() {
                 <>
                   {/* Stat Cards */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
-                    <StatCard icon="wallet" label="موجودی" value={faNum(userDetail.balance)} color="#22c55e" />
-                    <StatCard icon="models" label="توکن مصرفی" value={faNum(userDetail.stats.total_tokens)} color="#3b82f6" />
-                    <StatCard icon="chat" label="گفتگوها" value={userDetail.stats.conversation_count} color="#a855f7" />
-                    <StatCard icon="pricing" label="هزینه کل" value={faNum(userDetail.stats.total_cost)} color="#f59e0b" />
-                    <StatCard icon="wallet" label="پرداخت‌ها" value={userDetail.stats.payment_count} color="#06b6d4" />
-                    <StatCard icon="dashboard" label="درخواست‌ها" value={userDetail.stats.usage_events} color="#ec4899" />
+                    <StatCard icon="wallet" label="موجودی" value={faNum(userDetail.balance)} color="var(--positive)" />
+                    <StatCard icon="models" label="توکن مصرفی" value={faNum(userDetail.stats.total_tokens)} color="var(--info)" />
+                    <StatCard icon="chat" label="گفتگوها" value={userDetail.stats.conversation_count} color="var(--accent-purple)" />
+                    <StatCard icon="pricing" label="هزینه کل" value={faNum(userDetail.stats.total_cost)} color="var(--warning)" />
+                    <StatCard icon="wallet" label="پرداخت‌ها" value={userDetail.stats.payment_count} color="var(--accent)" />
+                    <StatCard icon="dashboard" label="درخواست‌ها" value={userDetail.stats.usage_events} color="var(--danger)" />
                   </div>
 
                   {/* User Info Card */}
@@ -1248,12 +1259,8 @@ export default function AdminPage() {
                             <td className="p-3"><span className="badge">{p.currency}</span></td>
                             <td className="p-3">
                               <button
-                                className="badge"
-                                style={{
-                                  cursor: 'pointer',
-                                  background: isDisabled ? 'var(--danger-dim, #4a1a1a)' : 'var(--success-dim, #143a1e)',
-                                  color: isDisabled ? 'var(--danger, #e35d5d)' : 'var(--success, #4ade80)',
-                                }}
+                                className={`badge ${isDisabled ? 'badge-danger' : 'badge-positive'}`}
+                                style={{ cursor: 'pointer' }}
                                 disabled={togglingModel === p.model}
                                 onClick={() => toggleModel(p.model, p.availability)}
                                 title="کلیک برای تغییر وضعیت"
@@ -1268,7 +1275,7 @@ export default function AdminPage() {
                                 ) : 'تست'}
                               </button>
                               {testResult && (
-                                <span className="text-xs mr-2" style={{ color: testResult.ok ? 'var(--success, #4ade80)' : 'var(--danger, #e35d5d)' }}>
+                                <span className="text-xs mr-2" style={{ color: testResult.ok ? 'var(--success)' : 'var(--danger)' }}>
                                   {testResult.ok ? `${faNum(testResult.latency_ms)}ms` : (testResult.error || 'خطا')}
                                 </span>
                               )}
@@ -1348,12 +1355,8 @@ export default function AdminPage() {
                           <td className="p-3 text-xs">{faNum(Math.round(pkg.base_amount / 10))}</td>
                           <td className="p-3">
                             <button
-                              className="badge"
-                              style={{
-                                cursor: 'pointer',
-                                background: pkg.active ? 'var(--success-dim, #143a1e)' : 'var(--danger-dim, #4a1a1a)',
-                                color: pkg.active ? 'var(--success, #4ade80)' : 'var(--danger, #e35d5d)',
-                              }}
+                              className={`badge ${pkg.active ? 'badge-positive' : 'badge-danger'}`}
+                              style={{ cursor: 'pointer' }}
                               onClick={() => toggleCreditPackageActive(pkg)}
                             >
                               {pkg.active ? 'فعال' : 'غیرفعال'}
@@ -1723,47 +1726,27 @@ export default function AdminPage() {
                     <div
                       className="admin-card"
                       style={{
-                        borderRight: `3px solid ${
-                          securityStats.threat_level === 'critical' ? '#ef4444'
-                          : securityStats.threat_level === 'high' ? '#f97316'
-                          : securityStats.threat_level === 'medium' ? '#eab308'
-                          : '#22c55e'
-                        }`,
+                        borderRight: `3px solid ${THREAT_LEVEL_COLOR[securityStats.threat_level]}`,
                       }}
                     >
                       <div className="flex items-center gap-3 mb-3">
                         <div
                           className="p-2 rounded-lg"
                           style={{
-                            background: `${
-                              securityStats.threat_level === 'critical' ? '#ef4444'
-                              : securityStats.threat_level === 'high' ? '#f97316'
-                              : securityStats.threat_level === 'medium' ? '#eab308'
-                              : '#22c55e'
-                            }15`,
+                            background: `color-mix(in srgb, ${THREAT_LEVEL_COLOR[securityStats.threat_level]} 15%, transparent)`,
                           }}
                         >
                           <Icon
                             name="warning"
                             size={18}
-                            style={{
-                              color: securityStats.threat_level === 'critical' ? '#ef4444'
-                                : securityStats.threat_level === 'high' ? '#f97316'
-                                : securityStats.threat_level === 'medium' ? '#eab308'
-                                : '#22c55e',
-                            }}
+                            style={{ color: THREAT_LEVEL_COLOR[securityStats.threat_level] }}
                           />
                         </div>
                         <span className="text-xs text-muted">سطح تهدید</span>
                       </div>
                       <p
                         className="text-xl font-bold"
-                        style={{
-                          color: securityStats.threat_level === 'critical' ? '#ef4444'
-                            : securityStats.threat_level === 'high' ? '#f97316'
-                            : securityStats.threat_level === 'medium' ? '#eab308'
-                            : '#22c55e',
-                        }}
+                        style={{ color: THREAT_LEVEL_COLOR[securityStats.threat_level] }}
                       >
                         {{ low: 'پایین', medium: 'متوسط', high: 'بالا', critical: 'بحرانی' }[securityStats.threat_level]}
                       </p>

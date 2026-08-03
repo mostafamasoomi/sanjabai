@@ -287,7 +287,7 @@ export default function TasksPage() {
   return (
     <div style={{ padding: '24px 0' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+      <div className="slide-up" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
             width: 40, height: 40, borderRadius: 12,
@@ -312,11 +312,12 @@ export default function TasksPage() {
       </div>
 
       {/* Info card */}
-      <div className="card" style={{
+      <div className="card slide-up" style={{
         display: 'flex', alignItems: 'center', gap: 12,
         padding: '14px 18px', marginBottom: 20,
         background: 'linear-gradient(135deg, var(--bg-elev), var(--bg-surface, var(--bg-elev)))',
         border: '1px solid var(--border)',
+        animationDelay: '0.05s',
       }}>
         <Icon name="info" size={18} className="text-accent shrink-0" />
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.7 }}>
@@ -346,13 +347,14 @@ export default function TasksPage() {
         />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {tasks.map((task) => {
+          {tasks.map((task, idx) => {
             const ch = DELIVERY_CHANNELS[task.delivery_channel] || DELIVERY_CHANNELS.dashboard
             return (
-              <div key={task.id} className="card" style={{
+              <div key={task.id} className="card slide-up" style={{
                 padding: '18px 20px',
                 opacity: task.is_active ? 1 : 0.7,
                 transition: 'opacity 0.2s',
+                animationDelay: `${0.1 + Math.min(idx, 10) * 0.03}s`,
               }}>
                 {/* Top row: title + toggle */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -393,11 +395,10 @@ export default function TasksPage() {
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', direction: 'ltr', fontFamily: 'var(--font-mono)' }}>
                     {task.cron_expression}
                   </span>
-                  <span className="badge" style={{
-                    background: task.is_active ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                    color: task.is_active ? 'var(--positive)' : 'var(--danger)',
-                    fontSize: 11,
-                  }}>
+                  <span
+                    className={`badge ${task.is_active ? 'badge-positive' : 'badge-danger'}`}
+                    style={{ fontSize: 11 }}
+                  >
                     {task.is_active ? 'فعال' : 'غیرفعال'}
                   </span>
                   <span className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, background: 'var(--bg-surface, var(--bg-elev))' }}>

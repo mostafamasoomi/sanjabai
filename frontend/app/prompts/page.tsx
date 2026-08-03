@@ -149,7 +149,7 @@ export default function PromptsPage() {
   return (
     <div className="prompts-page">
       {/* Header */}
-      <div className="prompts-header">
+      <div className="prompts-header slide-up">
         <div className="prompts-header-title">
           <div className="prompts-header-icon">
             <Icon name="sparkles" size={22} className="text-accent" />
@@ -162,7 +162,7 @@ export default function PromptsPage() {
       </div>
 
       {/* Search & Filter */}
-      <div className="prompts-toolbar">
+      <div className="prompts-toolbar slide-up" style={{ animationDelay: '0.05s' }}>
         <div className="prompts-search-wrapper">
           <Icon name="search" size={16} className="prompts-search-icon" />
           <input
@@ -222,22 +222,23 @@ export default function PromptsPage() {
         </div>
       ) : (
         <div className="prompts-grid">
-          {filteredPrompts.map(prompt => (
+          {filteredPrompts.map((prompt, idx) => (
             <button
               key={prompt.id}
-              className="prompt-card"
+              className="prompt-card slide-up"
+              style={{ animationDelay: `${0.1 + Math.min(idx, 10) * 0.03}s` }}
               onClick={() => handleUsePrompt(prompt)}
             >
               <div className="prompt-card-header">
                 <div
                   className="prompt-card-icon"
-                  style={{ background: `${CATEGORY_COLORS[prompt.category]}20`, color: CATEGORY_COLORS[prompt.category] }}
+                  style={{ background: `color-mix(in srgb, ${CATEGORY_COLORS[prompt.category]} 20%, transparent)`, color: CATEGORY_COLORS[prompt.category] }}
                 >
                   <Icon name={prompt.icon} size={20} />
                 </div>
                 <span
                   className="prompt-card-category"
-                  style={{ color: CATEGORY_COLORS[prompt.category], background: `${CATEGORY_COLORS[prompt.category]}15` }}
+                  style={{ color: CATEGORY_COLORS[prompt.category], background: `color-mix(in srgb, ${CATEGORY_COLORS[prompt.category]} 15%, transparent)` }}
                 >
                   {prompt.category}
                 </span>

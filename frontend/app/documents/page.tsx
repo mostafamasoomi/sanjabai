@@ -33,21 +33,18 @@ const DOC_TYPES = [
     label: 'PowerPoint',
     icon: '📊',
     desc: 'ارائه حرفه‌ای با اسلایدهای زیبا',
-    color: '#E74C3C',
   },
   {
     id: 'docx' as DocType,
     label: 'Word',
     icon: '📄',
     desc: 'سند متنی با ساختار حرفه‌ای',
-    color: '#2B579A',
   },
   {
     id: 'mdx' as DocType,
     label: 'Markdown Slides',
     icon: '📝',
     desc: 'اسلاید Markdown (Marp/reveal.js)',
-    color: '#00B4D8',
   },
 ]
 
@@ -170,7 +167,7 @@ export default function DocumentsPage() {
     <div className="page-container" dir="rtl">
       <div className="content-wrapper">
         {/* Header */}
-        <div className="section-header">
+        <div className="section-header slide-up">
           <h1 className="page-title">
             <span style={{ fontSize: '1.5em' }}>📝</span> تولید سند با هوش مصنوعی
           </h1>
@@ -180,7 +177,7 @@ export default function DocumentsPage() {
         </div>
 
         {/* Format selector */}
-        <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="card slide-up" style={{ marginBottom: '1.5rem', animationDelay: '0.05s' }}>
           <div className="card-header">نوع سند</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
             {DOC_TYPES.map(dt => (
@@ -189,16 +186,16 @@ export default function DocumentsPage() {
                 onClick={() => setDocType(dt.id)}
                 style={{
                   padding: '1.25rem',
-                  border: `2px solid ${docType === dt.id ? dt.color : 'var(--border)'}`,
+                  border: `2px solid ${docType === dt.id ? 'var(--accent)' : 'var(--border)'}`,
                   borderRadius: 'var(--radius-lg)',
-                  background: docType === dt.id ? `${dt.color}10` : 'var(--surface)',
+                  background: docType === dt.id ? 'color-mix(in srgb, var(--accent) 10%, transparent)' : 'var(--surface)',
                   cursor: 'pointer',
                   textAlign: 'center',
                   transition: 'all 0.2s',
                 }}
               >
                 <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>{dt.icon}</div>
-                <div style={{ fontWeight: 600, color: docType === dt.id ? dt.color : 'var(--text)' }}>
+                <div style={{ fontWeight: 600, color: docType === dt.id ? 'var(--accent)' : 'var(--text)' }}>
                   {dt.label}
                 </div>
                 <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
@@ -210,7 +207,7 @@ export default function DocumentsPage() {
         </div>
 
         {/* Prompt input */}
-        <div className="card" style={{ marginBottom: '1.5rem' }}>
+        <div className="card slide-up" style={{ marginBottom: '1.5rem', animationDelay: '0.1s' }}>
           <div className="card-header">توضیحات سند</div>
           <textarea dir="rtl"
             value={prompt}
@@ -256,6 +253,7 @@ export default function DocumentsPage() {
         <button
           onClick={handleGenerate}
           disabled={!prompt.trim() || generating}
+          className="slide-up"
           style={{
             width: '100%',
             padding: '1rem',
@@ -268,6 +266,7 @@ export default function DocumentsPage() {
             cursor: generating ? 'not-allowed' : 'pointer',
             marginBottom: '1.5rem',
             transition: 'all 0.2s',
+            animationDelay: '0.15s',
           }}
         >
           {generating ? (
@@ -283,12 +282,13 @@ export default function DocumentsPage() {
         {/* Error */}
         {error && (
           <div
+            className="slide-up"
             style={{
               padding: '1rem',
-              border: '1px solid #E74C3C',
+              border: '1px solid var(--danger)',
               borderRadius: 'var(--radius-md)',
-              background: '#E74C3C10',
-              color: '#E74C3C',
+              background: 'color-mix(in srgb, var(--danger) 10%, transparent)',
+              color: 'var(--danger)',
               marginBottom: '1.5rem',
             }}
           >
@@ -299,11 +299,11 @@ export default function DocumentsPage() {
         {/* Result */}
         {result && (
           <div
-            className="card"
+            className="card slide-up"
             style={{
               marginBottom: '1.5rem',
               border: '2px solid var(--accent)',
-              background: 'var(--accent)08',
+              background: 'color-mix(in srgb, var(--accent) 8%, transparent)',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
@@ -345,7 +345,7 @@ export default function DocumentsPage() {
         )}
 
         {/* History */}
-        <div className="card">
+        <div className="card slide-up" style={{ animationDelay: '0.2s' }}>
           <div className="card-header">
             سوابق تولید
             {loadingHistory && <span style={{ fontSize: '0.8rem', marginRight: '0.5rem' }}>...</span>}
@@ -356,9 +356,10 @@ export default function DocumentsPage() {
             </p>
           ) : (
             <div className="flex flex-col gap-3">
-              {history.map(doc => (
+              {history.map((doc, idx) => (
                 <div
                   key={doc.id}
+                  className="slide-up"
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -367,6 +368,7 @@ export default function DocumentsPage() {
                     border: '1px solid var(--border)',
                     borderRadius: 'var(--radius-md)',
                     background: 'var(--surface)',
+                    animationDelay: `${0.2 + Math.min(idx, 10) * 0.03}s`,
                   }}
                 >
                   <div className="flex items-center gap-3">
@@ -399,10 +401,10 @@ export default function DocumentsPage() {
                       onClick={() => handleDelete(doc.id)}
                       style={{
                         padding: '0.4rem 0.8rem',
-                        border: '1px solid #E74C3C40',
+                        border: '1px solid color-mix(in srgb, var(--danger) 40%, transparent)',
                         borderRadius: 'var(--radius-sm)',
-                        background: '#E74C3C10',
-                        color: '#E74C3C',
+                        background: 'color-mix(in srgb, var(--danger) 10%, transparent)',
+                        color: 'var(--danger)',
                         cursor: 'pointer',
                         fontSize: '0.85rem',
                       }}
@@ -421,8 +423,8 @@ export default function DocumentsPage() {
         .spinner {
           width: 18px;
           height: 18px;
-          border: 2px solid rgba(255, 255, 255, 0.3);
-          border-top-color: 'var(--text-on-accent)';
+          border: 2px solid color-mix(in srgb, var(--text-on-accent) 30%, transparent);
+          border-top-color: var(--text-on-accent);
           border-radius: 50%;
           animation: spin 0.6s linear infinite;
         }

@@ -371,7 +371,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Avatar + User info card */}
-      <div className="card profile-avatar-card">
+      <div className="card profile-avatar-card slide-up">
         <div className="profile-avatar-section">
           <div
             className="profile-avatar cursor-pointer relative"
@@ -390,7 +390,7 @@ export default function ProfilePage() {
               position: 'absolute', bottom: 0, right: 0,
               background: 'var(--accent)', borderRadius: '50%',
               width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              border: '2px solid var(--bg-card, #1a1a2e)',
+              border: '2px solid var(--bg-card)',
             }}>
               {avatarUploading ? (
                 <div className="apikeys-spinner" style={{ width: 12, height: 12 }} />
@@ -454,7 +454,7 @@ export default function ProfilePage() {
       </div>
 
       {/* ─── Profile Info Section ─── */}
-      <div className="card profile-section-card">
+      <div className="card profile-section-card slide-up" style={{ animationDelay: '0.05s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="user" size={16} className="text-accent" />
           <h2 className="card-title">
@@ -505,7 +505,7 @@ export default function ProfilePage() {
       </div>
 
       {/* ─── AI Preferences Section ─── */}
-      <div className="card profile-section-card">
+      <div className="card profile-section-card slide-up" style={{ animationDelay: '0.1s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="cpu" size={16} className="text-accent" />
           <h2 className="card-title">
@@ -599,7 +599,7 @@ export default function ProfilePage() {
       </div>
 
       {/* ─── Autonomy Level Section ─── */}
-      <div className="card profile-section-card">
+      <div className="card profile-section-card slide-up" style={{ animationDelay: '0.15s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="rocket" size={16} className="text-accent" />
           <h2 className="card-title">
@@ -622,15 +622,15 @@ export default function ProfilePage() {
                 gap: 12,
                 padding: '14px 16px',
                 borderRadius: 10,
-                border: `2px solid ${autonomyLevel === level.value ? 'var(--accent)' : 'var(--border, #2a2a4a)'}`,
-                background: autonomyLevel === level.value ? 'var(--accent-bg, rgba(99,102,241,0.08))' : 'transparent',
+                border: `2px solid ${autonomyLevel === level.value ? 'var(--accent)' : 'var(--border)'}`,
+                background: autonomyLevel === level.value ? 'var(--accent-bg)' : 'transparent',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
               }}
             >
               <div style={{
                 width: 20, height: 20, borderRadius: '50%', marginTop: 2, flexShrink: 0,
-                border: `2px solid ${autonomyLevel === level.value ? 'var(--accent)' : 'var(--border, #4a4a6a)'}`,
+                border: `2px solid ${autonomyLevel === level.value ? 'var(--accent)' : 'var(--border)'}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
                 {autonomyLevel === level.value && (
@@ -651,7 +651,7 @@ export default function ProfilePage() {
       </div>
 
       {/* ─── Appearance & Language Section ─── */}
-      <div className="card profile-section-card">
+      <div className="card profile-section-card slide-up" style={{ animationDelay: '0.2s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="palette" size={16} className="text-accent" />
           <h2 className="card-title">
@@ -716,7 +716,7 @@ export default function ProfilePage() {
       </div>
 
       {/* ─── Notification Preferences ─── */}
-      <div className="card profile-section-card">
+      <div className="card profile-section-card slide-up" style={{ animationDelay: '0.25s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="bell" size={16} className="text-accent" />
           <h2 className="card-title">
@@ -787,7 +787,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Change password */}
-      <div className="card profile-section-card">
+      <div className="card profile-section-card slide-up" style={{ animationDelay: '0.3s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="lock" size={16} className="text-accent" />
           <h2 className="card-title">
@@ -842,7 +842,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Telegram link */}
-      <div className="card profile-section-card">
+      <div className="card profile-section-card slide-up" style={{ animationDelay: '0.35s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Icon name="send" size={16} className="text-accent" />
           <h2 className="card-title">
@@ -885,7 +885,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Referral */}
-      <div className="card profile-section-card">
+      <div className="card profile-section-card slide-up" style={{ animationDelay: '0.4s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Icon name="gift" size={16} className="text-accent" />
           <h2 className="card-title">
@@ -942,7 +942,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Danger zone */}
-      <div className="card profile-danger-card">
+      <div className="card profile-danger-card slide-up" style={{ animationDelay: '0.45s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Icon name="warning" size={16} className="text-danger" />
           <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--danger)' }}>

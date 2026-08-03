@@ -42,7 +42,6 @@ export function ApiSection() {
     <section className="lp-section">
       <div className="lp-container lp-split">
         <Reveal className="lp-split__copy">
-          <span className="lp-eyebrow">برای توسعه‌دهندگان</span>
           <h2 className="lp-title">یک endpoint، همه‌ی مدل‌ها</h2>
           <p className="lp-lead">
             آدرس پایه را به <span className="lp-latin">{API_BASE_URL}</span> تغییر دهید.

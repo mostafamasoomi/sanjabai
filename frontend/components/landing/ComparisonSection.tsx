@@ -12,9 +12,8 @@ export function ComparisonSection() {
     <section className="lp-section lp-section--soft" id="comparison">
       <div className="lp-container">
         <header className="lp-head">
-          <span className="lp-eyebrow">مقایسه</span>
           <h2 className="lp-title">چرا پرداخت به‌ازای مصرف، نه اشتراک ماهانه؟</h2>
-          <p className="lp-lead">تفاوت سنجوبای با سرویس‌های اشتراکی رایج، در یک نگاه.</p>
+          <p className="lp-lead">تفاوت سنجاب‌ای با سرویس‌های اشتراکی رایج، در یک نگاه.</p>
         </header>
 
         {/* The table is wider than a phone screen (3 columns of real content

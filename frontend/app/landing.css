@@ -47,7 +47,7 @@
   --lp-r-pill: 999px;
 
   /* ── Rhythm — one variable drives every section's vertical spacing ────── */
-  --lp-section: clamp(4.5rem, 9vw, 7.5rem);
+  --lp-section: clamp(4rem, 7vw, 6rem);
 
   /* ── Motion ───────────────────────────────────────────────────────────── */
   --lp-ease: cubic-bezier(0.22, 1, 0.36, 1);

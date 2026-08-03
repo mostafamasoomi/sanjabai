@@ -70,7 +70,6 @@ export function CapabilityShowcase() {
       <div className="lp-container">
         <Reveal>
           <header className="lp-head">
-            <span className="lp-eyebrow">فراتر از چت</span>
             <h2 className="lp-title">
               دستیاری که یادش می‌ماند، برایتان می‌سازد و به‌موقع کارش را انجام می‌دهد
             </h2>

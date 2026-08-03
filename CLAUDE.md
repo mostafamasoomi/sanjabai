@@ -110,3 +110,13 @@ Next.js App Router under `frontend/app/`, one directory per feature area (`chat`
 - **Persian in code**: many user-facing strings (error messages, audit log text, rate-limit messages) are Persian literals embedded directly in backend Python files — this is intentional (Persian-first product), not a mistake to "fix" to English.
 - Currency values are always integer tomans; never introduce float arithmetic for money.
 - SQL migrations are append-only and numbered — never edit a migration that may have already run in any environment.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships. It's an optional dev tool (`pip install graphifyy`, see https://github.com/Graphify-Labs/graphify) — the `.claude/settings.json` hook that suggests it no-ops silently if the `graphify` binary isn't on PATH, so it's safe to work in this repo without it installed.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

@@ -113,7 +113,7 @@ Next.js App Router under `frontend/app/`, one directory per feature area (`chat`
 
 ## graphify
 
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships. It's an optional dev tool (`pip install graphifyy`, see https://github.com/Graphify-Labs/graphify) — the `.claude/settings.json` hook that suggests it no-ops silently if the `graphify` binary isn't on PATH, so it's safe to work in this repo without it installed.
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships. It's an optional dev tool — install with `pip install graphifyy` (the PyPI package name; it installs a CLI binary named `graphify`, which is what `.claude/settings.json`'s hook and the commands below actually invoke), see https://github.com/Graphify-Labs/graphify. That hook no-ops silently if the `graphify` binary isn't on PATH, so it's safe to work in this repo without it installed.
 
 Rules:
 - For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.

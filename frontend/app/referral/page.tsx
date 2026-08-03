@@ -36,7 +36,7 @@ export default function ReferralPage() {
   return (
     <div style={{ maxWidth: '40rem', margin: '0 auto', padding: '1rem 0' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+      <div className="slide-up" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
         <div
           style={{
             width: '2.5rem',
@@ -57,7 +57,7 @@ export default function ReferralPage() {
       </div>
 
       {/* Referral Code Card */}
-      <div className="card" style={{ marginBottom: '1rem' }}>
+      <div className="card slide-up" style={{ marginBottom: '1rem', animationDelay: '0.05s' }}>
         <div style={{ marginBottom: '1rem' }}>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>کد دعوت شما</span>
         </div>
@@ -86,15 +86,15 @@ export default function ReferralPage() {
       </div>
 
       {/* How it works */}
-      <div className="card">
+      <div className="card slide-up" style={{ animationDelay: '0.1s' }}>
         <h2 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '1rem' }}>نحوه کار</h2>
         <div className="flex flex-col gap-3">
           {[
             { step: '۱', text: 'لینک دعوت خود را با دوستان به اشتراک بگذارید' },
             { step: '۲', text: 'دوست شما ثبت‌نام و اولین شارژ را انجام می‌دهد' },
             { step: '۳', text: 'هر دوی شما پاداش اعتباری دریافت می‌کنید' },
-          ].map((item) => (
-            <div key={item.step} className="flex items-center gap-3">
+          ].map((item, idx) => (
+            <div key={item.step} className="flex items-center gap-3 slide-up" style={{ animationDelay: `${0.15 + idx * 0.05}s` }}>
               <div
                 style={{
                   width: '2rem',

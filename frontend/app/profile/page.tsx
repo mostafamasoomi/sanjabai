@@ -101,7 +101,7 @@ export default function ProfilePage() {
 
   const fetchProfile = async () => {
     try {
-      const t = token || localStorage.getItem('sanjhubai_auth_token')
+      const t = token || localStorage.getItem('sanjabai_auth_token')
       const r = await fetch('/api/auth/profile', {
         headers: { Authorization: `Bearer ${t}` },
       })
@@ -151,7 +151,7 @@ export default function ProfilePage() {
 
   const fetchUsage = async () => {
     try {
-      const t = token || localStorage.getItem('sanjhubai_auth_token')
+      const t = token || localStorage.getItem('sanjabai_auth_token')
       const r = await fetch('/api/me/usage', { headers: { Authorization: `Bearer ${t}` } })
       if (r.ok) setUsage(await r.json())
     } catch {}
@@ -159,7 +159,7 @@ export default function ProfilePage() {
 
   const fetchBalance = async () => {
     try {
-      const t = token || localStorage.getItem('sanjhubai_auth_token')
+      const t = token || localStorage.getItem('sanjabai_auth_token')
       const r = await fetch('/api/wallet', { headers: { Authorization: `Bearer ${t}` } })
       if (r.ok) setBalance((await r.json()).balance)
     } catch {}
@@ -168,7 +168,7 @@ export default function ProfilePage() {
   const handleSaveProfile = async () => {
     setSaving(true)
     try {
-      const t = token || localStorage.getItem('sanjhubai_auth_token')
+      const t = token || localStorage.getItem('sanjabai_auth_token')
       const r = await fetch('/api/auth/profile', {
         method: 'PUT',
         headers: {
@@ -256,7 +256,7 @@ export default function ProfilePage() {
       const reader = new FileReader()
       reader.onload = async () => {
         const base64 = (reader.result as string).split(',')[1]
-        const t = token || localStorage.getItem('sanjhubai_auth_token')
+        const t = token || localStorage.getItem('sanjabai_auth_token')
         const r = await fetch('/api/auth/avatar', {
           method: 'POST',
           headers: {
@@ -292,7 +292,7 @@ export default function ProfilePage() {
     }
     setChangingPassword(true)
     try {
-      const t = token || localStorage.getItem('sanjhubai_auth_token')
+      const t = token || localStorage.getItem('sanjabai_auth_token')
       const r = await fetch('/api/auth/change-password', {
         method: 'POST',
         headers: {
@@ -324,7 +324,7 @@ export default function ProfilePage() {
     }
     setLinkingTelegram(true)
     try {
-      const t = token || localStorage.getItem('sanjhubai_auth_token')
+      const t = token || localStorage.getItem('sanjabai_auth_token')
       const r = await fetch('/api/auth/telegram-link', {
         method: 'POST',
         headers: {
@@ -371,7 +371,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Avatar + User info card */}
-      <div className="card profile-avatar-card">
+      <div className="card profile-avatar-card slide-up">
         <div className="profile-avatar-section">
           <div
             className="profile-avatar cursor-pointer relative"
@@ -390,7 +390,7 @@ export default function ProfilePage() {
               position: 'absolute', bottom: 0, right: 0,
               background: 'var(--accent)', borderRadius: '50%',
               width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              border: '2px solid var(--bg-card, #1a1a2e)',
+              border: '2px solid var(--bg-card)',
             }}>
               {avatarUploading ? (
                 <div className="apikeys-spinner" style={{ width: 12, height: 12 }} />
@@ -454,7 +454,7 @@ export default function ProfilePage() {
       </div>
 
       {/* ─── Profile Info Section ─── */}
-      <div className="card profile-section-card">
+      <div className="card profile-section-card slide-up" style={{ animationDelay: '0.05s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="user" size={16} className="text-accent" />
           <h2 className="card-title">
@@ -505,7 +505,7 @@ export default function ProfilePage() {
       </div>
 
       {/* ─── AI Preferences Section ─── */}
-      <div className="card profile-section-card">
+      <div className="card profile-section-card slide-up" style={{ animationDelay: '0.1s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="cpu" size={16} className="text-accent" />
           <h2 className="card-title">
@@ -599,7 +599,7 @@ export default function ProfilePage() {
       </div>
 
       {/* ─── Autonomy Level Section ─── */}
-      <div className="card profile-section-card">
+      <div className="card profile-section-card slide-up" style={{ animationDelay: '0.15s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="rocket" size={16} className="text-accent" />
           <h2 className="card-title">
@@ -622,15 +622,15 @@ export default function ProfilePage() {
                 gap: 12,
                 padding: '14px 16px',
                 borderRadius: 10,
-                border: `2px solid ${autonomyLevel === level.value ? 'var(--accent)' : 'var(--border, #2a2a4a)'}`,
-                background: autonomyLevel === level.value ? 'var(--accent-bg, rgba(99,102,241,0.08))' : 'transparent',
+                border: `2px solid ${autonomyLevel === level.value ? 'var(--accent)' : 'var(--border)'}`,
+                background: autonomyLevel === level.value ? 'var(--accent-bg)' : 'transparent',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
               }}
             >
               <div style={{
                 width: 20, height: 20, borderRadius: '50%', marginTop: 2, flexShrink: 0,
-                border: `2px solid ${autonomyLevel === level.value ? 'var(--accent)' : 'var(--border, #4a4a6a)'}`,
+                border: `2px solid ${autonomyLevel === level.value ? 'var(--accent)' : 'var(--border)'}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
                 {autonomyLevel === level.value && (
@@ -651,7 +651,7 @@ export default function ProfilePage() {
       </div>
 
       {/* ─── Appearance & Language Section ─── */}
-      <div className="card profile-section-card">
+      <div className="card profile-section-card slide-up" style={{ animationDelay: '0.2s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="palette" size={16} className="text-accent" />
           <h2 className="card-title">
@@ -716,7 +716,7 @@ export default function ProfilePage() {
       </div>
 
       {/* ─── Notification Preferences ─── */}
-      <div className="card profile-section-card">
+      <div className="card profile-section-card slide-up" style={{ animationDelay: '0.25s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="bell" size={16} className="text-accent" />
           <h2 className="card-title">
@@ -787,7 +787,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Change password */}
-      <div className="card profile-section-card">
+      <div className="card profile-section-card slide-up" style={{ animationDelay: '0.3s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="lock" size={16} className="text-accent" />
           <h2 className="card-title">
@@ -842,7 +842,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Telegram link */}
-      <div className="card profile-section-card">
+      <div className="card profile-section-card slide-up" style={{ animationDelay: '0.35s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Icon name="send" size={16} className="text-accent" />
           <h2 className="card-title">
@@ -851,8 +851,8 @@ export default function ProfilePage() {
         </div>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
           {isFa
-            ? 'با اتصال حساب تلگرام می‌توانید از طریق ربات Sanjhubai چت کنید و موجودی خود را ببینید.'
-            : 'Link your Telegram account to chat via the Sanjhubai bot and view your balance.'}
+            ? 'با اتصال حساب تلگرام می‌توانید از طریق ربات Sanjabai چت کنید و موجودی خود را ببینید.'
+            : 'Link your Telegram account to chat via the Sanjabai bot and view your balance.'}
         </p>
         <div style={{ display: 'flex', gap: 8 }}>
           <input
@@ -885,7 +885,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Referral */}
-      <div className="card profile-section-card">
+      <div className="card profile-section-card slide-up" style={{ animationDelay: '0.4s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Icon name="gift" size={16} className="text-accent" />
           <h2 className="card-title">
@@ -894,8 +894,8 @@ export default function ProfilePage() {
         </div>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
           {isFa
-            ? 'با دعوت دوستان به Sanjhubai، به ازای هر ثبت‌نام موفق اعتبار هدیه دریافت کنید.'
-            : 'Invite friends to Sanjhubai and earn bonus credits for each successful signup.'}
+            ? 'با دعوت دوستان به Sanjabai، به ازای هر ثبت‌نام موفق اعتبار هدیه دریافت کنید.'
+            : 'Invite friends to Sanjabai and earn bonus credits for each successful signup.'}
         </p>
         {user?.referral_code && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -942,7 +942,7 @@ export default function ProfilePage() {
       </div>
 
       {/* Danger zone */}
-      <div className="card profile-danger-card">
+      <div className="card profile-danger-card slide-up" style={{ animationDelay: '0.45s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Icon name="warning" size={16} className="text-danger" />
           <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--danger)' }}>

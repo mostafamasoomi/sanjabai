@@ -1,6 +1,6 @@
 # Security & smoke test suite
 
-Black-box tests that run against a **deployed** Sanjhubai instance over plain
+Black-box tests that run against a **deployed** Sanjabai instance over plain
 HTTP(S) — no source checkout, no mocks, no database access required on the
 machine running them. They complement (not replace) the source-level test
 suites in `backend/tests/` (ownership introspection, migration idempotency,

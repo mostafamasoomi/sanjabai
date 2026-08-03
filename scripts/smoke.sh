@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
-# scripts/smoke.sh — Phase 0 smoke test for the Sanjhubai backend + frontend.
+# scripts/smoke.sh — Phase 0 smoke test for the Sanjabai backend + frontend.
 #
-# Lightweight runtime QA against a deployed Sanjhubai stack. It:
-#   1. Confirms the Compose services are up (sanjhubai_* containers running).
+# Lightweight runtime QA against a deployed Sanjabai stack. It:
+#   1. Confirms the Compose services are up (sanjabai_* containers running).
 #   2. Hits backend health endpoints (spec: /health/live + /health/ready;
 #      tolerates the real /health + /health/detailed when the spec'd ones
 #      are absent, so the check works against the actual API).
@@ -18,12 +18,12 @@
 # Override targets via environment variables:
 #   BACKEND_URL      (default http://127.0.0.1:8001)
 #   FRONTEND_URL     (default http://localhost:3003)
-#   COMPOSE_FILE     (default docker-compose.sanjhubai.yml)
+#   COMPOSE_FILE     (default docker-compose.sanjabai.yml)
 set -uo pipefail
 
 BACKEND="${BACKEND_URL:-http://127.0.0.1:8001}"
 FRONTEND="${FRONTEND_URL:-http://localhost:3003}"
-COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.sanjhubai.yml}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.sanjabai.yml}"
 
 FAIL=0
 
@@ -39,15 +39,15 @@ if command -v docker >/dev/null 2>&1; then
     n=$(docker compose -f "$COMPOSE_FILE" ps --services --filter "status=running" 2>/dev/null | wc -l)
     log "  docker compose reports $n running service(s)"
     svc_up=1
-  elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q 'sanjhubai_'; then
-    n=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -c 'sanjhubai_')
-    log "  docker reports $n sanjhubai_* container(s) running"
+  elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q 'sanjabai_'; then
+    n=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -c 'sanjabai_')
+    log "  docker reports $n sanjabai_* container(s) running"
     svc_up=1
   fi
 else
   log "  docker CLI unavailable; skipping service-presence check"
 fi
-if [ "$svc_up" -eq 1 ]; then ok "compose services up"; else bad "no sanjhubai compose services detected as running"; fi
+if [ "$svc_up" -eq 1 ]; then ok "compose services up"; else bad "no sanjabai compose services detected as running"; fi
 
 # ── 2. Backend health ──────────────────────────────────────────────────────
 log "==> Checking backend health ($BACKEND)"
@@ -131,7 +131,7 @@ fi
 
 # ── 6. Verify effective runtime mode ───────────────────────────────────────
 log "==> Checking effective runtime mode"
-mock_mode=$(docker compose -f "$COMPOSE_FILE" exec -T sanjhubai_api sh -c 'printf "%s" "${MOCK_MODE:-}"' 2>/dev/null || true)
+mock_mode=$(docker compose -f "$COMPOSE_FILE" exec -T sanjabai_api sh -c 'printf "%s" "${MOCK_MODE:-}"' 2>/dev/null || true)
 if [ "$mock_mode" = "false" ]; then
   ok "backend MOCK_MODE=false"
 else

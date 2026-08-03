@@ -1,6 +1,6 @@
 # Hermes agent daemon contract
 
-This document specifies the HTTP contract between sanjhubai and the small daemon
+This document specifies the HTTP contract between sanjabai and the small daemon
 that must run on a delivered Hermes server. **The daemon itself is not implemented
 in this repository** — this is the spec an implementation must satisfy. Everything
 below is served by `backend/hermes.py` under `/hermes/agent/*`.
@@ -11,7 +11,7 @@ When an admin runs `POST /admin/hermes/orders/{order_id}/provision`, the respons
 includes two secrets, shown **exactly once**:
 
 - `agent_token` — `hsa-<random>`, the daemon's credential for the endpoints below.
-- `api_key` — `sk-<random>`, a normal Sanjhubai API key (same shape as
+- `api_key` — `sk-<random>`, a normal Sanjabai API key (same shape as
   `POST /api-keys`) scoped to the buyer's account, meant to be dropped into the
   daemon's LLM-calling config so Hermes' own model usage bills through the
   buyer's wallet via the existing `chat.py` reserve/settle path.
@@ -107,7 +107,7 @@ Content-Type: application/json
     confirms removal, the row stays with `state='removing'` so the dashboard can
     show "removal pending".
 - Every report is also appended to `hermes_agent_events` for audit/debugging —
-  there's no need for the daemon to log anything separately for sanjhubai's sake.
+  there's no need for the daemon to log anything separately for sanjabai's sake.
 - This endpoint is idempotent to call repeatedly with the same payload; there's no
   harm in re-reporting the same state if a previous report's response was lost.
 
@@ -127,7 +127,7 @@ never talk to the box directly:
 ## Non-goals of this contract (for now)
 
 - No SSH access is brokered through this API — the admin's install script
-  configures the box directly; sanjhubai never stores an SSH key.
+  configures the box directly; sanjabai never stores an SSH key.
 - No log/metrics streaming endpoint exists yet — `hermes_agent_events` is the only
   audit trail, and it only records what `/agent/report` sends.
 - No mechanism exists yet to push an urgent/out-of-band command between polls

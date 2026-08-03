@@ -1,5 +1,5 @@
 """
-Black-box smoke tests against a deployed Sanjhubai instance.
+Black-box smoke tests against a deployed Sanjabai instance.
 
 No source checkout or database access needed -- everything here is a plain
 HTTP request against BACKEND_URL / FRONTEND_URL. Tolerant of a few possible

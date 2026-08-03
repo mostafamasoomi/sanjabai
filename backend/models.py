@@ -1,5 +1,5 @@
 """
-SQLAlchemy ORM models for the Sanjhubai platform.
+SQLAlchemy ORM models for the Sanjabai platform.
 """
 from __future__ import annotations
 

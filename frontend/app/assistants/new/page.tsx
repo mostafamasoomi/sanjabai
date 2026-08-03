@@ -89,7 +89,7 @@ export default function CreateAssistantPage() {
     <div style={{ maxWidth: '40rem', margin: '0 auto', padding: '1rem 0' }}>
       {/* Back button */}
       <button
-        className="btn btn-ghost btn-sm"
+        className="btn btn-ghost btn-sm slide-up"
         onClick={() => router.push('/assistants')}
         style={{ marginBottom: '1rem', fontSize: '0.8125rem' }}
       >
@@ -97,15 +97,16 @@ export default function CreateAssistantPage() {
         بازگشت به دستیارها
       </button>
 
-      <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
+      <h1 className="slide-up" style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.25rem', animationDelay: '0.05s' }}>
         ساخت دستیار جدید
       </h1>
-      <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
+      <p className="slide-up" style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.5rem', animationDelay: '0.05s' }}>
         یک دستیار هوشمند با پرامپت سیستم سفارشی بسازید
       </p>
 
       <form onSubmit={handleSubmit}>
         <div
+          className="slide-up"
           style={{
             background: 'var(--bg-surface)',
             borderRadius: 'var(--radius-lg)',
@@ -114,6 +115,7 @@ export default function CreateAssistantPage() {
             display: 'flex',
             flexDirection: 'column',
             gap: '1.25rem',
+            animationDelay: '0.1s',
           }}
         >
           {/* Name */}

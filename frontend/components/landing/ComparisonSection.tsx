@@ -12,9 +12,8 @@ export function ComparisonSection() {
     <section className="lp-section lp-section--soft" id="comparison">
       <div className="lp-container">
         <header className="lp-head">
-          <span className="lp-eyebrow">مقایسه</span>
           <h2 className="lp-title">چرا پرداخت به‌ازای مصرف، نه اشتراک ماهانه؟</h2>
-          <p className="lp-lead">تفاوت سنجوبای با سرویس‌های اشتراکی رایج، در یک نگاه.</p>
+          <p className="lp-lead">تفاوت سنجاب‌ای با سرویس‌های اشتراکی رایج، در یک نگاه.</p>
         </header>
 
         {/* The table is wider than a phone screen (3 columns of real content
@@ -30,7 +29,7 @@ export function ComparisonSection() {
               <tr>
                 <th scope="col" />
                 <th scope="col" className="lp-compare__col--brand">
-                  <span dir="ltr">Sanjhubai</span>
+                  <span dir="ltr">Sanjabai</span>
                 </th>
                 <th scope="col">سرویس‌های اشتراکی رایج</th>
               </tr>
@@ -42,7 +41,7 @@ export function ComparisonSection() {
                   <td className="lp-compare__col--brand">
                     <span className="lp-compare__value">
                       <CheckGlyph size={14} />
-                      {row.sanjhubai}
+                      {row.sanjabai}
                     </span>
                   </td>
                   <td>{row.subscription}</td>

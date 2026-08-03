@@ -258,7 +258,7 @@ export default function SkillDetailPage() {
     <div style={{ maxWidth: '48rem', margin: '0 auto' }}>
       {/* ── Back button ── */}
       <button
-        className="btn btn-ghost btn-sm"
+        className="btn btn-ghost btn-sm slide-up"
         onClick={() => router.push('/skills')}
         style={{ marginBottom: '1rem', fontSize: '0.8125rem' }}
       >
@@ -267,7 +267,7 @@ export default function SkillDetailPage() {
       </button>
 
       {/* ── Header ── */}
-      <div style={{ marginBottom: '1.5rem' }}>
+      <div className="slide-up" style={{ marginBottom: '1.5rem', animationDelay: '0.05s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
           <span
             className={`badge ${CATEGORY_BADGES[skill.category] || 'aurora-cap-default'}`}
@@ -295,6 +295,7 @@ export default function SkillDetailPage() {
 
       {/* ── Stats bar ── */}
       <div
+        className="slide-up"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -305,6 +306,7 @@ export default function SkillDetailPage() {
           border: '1px solid var(--border)',
           marginBottom: '1.5rem',
           flexWrap: 'wrap',
+          animationDelay: '0.1s',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
@@ -337,7 +339,7 @@ export default function SkillDetailPage() {
 
       {/* ── Tags ── */}
       {skill.tags && skill.tags.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.5rem' }}>
+        <div className="slide-up" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.5rem', animationDelay: '0.15s' }}>
           {skill.tags.map((tag) => (
             <span
               key={tag}
@@ -361,6 +363,7 @@ export default function SkillDetailPage() {
       {/* ── Not authenticated notice ── */}
       {!authLoading && !user && (
         <div
+          className="slide-up"
           style={{
             padding: '1.25rem',
             background: 'var(--bg-surface)',
@@ -368,6 +371,7 @@ export default function SkillDetailPage() {
             border: '1px solid var(--border)',
             textAlign: 'center',
             marginBottom: '1.5rem',
+            animationDelay: '0.2s',
           }}
         >
           <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
@@ -383,12 +387,14 @@ export default function SkillDetailPage() {
       {/* ── Use form ── */}
       {user && (
         <div
+          className="slide-up"
           style={{
             background: 'var(--bg-surface)',
             borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--border)',
             padding: '1.5rem',
             marginBottom: '1.5rem',
+            animationDelay: '0.2s',
           }}
         >
           <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '1rem' }}>
@@ -500,12 +506,14 @@ export default function SkillDetailPage() {
 
       {/* ── Rating section ── */}
       <div
+        className="slide-up"
         style={{
           background: 'var(--bg-surface)',
           borderRadius: 'var(--radius-lg)',
           border: '1px solid var(--border)',
           padding: '1.25rem',
           marginBottom: '1.5rem',
+          animationDelay: '0.25s',
         }}
       >
         <h3 style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
@@ -538,11 +546,13 @@ export default function SkillDetailPage() {
 
       {/* ── Prompt template preview ── */}
       <div
+        className="slide-up"
         style={{
           background: 'var(--bg-surface)',
           borderRadius: 'var(--radius-lg)',
           border: '1px solid var(--border)',
           padding: '1.25rem',
+          animationDelay: '0.3s',
         }}
       >
         <h3 style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.75rem' }}>

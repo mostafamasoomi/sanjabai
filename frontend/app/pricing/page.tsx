@@ -127,23 +127,24 @@ export default function PricingPage() {
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 20px 64px' }}>
 
-      {/* Hero */}
+      {/* Hero — staggered entrance so the pill, headline, and subtext settle
+          in sequence instead of the whole block popping in at once. */}
       <div style={{ textAlign: 'center', marginBottom: 48 }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 16px', borderRadius: 'var(--radius-full)', background: 'var(--accent-dim)', marginBottom: 20 }}>
+        <div className="slide-up" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 16px', borderRadius: 'var(--radius-full)', background: 'var(--accent-dim)', marginBottom: 20 }}>
           <Icon name="sparkles" size={16} className="text-accent" />
           <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>تعرفه مدل‌ها</span>
         </div>
-        <h1 style={{ fontSize: 'var(--fs-3xl)', fontWeight: 800, color: 'var(--text-primary)', marginBottom: 12, lineHeight: 1.4 }}>
+        <h1 className="slide-up" style={{ fontSize: 'var(--fs-3xl)', fontWeight: 800, color: 'var(--text-primary)', marginBottom: 12, lineHeight: 1.4, animationDelay: '0.05s' }}>
           قیمت‌گذاری شفاف، پرداخت به ازای مصرف
         </h1>
-        <p style={{ fontSize: 15, color: 'var(--text-secondary)', maxWidth: 560, margin: '0 auto', lineHeight: 1.7 }}>
+        <p className="slide-up" style={{ fontSize: 15, color: 'var(--text-secondary)', maxWidth: 560, margin: '0 auto', lineHeight: 1.7, animationDelay: '0.1s' }}>
           هر مدل هوش مصنوعی قیمت مشخصی دارد. فقط به اندازه مصرف واقعی خود پرداخت کنید. قیمت‌ها به تومان به ازای هر ۱ میلیون توکن هستند.
         </p>
       </div>
 
       {/* Balance card (if logged in) */}
       {user && balance !== null && (
-        <div className="card" style={{ padding: '16px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div className="card slide-up" style={{ padding: '16px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, animationDelay: '0.15s' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Icon name="wallet" size={18} className="text-accent" />
             <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>موجودی کیف پول:</span>
@@ -157,7 +158,7 @@ export default function PricingPage() {
       )}
 
       {/* Pricing Table */}
-      <div className="card" style={{ overflow: 'hidden', marginBottom: 32 }}>
+      <div className="card slide-up" style={{ overflow: 'hidden', marginBottom: 32, animationDelay: '0.2s' }}>
         {/* Table Header */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 130px 90px', gap: 8, padding: '14px 16px', borderBottom: '2px solid var(--border)', background: 'var(--bg-hover)', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
           {/* Real <button>s, not divs with role="button": these actually sort,
@@ -219,6 +220,7 @@ export default function PricingPage() {
             return (
               <div
                 key={model.id}
+                className="pricing-row slide-up"
                 style={{
                   display: 'grid',
                   gridTemplateColumns: '1fr 130px 130px 90px',
@@ -226,10 +228,8 @@ export default function PricingPage() {
                   padding: '12px 16px',
                   borderBottom: idx < sortedModels.length - 1 ? '1px solid var(--border)' : 'none',
                   alignItems: 'center',
-                  transition: 'background 0.15s ease',
+                  animationDelay: `${0.25 + Math.min(idx, 10) * 0.03}s`,
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-hover)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
                 {/* Model name */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -268,7 +268,7 @@ export default function PricingPage() {
 
       {/* Info notes */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 40 }}>
-        <div className="card" style={{ padding: 20 }}>
+        <div className="card slide-up" style={{ padding: 20, animationDelay: '0.3s' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <Icon name="info" size={16} className="text-accent" />
             <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>واحد قیمت</span>
@@ -277,7 +277,7 @@ export default function PricingPage() {
             قیمت‌ها به <strong>تومان</strong> به ازای هر <strong>۱ میلیون توکن</strong> هستند. یک پیام معمولی حدود ۵۰۰-۲۰۰۰ توکن مصرف می‌کند.
           </p>
         </div>
-        <div className="card" style={{ padding: 20 }}>
+        <div className="card slide-up" style={{ padding: 20, animationDelay: '0.35s' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <Icon name="wallet" size={16} className="text-accent" />
             <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>شارژ کیف پول</span>
@@ -286,7 +286,7 @@ export default function PricingPage() {
             کیف پول خود را شارژ کنید و به ازای مصرف واقعی هر پیام، هزینه از موجودی کسر می‌شود. بدون اشتراک ماهانه!
           </p>
         </div>
-        <div className="card" style={{ padding: 20 }}>
+        <div className="card slide-up" style={{ padding: 20, animationDelay: '0.4s' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <Icon name="sparkles" size={16} className="text-accent" />
             <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>مدل هوشمند</span>
@@ -297,13 +297,19 @@ export default function PricingPage() {
         </div>
       </div>
 
-      {/* Bottom CTA */}
-      <div style={{
+      {/* Bottom CTA — was a hardcoded purple/cyan gradient left over from
+          before the squirrel-brand redesign; every other accent on this page
+          (and site-wide) is the warm rust --accent, so this section quietly
+          broke the "one accent color per page" rule. Now tinted off the same
+          token, via color-mix so it stays a soft wash rather than a solid
+          fill. */}
+      <div className="slide-up" style={{
         textAlign: 'center',
         padding: '40px 24px',
-        background: 'linear-gradient(135deg, rgba(124,111,247,0.08) 0%, rgba(103,232,249,0.04) 100%)',
+        background: 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, transparent) 0%, color-mix(in srgb, var(--accent) 4%, transparent) 100%)',
         borderRadius: 'var(--radius-lg)',
         border: '1px solid var(--border)',
+        animationDelay: '0.45s',
       }}>
         <Icon name="sparkles" size={28} style={{ color: 'var(--accent)', marginBottom: 12 }} />
         {/* h2, not h3 — the only heading above it on this page is the h1. */}

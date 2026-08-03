@@ -9,7 +9,7 @@ export function SiteFooter() {
           <div className="lp-footer__about">
             <a href="/" className="lp-brand">
               <BrandMark />
-              Sanjhubai
+              Sanjabai
             </a>
             <p className="lp-footer__tagline">
               پلتفرم فارسی دسترسی به مدل‌های هوش مصنوعی. چت کنید، عامل بسازید و با یک API
@@ -30,7 +30,7 @@ export function SiteFooter() {
         </div>
 
         <div className="lp-footer__bottom">
-          <span>© ۱۴۰۴ Sanjhubai — تمامی حقوق محفوظ است.</span>
+          <span>© ۱۴۰۴ Sanjabai — تمامی حقوق محفوظ است.</span>
           <span>ساخته‌شده برای کاربران فارسی‌زبان</span>
         </div>
       </div>

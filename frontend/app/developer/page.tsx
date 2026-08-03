@@ -25,7 +25,7 @@ const CODE_EXAMPLES = {
 
 client = OpenAI(
     api_key="YOUR_API_KEY",
-    base_url="https://sanjhubai.ir/v1"
+    base_url="https://sanjabai.ir/v1"
 )
 
 response = client.chat.completions.create(
@@ -41,7 +41,7 @@ print(response.choices[0].message.content)`,
   },
   curl: {
     label: 'cURL',
-    code: `curl https://sanjhubai.ir/v1/chat/completions \\
+    code: `curl https://sanjabai.ir/v1/chat/completions \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer YOUR_API_KEY" \\
   -d '{
@@ -59,7 +59,7 @@ print(response.choices[0].message.content)`,
 
 const client = new OpenAI({
   apiKey: "YOUR_API_KEY",
-  baseURL: "https://sanjhubai.ir/v1",
+  baseURL: "https://sanjabai.ir/v1",
 });
 
 const response = await client.chat.completions.create({
@@ -203,10 +203,10 @@ export default function DeveloperPage() {
   return (
     <div style={{ padding: '24px 0' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+      <div className="slide-up" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
         <div style={{
           width: 40, height: 40, borderRadius: 12,
-          background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)',
+          background: 'linear-gradient(135deg, var(--accent), var(--accent-hover))',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <Icon name="code" size={20} style={{ color: 'var(--text-on-accent)' }} />
@@ -222,7 +222,7 @@ export default function DeveloperPage() {
       </div>
 
       {/* API Info Card */}
-      <div className="card" style={{ marginBottom: 20 }}>
+      <div className="card slide-up" style={{ marginBottom: 20, animationDelay: '0.05s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="external" size={16} className="text-accent" />
           <h2 className="card-title">اطلاعات API</h2>
@@ -230,8 +230,8 @@ export default function DeveloperPage() {
 
         <div style={{
           padding: '14px 18px', borderRadius: 10,
-          background: 'linear-gradient(135deg, rgba(139,92,246,0.1), rgba(109,40,217,0.05))',
-          border: '1px solid rgba(139,92,246,0.2)',
+          background: 'linear-gradient(135deg, var(--accent-bg), transparent)',
+          border: '1px solid color-mix(in srgb, var(--accent) 20%, transparent)',
           marginBottom: 16,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -242,7 +242,7 @@ export default function DeveloperPage() {
             display: 'block', direction: 'ltr', fontFamily: 'var(--font-mono)',
             fontSize: 15, fontWeight: 700, color: 'var(--accent)',
           }}>
-            https://sanjhubai.ir/v1
+            https://sanjabai.ir/v1
           </code>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '6px 0 0' }}>
             API سازگار با فرمت OpenAI — بدون تغییر در کد اصلی ادغام دهید.
@@ -278,7 +278,7 @@ export default function DeveloperPage() {
 
       {/* API Keys Section */}
       {user && (
-        <div className="card" style={{ marginBottom: 20 }}>
+        <div className="card slide-up" style={{ marginBottom: 20, animationDelay: '0.1s' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
             <Icon name="key" size={16} className="text-accent" />
             <h2 className="card-title">کلیدهای API</h2>
@@ -301,7 +301,7 @@ export default function DeveloperPage() {
               style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
             >
               {keyLoading ? (
-                <span style={{ width: 14, height: 14, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
+                <span style={{ width: 14, height: 14, border: '2px solid var(--text-on-accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
               ) : (
                 <Icon name="plus" size={14} />
               )}
@@ -313,8 +313,8 @@ export default function DeveloperPage() {
           {newKey && (
             <div style={{
               padding: '14px 18px', borderRadius: 10, marginBottom: 16,
-              background: 'rgba(16, 185, 129, 0.08)',
-              border: '1px solid rgba(16, 185, 129, 0.2)',
+              background: 'color-mix(in srgb, var(--positive) 8%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--positive) 20%, transparent)',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                 <Icon name="check" size={14} className="text-positive" />
@@ -401,7 +401,7 @@ export default function DeveloperPage() {
       )}
 
       {/* Code Examples */}
-      <div className="card" style={{ marginBottom: 20 }}>
+      <div className="card slide-up" style={{ marginBottom: 20, animationDelay: '0.15s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="code" size={16} className="text-accent" />
           <h2 className="card-title">نمونه کد</h2>
@@ -467,7 +467,7 @@ export default function DeveloperPage() {
       </div>
 
       {/* Endpoint Documentation */}
-      <div className="card">
+      <div className="card slide-up" style={{ animationDelay: '0.2s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="external" size={16} className="text-accent" />
           <h2 className="card-title">مستندات endpoint‌ها</h2>
@@ -483,8 +483,8 @@ export default function DeveloperPage() {
                 <span style={{
                   padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700,
                   fontFamily: 'var(--font-mono)',
-                  background: ep.method === 'POST' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.1)',
-                  color: ep.method === 'POST' ? 'var(--positive)' : '#3b82f6',
+                  background: ep.method === 'POST' ? 'color-mix(in srgb, var(--positive) 10%, transparent)' : 'color-mix(in srgb, var(--info) 10%, transparent)',
+                  color: ep.method === 'POST' ? 'var(--positive)' : 'var(--info)',
                 }}>
                   {ep.method}
                 </span>

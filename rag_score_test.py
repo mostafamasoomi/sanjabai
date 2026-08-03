@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent re-score test of sanjhubai RAG endpoints against localhost:8081."""
+"""Independent re-score test of sanjabai RAG endpoints against localhost:8081."""
 import json, time, sys, uuid
 import requests
 

@@ -213,10 +213,13 @@ function QuickAction({
    Ledger Entry Row
    ═══════════════════════════════════════════════════════════════ */
 
-function LedgerRow({ entry }: { entry: LedgerEntry }) {
+function LedgerRow({ entry, idx = 0 }: { entry: LedgerEntry; idx?: number }) {
   const isCredit = entry.amount > 0
   return (
-    <div className="flex items-center justify-between py-3 border-b border-[var(--border)]">
+    <div
+      className="flex items-center justify-between py-3 border-b border-[var(--border)] slide-up"
+      style={{ animationDelay: `${0.2 + Math.min(idx, 10) * 0.03}s` }}
+    >
       <div className="flex items-center gap-3 min-w-0">
         <div
           className="w-8 h-8 rounded-[var(--radius-sm)] flex items-center justify-center shrink-0"
@@ -477,7 +480,7 @@ export default function DashboardPage() {
     // to a half-width column pinned to the inline-start edge.
     <div className="dash-grid">
       {/* ─── Header ─── */}
-      <header className="dash-span-12" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+      <header className="dash-span-12 slide-up" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 className="page-title">
             سلام، {displayName}
@@ -506,21 +509,21 @@ export default function DashboardPage() {
       </header>
 
       {/* ─── Stat row: four equal columns across the full measure ─── */}
-      <div className="dash-span-3">
+      <div className="dash-span-3 slide-up" style={{ animationDelay: '0.05s' }}>
         <StatCard icon="wallet" label="موجودی کیف پول" value={balance ?? 0} unit="تومان" lead />
       </div>
-      <div className="dash-span-3">
+      <div className="dash-span-3 slide-up" style={{ animationDelay: '0.1s' }}>
         <StatCard icon="payment" label="کل هزینه" value={usage?.total_spent_this_month ?? 0} unit="تومان" />
       </div>
-      <div className="dash-span-3">
+      <div className="dash-span-3 slide-up" style={{ animationDelay: '0.15s' }}>
         <StatCard icon="chat" label="تعداد مکالمات" value={(usage as any)?.event_count_this_month ?? 0} unit="مکالمه" />
       </div>
-      <div className="dash-span-3">
+      <div className="dash-span-3 slide-up" style={{ animationDelay: '0.2s' }}>
         <StatCard icon="code" label="کل توکن‌ها" value={usage?.total_input_tokens_this_month ?? 0} unit="توکن" />
       </div>
 
       {/* ─── Subscription + activity row ─── */}
-        <div className="card dash-span-4 flex flex-col gap-3">
+        <div className="card dash-span-4 flex flex-col gap-3 slide-up" style={{ animationDelay: '0.25s' }}>
           <div className="flex items-center justify-between">
             <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>وضعیت اشتراک</span>
             <div
@@ -612,7 +615,7 @@ export default function DashboardPage() {
 
         {/* Recent Activity / Ledger — the widest card on the page, because it
             is a list of long rows and the only one that benefits from run. */}
-        <div className="card dash-span-8 overflow-hidden">
+        <div className="card dash-span-8 overflow-hidden slide-up" style={{ animationDelay: '0.3s' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
             <div className="flex items-center gap-2">
               <span className="text-[var(--accent)]">
@@ -646,8 +649,8 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="flex flex-col">
-              {recentLedger.map((entry) => (
-                <LedgerRow key={entry.id} entry={entry} />
+              {recentLedger.map((entry, idx) => (
+                <LedgerRow key={entry.id} entry={entry} idx={idx} />
               ))}
             </div>
           )}
@@ -655,7 +658,7 @@ export default function DashboardPage() {
 
         {/* ─── Bottom row: three equal thirds ─── */}
           {/* Quick Actions */}
-          <div className="card dash-span-4">
+          <div className="card dash-span-4 slide-up" style={{ animationDelay: '0.35s' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
               <span className="text-[var(--accent)]">
                 <Icon name="dashboard" size={18} />
@@ -700,7 +703,7 @@ export default function DashboardPage() {
           </div>
 
           {/* Account Info */}
-          <div className="card dash-span-4">
+          <div className="card dash-span-4 slide-up" style={{ animationDelay: '0.4s' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
               <span className="text-[var(--accent)]">
                 <Icon name="profile" size={18} />
@@ -730,7 +733,7 @@ export default function DashboardPage() {
           </div>
 
           {/* ─── PAYG Toggle Section ─── */}
-          <div className="card dash-span-4" id="payg-section">
+          <div className="card dash-span-4 slide-up" id="payg-section" style={{ animationDelay: '0.45s' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
               <span className="text-[var(--accent)]">
                 <Icon name="payment" size={18} />
@@ -776,13 +779,13 @@ export default function DashboardPage() {
                     width: '1.25rem',
                     height: '1.25rem',
                     borderRadius: '50%',
-                    background: 'white',
+                    background: 'var(--text-on-accent)',
                     position: 'absolute',
                     top: '0.1875rem',
                     right: billingSettings?.payg_enabled ? '0.1875rem' : 'auto',
                     left: billingSettings?.payg_enabled ? 'auto' : '0.1875rem',
                     transition: 'all 0.2s ease',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                    boxShadow: 'var(--shadow-sm)',
                   }}
                 />
               </button>

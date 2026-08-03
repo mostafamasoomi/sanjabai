@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-Sanjhubai is a Persian-first AI agent platform: a FastAPI backend gateway to AI models (via a self-hosted LiteLLM proxy in front of the "Bynara" provider), a Next.js 15 frontend (RTL Persian UI), a separate admin panel, and a Telegram bot. It provides chat/completions, conversation + assistant + skill + memory management, RAG over user documents, a document generator (PPTX/DOCX/Markdown), wallet/billing with a reservation-and-settle pattern, and subscriptions.
+Sanjabai is a Persian-first AI agent platform: a FastAPI backend gateway to AI models (via a self-hosted LiteLLM proxy in front of the "Bynara" provider), a Next.js 15 frontend (RTL Persian UI), a separate admin panel, and a Telegram bot. It provides chat/completions, conversation + assistant + skill + memory management, RAG over user documents, a document generator (PPTX/DOCX/Markdown), wallet/billing with a reservation-and-settle pattern, and subscriptions.
 
-Services (see `docker-compose.sanjhubai.yml`): `sanjhubai_pg` (Postgres 16 + pgvector), `sanjhubai_redis`, `sanjhubai_litellm` (LiteLLM proxy, egresses through `sanjhubai_tunnel` SOCKS5), `sanjhubai_api` (FastAPI backend, port 8001→8000), `sanjhubai_frontend` (Next.js, port 3003→3000), `sanjhubai_bot` (Telegram bot). There is also a standalone `admin/` FastAPI app (separate from `sanjhubai_api`'s built-in `/admin/*` routes) and `infra/` (nginx + tunnel).
+Services (see `docker-compose.sanjabai.yml`): `sanjabai_pg` (Postgres 16 + pgvector), `sanjabai_redis`, `sanjabai_litellm` (LiteLLM proxy, egresses through `sanjabai_tunnel` SOCKS5), `sanjabai_api` (FastAPI backend, port 8001→8000), `sanjabai_frontend` (Next.js, port 3003→3000), `sanjabai_bot` (Telegram bot). There is also a standalone `admin/` FastAPI app (separate from `sanjabai_api`'s built-in `/admin/*` routes) and `infra/` (nginx + tunnel).
 
 ## Commands
 
@@ -52,7 +52,7 @@ npx playwright test tests/wallet.spec.ts
 
 ```bash
 cp .env.example .env   # fill in BYNARA_API_KEY, SOCKS5_PROXY_URL, ADMIN_TOKEN, etc.
-docker compose -f docker-compose.sanjhubai.yml up -d
+docker compose -f docker-compose.sanjabai.yml up -d
 # Frontend: http://localhost:3003  API: http://localhost:8001  Health: /health
 ```
 
@@ -90,7 +90,7 @@ Wallet operations use a reserve → settle pattern (`services/reservation.py`, `
 
 ### Document generator
 
-`document_generator.py` builds `.pptx` (`python-pptx`), `.docx` (`python-docx`), and Markdown decks from a single prompt. Generated files are written to a Docker volume (`sanjhubai_docs`, mounted at `/tmp/sanjhubai_docs`); the document registry/metadata is currently **in-memory only** and does not survive an API restart — this is a known gap tracked in the README roadmap (persistent storage via Postgres + object storage is planned, not yet implemented). Don't assume document listing survives across processes/restarts.
+`document_generator.py` builds `.pptx` (`python-pptx`), `.docx` (`python-docx`), and Markdown decks from a single prompt. Generated files are written to a Docker volume (`sanjabai_docs`, mounted at `/tmp/sanjabai_docs`); the document registry/metadata is currently **in-memory only** and does not survive an API restart — this is a known gap tracked in the README roadmap (persistent storage via Postgres + object storage is planned, not yet implemented). Don't assume document listing survives across processes/restarts.
 
 ### Auth & sessions
 
@@ -98,7 +98,7 @@ Two parallel identity mechanisms: cookie-based server-side sessions in Redis (`S
 
 ### Frontend
 
-Next.js App Router under `frontend/app/`, one directory per feature area (`chat`, `admin`, `wallet`, `pricing`, `assistants`, `skills`, `memory`, `tasks`, `api-keys`, `usage`, `compare`, `playground`, `documents`, ...). `next.config.js` rewrites `/api/*` and `/v1/*` to the backend (`NEXT_PUBLIC_API_URL`, defaulting to the Docker service name `sanjhubai-sanjhubai_api-1:8000`) — the frontend never talks to the backend directly by absolute URL in app code, it goes through these rewrites. `lib/auth.tsx` provides an `AuthProvider`/context wrapping token storage (`localStorage` + `/api/auth/me`) — only clears the stored token on a definitive 401/403, not on transient network/5xx errors. `lib/useCatalog.ts` and similar hooks module-cache API responses (e.g. 60s TTL, in-flight request dedup) to avoid redundant fetches across components. UI is RTL Persian by default with an English/Persian language toggle; Playwright specs run against `fa-IR` locale.
+Next.js App Router under `frontend/app/`, one directory per feature area (`chat`, `admin`, `wallet`, `pricing`, `assistants`, `skills`, `memory`, `tasks`, `api-keys`, `usage`, `compare`, `playground`, `documents`, ...). `next.config.js` rewrites `/api/*` and `/v1/*` to the backend (`NEXT_PUBLIC_API_URL`, defaulting to the Docker service name `sanjabai-sanjabai_api-1:8000`) — the frontend never talks to the backend directly by absolute URL in app code, it goes through these rewrites. `lib/auth.tsx` provides an `AuthProvider`/context wrapping token storage (`localStorage` + `/api/auth/me`) — only clears the stored token on a definitive 401/403, not on transient network/5xx errors. `lib/useCatalog.ts` and similar hooks module-cache API responses (e.g. 60s TTL, in-flight request dedup) to avoid redundant fetches across components. UI is RTL Persian by default with an English/Persian language toggle; Playwright specs run against `fa-IR` locale.
 
 ### Product/data contract
 
@@ -110,3 +110,13 @@ Next.js App Router under `frontend/app/`, one directory per feature area (`chat`
 - **Persian in code**: many user-facing strings (error messages, audit log text, rate-limit messages) are Persian literals embedded directly in backend Python files — this is intentional (Persian-first product), not a mistake to "fix" to English.
 - Currency values are always integer tomans; never introduce float arithmetic for money.
 - SQL migrations are append-only and numbered — never edit a migration that may have already run in any environment.
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships. It's an optional dev tool — install with `pip install graphifyy` (the PyPI package name; it installs a CLI binary named `graphify`, which is what `.claude/settings.json`'s hook and the commands below actually invoke), see https://github.com/Graphify-Labs/graphify. That hook no-ops silently if the `graphify` binary isn't on PATH, so it's safe to work in this repo without it installed.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

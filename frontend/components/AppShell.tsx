@@ -12,7 +12,7 @@ import { useCommandPalette } from '@/components/CommandPalette'
 import { isOnboarded } from '@/lib/onboarding'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Sanjhubai Aurora — AppShell v2
+   Sanjabai Aurora — AppShell v2
    Premium sidebar, command palette, mobile-first, keyboard shortcuts.
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -206,7 +206,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{background: 'var(--accent-dim)'}}>
             <img src="/logo.svg" alt="" width={22} height={22} />
           </div>
-          <Link href="/" className="text-lg font-extrabold text-gradient tracking-tight">Sanjhubai</Link>
+          <Link href="/" className="text-lg font-extrabold text-gradient tracking-tight">Sanjabai</Link>
         </div>
         <div className="divider" />
 
@@ -295,7 +295,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               className={`topbar-brand${user ? ' topbar-brand--duplicate' : ''}`}
             >
               <img src="/logo.svg" alt="" width={24} height={24} />
-              <span>Sanjhubai</span>
+              <span>Sanjabai</span>
             </Link>
 
             {/* Command palette. It lives at the start of the bar rather than
@@ -379,7 +379,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between px-4 py-3.5 border-b border-[var(--border)]">
-              <span className="font-bold text-gradient">Sanjhubai</span>
+              <span className="font-bold text-gradient">Sanjabai</span>
               <button onClick={() => setSidebarOpen(false)} className="btn btn-ghost btn-icon topbar-menu-btn">
                 <Icon name="close" size={18} />
               </button>

@@ -13,7 +13,7 @@ import MarkdownRenderer from './components/MarkdownRenderer'
 import ModelPicker from './components/ModelPicker'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Sanjhubai Chat — Aurora v2 + Conversation History Sidebar
+   Sanjabai Chat — Aurora v2 + Conversation History Sidebar
    Cancel, retry, model picker, cost preview, markdown, keyboard shortcuts.
    Sidebar: conversation CRUD, auto-save, mobile drawer, desktop collapse.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -173,7 +173,7 @@ export default function ChatPage() {
   const { user, token } = useAuth()
   const { models, loading, error: catalogError } = useCatalog()
   const [messages, setMessages] = useState<Message[]>(() => [
-    { id: 'welcome', role: 'assistant', content: 'سلام! به Sanjhubai خوش آمدید. چطور می‌توانم کمک کنید؟' }
+    { id: 'welcome', role: 'assistant', content: 'سلام! به Sanjabai خوش آمدید. چطور می‌توانم کمک کنید؟' }
   ])
   const [model, setModel] = useState<ModelCatalogItem | null>(null);
   const [input, setInput] = useState('')
@@ -185,14 +185,14 @@ export default function ChatPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [attachedFile, setAttachedFile] = useState<File | null>(null)
   const [webSearch, setWebSearch] = useState<boolean>(() => {
-    try { return localStorage.getItem('sanjhubai_web_search') === 'true' } catch { return false }
+    try { return localStorage.getItem('sanjabai_web_search') === 'true' } catch { return false }
   })
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [showPresets, setShowPresets] = useState(true)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [smartMode, setSmartMode] = useState<boolean>(() => {
-    try { return localStorage.getItem('sanjhubai_smart_mode') === 'true' } catch { return false }
+    try { return localStorage.getItem('sanjabai_smart_mode') === 'true' } catch { return false }
   })
   const [smartModel, setSmartModel] = useState<string | null>(null)
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
@@ -253,10 +253,10 @@ export default function ChatPage() {
   useEffect(() => { activeConversationIdRef.current = activeConversationId }, [activeConversationId])
   useEffect(() => { messagesRef.current = messages }, [messages])
   useEffect(() => {
-    try { localStorage.setItem('sanjhubai_smart_mode', smartMode ? 'true' : 'false') } catch {}
+    try { localStorage.setItem('sanjabai_smart_mode', smartMode ? 'true' : 'false') } catch {}
   }, [smartMode])
   useEffect(() => {
-    try { localStorage.setItem('sanjhubai_web_search', webSearch ? 'true' : 'false') } catch {}
+    try { localStorage.setItem('sanjabai_web_search', webSearch ? 'true' : 'false') } catch {}
   }, [webSearch])
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -328,7 +328,7 @@ export default function ChatPage() {
         setMessages(loaded)
         setShowPresets(false)
       } else {
-        setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Sanjhubai خوش آمدید. چطور می‌توانم کمک کنید؟' }])
+        setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Sanjabai خوش آمدید. چطور می‌توانم کمک کنید؟' }])
         setShowPresets(true)
       }
       // Set model from conversation if possible
@@ -390,7 +390,7 @@ export default function ChatPage() {
         setConversations(prev => prev.filter(c => c.id !== id))
         if (activeConversationId === id) {
           setActiveConversationId(null)
-          setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Sanjhubai خوش آمدید. چطور می‌توانم کمک کنید؟' }])
+          setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Sanjabai خوش آمدید. چطور می‌توانم کمک کنید؟' }])
           setShowPresets(true)
         }
       }
@@ -405,7 +405,7 @@ export default function ChatPage() {
 
   const startNewChat = useCallback(() => {
     setActiveConversationId(null)
-    setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Sanjhubai خوش آمدید. چطور می‌توانم کمک کنید؟' }])
+    setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Sanjabai خوش آمدید. چطور می‌توانم کمک کنید؟' }])
     setShowPresets(true)
     setError('')
     setMobileDrawerOpen(false)
@@ -1042,7 +1042,7 @@ export default function ChatPage() {
           {/* ── Messages ────────────────────────────────────────────── */}
           <div ref={scrollContainerRef} onScroll={handleScroll} className="chat-messages">
             {showPresets && messages.length <= 1 && (
-              <div className="chat-presets">
+              <div className="chat-presets slide-up">
                 <h2 className="chat-presets-title">از کجا شروع کنیم؟</h2>
                 <div className="chat-presets-grid">
                   {PRESETS.map(p => (
@@ -1081,8 +1081,8 @@ export default function ChatPage() {
             {error && (
               error === 'INSUFFICIENT_BALANCE' ? (
                 <div className="chat-error chat-error-balance" style={{
-                  background: 'linear-gradient(135deg, rgba(243,156,18,0.12), rgba(231,76,60,0.08))',
-                  border: '1px solid rgba(243,156,18,0.3)',
+                  background: 'linear-gradient(135deg, color-mix(in srgb, var(--warning) 12%, transparent), color-mix(in srgb, var(--danger) 8%, transparent))',
+                  border: '1px solid color-mix(in srgb, var(--warning) 30%, transparent)',
                   borderRadius: '16px',
                   padding: '20px 24px',
                   display: 'flex',
@@ -1155,7 +1155,7 @@ export default function ChatPage() {
                 className={"btn btn-ghost btn-icon rounded-xl shrink-0" + (webSearch ? " text-[var(--accent)]" : "")}
                 aria-label="جستجوی وب"
                 title="جستجوی وب"
-                style={webSearch ? { color: 'var(--accent, #3b82f6)' } : {}}
+                style={webSearch ? { color: 'var(--accent)' } : {}}
               >
                 <Icon name="globe" size={18} />
               </button>
@@ -1179,7 +1179,7 @@ export default function ChatPage() {
               </button>
             </div>
             {attachedFile && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', marginTop: '6px', background: 'var(--bg-secondary, rgba(255,255,255,0.05))', borderRadius: '10px', fontSize: '0.82rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', marginTop: '6px', background: 'var(--bg-secondary)', borderRadius: '10px', fontSize: '0.82rem' }}>
                 <Icon name="paperclip" size={14} />
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{attachedFile.name}</span>
                 <button type="button" onClick={() => setAttachedFile(null)} aria-label="حذف پیوست" style={{ display: 'inline-flex', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: '2px' }}>

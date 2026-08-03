@@ -70,7 +70,7 @@ export default function MemoryPage() {
   /* ── Fetch memories ───────────────────────────────────────── */
   const fetchMemories = useCallback(async (category?: string, q?: string) => {
     try {
-      const token = localStorage.getItem('sanjhubai_auth_token')
+      const token = localStorage.getItem('sanjabai_auth_token')
       if (!token) return
 
       let url = '/api/memories'
@@ -120,7 +120,7 @@ export default function MemoryPage() {
     }
     setSaving(true)
     try {
-      const token = localStorage.getItem('sanjhubai_auth_token')
+      const token = localStorage.getItem('sanjabai_auth_token')
       const r = await fetch('/api/memories', {
         method: 'POST',
         headers: {
@@ -162,7 +162,7 @@ export default function MemoryPage() {
   const saveEdit = async () => {
     if (editingId === null) return
     try {
-      const token = localStorage.getItem('sanjhubai_auth_token')
+      const token = localStorage.getItem('sanjabai_auth_token')
       const r = await fetch(`/api/memories/${editingId}`, {
         method: 'PUT',
         headers: {
@@ -192,7 +192,7 @@ export default function MemoryPage() {
   /* ── Delete memory ────────────────────────────────────────── */
   const deleteMemory = async (id: number) => {
     try {
-      const token = localStorage.getItem('sanjhubai_auth_token')
+      const token = localStorage.getItem('sanjabai_auth_token')
       const r = await fetch(`/api/memories/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
@@ -218,7 +218,7 @@ export default function MemoryPage() {
   return (
     <div style={{ maxWidth: 800, margin: '0 auto', padding: '0 16px' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+      <div className="slide-up" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
         <div
           style={{
             width: 40,
@@ -243,7 +243,7 @@ export default function MemoryPage() {
       </div>
 
       {/* Search bar */}
-      <div style={{ position: 'relative', marginBottom: 16 }}>
+      <div className="slide-up" style={{ position: 'relative', marginBottom: 16, animationDelay: '0.05s' }}>
         <Icon
           name="search"
           size={16}
@@ -284,12 +284,14 @@ export default function MemoryPage() {
 
       {/* Category tabs */}
       <div
+        className="slide-up"
         style={{
           display: 'flex',
           gap: 6,
           marginBottom: 20,
           overflowX: 'auto',
           paddingBottom: 4,
+          animationDelay: '0.1s',
         }}
       >
         {CATEGORIES.map((cat) => (
@@ -309,7 +311,7 @@ export default function MemoryPage() {
       </div>
 
       {/* Add memory button + form */}
-      <div style={{ marginBottom: 20 }}>
+      <div className="slide-up" style={{ marginBottom: 20, animationDelay: '0.15s' }}>
         {!showAddForm ? (
           <button
             onClick={() => setShowAddForm(true)}
@@ -390,12 +392,13 @@ export default function MemoryPage() {
 
       {/* Info card */}
       <div
-        className="card"
+        className="card slide-up"
         style={{
           marginBottom: 20,
           background: 'var(--accent-dim)',
           borderColor: 'var(--accent)',
           borderWidth: 1,
+          animationDelay: '0.2s',
         }}
       >
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
@@ -424,10 +427,11 @@ export default function MemoryPage() {
         </div>
       ) : memories.length === 0 ? (
         <div
-          className="card"
+          className="card slide-up"
           style={{
             textAlign: 'center',
             padding: '48px 24px',
+            animationDelay: '0.2s',
           }}
         >
           <div
@@ -461,8 +465,12 @@ export default function MemoryPage() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {memories.map((m) => (
-            <div key={m.id} className="card" style={{ padding: 16 }}>
+          {memories.map((m, idx) => (
+            <div
+              key={m.id}
+              className="card slide-up"
+              style={{ padding: 16, animationDelay: `${0.2 + Math.min(idx, 10) * 0.03}s` }}
+            >
               {isEditing(m.id) ? (
                 /* Edit mode */
                 <div>

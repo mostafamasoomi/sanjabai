@@ -54,7 +54,7 @@ export default function PlaygroundPage() {
 
   const curlSnippet = useMemo(
     () =>
-      `curl https://api.sanjhubai.ir/v1/chat/completions \\\n` +
+      `curl https://api.sanjabai.ir/v1/chat/completions \\\n` +
       `  -H "Authorization: Bearer YOUR_API_KEY" \\\n` +
       `  -H "Content-Type: application/json" \\\n` +
       `  -d '${JSON.stringify(requestBody, null, 2)}'`,
@@ -101,7 +101,7 @@ export default function PlaygroundPage() {
 
   return (
     <div className="compare-page">
-      <div className="compare-header">
+      <div className="compare-header slide-up">
         <div>
           <h1 className="text-2xl font-bold text-gradient">Playground</h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1">
@@ -110,7 +110,7 @@ export default function PlaygroundPage() {
         </div>
       </div>
 
-      <div className="card space-y-3">
+      <div className="card space-y-3 slide-up" style={{ animationDelay: '0.05s' }}>
         <div>
           <label className="compare-picker-label">مدل</label>
           {catalogLoading ? (
@@ -178,7 +178,7 @@ export default function PlaygroundPage() {
       )}
 
       <div className="compare-results">
-        <div className="compare-panel">
+        <div className="compare-panel slide-up" style={{ animationDelay: '0.1s' }}>
           <div className="compare-panel-header">
             <span className="compare-model-name">پاسخ</span>
           </div>
@@ -193,7 +193,7 @@ export default function PlaygroundPage() {
           </div>
         </div>
 
-        <div className="compare-panel">
+        <div className="compare-panel slide-up" style={{ animationDelay: '0.15s' }}>
           <div className="compare-panel-header">
             <span className="compare-model-name">درخواست (curl)</span>
             <button className="btn btn-ghost" onClick={copySnippet} title="کپی">
@@ -207,7 +207,7 @@ export default function PlaygroundPage() {
       </div>
 
       {response && (
-        <div className="card">
+        <div className="card slide-up">
           <div className="compare-panel-header">
             <span className="compare-model-name">پاسخ خام JSON</span>
           </div>

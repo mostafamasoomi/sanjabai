@@ -69,14 +69,14 @@ function CardSkeleton() {
    Conversation Card
    ═══════════════════════════════════════════════════════════════ */
 
-function ConversationCard({ conv, onClick }: { conv: Conversation; onClick: () => void }) {
+function ConversationCard({ conv, onClick, idx = 0 }: { conv: Conversation; onClick: () => void; idx?: number }) {
   const lastMsg = conv.messages?.length
     ? conv.messages[conv.messages.length - 1]?.content
     : undefined
 
   return (
     <button
-      className="card-interactive"
+      className="card-interactive slide-up"
       onClick={onClick}
       style={{
         display: 'flex',
@@ -90,6 +90,7 @@ function ConversationCard({ conv, onClick }: { conv: Conversation; onClick: () =
         borderRadius: 'var(--radius-md)',
         background: 'var(--bg-surface)',
         transition: 'all var(--motion-fast) ease',
+        animationDelay: `${0.05 + Math.min(idx, 10) * 0.03}s`,
       }}
     >
       <div className="flex items-center justify-between gap-2">
@@ -279,7 +280,7 @@ export default function SearchPage() {
   return (
     <div className="flex flex-col gap-6">
       {/* ── Header ── */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 slide-up">
         <div
           style={{
             width: '2.5rem',
@@ -307,6 +308,7 @@ export default function SearchPage() {
 
       {/* ── Search Input ── */}
       <div
+        className="slide-up"
         style={{
           position: 'relative',
           display: 'flex',
@@ -317,6 +319,7 @@ export default function SearchPage() {
           border: '1.5px solid var(--border)',
           borderRadius: 'var(--radius-lg)',
           transition: 'border-color var(--motion-fast) ease',
+          animationDelay: '0.05s',
         }}
       >
         <Icon
@@ -376,16 +379,18 @@ export default function SearchPage() {
       {!isLoading && (
         <div className="flex flex-col gap-3">
           {displayList.length > 0 ? (
-            displayList.map((conv) => (
+            displayList.map((conv, idx) => (
               <ConversationCard
                 key={conv.id}
                 conv={conv}
+                idx={idx}
                 onClick={() => router.push(`/chat?conversation=${conv.id}`)}
               />
             ))
           ) : (
             /* ── Empty state ── */
             <div
+              className="slide-up"
               style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -393,6 +398,7 @@ export default function SearchPage() {
                 justifyContent: 'center',
                 padding: '4rem 2rem',
                 gap: '1rem',
+                animationDelay: '0.1s',
               }}
             >
               <Icon

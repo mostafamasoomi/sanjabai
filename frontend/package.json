@@ -22,7 +22,8 @@
     "rehype-raw": "^7.0.0",
     "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1",
-    "tailwindcss": "^3.4.4"
+    "tailwindcss": "^3.4.4",
+    "three": "^0.185.1"
   },
   "devDependencies": {
     "@next/bundle-analyzer": "^14.2.35",
@@ -30,6 +31,7 @@
     "@types/node": "^20.14.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@types/three": "^0.185.4",
     "typescript": "5.5",
     "vitest": "^4.1.10"
   }

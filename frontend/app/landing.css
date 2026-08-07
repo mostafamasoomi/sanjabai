@@ -621,6 +621,20 @@ a.lp-pill:hover {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Vortex intro
+   ───────────────────────────────────────────────────────────────────────────
+   Decorative only (aria-hidden), so it's a fixed dark backdrop in both
+   themes rather than a themed surface. The fixed header floats over its top
+   edge exactly as it floats over the hero below.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-vortex-intro {
+  position: relative;
+  height: clamp(420px, 100vh, 860px);
+  overflow: hidden;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Header
    ═══════════════════════════════════════════════════════════════════════════ */
 

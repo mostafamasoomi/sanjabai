@@ -621,6 +621,45 @@ a.lp-pill:hover {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Vortex intro
+   ───────────────────────────────────────────────────────────────────────────
+   Decorative only (aria-hidden), so it's a fixed dark backdrop in both
+   themes rather than a themed surface. The fixed header floats over its top
+   edge exactly as it floats over the hero below.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.lp-vortex-intro {
+  position: relative;
+  height: clamp(420px, 100vh, 860px);
+  overflow: hidden;
+  background: #000;
+}
+
+/* Soft fade into the themed background so the dark canvas never ends on a
+   hard edge — in light mode it melts into the cream page, in dark mode it
+   melts into the near-black page. The canvas keeps its alpha so the fade
+   reveals the section's own background underneath. */
+.lp-vortex-intro::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 55%, var(--bg-base) 100%);
+  pointer-events: none;
+}
+
+/* Light theme: a pure-black block pasted on a cream page is jarring, so the
+   section's own background is a dark gradient that finishes exactly at the
+   page background. The white particles stay visible against the dark top. */
+[data-theme='light'] .lp-vortex-intro {
+  background: linear-gradient(
+    to bottom,
+    #14100d 0%,
+    #0f0c0a 45%,
+    var(--bg-base) 100%
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Header
    ═══════════════════════════════════════════════════════════════════════════ */
 

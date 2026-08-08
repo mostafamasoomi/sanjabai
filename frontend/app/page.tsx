@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 
+import { VortexIntro } from '@/components/landing/VortexIntro'
 import { LandingHeader } from '@/components/landing/LandingHeader'
 import { Hero } from '@/components/landing/Hero'
 import { ProviderMarquee } from '@/components/landing/ProviderMarquee'
@@ -49,6 +50,7 @@ const faqJsonLd = {
 export default function LandingPage() {
   return (
     <div className="lp">
+      <VortexIntro />
       <LandingHeader />
 
       <main>

@@ -21,7 +21,7 @@ export function VortexIntro() {
       <Vortex
         style={{ width: '100%', height: '100%' }}
         background="transparent"
-        cometOptions={{ color: '#d97b3f', glow: 10, count: 16, speed: 8 }}
+        cometOptions={{ color: '#ff8a3d', glow: 10, count: 20, speed: 10, delay: 0 }}
       />
     </div>
   )

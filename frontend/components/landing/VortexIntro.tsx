@@ -18,7 +18,10 @@ const Vortex = dynamic(() => import('./Vortex'), { ssr: false })
 export function VortexIntro() {
   return (
     <div className="lp-vortex-intro" aria-hidden="true">
-      <Vortex style={{ width: '100%', height: '100%' }} />
+      <Vortex
+        style={{ width: '100%', height: '100%' }}
+        cometOptions={{ color: '#d97b3f', glow: 10, count: 16, speed: 8 }}
+      />
     </div>
   )
 }

@@ -62,13 +62,13 @@ export default function SignupPage() {
 
   return (
     <div className="aurora-signup-wrapper min-h-[80vh] flex items-center justify-center">
-      <div className="aurora-signup-card card w-full max-w-sm">
+      <div className="aurora-signup-card card w-full max-w-sm slide-up">
         {/* Header */}
         <div className="text-center mb-6">
           <div className="aurora-signup-logo w-14 h-14 rounded-xl flex items-center justify-center mx-auto mb-4">
             <Icon name="sparkles" size={28} className="text-white" />
           </div>
-          <h1 className="text-xl font-extrabold mb-1 text-gradient">ثبت‌نام در Sanjhubai</h1>
+          <h1 className="text-xl font-extrabold mb-1 text-gradient">ثبت‌نام در Sanjabai</h1>
           <p className="text-sm text-[var(--text-dim)]">دسترسی به همه مدل‌های هوش مصنوعی</p>
         </div>
 

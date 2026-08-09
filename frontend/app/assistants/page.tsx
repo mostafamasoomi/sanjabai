@@ -50,16 +50,17 @@ function CardSkeleton() {
    Assistant Card
    ═══════════════════════════════════════════════════════════════ */
 
-function AssistantCard({ assistant, onClick }: { assistant: Assistant; onClick: () => void }) {
+function AssistantCard({ assistant, onClick, delay }: { assistant: Assistant; onClick: () => void; delay: number }) {
   return (
     <div
-      className="card card-interactive"
+      className="card card-interactive slide-up"
       style={{
         display: 'flex',
         flexDirection: 'column',
         gap: '0.625rem',
         padding: '1.25rem',
         cursor: 'pointer',
+        animationDelay: `${delay}s`,
       }}
       onClick={onClick}
     >
@@ -201,7 +202,7 @@ export default function AssistantsPage() {
   return (
     <div style={{ maxWidth: '64rem', margin: '0 auto', padding: '1rem 0' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+      <div className="slide-up" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
             دستیارها
@@ -220,7 +221,7 @@ export default function AssistantsPage() {
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+      <div className="slide-up" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap', animationDelay: '0.05s' }}>
         {filters.map((f) => (
           <button
             key={f.key}
@@ -240,6 +241,7 @@ export default function AssistantsPage() {
         </div>
       ) : filtered.length === 0 ? (
         <div
+          className="slide-up"
           style={{
             display: 'flex',
             flexDirection: 'column',
@@ -247,6 +249,7 @@ export default function AssistantsPage() {
             justifyContent: 'center',
             padding: '3rem 1rem',
             gap: '1rem',
+            animationDelay: '0.1s',
           }}
         >
           <Icon name="sparkles" size={48} className="text-[var(--text-muted)]" style={{ opacity: 0.3 }} />
@@ -269,11 +272,12 @@ export default function AssistantsPage() {
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-          {filtered.map((assistant) => (
+          {filtered.map((assistant, idx) => (
             <AssistantCard
               key={assistant.id}
               assistant={assistant}
               onClick={() => router.push(`/assistants/${assistant.id}`)}
+              delay={0.1 + Math.min(idx, 10) * 0.03}
             />
           ))}
         </div>

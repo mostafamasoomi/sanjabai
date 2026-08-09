@@ -141,7 +141,7 @@ export default function StatusPage() {
 
   return (
     <div className="status-page">
-      <header className="status-header">
+      <header className="status-header slide-up">
         <div>
           <h1 className="page-title">وضعیت مدل‌ها</h1>
           <p className="page-subtitle">
@@ -179,7 +179,7 @@ export default function StatusPage() {
 
       {!loading && !error && data && overall && (
         <>
-          <div className="card status-banner" style={{ borderColor: overall.tone }}>
+          <div className="card status-banner slide-up" style={{ borderColor: overall.tone, animationDelay: '0.05s' }}>
             <span
               className="model-health-dot status-banner-dot"
               style={{ background: overall.tone }}
@@ -203,7 +203,7 @@ export default function StatusPage() {
 
           {/* Upstream gateways. When one of these is down every model behind it
               reads as broken, so it is worth calling out separately. */}
-          <section className="status-section">
+          <section className="status-section slide-up" style={{ animationDelay: '0.1s' }}>
             <h2 className="aurora-section-title">درگاه‌های بالادست</h2>
             <div className="status-upstreams">
               {data.upstreams.map((u) => (
@@ -230,7 +230,7 @@ export default function StatusPage() {
             </div>
           </section>
 
-          <section className="status-section">
+          <section className="status-section slide-up" style={{ animationDelay: '0.15s' }}>
             <h2 className="aurora-section-title">مدل‌ها</h2>
             <div className="card status-table-wrap">
               <table className="status-table">

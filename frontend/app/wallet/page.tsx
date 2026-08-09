@@ -363,7 +363,7 @@ export default function WalletPage() {
   return (
     <div className="wallet-page">
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+      <div className="slide-up" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div className="wallet-header-icon">
             <Icon name="wallet" size={20} className="text-accent" />
@@ -385,7 +385,7 @@ export default function WalletPage() {
       {/* Balance + Topup grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 24 }}>
         {/* ── Balance Hero Card ─────────────────────────────────────── */}
-        <div className="card wallet-balance-card">
+        <div className="card wallet-balance-card slide-up" style={{ animationDelay: '0.05s' }}>
           {/* Glow accent */}
           <div className="wallet-balance-glow" />
 
@@ -420,7 +420,7 @@ export default function WalletPage() {
         </div>
 
         {/* ── Topup Card ───────────────────────────────────────────── */}
-        <div className="card wallet-topup-card">
+        <div className="card wallet-topup-card slide-up" style={{ animationDelay: '0.1s' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
             <div className="wallet-topup-icon">
               <Icon name="plus" size={14} className="text-accent" />
@@ -493,7 +493,7 @@ export default function WalletPage() {
       </div>
 
       {/* ── Credit Packages Section ────────────────────────────────── */}
-      <div className="card" style={{ marginBottom: 24 }}>
+      <div className="card slide-up" style={{ marginBottom: 24, animationDelay: '0.15s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
           <Icon name="gift" size={16} className="text-accent" />
           <h2 className="card-title">بسته‌های اعتباری</h2>
@@ -506,7 +506,7 @@ export default function WalletPage() {
           <EmptyStateIcon icon="gift" title="بسته‌ای موجود نیست" desc="در حال حاضر بسته اعتباری برای خرید وجود ندارد." />
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
-            {creditPackages.map((pkg) => {
+            {creditPackages.map((pkg, idx) => {
               const isPurchasing = purchasingPkgId === pkg.id
               const baseToman = faNum(pkg.base_amount / 10)
               const bonusToman = pkg.bonus_percent > 0
@@ -517,7 +517,7 @@ export default function WalletPage() {
               return (
                 <div
                   key={pkg.id}
-                  className="card"
+                  className="card slide-up"
                   style={{
                     display: 'flex',
                     flexDirection: 'column',
@@ -526,6 +526,7 @@ export default function WalletPage() {
                     overflow: 'hidden',
                     borderColor: pkg.bonus_percent > 0 ? 'var(--accent)' : undefined,
                     borderWidth: pkg.bonus_percent > 0 ? 1.5 : undefined,
+                    animationDelay: `${0.15 + Math.min(idx, 10) * 0.03}s`,
                   }}
                 >
                   {pkg.bonus_percent > 0 && (
@@ -608,7 +609,7 @@ export default function WalletPage() {
       </div>
 
       {/* ── Ledger Section ─────────────────────────────────────────── */}
-      <div className="card" style={{ marginBottom: 24 }}>
+      <div className="card slide-up" style={{ marginBottom: 24, animationDelay: '0.2s' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon name="history" size={16} className="text-accent" />
@@ -655,7 +656,11 @@ export default function WalletPage() {
                 {filteredLedger.map((l, idx) => {
                   const isCredit = l.amount > 0
                   return (
-                    <tr key={l.id} className={idx % 2 === 0 ? 'wallet-row-even' : 'wallet-row-odd'}>
+                    <tr
+                      key={l.id}
+                      className={`slide-up ${idx % 2 === 0 ? 'wallet-row-even' : 'wallet-row-odd'}`}
+                      style={{ animationDelay: `${0.2 + Math.min(idx, 10) * 0.03}s` }}
+                    >
                       <td className="wallet-td-date">
                         {fmtDate(l.created_at)}
                       </td>
@@ -683,7 +688,7 @@ export default function WalletPage() {
       </div>
 
       {/* ── Payment History Section ────────────────────────────────── */}
-      <div className="card">
+      <div className="card slide-up" style={{ animationDelay: '0.25s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
           <Icon name="payment" size={16} className="text-accent" />
           <h2 className="card-title">تاریخچه پرداخت‌ها</h2>
@@ -706,7 +711,11 @@ export default function WalletPage() {
                 {payments.map((p, idx) => {
                   const st = statusLabel[p.status] || { text: p.status, badge: 'badge-warning' }
                   return (
-                    <tr key={p.id} className={idx % 2 === 0 ? 'wallet-row-even' : 'wallet-row-odd'}>
+                    <tr
+                      key={p.id}
+                      className={`slide-up ${idx % 2 === 0 ? 'wallet-row-even' : 'wallet-row-odd'}`}
+                      style={{ animationDelay: `${0.25 + Math.min(idx, 10) * 0.03}s` }}
+                    >
                       <td className="wallet-td-date">
                         {fmtDate(p.created_at)}
                       </td>

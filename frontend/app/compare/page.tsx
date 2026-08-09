@@ -140,7 +140,7 @@ export default function ComparePage() {
     const isCheaper = results?.cheaper === `model_${side}`
 
     return (
-      <div className="compare-panel">
+      <div className="compare-panel slide-up" style={{ animationDelay: side === 'a' ? '0.1s' : '0.15s' }}>
         {/* Panel header */}
         <div className="compare-panel-header">
           <div className="flex items-center gap-2 min-w-0">
@@ -232,7 +232,7 @@ export default function ComparePage() {
   return (
     <div className="compare-page">
       {/* Header */}
-      <div className="compare-header">
+      <div className="compare-header slide-up">
         <div>
           <h1 className="text-2xl font-bold text-gradient">مقایسه مدل‌ها</h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1">
@@ -242,7 +242,7 @@ export default function ComparePage() {
       </div>
 
       {/* Model pickers + prompt */}
-      <div className="card">
+      <div className="card slide-up" style={{ animationDelay: '0.05s' }}>
         <div className="compare-controls">
           {/* Model A picker */}
           <div className="compare-picker-col">

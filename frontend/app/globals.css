@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Sanjhubai — product design system
+   Sanjabai — product design system
    ───────────────────────────────────────────────────────────────────────────
    Tokens and component classes for every signed-in surface: dashboard, chat,
    models, wallet, admin. The marketing page has its own scoped system in
@@ -444,6 +444,21 @@ img, svg, video, canvas {
 .pricing-sort-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
 .pricing-sort-btn[aria-pressed='true'] { color: var(--accent); }
 .pricing-cell-value { font-size: var(--fs-sm); font-weight: 700; color: var(--text-primary); }
+
+/* Replaces a per-row onMouseEnter/onMouseLeave inline-style toggle with a
+   plain :hover rule -- same visual effect, no JS re-render on pointer move.
+   The inline-start accent bar is transparent at rest so it doesn't shift
+   layout, and only tints on hover/focus; translateY is vertical only, so it
+   reads correctly in both LTR and RTL. */
+.pricing-row {
+  border-inline-start: 2px solid transparent;
+  transition: background var(--motion-fast), border-color var(--motion-fast), transform var(--motion-fast);
+}
+.pricing-row:hover, .pricing-row:focus-within {
+  background: var(--bg-hover);
+  border-inline-start-color: var(--accent);
+  transform: translateY(-1px);
+}
 
 /* Brand lockup in the topbar. Always visible — on public routes it is the
    only branding and the only route home. */

@@ -47,7 +47,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center">
-      <div className="card w-full max-w-sm" style={{ padding: 'var(--space-8)' }}>
+      <div className="card w-full max-w-sm slide-up" style={{ padding: 'var(--space-8)' }}>
         {/* Header */}
         <div className="text-center mb-6">
           <div
@@ -60,15 +60,15 @@ export default function LoginPage() {
             <Icon name="chat" size={26} className="text-white" />
           </div>
           <h1 className="text-xl font-extrabold mb-1 text-gradient">ورود به حساب</h1>
-          <p className="text-sm text-[var(--text-muted)]">به Sanjhubai خوش آمدید</p>
+          <p className="text-sm text-[var(--text-muted)]">به Sanjabai خوش آمدید</p>
         </div>
 
         {error && (
           <div
             className="rounded-lg p-3 text-sm mb-4 flex items-center gap-2"
             style={{
-              background: 'rgba(248, 113, 113, 0.08)',
-              border: '1px solid rgba(248, 113, 113, 0.2)',
+              background: 'color-mix(in srgb, var(--danger) 8%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--danger) 20%, transparent)',
               color: 'var(--danger)',
             }}
           >

@@ -3,43 +3,44 @@
 # directory this file lives in. Pinning it here means the container/network
 # names below are fixed regardless of what the checkout directory is called
 # on any given host — important since this file was renamed as part of the
-# Multiai -> Sanjhubai rebrand, but the *directory* it's deployed from on an
-# existing server may not have been renamed yet (see the volume mount below).
-name: sanjhubai
+# Multiai -> Sanjhubai -> Sanjabai rebrands, but the *directory* it's
+# deployed from on an existing server may not have been renamed yet (see
+# the volume mount below).
+name: sanjabai
 
 services:
-  sanjhubai_pg:
+  sanjabai_pg:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: sanjhubai
-      POSTGRES_PASSWORD: sanjhubai
-      POSTGRES_DB: sanjhubai
+      POSTGRES_USER: sanjabai
+      POSTGRES_PASSWORD: sanjabai
+      POSTGRES_DB: sanjabai
     volumes:
-      - sanjhubai_pg_data:/var/lib/postgresql/data
+      - sanjabai_pg_data:/var/lib/postgresql/data
       # This host path must match wherever this repo is actually checked
-      # out on the server. It reads /root/sanjhubai here, matching this
+      # out on the server. It reads /root/sanjabai here, matching this
       # rebrand — if the real checkout directory hasn't been renamed to
       # match yet, change this one line back to the real path rather than
       # renaming the checkout, and don't fix it silently.
-      - /root/sanjhubai/infra/pgvector/vector.so:/usr/local/lib/postgresql/vector.so:ro
+      - /root/sanjabai/infra/pgvector/vector.so:/usr/local/lib/postgresql/vector.so:ro
       # ponytail: no host port needed — API connects via Docker network
-    networks: [sanjhubai_net]
+    networks: [sanjabai_net]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sanjhubai"]
+      test: ["CMD-SHELL", "pg_isready -U sanjabai"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  sanjhubai_redis:
+  sanjabai_redis:
     image: redis:7-alpine
     restart: unless-stopped
     command: ["redis-server", "--save", "60", "1", "--appendonly", "yes"]
     volumes:
-      - sanjhubai_redis_data:/data
-    networks: [sanjhubai_net]
+      - sanjabai_redis_data:/data
+    networks: [sanjabai_net]
 
-  sanjhubai_litellm:
+  sanjabai_litellm:
     build:
       context: ./backend
       dockerfile: Dockerfile.litellm
@@ -52,29 +53,29 @@ services:
       BYNARA_API_KEY_2: ${BYNARA_API_KEY_2:?BYNARA_API_KEY_2 must be set in .env}
       SOCKS5_PROXY_URL: ${SOCKS5_PROXY_URL:?SOCKS5_PROXY_URL must be set in .env}
     depends_on:
-      - sanjhubai_tunnel
-    networks: [sanjhubai_net]
+      - sanjabai_tunnel
+    networks: [sanjabai_net]
 
-  sanjhubai_tunnel:
+  sanjabai_tunnel:
     build:
       context: ./infra
       dockerfile: Dockerfile.tunnel
     restart: unless-stopped
-    networks: [sanjhubai_net]
+    networks: [sanjabai_net]
 
-  sanjhubai_api:
+  sanjabai_api:
     build:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
-      sanjhubai_pg:
+      sanjabai_pg:
         condition: service_healthy
-      sanjhubai_redis:
+      sanjabai_redis:
         condition: service_started
-      sanjhubai_litellm:
+      sanjabai_litellm:
         condition: service_started
-      sanjhubai_tunnel:
+      sanjabai_tunnel:
         condition: service_started
     env_file: .env
     # env vars loaded from .env via env_file above. ADMIN_TOKEN is also
@@ -88,40 +89,40 @@ services:
       - ADMIN_TOKEN=${ADMIN_TOKEN:?ADMIN_TOKEN must be set in .env}
     ports:
       - "0.0.0.0:8001:8000"
-    networks: [sanjhubai_net]
+    networks: [sanjabai_net]
 
-  sanjhubai_frontend:
+  sanjabai_frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: http://sanjhubai-sanjhubai_api-1:8000
+        NEXT_PUBLIC_API_URL: http://sanjabai-sanjabai_api-1:8000
     restart: unless-stopped
     depends_on:
-      - sanjhubai_api
+      - sanjabai_api
     environment:
-      NEXT_PUBLIC_API_URL: http://sanjhubai-sanjhubai_api-1:8000
+      NEXT_PUBLIC_API_URL: http://sanjabai-sanjabai_api-1:8000
       HOSTNAME: 0.0.0.0
     ports:
       - "0.0.0.0:3003:3000"
-    networks: [sanjhubai_net]
+    networks: [sanjabai_net]
 
-  sanjhubai_bot:
+  sanjabai_bot:
     build:
       context: ./bot
       dockerfile: Dockerfile
     restart: on-failure:3
     depends_on:
-      - sanjhubai_api
+      - sanjabai_api
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-      API_URL: http://sanjhubai-sanjhubai_api-1:8000
-    networks: [sanjhubai_net]
+      API_URL: http://sanjabai-sanjabai_api-1:8000
+    networks: [sanjabai_net]
 
 volumes:
-  sanjhubai_pg_data:
-  sanjhubai_redis_data:
+  sanjabai_pg_data:
+  sanjabai_redis_data:
 
 networks:
-  sanjhubai_net:
+  sanjabai_net:
     driver: bridge

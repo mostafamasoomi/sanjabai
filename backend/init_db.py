@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
 from models import Base, Pricing, Feature, Discount, AboutContent, ProxyConfig
 
-DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql+asyncpg://sanjhubai:sanjhubai@127.0.0.1:5432/sanjhubai')
+DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql+asyncpg://sanjabai:sanjabai@127.0.0.1:5432/sanjabai')
 
 def get_engine():
     return create_async_engine(DATABASE_URL)
@@ -69,7 +69,7 @@ async def init_db():
         stmt = select(ProxyConfig)
         res = await session.execute(stmt)
         if not res.scalar_one_or_none():
-            session.add(ProxyConfig(proxy_url="socks5://ted:T%23d%40123234@sanjhubai_tunnel:9090", proxy_type="socks5", active=True))
+            session.add(ProxyConfig(proxy_url="socks5://ted:T%23d%40123234@sanjabai_tunnel:9090", proxy_type="socks5", active=True))
         
         await session.commit()
 

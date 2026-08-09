@@ -1,4 +1,4 @@
-# گزارش بررسی فنی — Document Generator (Sanjhubai Backend)
+# گزارش بررسی فنی — Document Generator (Sanjabai Backend)
 
 نمره کلی: **6 / 10**
 
@@ -28,7 +28,7 @@
 - **اصلاح:** قبل از فراخوانی AI، `BillingService.authorize`/`reserve` با یک برآورد بالادست، و بعد از تولید `settle` با هزینه واقعی توکن‌ها؛ در صورت خطا `release`. یا حداقل `record_usage` مشابه `chat._record_usage`.
 
 ### 🔴 B2 — ذخیره‌سازی درون‌حافظه‌ای و فایل‌های موقت
-- `_doc_registry: dict` در حافظه process نگه‌داری می‌شود و فایل‌ها در `/tmp/sanjhubai_docs` هستند.
+- `_doc_registry: dict` در حافظه process نگه‌داری می‌شود و فایل‌ها در `/tmp/sanjabai_docs` هستند.
 - با هر restart کانتینر یا در حالت **چند worker/چند instance** (uvicorn/gunicorn workers):
   - رجیستری خالی می‌شود → لیست اسناد و download همه ۴۰۴ می‌دهند.
   - در محیط multi-worker، اگر generate روی worker A و download روی worker B بیفتد، سند «یافت نشد» می‌شود چون رجیستری بین workerها share نیست.

@@ -1,4 +1,4 @@
-name: Sanjhubai CI/CD
+name: Sanjabai CI/CD
 
 on:
   push:
@@ -63,13 +63,13 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           # NOTE: this path and the compose file name both assume the
           # server-side checkout has been renamed from /root/multiai to
-          # /root/sanjhubai to match this rebrand. If it hasn't been (yet),
+          # /root/sanjabai to match this rebrand. If it hasn't been (yet),
           # change just this `cd` line back — don't silently rename the
           # actual directory from a deploy script.
           script: |
-            cd /root/sanjhubai
+            cd /root/sanjabai
             git pull origin master
-            docker compose -f docker-compose.sanjhubai.yml build --pull=false sanjhubai_frontend sanjhubai_api
-            docker compose -f docker-compose.sanjhubai.yml up -d sanjhubai_api sanjhubai_frontend
-            docker compose -f docker-compose.sanjhubai.yml restart sanjhubai_bot || true
+            docker compose -f docker-compose.sanjabai.yml build --pull=false sanjabai_frontend sanjabai_api
+            docker compose -f docker-compose.sanjabai.yml up -d sanjabai_api sanjabai_frontend
+            docker compose -f docker-compose.sanjabai.yml restart sanjabai_bot || true
             echo "✅ Deploy complete"

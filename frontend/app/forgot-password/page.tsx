@@ -35,7 +35,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center">
-      <div className="card w-full max-w-sm">
+      <div className="card w-full max-w-sm slide-up">
         <h1 className="text-xl font-bold text-center mb-6">بازنشانی رمز عبور</h1>
         {sent ? (
           <div className="text-center">

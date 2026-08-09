@@ -188,9 +188,9 @@ test.describe('wallet', () => {
 
   test('wallet page redirects to login when not authenticated', async ({ page }) => {
     // Override auth to return unauthenticated and drop the seeded token.
-    // The key is `sanjhubai_auth_token` — see lib/auth.tsx.
+    // The key is `sanjabai_auth_token` — see lib/auth.tsx.
     await mockAuthMe(page, null)
-    await page.addInitScript(() => localStorage.removeItem('sanjhubai_auth_token'))
+    await page.addInitScript(() => localStorage.removeItem('sanjabai_auth_token'))
 
     await page.goto('/wallet')
 

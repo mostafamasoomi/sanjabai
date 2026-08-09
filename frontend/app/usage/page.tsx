@@ -528,7 +528,7 @@ export default function UsagePage() {
 
           {/* Most expensive call highlight */}
           {mostExpensive && (
-            <FadeInCard className="card" delay={220} style={{ marginBottom: 16, padding: 20, background: 'linear-gradient(135deg, rgba(99,102,241,0.10), rgba(139,92,246,0.04))', border: '1px solid var(--border-strong)' }}>
+            <FadeInCard className="card" delay={220} style={{ marginBottom: 16, padding: 20, background: 'linear-gradient(135deg, var(--accent-dim), transparent)', border: '1px solid var(--border-strong)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
                 <div style={{ width: 44, height: 44, borderRadius: 'var(--radius-md)', background: 'var(--accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <Icon name="warning" size={22} style={{ color: 'var(--warning)' }} />
@@ -648,10 +648,14 @@ export default function UsagePage() {
               </div>
 
               <div style={{ padding: '20px 20px 8px' }}>
-                {modelStats.map((m) => {
+                {modelStats.map((m, idx) => {
                   const pct = (m.cost / maxModelCost) * 100
                   return (
-                    <div key={m.model} style={{ marginBottom: 18 }}>
+                    <div
+                      key={m.model}
+                      className="slide-up"
+                      style={{ marginBottom: 18, animationDelay: `${420 + Math.min(idx, 10) * 30}ms` }}
+                    >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6, flexWrap: 'wrap', gap: 6 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <div style={{ width: 8, height: 8, borderRadius: 'var(--radius-full)', background: m.color, flexShrink: 0 }} />
@@ -716,8 +720,9 @@ export default function UsagePage() {
                         fontSize: 13,
                         alignItems: 'center',
                         transition: 'background 0.15s ease',
+                        animationDelay: `${480 + Math.min(idx, 10) * 30}ms`,
                       }}
-                      className="usage-row"
+                      className="usage-row slide-up"
                     >
                       <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{modelName(evt.model)}</div>
                       <div style={{ color: 'var(--text-secondary)', fontFeatureSettings: '"tnum"' }}>{fmtTokens(evt.input_tokens)}</div>

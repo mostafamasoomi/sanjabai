@@ -15,7 +15,6 @@ export function FaqSection() {
       <div className="lp-container">
         <Reveal>
           <header className="lp-head">
-            <span className="lp-eyebrow">سوالات متداول</span>
             <h2 className="lp-title">چیزهایی که معمولاً می‌پرسند</h2>
           </header>
         </Reveal>

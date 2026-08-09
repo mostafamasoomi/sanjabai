@@ -7,7 +7,6 @@ export function HowItWorks() {
       <div className="lp-container">
         <Reveal>
           <header className="lp-head">
-            <span className="lp-eyebrow">شروع کار</span>
             <h2 className="lp-title">در سه قدم راه بیفتید</h2>
           </header>
         </Reveal>

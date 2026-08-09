@@ -1,7 +1,7 @@
 
 import os, time, requests, pytest
 
-BASE = os.environ.get("SANJHUBAI_BASE", "http://localhost:8001")
+BASE = os.environ.get("SANJABAI_BASE", "http://localhost:8001")
 parts = ["MULTIA", "I_T", "OKEN"]
 TOKEN = os.environ.get("".join(parts), "")
 HEADERS = {"Authorization": f"Bearer {TOKEN}"} if TOKEN else {}

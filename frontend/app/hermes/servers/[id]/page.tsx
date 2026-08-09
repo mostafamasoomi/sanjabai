@@ -135,13 +135,13 @@ export default function HermesServerDetailPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 slide-up">
         <Link href="/hermes/servers" className="btn btn-secondary btn-sm"><Icon name="close" size={14} /> بازگشت</Link>
         <h1 className="page-title" style={{ margin: 0 }}>{server.hostname || `سرور #${server.id}`}</h1>
       </div>
 
       {/* ── Connection & status ── */}
-      <div className="card" style={{ padding: '1.25rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem' }}>
+      <div className="card slide-up" style={{ padding: '1.25rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', animationDelay: '0.05s' }}>
         <Info label="آی‌پی" value={server.ip_address ? `${server.ip_address}:${server.ssh_port}` : '—'} ltr />
         <Info label="وضعیت" value={server.status === 'active' ? 'فعال' : server.status === 'suspended' ? 'متوقف‌شده' : server.status === 'provisioning' ? 'در حال راه‌اندازی' : 'خاتمه‌یافته'} />
         <Info label="همگام‌سازی" value={server.in_sync ? 'همگام' : `در انتظار (${faNum(server.applied_state_version)}/${faNum(server.desired_state_version)})`} />
@@ -151,7 +151,7 @@ export default function HermesServerDetailPage() {
       </div>
 
       {/* ── Skills ── */}
-      <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      <div className="card slide-up" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', animationDelay: '0.1s' }}>
         <div className="flex items-center justify-between">
           <h2 style={{ fontWeight: 700 }}>اسکیل‌های نصب‌شده</h2>
           <button className="btn btn-primary btn-sm" onClick={() => setShowAddModal(true)} disabled={availableToAdd.length === 0}>
@@ -163,8 +163,16 @@ export default function HermesServerDetailPage() {
           <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>هنوز اسکیلی روی این سرور نصب نشده است.</p>
         ) : (
           <div className="flex flex-col gap-2">
-            {server.skills.map((s) => (
-              <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 0.75rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
+            {server.skills.map((s, idx) => (
+              <div
+                key={s.id}
+                className="slide-up"
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '0.625rem 0.75rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)',
+                  animationDelay: `${0.15 + Math.min(idx, 10) * 0.02}s`,
+                }}
+              >
                 <div className="flex items-center gap-2">
                   <span style={{ fontWeight: 600 }}>{catalog.find((c) => c.id === s.skill_id)?.name_fa || s.skill_id}</span>
                   <span className={`badge ${SKILL_STATE_BADGE[s.state]}`} style={{ fontSize: '0.6875rem' }}>{SKILL_STATE_LABEL[s.state]}</span>

@@ -137,18 +137,18 @@ function CardSkeleton() {
    Skill Card
    ═══════════════════════════════════════════════════════════════ */
 
-function SkillCard({ skill, onUse }: { skill: Skill; onUse: (s: Skill) => void }) {
+function SkillCard({ skill, onUse, idx }: { skill: Skill; onUse: (s: Skill) => void; idx: number }) {
   const avg = getAverageRating(skill)
 
   return (
     <div
-      className="card card-interactive"
+      className="card card-interactive slide-up"
       style={{
         display: 'flex',
         flexDirection: 'column',
         gap: '0.625rem',
         padding: '1.25rem',
-        animationDelay: '0ms',
+        animationDelay: `${0.2 + Math.min(idx, 10) * 0.03}s`,
       }}
     >
       {/* Header: category badge + usage */}
@@ -864,7 +864,7 @@ export default function SkillsPage() {
   // Not authenticated state
   if (!authLoading && !user) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1.5rem' }}>
+      <div className="slide-up" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1.5rem' }}>
         <Icon name="sparkles" size={48} className="text-[var(--text-muted)]" style={{ opacity: 0.4 }} />
         <div className="text-center">
           {/* h1: this branch replaces the whole page, so it owns the outline. */}
@@ -884,7 +884,7 @@ export default function SkillsPage() {
   return (
     <div className="flex flex-col gap-6">
       {/* ── Header ── */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+      <div className="slide-up" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
         <div className="flex items-center gap-3">
           <div
             style={{
@@ -919,7 +919,7 @@ export default function SkillsPage() {
       </div>
 
       {/* ── Search + Sort ── */}
-      <div className="flex gap-3 items-center flex-wrap">
+      <div className="flex gap-3 items-center flex-wrap slide-up" style={{ animationDelay: '0.05s' }}>
         <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
           <Icon name="search" size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
           <input
@@ -965,7 +965,7 @@ export default function SkillsPage() {
       </div>
 
       {/* ── Category Tabs ── */}
-      <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
+      <div className="slide-up" style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.25rem', animationDelay: '0.1s' }}>
         {CATEGORIES.map((cat) => (
           <button
             key={cat.key}
@@ -1003,6 +1003,7 @@ export default function SkillsPage() {
       {/* ── Empty state ── */}
       {!loading && skills.length === 0 && (
         <div
+          className="slide-up"
           style={{
             display: 'flex',
             flexDirection: 'column',
@@ -1037,8 +1038,8 @@ export default function SkillsPage() {
             gap: '1rem',
           }}
         >
-          {skills.map((skill) => (
-            <SkillCard key={skill.id} skill={skill} onUse={handleUseSkill} />
+          {skills.map((skill, idx) => (
+            <SkillCard key={skill.id} skill={skill} onUse={handleUseSkill} idx={idx} />
           ))}
         </div>
       )}

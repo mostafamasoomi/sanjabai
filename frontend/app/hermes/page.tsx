@@ -57,7 +57,7 @@ export default function HermesLandingPage() {
   return (
     <div className="flex flex-col gap-6">
       {/* ── Header ── */}
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-3 slide-up">
         <div
           style={{
             width: '2.5rem', height: '2.5rem', borderRadius: 'var(--radius-md)',
@@ -88,13 +88,13 @@ export default function HermesLandingPage() {
             gap: '1rem',
           }}
         >
-          {offerings.map((o) => (
-            <OfferingCard key={o.id} offering={o} loggedIn={!!user} />
+          {offerings.map((o, idx) => (
+            <OfferingCard key={o.id} offering={o} loggedIn={!!user} delay={0.1 + Math.min(idx, 10) * 0.04} />
           ))}
         </div>
       )}
 
-      <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+      <div className="card slide-up" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', animationDelay: '0.5s' }}>
         <div className="flex items-center gap-2">
           <Icon name="info" size={16} className="text-[var(--text-muted)]" />
           <span style={{ fontWeight: 600 }}>بعد از خرید چه اتفاقی می‌افتد؟</span>
@@ -109,9 +109,9 @@ export default function HermesLandingPage() {
   )
 }
 
-function OfferingCard({ offering, loggedIn }: { offering: Offering; loggedIn: boolean }) {
+function OfferingCard({ offering, loggedIn, delay }: { offering: Offering; loggedIn: boolean; delay: number }) {
   return (
-    <div className="card card-interactive" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '1.25rem' }}>
+    <div className="card card-interactive slide-up" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '1.25rem', animationDelay: `${delay}s` }}>
       <div className="flex items-center justify-between">
         <span className="badge aurora-cap-default" style={{ fontSize: '0.6875rem' }}>
           {offering.arch === 'arm64' ? 'ARM' : 'Intel'}

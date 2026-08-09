@@ -58,7 +58,7 @@ export default function HermesServersPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between slide-up">
         <h1 className="page-title">سرورهای هرمس من</h1>
         <Link href="/hermes" className="btn btn-primary btn-sm">
           <Icon name="plus" size={14} />
@@ -74,8 +74,13 @@ export default function HermesServersPage() {
         </EmptyState>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1rem' }}>
-          {servers.map((s) => (
-            <Link key={s.id} href={`/hermes/servers/${s.id}`} className="card card-interactive" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {servers.map((s, idx) => (
+            <Link
+              key={s.id}
+              href={`/hermes/servers/${s.id}`}
+              className="card card-interactive slide-up"
+              style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', animationDelay: `${0.1 + Math.min(idx, 10) * 0.04}s` }}
+            >
               <div className="flex items-center justify-between">
                 <span style={{ fontWeight: 700 }}>{s.hostname || `سرور #${s.id}`}</span>
                 <span className={`badge ${STATUS_BADGE[s.status]}`} style={{ fontSize: '0.6875rem' }}>{STATUS_LABEL[s.status]}</span>

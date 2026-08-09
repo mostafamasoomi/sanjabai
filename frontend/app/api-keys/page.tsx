@@ -109,7 +109,7 @@ export default function ApiKeysPage() {
   return (
     <div className="apikeys-page">
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+      <div className="slide-up" style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
         <div className="apikeys-header-icon">
           <Icon name="key" size={20} className="text-accent" />
         </div>
@@ -120,7 +120,7 @@ export default function ApiKeysPage() {
       </div>
 
       {/* Generate new key */}
-      <div className="card apikeys-generate-card">
+      <div className="card apikeys-generate-card slide-up" style={{ animationDelay: '0.05s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="plus" size={16} className="text-accent" />
           <h2 className="card-title">ساخت کلید جدید</h2>
@@ -145,7 +145,7 @@ export default function ApiKeysPage() {
 
       {/* New key display */}
       {newKey && (
-        <div className="card apikeys-newkey-card">
+        <div className="card apikeys-newkey-card slide-up">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <div className="apikeys-success-icon">
               <Icon name="check" size={16} className="text-positive" />
@@ -168,7 +168,7 @@ export default function ApiKeysPage() {
       )}
 
       {/* Existing keys */}
-      <div className="card">
+      <div className="card slide-up" style={{ animationDelay: '0.1s' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon name="key" size={16} className="text-accent" />
@@ -189,11 +189,15 @@ export default function ApiKeysPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {keys.map((k) => {
+            {keys.map((k, idx) => {
               const isRevealed = revealedKeys.has(k.id)
               const isCopied = copiedId === k.id
               return (
-                <div key={k.id} className={`apikeys-key-card ${!k.active ? 'apikeys-key-disabled' : ''}`}>
+                <div
+                  key={k.id}
+                  className={`apikeys-key-card slide-up ${!k.active ? 'apikeys-key-disabled' : ''}`}
+                  style={{ animationDelay: `${0.15 + Math.min(idx, 10) * 0.03}s` }}
+                >
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                     <div className="flex-1 min-w-0">
                       {/* Key name + status */}
@@ -271,7 +275,7 @@ export default function ApiKeysPage() {
       </div>
 
       {/* API Docs */}
-      <div className="card" style={{ marginTop: 16 }}>
+      <div className="card slide-up" style={{ marginTop: 16, animationDelay: '0.2s' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
           <Icon name="code" size={16} className="text-accent" />
           <h2 className="card-title">نحوه استفاده</h2>
@@ -284,7 +288,7 @@ export default function ApiKeysPage() {
             </h3>
             <pre className="apikeys-pre">
               <code>{`curl -H "Authorization: Bearer *** \\
-  https://sanjhubai.ir/v1/chat/completions`}</code>
+  https://sanjabai.ir/v1/chat/completions`}</code>
             </pre>
           </div>
           <div>
@@ -306,7 +310,7 @@ export default function ApiKeysPage() {
             </h3>
             <pre className="apikeys-pre">
               <code>{`curl -H "Authorization: Bearer *** \\
-  https://sanjhubai.ir/v1/models`}</code>
+  https://sanjabai.ir/v1/models`}</code>
             </pre>
           </div>
         </div>

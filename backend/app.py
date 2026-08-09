@@ -218,7 +218,7 @@ app = FastAPI(
 # ── Middleware ───────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv('CORS_ORIGINS', 'https://sanjhubai.ir,http://localhost:3003').split(','),
+    allow_origins=os.getenv('CORS_ORIGINS', 'https://sanjabai.ir,http://localhost:3003').split(','),
     allow_credentials=False,
     allow_methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allow_headers=['Authorization', 'Content-Type', 'X-Requested-With'],

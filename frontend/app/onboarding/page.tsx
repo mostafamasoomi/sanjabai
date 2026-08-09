@@ -11,7 +11,7 @@ import { faNum, faCompact } from '@/lib/format'
 import { markOnboarded, isOnboarded, displayName } from '@/lib/onboarding'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Sanjhubai Onboarding — Aurora v2
+   Sanjabai Onboarding — Aurora v2
    A guided, premium first-time experience (Linear / Stripe style).
 
    Steps:
@@ -146,7 +146,7 @@ function formatContext(n?: number): string {
   return `${faCompact(n)} توکن`
 }
 
-const FAVORITES_KEY = 'sanjhubai_favorite_models'
+const FAVORITES_KEY = 'sanjabai_favorite_models'
 
 function loadFavorites(): string[] {
   if (typeof window === 'undefined') return []
@@ -257,7 +257,7 @@ export default function OnboardingPage() {
             <div className="w-7 h-7 rounded-lg bg-[var(--accent)] flex items-center justify-center">
               <span className="text-white text-sm font-bold">M</span>
             </div>
-            <span className="text-base font-bold text-gradient tracking-tight">Sanjhubai</span>
+            <span className="text-base font-bold text-gradient tracking-tight">Sanjabai</span>
           </div>
           <span className="badge badge-accent">تنظیمات اولیه</span>
         </div>
@@ -276,7 +276,7 @@ export default function OnboardingPage() {
                       style={{
                         width: done || current ? '100%' : '0%',
                         background: current
-                          ? 'linear-gradient(90deg, var(--accent), #a78bfa)'
+                          ? 'linear-gradient(90deg, var(--accent), var(--accent-hover))'
                           : 'var(--accent)',
                       }}
                     />
@@ -314,7 +314,7 @@ export default function OnboardingPage() {
                     </>
                   ) : (
                     <>
-                      به <span className="text-gradient">Sanjhubai</span> خوش آمدید
+                      به <span className="text-gradient">Sanjabai</span> خوش آمدید
                     </>
                   )}
                 </h1>
@@ -337,17 +337,18 @@ export default function OnboardingPage() {
                   بر اساس انتخاب شما، بهترین مدل را پیشنهاد می‌دهیم.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {GOALS.map((g) => {
+                  {GOALS.map((g, idx) => {
                     const selected = g.id === goalId
                     return (
                       <button
                         key={g.id}
                         onClick={() => setGoalId(g.id)}
-                        className={`card card-interactive text-right flex items-center gap-4 p-4 cursor-pointer transition-all ${
+                        className={`card card-interactive text-right flex items-center gap-4 p-4 cursor-pointer transition-all slide-up ${
                           selected
                             ? 'border-[var(--accent)] bg-[var(--accent-dim)] shadow-[var(--shadow-glow)]'
                             : ''
                         }`}
+                        style={{ animationDelay: `${0.05 + idx * 0.05}s` }}
                       >
                         <div
                           className={`shrink-0 w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${
@@ -411,17 +412,18 @@ export default function OnboardingPage() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[45vh] overflow-y-auto pr-1">
-                    {models.map((m) => {
+                    {models.map((m, idx) => {
                       const selected = favoriteIds.includes(m.id)
                       return (
                         <button
                           key={m.id}
                           onClick={() => toggleFavorite(m.id)}
-                          className={`card card-interactive text-right flex items-start gap-3 p-4 cursor-pointer transition-all ${
+                          className={`card card-interactive text-right flex items-start gap-3 p-4 cursor-pointer transition-all slide-up ${
                             selected
                               ? 'border-[var(--accent)] bg-[var(--accent-dim)] shadow-[var(--shadow-glow)]'
                               : ''
                           }`}
+                          style={{ animationDelay: `${0.05 + Math.min(idx, 10) * 0.03}s` }}
                         >
                           <div
                             className={`shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
@@ -565,7 +567,7 @@ export default function OnboardingPage() {
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="card p-5">
+                  <div className="card p-5 slide-up" style={{ animationDelay: '0.05s' }}>
                     <div className="w-11 h-11 rounded-xl bg-[var(--bg-elevated)] flex items-center justify-center mb-3">
                       <Icon name="search" size={22} className="text-[var(--accent)]" />
                     </div>
@@ -579,7 +581,7 @@ export default function OnboardingPage() {
                     </p>
                   </div>
 
-                  <div className="card p-5">
+                  <div className="card p-5 slide-up" style={{ animationDelay: '0.1s' }}>
                     <div className="w-11 h-11 rounded-xl bg-[var(--bg-elevated)] flex items-center justify-center mb-3">
                       <Icon name="models" size={22} className="text-[var(--accent)]" />
                     </div>
@@ -589,7 +591,7 @@ export default function OnboardingPage() {
                     </p>
                   </div>
 
-                  <div className="card p-5">
+                  <div className="card p-5 slide-up" style={{ animationDelay: '0.15s' }}>
                     <div className="w-11 h-11 rounded-xl bg-[var(--bg-elevated)] flex items-center justify-center mb-3">
                       <Icon name="wallet" size={22} className="text-[var(--accent)]" />
                     </div>

@@ -1,6 +1,6 @@
 import asyncio, asyncpg, os
 
-DB_URL = os.environ.get("DATABASE_URL", "postgresql+asyncpg://sanjhubai:***@sanjhubai_pg:5432/sanjhubai")
+DB_URL = os.environ.get("DATABASE_URL", "postgresql+asyncpg://sanjabai:***@sanjabai_pg:5432/sanjabai")
 DB_URL = DB_URL.replace("+asyncpg", "")
 
 async def main():

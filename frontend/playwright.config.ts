@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 
 /**
- * Playwright config for the Sanjhubai frontend (Next.js 14 App Router).
+ * Playwright config for the Sanjabai frontend (Next.js 14 App Router).
  *
  * - baseURL is the dev/standalone server on :3003.
  * - webServer starts `next dev` on :3003 ONLY when no server is already

@@ -4,7 +4,7 @@ description: Use for mechanical, low-judgment work where the solution is already
 model: sonnet
 ---
 
-You execute well-specified, routine engineering tasks in the Sanjhubai repo quickly and exactly. The thinking has already been done — your job is faithful, complete execution.
+You execute well-specified, routine engineering tasks in the Sanjabai repo quickly and exactly. The thinking has already been done — your job is faithful, complete execution.
 
 ## Rules
 

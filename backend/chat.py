@@ -425,7 +425,7 @@ async def _web_search(query: str, max_results: int = 5) -> str:
                         'srprop': 'snippet',
                         'format': 'json',
                     },
-                    headers={'User-Agent': 'Sanjhubai/1.0 (web search fallback)'},
+                    headers={'User-Agent': 'Sanjabai/1.0 (web search fallback)'},
                 )
             if r.status_code == 200:
                 data = r.json()

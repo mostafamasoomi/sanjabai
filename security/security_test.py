@@ -1,5 +1,5 @@
 """
-Black-box security tests against a deployed Sanjhubai instance.
+Black-box security tests against a deployed Sanjabai instance.
 
 Checks the boundaries that must hold no matter what's on the other side of
 BACKEND_URL: auth enforcement, admin/user session separation, security

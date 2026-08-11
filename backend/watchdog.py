@@ -1,5 +1,5 @@
 """
-Sanjhubai Financial Watchdog — Production-grade anomaly detection.
+Sanjabai Financial Watchdog — Production-grade anomaly detection.
 
 Monitors 13 critical checks across 3 tiers and sends Telegram alerts.
 Uses asyncpg for fast queries + Redis for dedup/cooldown.
@@ -26,7 +26,7 @@ import httpx
 
 DATABASE_URL = os.getenv(
     'DATABASE_URL',
-    'postgresql://sanjhubai:sanjhubai@db:5432/sanjhubai',
+    'postgresql://sanjabai:sanjabai@db:5432/sanjabai',
 )
 REDIS_URL = os.getenv('REDIS_URL', 'redis://redis:6379/0')
 WATCHDOG_BOT_TOKEN = os.getenv('WATCHDOG_BOT_TOKEN', '')
@@ -42,7 +42,7 @@ except ImportError:
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 
-LOG_PATH = os.getenv('WATCHDOG_LOG', '/root/sanjhubai/backend/watchdog.log')
+LOG_PATH = os.getenv('WATCHDOG_LOG', '/root/sanjabai/backend/watchdog.log')
 
 logger = logging.getLogger('watchdog')
 logger.setLevel(logging.INFO)
@@ -84,7 +84,7 @@ async def _send_telegram(severity: str, title: str, body: str) -> None:
 
     emoji = {'CRITICAL': '🚨', 'HIGH': '⚠️', 'MEDIUM': '📊'}.get(severity, 'ℹ️')
     text = (
-        f"{emoji} *Sanjhubai Watchdog — {severity}*\n"
+        f"{emoji} *Sanjabai Watchdog — {severity}*\n"
         f"*{title}*\n"
         f"{body}\n"
         f"Time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC"

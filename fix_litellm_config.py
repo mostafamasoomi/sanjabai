@@ -386,7 +386,7 @@ lines.append("  request_timeout: 90")
 
 config = "\n".join(lines) + "\n"
 
-with open("/root/sanjhubai/backend/litellm_config.yaml", "w") as f:
+with open("/root/sanjabai/backend/litellm_config.yaml", "w") as f:
     f.write(config)
 
 print(f"Written config with {len(bynara)} bynara + {len(openrouter_models)} openrouter = {len(bynara) + len(openrouter_models)} models total")

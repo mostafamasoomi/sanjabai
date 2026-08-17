@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
-import { Icon } from '@/components/ui/Icon'
+import { Icon, type IconName } from '@/components/ui/Icon'
 import { Num } from '@/lib/format'
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -35,19 +35,19 @@ type ModelPricing = {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 
-const modelIcons: Record<string, string> = {
-  'agnes': '⚡',
-  'gemini': '💎',
-  'mimo': '🧠',
-  'mistral': '🌀',
-  'tencent': '🔥',
+const modelIcons: Record<string, IconName> = {
+  'agnes': 'sparkles',
+  'gemini': 'globe',
+  'mimo': 'cpu',
+  'mistral': 'rocket',
+  'tencent': 'sparkles',
 }
 
-function getModelIcon(modelId: string): string {
+function getModelIcon(modelId: string): IconName {
   for (const [key, icon] of Object.entries(modelIcons)) {
     if (modelId.toLowerCase().includes(key)) return icon
   }
-  return '🤖'
+  return 'models'
 }
 
 function getModelTier(modelId: string): { label: string; color: string } {
@@ -212,7 +212,7 @@ export default function PricingPage() {
         ) : (
           sortedModels.map((model, idx) => {
             const tier = getModelTier(model.providerModelId)
-            const icon = getModelIcon(model.providerModelId)
+            const iconName = getModelIcon(model.providerModelId)
             const inputPct = (model.pricing.inputPerMillion / maxInput) * 100
             const outputPct = (model.pricing.outputPerMillion / maxOutput) * 100
 
@@ -233,7 +233,9 @@ export default function PricingPage() {
               >
                 {/* Model name */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 22, lineHeight: 1 }}>{icon}</span>
+                  <span style={{ fontSize: 22, lineHeight: 1, color: 'var(--text-primary)', display: 'flex', alignItems: 'center' }}>
+                    <Icon name={iconName} size={24} />
+                  </span>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{model.displayName}</div>
                     <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFeatureSettings: '"tnum"', direction: 'ltr', textAlign: 'left' }}>{model.providerModelId}</div>

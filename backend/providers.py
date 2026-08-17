@@ -65,20 +65,29 @@ class Provider:
         return h
 
 
-def configured_providers() -> list[Provider]:
-    """Every upstream that is enabled in the environment.
+# Global memory cache for DB-driven providers.
+# Updated asynchronously during lifespan or lazily.
+_CACHED_PROVIDERS: list[Provider] | None = None
+_LAST_CACHE_TIME: float = 0.0
+_CACHE_TTL: float = 60.0  # seconds
 
-    LiteLLM is always present because the chat path depends on it. 9Router is
-    opt-in so that a deployment without one configured does not spend every
-    probe cycle failing to connect to a host that was never meant to exist.
+
+def configured_providers() -> list[Provider]:
+    """Every upstream that is enabled in the DB or environment (sync fallback).
+
+    Uses a memory cache populated by the async refresh loop. If the cache is empty
+    or expired, it returns the env-based fallback providers.
     """
+    global _CACHED_PROVIDERS
+    if _CACHED_PROVIDERS is not None and (time.monotonic() - _LAST_CACHE_TIME) < _CACHE_TTL:
+        return _CACHED_PROVIDERS
+
+    # Sync fallback based on environment
     providers = [
         Provider(
             name='litellm',
             base_url=LITELLM_HOST.rstrip('/'),
             api_key=os.getenv('LITELLM_API_KEY', '') or os.getenv('LITELLM_MASTER_KEY', ''),
-            # LiteLLM's /health requires the master key, so it is not usable as
-            # an anonymous liveness check; fall back to listing models.
             health_path=None,
         ),
     ]
@@ -90,11 +99,42 @@ def configured_providers() -> list[Provider]:
                 name='ninerouter',
                 base_url=(nine_url or 'http://9router:20128').rstrip('/'),
                 api_key=os.getenv('NINEROUTER_API_KEY', ''),
-                # 9Router serves GET /health unauthenticated, outside /v1.
                 health_path='/health',
             )
         )
     return providers
+
+
+async def refresh_providers_cache() -> None:
+    """Asynchronously refresh the providers list from the database.
+
+    Reads the provider table and populates _CACHED_PROVIDERS.
+    """
+    global _CACHED_PROVIDERS, _LAST_CACHE_TIME
+    if async_session is None:
+        return
+
+    try:
+        from models import Provider as DBProvider
+        from sqlalchemy import select
+        async with async_session() as session:
+            res = await session.execute(select(DBProvider).where(DBProvider.enabled == True).order_by(DBProvider.priority.asc()))
+            rows = res.scalars().all()
+            if rows:
+                new_list = []
+                for r in rows:
+                    api_key = os.getenv(r.api_key_env, '')
+                    new_list.append(Provider(
+                        name=r.name,
+                        base_url=r.base_url.rstrip('/'),
+                        api_key=api_key,
+                        health_path=r.health_path,
+                    ))
+                _CACHED_PROVIDERS = new_list
+                _LAST_CACHE_TIME = time.monotonic()
+    except Exception as e:
+        # Fallback to env on DB failures, don't crash
+        pass
 
 
 def get_provider(name: str) -> Provider | None:

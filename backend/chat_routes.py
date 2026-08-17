@@ -48,13 +48,42 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
     # P1: BillingService reserve (replaces _check_quota_pre with proper FOR UPDATE locking)
     # Fall back to legacy _check_quota_pre if BillingService fails
     reservation = None
+    _model = payload_dict.get('model', '') or 'tencent-hy3'
+    payload_dict['model'] = _model
     try:
         async with async_session() as _bill_session:
             _repo = SqlBillingRepo(_bill_session)
             _bill_svc = BillingService(_repo)
-            _model = payload_dict.get('model', '') or 'tencent-hy3'
-            from chat import is_working_model
-            _est_cost = 1000 if await is_working_model(_model) else 5000
+
+            # Token-aware estimate: use max_tokens if provided, else a reasonable upper bound.
+            # We settle the actual usage later, so overestimating here is safe and prevents under-reservation.
+            _max_tokens = int(payload_dict.get('max_tokens') or 4000)
+            _prompt_tokens = sum(len(m.get('content', '')) // 4 for m in payload_dict.get('messages', []) if isinstance(m, dict))
+            _est_tokens = _prompt_tokens + _max_tokens
+
+            # Approximate cost: fetch price from model_catalog if possible, otherwise use a safe default
+            _price_row = None
+            try:
+                import sqlalchemy
+                _price_res = await _bill_session.execute(
+                    sqlalchemy.text(
+                        'SELECT input_per_million, output_per_million FROM model_catalog '
+                        'WHERE provider_model_id = :mid AND availability = :avail LIMIT 1'
+                    ),
+                    {'mid': _model, 'avail': 'available'},
+                )
+                _price_row = _price_res.fetchone()
+            except Exception:
+                pass
+
+            if _price_row:
+                inp_rate = int(_price_row.input_per_million or 0)
+                out_rate = int(_price_row.output_per_million or 0)
+                _est_cost = max(1, int((_prompt_tokens * inp_rate + _max_tokens * out_rate + 500_000) // 1_000_000))
+            else:
+                # Fallback to a safe estimate based on tokens
+                _est_cost = max(10, _est_tokens // 100)
+
             reservation = await _bill_svc.reserve(
                 uid, Money(_est_cost),
                 idempotency_key=f"chat:{secrets.token_hex(8)}",
@@ -72,10 +101,6 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
         quota_err = await _check_quota_pre(uid)
         if quota_err is not None:
             return quota_err
-
-    # Default model if empty (S2: mimo disabled, use tencent-hy3)
-    if not payload_dict.get('model'):
-        payload_dict['model'] = 'tencent-hy3'
 
     # --- Model whitelist validation ---
     model_to_check = payload_dict.get('model', '')
@@ -147,8 +172,8 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
 
     stream = payload_dict.get('stream', False)
     if stream:
-        await _release_reservation(reservation, uid, 'before_stream')
-        return await _chat_stream(payload_dict, request)
+        # Do NOT release before streaming. The stream handler will settle or release in its finally block.
+        return await _chat_stream(payload_dict, request, reservation=reservation)
     _hc_model = str(payload_dict.get('model') or '')
     _hc_started = _time.monotonic()
     try:
@@ -164,18 +189,33 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
             error=None if r.status_code == 200 else f'http_{r.status_code}',
         )
         if r.status_code == 200:
-            cost_info = await _track_usage(request, payload_dict, r.json())
             resp_data = r.json()
-            if cost_info and cost_info.get('cost', 0) > 0:
+            cost_info = await _track_usage(request, payload_dict, resp_data)
+            actual_cost = cost_info.get('cost', 0) if cost_info else 0
+
+            if cost_info and actual_cost > 0:
                 resp_data['billing'] = {
-                    'cost': cost_info.get('cost', 0),
+                    'cost': actual_cost,
                     'input_tokens': cost_info.get('input_tokens', 0),
                     'output_tokens': cost_info.get('output_tokens', 0),
                     'balance_after': cost_info.get('balance_after', 0),
                     'currency': 'IRT',
                 }
-            # P1: Release reservation after successful billing
-            await _release_reservation(reservation, uid, 'after_success')
+
+            # P1: Settle reservation with actual cost, releasing remainder
+            if reservation:
+                try:
+                    async with async_session() as _settle_session:
+                        _settle_repo = SqlBillingRepo(_settle_session)
+                        _settle_svc = BillingService(_settle_repo)
+                        if actual_cost > 0:
+                            await _settle_svc.settle(reservation['reservation_id'], Money(actual_cost))
+                        else:
+                            await _settle_svc.release(reservation['reservation_id'])
+                        await _settle_session.commit()
+                except Exception as e:
+                    logger.warning(f"BillingService.settle failed uid={uid} res={reservation['reservation_id']}: {e}")
+
             # P3: Fire background auto-memory extraction
             _fire_memory_extraction(uid, payload_dict.get('messages', []))
             return Response(content=json.dumps(resp_data), status_code=200, media_type='application/json')
@@ -209,16 +249,46 @@ async def chat_with_file(
     # P1: BillingService reserve (replaces _check_quota_pre with proper FOR UPDATE locking)
     # Fall back to legacy _check_quota_pre if BillingService fails
     reservation = None
+    selected_model = model or 'tencent-hy3'
     try:
         async with async_session() as _bill_session:
             _repo = SqlBillingRepo(_bill_session)
             _bill_svc = BillingService(_repo)
-            from chat import is_working_model
-            _est_cost = 1000 if await is_working_model(model or 'tencent-hy3') else 5000
+
+            # Token-aware estimate
+            _max_tokens = 4000
+            try:
+                _msgs_tmp = json.loads(messages) if messages else []
+                _prompt_tokens = sum(len(m.get('content', '')) // 4 for m in _msgs_tmp if isinstance(m, dict))
+            except Exception:
+                _prompt_tokens = 1000
+            _est_tokens = _prompt_tokens + _max_tokens
+
+            _price_row = None
+            try:
+                import sqlalchemy
+                _price_res = await _bill_session.execute(
+                    sqlalchemy.text(
+                        'SELECT input_per_million, output_per_million FROM model_catalog '
+                        'WHERE provider_model_id = :mid AND availability = :avail LIMIT 1'
+                    ),
+                    {'mid': selected_model, 'avail': 'available'},
+                )
+                _price_row = _price_res.fetchone()
+            except Exception:
+                pass
+
+            if _price_row:
+                inp_rate = int(_price_row.input_per_million or 0)
+                out_rate = int(_price_row.output_per_million or 0)
+                _est_cost = max(1, int((_prompt_tokens * inp_rate + _max_tokens * out_rate + 500_000) // 1_000_000))
+            else:
+                _est_cost = max(10, _est_tokens // 100)
+
             reservation = await _bill_svc.reserve(
                 uid, Money(_est_cost),
                 idempotency_key=f"file:{secrets.token_hex(8)}",
-                model=model or 'tencent-hy3',
+                model=selected_model,
             )
             await _bill_session.commit()
     except InsufficientBalanceError:
@@ -246,8 +316,6 @@ async def chat_with_file(
     if text.strip():
         file_block = f'[Attached file: {file.filename}]\n\n{text[:50000]}'
         msgs.append({'role': 'user', 'content': file_block})
-    # S2 fix: mimo-v2.5 disabled, use tencent-hy3 as default
-    selected_model = model or 'tencent-hy3'
     # Whitelist validation
     from chat import _is_model_allowed
     if not await _is_model_allowed(selected_model):
@@ -267,8 +335,8 @@ async def chat_with_file(
     except Exception as e:
         logger.warning(f"chat_with_file injection failed uid={uid}: {e}")
     if stream:
-        await _release_reservation(reservation, uid, 'before_stream')
-        return await _chat_stream(payload, request)
+        # Pass reservation to stream handler
+        return await _chat_stream(payload, request, reservation=reservation)
     try:
         from chat import _resolve_provider
         _provider = await _resolve_provider(selected_model)
@@ -277,18 +345,33 @@ async def chat_with_file(
             headers={**_provider.headers(), 'Accept': 'application/json'},
         )
         if r.status_code == 200:
-            cost_info = await _track_usage(request, payload, r.json())
             resp_data = r.json()
-            if cost_info and cost_info.get('cost', 0) > 0:
+            cost_info = await _track_usage(request, payload, resp_data)
+            actual_cost = cost_info.get('cost', 0) if cost_info else 0
+
+            if cost_info and actual_cost > 0:
                 resp_data['billing'] = {
-                    'cost': cost_info.get('cost', 0),
+                    'cost': actual_cost,
                     'input_tokens': cost_info.get('input_tokens', 0),
                     'output_tokens': cost_info.get('output_tokens', 0),
                     'balance_after': cost_info.get('balance_after', 0),
                     'currency': 'IRT',
                 }
-            # P1: Release reservation after successful billing
-            await _release_reservation(reservation, uid, 'after_success')
+
+            # P1: Settle reservation with actual cost
+            if reservation:
+                try:
+                    async with async_session() as _settle_session:
+                        _settle_repo = SqlBillingRepo(_settle_session)
+                        _settle_svc = BillingService(_settle_repo)
+                        if actual_cost > 0:
+                            await _settle_svc.settle(reservation['reservation_id'], Money(actual_cost))
+                        else:
+                            await _settle_svc.release(reservation['reservation_id'])
+                        await _settle_session.commit()
+                except Exception as e:
+                    logger.warning(f"BillingService.settle failed uid={uid} res={reservation['reservation_id']}: {e}")
+
             # P3: Fire background auto-memory extraction
             _fire_memory_extraction(uid, msgs)
             return Response(content=json.dumps(resp_data), status_code=200, media_type='application/json')

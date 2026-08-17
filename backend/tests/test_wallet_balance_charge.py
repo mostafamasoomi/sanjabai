@@ -1,12 +1,9 @@
 """Regression tests for the wallet.balance charge-on-usage fix.
 
 Previously chat._record_usage only ever appended a Ledger row for real
-usage — Wallet.balance was written to solely by top-ups and by
-BillingService.settle() (which is never called in production), so the
-pre-flight balance check in BillingService.reserve() never reflected actual
-spend. See migrations/0017_wallet_ledger_reconciliation.sql for the
-production-data fix and chat.py::_record_usage for the code fix this test
-protects.
+usage — Wallet.balance was written to solely by top-ups.
+Now BillingService.settle() is actively used in production and this test
+ensures the underlying recording path enforces balance consistency.
 """
 from __future__ import annotations
 
@@ -106,17 +103,19 @@ class TestRecordUsageChargesWallet:
         assert ledger_rows[0].balance_after == 9000
 
     @pytest.mark.asyncio
-    async def test_insufficient_balance_does_not_debit_or_go_negative(self):
+    async def test_insufficient_balance_debits_and_records_debt(self):
         session = _FakeSession(wallet_balance=500, price=_price())
         result = await chat_mod._record_usage(session, uid=1, payload={"model": "kr/gpt-4o-mini"}, usage=_usage())
 
         assert result["cost"] == 1000
-        # Balance must never be pushed below zero / left mutated when it
-        # can't cover the charge.
-        assert session.wallet.balance == 500
-        assert result["balance_after"] == 500
+        # Phase 1 fix: Never skip recording usage. Debt is recorded if
+        # usage somehow bypassed reservation pre-checks.
+        assert session.wallet.balance == -500
+        assert result["balance_after"] == -500
         ledger_rows = [o for o in session.added if type(o).__name__ == "Ledger"]
-        assert ledger_rows == []
+        assert len(ledger_rows) == 1
+        assert ledger_rows[0].amount == -1000
+        assert ledger_rows[0].balance_after == -500
 
     @pytest.mark.asyncio
     async def test_exact_balance_is_fully_spendable(self):

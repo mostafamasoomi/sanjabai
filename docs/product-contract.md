@@ -160,6 +160,8 @@ promotional_remaining
 currency
 ```
 
+**Single Source of Truth:** `wallet.balance` is the operational source of truth. The `ledger` is an append-only journal tracking every change. Invariant: `SUM(ledger.amount) == wallet.balance` must always hold.
+
 Promotional credit includes `grant_id`, source, issued_at, expires_at, and remaining amount. It cannot silently become paid balance.
 
 Current billing model: **pay-as-you-go + promotional credit**. Subscription plans are not active unless backed by a real subscription/quota contract.
@@ -177,17 +179,18 @@ Quota, if enabled, must define:
 
 Before an upstream request:
 
-1. Select model and price snapshot.
-2. Estimate upper bound.
+1. Select model and price snapshot (without strictly requiring `availability='available'` to prevent billing breaking if model is disabled mid-flight).
+2. Estimate upper bound dynamically based on prompt length and max_tokens using the model's price rates. Never use static fixed costs.
 3. Authorize and reserve funds atomically.
-4. Reject request if reservation fails.
+4. Reject request if reservation fails (status 402 or 429 before upstream call).
 
 After the response:
 
 1. Record input/output/cached/reasoning tokens.
 2. Calculate actual charge using the snapshot.
-3. Settle actual amount.
-4. Release unused reservation.
+3. Settle actual amount. If actual charge exceeds the hold, log a reconciliation warning and cap the charge at the held amount.
+4. Release unused reservation. On stream disconnect or upstream failure, deterministically release the full hold.
+5. If a request results in usage but has no balance, debt is tracked by allowing `balance` to go negative (never allow free usage without ledger entry).
 
 On upstream failure or cancellation, apply the documented deterministic release/refund policy. Tracking errors must not be silently swallowed; the request must surface a reconciliation state.
 

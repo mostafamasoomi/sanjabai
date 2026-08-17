@@ -6,6 +6,7 @@ model_discovery.py for how `upstream` gets set on a catalog row.
 from __future__ import annotations
 
 import os
+import time
 from unittest.mock import patch
 
 import pytest
@@ -69,3 +70,24 @@ class TestConfiguredProviders:
         with patch.dict(os.environ, {'NINEROUTER_URL': 'http://9router:20128'}):
             names = [p.name for p in providers.configured_providers()]
         assert 'ninerouter' in names
+
+    @pytest.mark.asyncio
+    async def test_providers_from_cache(self):
+        # When cache has providers, they must be returned
+        providers._CACHED_PROVIDERS = [
+            providers.Provider(name='mock_db_provider', base_url='http://mockdb', api_key='secret')
+        ]
+        providers._LAST_CACHE_TIME = time.monotonic()
+        try:
+            names = [p.name for p in providers.configured_providers()]
+            assert names == ['mock_db_provider']
+        finally:
+            providers._CACHED_PROVIDERS = None
+            providers._LAST_CACHE_TIME = 0.0
+
+    @pytest.mark.asyncio
+    async def test_providers_fallback_on_empty_cache(self):
+        # Empty cache falls back to env defaults
+        providers._CACHED_PROVIDERS = None
+        names = [p.name for p in providers.configured_providers()]
+        assert 'litellm' in names

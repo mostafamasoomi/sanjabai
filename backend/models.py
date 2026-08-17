@@ -91,6 +91,20 @@ class Quota(Base):
     updated_at: Mapped[datetime] = mapped_column(default=_utcnow)
 
 
+class Provider(Base):
+    __tablename__ = 'provider'
+    name: Mapped[str] = mapped_column(sqlalchemy.String(64), primary_key=True)
+    display_name: Mapped[str] = mapped_column(sqlalchemy.String(128))
+    base_url: Mapped[str] = mapped_column(sqlalchemy.String(256))
+    api_key_env: Mapped[str] = mapped_column(sqlalchemy.String(128))
+    health_path: Mapped[str | None] = mapped_column(sqlalchemy.String(256), nullable=True)
+    adapter: Mapped[str] = mapped_column(sqlalchemy.String(32), default='openai')
+    enabled: Mapped[bool] = mapped_column(default=True)
+    priority: Mapped[int] = mapped_column(default=0)
+    timeout_s: Mapped[int] = mapped_column(default=60)
+    is_default_chat: Mapped[bool] = mapped_column(default=False)
+
+
 class ModelAlias(Base):
     __tablename__ = 'model_aliases'
     id: Mapped[int] = mapped_column(primary_key=True)

@@ -235,8 +235,28 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
         async with async_session() as _bill_session:
             _repo = SqlBillingRepo(_bill_session)
             _bill_svc = BillingService(_repo)
-            from chat import is_working_model
-            _est_cost = 1000 if await is_working_model(selected_model) else 5000
+
+            # Token-aware estimate
+            _prompt_tokens = sum(len(m.get('content', '')) // 4 for m in messages if isinstance(m, dict))
+            _est_cost = max(10, (_prompt_tokens + 4000) // 100)
+
+            try:
+                import sqlalchemy
+                _price_res = await _bill_session.execute(
+                    sqlalchemy.text(
+                        'SELECT input_per_million, output_per_million FROM model_catalog '
+                        'WHERE provider_model_id = :mid AND availability = :avail LIMIT 1'
+                    ),
+                    {'mid': selected_model, 'avail': 'available'},
+                )
+                _price_row = _price_res.fetchone()
+                if _price_row:
+                    inp_rate = int(_price_row.input_per_million or 0)
+                    out_rate = int(_price_row.output_per_million or 0)
+                    _est_cost = max(1, int((_prompt_tokens * inp_rate + 4000 * out_rate + 500_000) // 1_000_000))
+            except Exception:
+                pass
+
             reservation = await _bill_svc.reserve(
                 uid, Money(_est_cost),
                 idempotency_key=f"smart:{secrets.token_hex(8)}",
@@ -278,17 +298,7 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
 
     stream = payload_dict.get('stream', False)
     if stream:
-        # P1: Release reservation before streaming (stream billing handles actual cost in finally)
-        if reservation:
-            try:
-                async with async_session() as _rel_session:
-                    _rel_repo = SqlBillingRepo(_rel_session)
-                    _rel_svc = BillingService(_rel_repo)
-                    await _rel_svc.release(reservation['reservation_id'])
-                    await _rel_session.commit()
-            except Exception as _rel_e:
-                logger.warning(f"BillingService.release before stream failed uid={uid}: {_rel_e}")
-        return await _smart_chat_stream(payload_dict, request, selected_model, category)
+        return await _smart_chat_stream(payload_dict, request, selected_model, category, reservation=reservation)
 
     try:
         from chat import _resolve_provider
@@ -299,26 +309,33 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
             headers={**_provider.headers(), 'Accept': 'application/json'},
         )
         if r.status_code == 200:
-            cost_info = await _track_usage(request, payload_dict, r.json())
             resp_data = r.json()
-            if cost_info and cost_info.get('cost', 0) > 0:
+            cost_info = await _track_usage(request, payload_dict, resp_data)
+            actual_cost = cost_info.get('cost', 0) if cost_info else 0
+
+            if cost_info and actual_cost > 0:
                 resp_data['billing'] = {
-                    'cost': cost_info.get('cost', 0),
+                    'cost': actual_cost,
                     'input_tokens': cost_info.get('input_tokens', 0),
                     'output_tokens': cost_info.get('output_tokens', 0),
                     'balance_after': cost_info.get('balance_after', 0),
                     'currency': 'IRT',
                 }
-            # P1: Release reservation after successful billing (track_usage already wrote ledger)
+
+            # P1: Settle reservation with actual cost
             if reservation:
                 try:
-                    async with async_session() as _rel_session:
-                        _rel_repo = SqlBillingRepo(_rel_session)
-                        _rel_svc = BillingService(_rel_repo)
-                        await _rel_svc.release(reservation['reservation_id'])
-                        await _rel_session.commit()
-                except Exception as _rel_e:
-                    logger.warning(f"BillingService.release after success failed uid={uid}: {_rel_e}")
+                    async with async_session() as _settle_session:
+                        _settle_repo = SqlBillingRepo(_settle_session)
+                        _settle_svc = BillingService(_settle_repo)
+                        if actual_cost > 0:
+                            await _settle_svc.settle(reservation['reservation_id'], Money(actual_cost))
+                        else:
+                            await _settle_svc.release(reservation['reservation_id'])
+                        await _settle_session.commit()
+                except Exception as e:
+                    logger.warning(f"BillingService.settle failed uid={uid} res={reservation['reservation_id']}: {e}")
+
             resp = Response(content=json.dumps(resp_data), status_code=200, media_type='application/json')
         else:
             if reservation:
@@ -362,6 +379,7 @@ async def _smart_chat_stream(
     request: Request,
     selected_model: str,
     category: str,
+    reservation: dict | None = None,
 ):
     """Stream smart chat completion via SSE."""
     uid = await _get_user_id(request)
@@ -377,6 +395,7 @@ async def _smart_chat_stream(
 
     async def event_stream():
         usage_data = None
+        actual_cost = 0
         try:
             payload['stream'] = True
             payload.setdefault('stream_options', {})
@@ -417,10 +436,11 @@ async def _smart_chat_stream(
             if uid and usage_data and async_session is not None:
                 try:
                     cost_info = await _bill_stream_usage(uid, payload, usage_data)
-                    if cost_info and cost_info.get('cost', 0) > 0:
+                    actual_cost = cost_info.get('cost', 0) if cost_info else 0
+                    if cost_info and actual_cost > 0:
                         billing_event = json.dumps({
                             'type': 'billing',
-                            'cost': cost_info.get('cost', 0),
+                            'cost': actual_cost,
                             'input_tokens': cost_info.get('input_tokens', 0),
                             'output_tokens': cost_info.get('output_tokens', 0),
                             'balance_after': cost_info.get('balance_after', 0),
@@ -429,6 +449,22 @@ async def _smart_chat_stream(
                         yield f'data: {billing_event}\n\n'
                 except Exception as e:
                     logger.warning(f"_smart_chat_stream billing emit failed uid={uid}: {e}")
+
+            # P1: Settle/release the reservation now that the stream is done.
+            if reservation and async_session is not None:
+                try:
+                    from services.billing import SqlBillingRepo, BillingService
+                    async with async_session() as _s:
+                        _sr = SqlBillingRepo(_s)
+                        _sv = BillingService(_sr)
+                        if actual_cost > 0:
+                            await _sv.settle(reservation['reservation_id'], Money(actual_cost))
+                        else:
+                            await _sv.release(reservation['reservation_id'], reason='stream_no_cost')
+                        await _s.commit()
+                except Exception as e:
+                    logger.warning(f"_smart_chat_stream settle/release failed uid={uid} res={reservation['reservation_id']}: {e}")
+
             # P3: Fire background auto-memory extraction (streaming)
             if uid:
                 _fire_memory_extraction(uid, payload.get('messages', []))

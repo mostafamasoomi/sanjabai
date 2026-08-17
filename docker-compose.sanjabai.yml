@@ -11,9 +11,9 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: sanjabai
-      POSTGRES_PASSWORD: sanjabai
-      POSTGRES_DB: sanjabai
+      POSTGRES_USER: ${POSTGRES_USER:-sanjabai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-sanjabai}
     volumes:
       - sanjabai_pg_data:/var/lib/postgresql/data
       # This host path must match wherever this repo is actually checked
@@ -49,6 +49,7 @@ services:
     environment:
       BYNARA_API_KEY: ${BYNARA_API_KEY:?BYNARA_API_KEY must be set in .env}
       BYNARA_API_KEY_2: ${BYNARA_API_KEY_2:?BYNARA_API_KEY_2 must be set in .env}
+      FREELLMAPI_KEY: ${FREELLMAPI_KEY:?FREELLMAPI_KEY must be set in .env}
       SOCKS5_PROXY_URL: ${SOCKS5_PROXY_URL:?SOCKS5_PROXY_URL must be set in .env}
     depends_on:
       - sanjabai_tunnel

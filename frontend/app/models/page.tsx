@@ -166,10 +166,6 @@ export default function ModelsPage() {
           همه مدل‌ها از یک پنل — وضعیت هر مدل به‌صورت زنده اندازه‌گیری می‌شود.
         </p>
       </div>
-      <button className="btn btn-sm btn-secondary" onClick={handleTestModels} disabled={testing}>
-        <Icon name="refresh" size={14} />
-        {testing ? 'در حال تست...' : 'تست همه مدل‌ها'}
-      </button>
     </header>
   )
 

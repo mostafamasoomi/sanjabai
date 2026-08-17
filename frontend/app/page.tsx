@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 
-import { VortexIntro } from '@/components/landing/VortexIntro'
+import { VortexCanvas } from '@/components/landing/VortexCanvas'
 import { LandingHeader } from '@/components/landing/LandingHeader'
 import { Hero } from '@/components/landing/Hero'
 import { ProviderMarquee } from '@/components/landing/ProviderMarquee'
@@ -50,7 +50,7 @@ const faqJsonLd = {
 export default function LandingPage() {
   return (
     <div className="lp">
-      <VortexIntro />
+      <VortexCanvas className="lp-vortex-canvas absolute inset-0 z-[-1]" />
       <LandingHeader />
 
       <main>

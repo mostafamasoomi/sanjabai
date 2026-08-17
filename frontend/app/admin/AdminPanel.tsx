@@ -147,14 +147,26 @@ const NAV_ITEMS: { key: Page; label: string; icon: IconName }[] = [
 
 // ─── API Helper ──────────────────────────────────────────────────────────────
 
-let TOKEN = ''
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null
+  const v = `; ${document.cookie}`
+  const parts = v.split(`; ${name}=`)
+  if (parts.length === 2) return parts.pop()?.split(';').shift() || null
+  return null
+}
 
 async function api(path: string, opts: RequestInit = {}) {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (TOKEN) headers['Authorization'] = 'Bearer ' + TOKEN
-  const res = await fetch(path, { ...opts, headers })
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(opts.headers as Record<string, string>),
+  }
+  const method = (opts.method || 'GET').toUpperCase()
+  if (['POST', 'PUT', 'DELETE'].includes(method)) {
+    const csrf = getCookie('sanjabai_admin_csrf') || getCookie('admin_csrf')
+    if (csrf) headers['x-csrf-token'] = csrf
+  }
+  const res = await fetch(path, { ...opts, headers, credentials: 'same-origin' })
   if (res.status === 401) {
-    TOKEN = ''
     throw new Error('unauthorized')
   }
   if (!res.ok) throw new Error(`خطای سرور (${res.status})`)
@@ -396,9 +408,13 @@ export default function AdminPage() {
     if (!token) return
     setLoggingIn(true)
     try {
-      const res = await fetch('/api/admin/analytics', { headers: { Authorization: 'Bearer ' + token } })
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+        credentials: 'same-origin',
+      })
       if (res.ok) {
-        TOKEN = token
         setAuthed(true)
         toast('ورود موفقیت‌آمیز بود', 'success')
       } else {
@@ -643,8 +659,10 @@ export default function AdminPage() {
 
   // ─── Logout ──────────────────────────────────────────────────────────────
 
-  const logout = () => {
-    TOKEN = ''
+  const logout = async () => {
+    try {
+      await fetch('/api/admin/logout', { method: 'POST', credentials: 'same-origin' })
+    } catch {}
     setAuthed(false)
     setTokenInput('')
     setAnalytics(null)

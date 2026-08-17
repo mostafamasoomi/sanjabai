@@ -59,11 +59,28 @@ async def pricing_update(request: Request, item_id: str = Form(...), input: int 
     if isinstance(redirect, RedirectResponse):
         return redirect
     try:
+        import sys
+        from pathlib import Path
+        backend_dir = Path(__file__).resolve().parent.parent / "backend"
+        if str(backend_dir) not in sys.path:
+            sys.path.insert(0, str(backend_dir))
+        from services.pricing import set_model_price, invalidate_pricing_cache
+
         async with async_session() as session:
-            async with session.begin():
-                await _execute(session,
-                    'UPDATE pricing SET input_per_million=:i, output_per_million=:o, updated_at=:u WHERE id=:id',
-                    {'i': input, 'o': output, 'u': datetime.utcnow(), 'id': item_id})
+            # Look up model id if item_id is pricing.id
+            m_row = await _fetch_one(session, 'SELECT model FROM pricing WHERE id = :id', {'id': item_id})
+            model_id = m_row['model'] if m_row else item_id
+
+            await set_model_price(
+                session,
+                model_id=model_id,
+                input_per_million=input,
+                output_per_million=output,
+                currency='IRT',
+                source='admin.jinja.pricing_update'
+            )
+            await session.commit()
+            await invalidate_pricing_cache()
     except Exception:
         pass
     return RedirectResponse(url='/admin/pricing?updated=1', status_code=302)
@@ -106,34 +123,33 @@ async def api_pricing_create(request: Request):
     _require_api_session(request)
     body = await request.json()
     model = body.get('model')
-    provider = body.get('provider', '')
     input_per_million = body.get('input_per_million', 0)
     output_per_million = body.get('output_per_million', 0)
-    currency = body.get('currency', 'USD')
+    currency = body.get('currency', 'IRT')
 
     if not model:
         return _json_response({'error': 'model is required'}, 400)
 
     try:
+        import sys
+        from pathlib import Path
+        backend_dir = Path(__file__).resolve().parent.parent / "backend"
+        if str(backend_dir) not in sys.path:
+            sys.path.insert(0, str(backend_dir))
+        from services.pricing import set_model_price, invalidate_pricing_cache
+
         async with async_session() as session:
-            async with session.begin():
-                # Try update first, then insert
-                existing = await _fetch_one(session,
-                    'SELECT id FROM pricing WHERE model = :model AND provider = :provider',
-                    {'model': model, 'provider': provider})
-                if existing:
-                    await _execute(session,
-                        'UPDATE pricing SET input_per_million = :i, output_per_million = :o, '
-                        'currency = :c, updated_at = :u WHERE id = :id',
-                        {'i': input_per_million, 'o': output_per_million, 'c': currency,
-                         'u': datetime.utcnow(), 'id': existing['id']})
-                else:
-                    await _execute(session,
-                        'INSERT INTO pricing (model, provider, input_per_million, output_per_million, currency, updated_at) '
-                        'VALUES (:model, :provider, :i, :o, :c, :u)',
-                        {'model': model, 'provider': provider, 'i': input_per_million,
-                         'o': output_per_million, 'c': currency, 'u': datetime.utcnow()})
-                return _json_response({'ok': True})
+            await set_model_price(
+                session,
+                model_id=model,
+                input_per_million=input_per_million,
+                output_per_million=output_per_million,
+                currency=currency,
+                source='admin.jinja.api_pricing_create'
+            )
+            await session.commit()
+            await invalidate_pricing_cache()
+            return _json_response({'ok': True})
     except Exception as e:
         return _json_response({'error': str(e)}, 500)
 

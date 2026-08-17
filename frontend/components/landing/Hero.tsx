@@ -162,39 +162,21 @@ function ProductPreview() {
   )
 }
 
+import { VortexCanvas } from '@/components/landing/VortexCanvas'
+
 /* ── Hero ─────────────────────────────────────────────────────────────────── */
 
 export function Hero() {
-  // Tilt is attached to the section, not .lp-aura itself: the aura has
-  // pointer-events: none (so it never steals clicks from the content sitting
-  // on top of it) and so can never *receive* the pointermove that would
-  // drive it. Setting --tx/--ty here and reading them on .lp-aura (a plain
-  // inherited custom property) lets the background read depth from the
-  // cursor while the foreground content stays perfectly still and legible.
+  // Tilt is attached to the section, not the aura itself
   const sectionRef = useRef<HTMLElement>(null)
   useTilt(sectionRef, true, 2.5)
 
-  const blobRef1 = useRef<HTMLSpanElement>(null)
-  const blobRef2 = useRef<HTMLSpanElement>(null)
-  const blobRef3 = useRef<HTMLSpanElement>(null)
-  const blobLayers = useMemo(
-    () => [
-      { ref: blobRef1, ...AURA_DEPTHS[0] },
-      { ref: blobRef2, ...AURA_DEPTHS[1] },
-      { ref: blobRef3, ...AURA_DEPTHS[2] },
-    ],
-    [],
-  )
-  useScrollParallax(sectionRef, blobLayers)
-
   return (
     <section className="lp-hero" ref={sectionRef}>
-      {/* Ambient layers sit behind everything via z-index: -1 on .lp-aura. */}
+      {/* Ambient layers sit behind everything */}
       <div className="lp-grid-lines" aria-hidden="true" />
       <div className="lp-aura" aria-hidden="true">
-        <span className="lp-aura__blob" ref={blobRef1} />
-        <span className="lp-aura__blob" ref={blobRef2} />
-        <span className="lp-aura__blob" ref={blobRef3} />
+        <VortexCanvas className="absolute inset-0 w-full h-full opacity-40 pointer-events-none" />
         <Constellation />
       </div>
 

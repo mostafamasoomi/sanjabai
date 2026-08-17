@@ -30,8 +30,16 @@ from chat_common import _fire_memory_extraction
 logger = logging.getLogger(__name__)
 
 
-async def _chat_stream(payload: dict[str, Any], request: Request):
-    """Stream chat completion via SSE, collecting usage for billing."""
+async def _chat_stream(payload: dict[str, Any], request: Request, reservation: dict | None = None):
+    """Stream chat completion via SSE, collecting usage for billing.
+
+    ``reservation`` is the BillingService reservation created by the caller.
+    It is held for the full duration of the stream and settled with the actual
+    usage in the generator's ``finally`` block (or released if no usage/cost).
+    Releasing it before the stream starts — the old behaviour — meant there was
+    no hold at all, so billing was entirely post-hoc and a user could spend
+    concurrently against an already-spent balance.
+    """
     uid = await _get_user_id(request)
 
     if uid:
@@ -54,6 +62,7 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
 
     async def event_stream():
         usage_data = None
+        actual_cost = 0
         try:
             payload['stream'] = True
             payload.setdefault('stream_options', {})
@@ -95,10 +104,11 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
             if uid and usage_data and async_session is not None:
                 try:
                     cost_info = await _bill_stream_usage(uid, payload, usage_data)
-                    if cost_info and cost_info.get('cost', 0) > 0:
+                    actual_cost = cost_info.get('cost', 0) if cost_info else 0
+                    if cost_info and actual_cost > 0:
                         billing_event = json.dumps({
                             'type': 'billing',
-                            'cost': cost_info.get('cost', 0),
+                            'cost': actual_cost,
                             'input_tokens': cost_info.get('input_tokens', 0),
                             'output_tokens': cost_info.get('output_tokens', 0),
                             'balance_after': cost_info.get('balance_after', 0),
@@ -107,6 +117,25 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
                         yield f'data: {billing_event}\n\n'
                 except Exception as e:
                     logger.warning(f"_chat_stream billing emit failed uid={uid}: {e}")
+
+            # P1: Settle/release the reservation now that the stream is done.
+            # This runs even when the client disconnected mid-stream (the
+            # generator's finally fires on cancellation) and even when no usage
+            # trailer arrived — in the latter case we release the hold intact.
+            if reservation and async_session is not None:
+                try:
+                    from services.billing import SqlBillingRepo, BillingService
+                    async with async_session() as _s:
+                        _sr = SqlBillingRepo(_s)
+                        _sv = BillingService(_sr)
+                        if actual_cost > 0:
+                            await _sv.settle(reservation['reservation_id'], Money(actual_cost))
+                        else:
+                            await _sv.release(reservation['reservation_id'])
+                        await _s.commit()
+                except Exception as e:
+                    logger.warning(f"_chat_stream settle/release failed uid={uid} res={reservation['reservation_id']}: {e}")
+
             # P3: Fire background auto-memory extraction (streaming)
             if uid:
                 _fire_memory_extraction(uid, payload.get('messages', []))

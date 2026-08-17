@@ -76,7 +76,7 @@ async def _check_quota_pre(uid: int) -> JSONResponse | None:
                         status_code=429,
                     )
             res = await session.execute(
-                sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid'),
+                sqlalchemy.text('SELECT balance FROM wallet WHERE user_id = :uid'),
                 {'uid': uid},
             )
             row = res.fetchone()
@@ -130,31 +130,36 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
         out_rate = int(price_row.output_per_million or 0)
         cost = max(1, int((input_tokens * inp_rate + output_tokens * out_rate + 500_000) // 1_000_000))
     else:
-        cost = max(1, total_tokens // 1000)
+        # Fallback to pricing table or any availability model_catalog entry if exact available entry missed
+        try:
+            fallback_res = await session.execute(
+                sqlalchemy.text('SELECT input_per_million, output_per_million FROM model_catalog WHERE provider_model_id = :mid LIMIT 1'),
+                {'mid': model},
+            )
+            fb_row = fallback_res.fetchone()
+            if fb_row and (fb_row.input_per_million or fb_row.output_per_million):
+                inp_rate = int(fb_row.input_per_million or 0)
+                out_rate = int(fb_row.output_per_million or 0)
+                cost = max(1, int((input_tokens * inp_rate + output_tokens * out_rate + 500_000) // 1_000_000))
+            else:
+                # Default baseline price per million if completely unpriced
+                cost = max(1, int((input_tokens * 1000 + output_tokens * 2000 + 500_000) // 1_000_000))
+        except Exception:
+            cost = max(1, total_tokens)
 
     result['cost'] = cost
 
-    # Charge against Wallet.balance itself (the source of truth that
-    # BillingService.reserve() gates future requests against), not just the
-    # ledger's running SUM. Previously this only ever appended a Ledger row
-    # and Wallet.balance was left untouched by real usage — it only moved on
-    # top-ups — so the pre-flight reserve() check against `balance - reserved`
-    # never reflected actual spend and users could keep chatting for free
-    # indefinitely once their true (ledger) balance ran out. Locked via
-    # lock_wallet_for_update to avoid a concurrent-request race on the same
-    # wallet row.
+    # Always charge against Wallet.balance and append a Ledger row, even if current < cost.
+    # No more free usage when current < cost.
     from services.billing import SqlBillingRepo
     _repo = SqlBillingRepo(session)
     async with _repo.lock_wallet_for_update(uid):
         wallet = await _repo.ensure_wallet(uid)
         current = wallet['balance']
-        if current >= cost:
-            new_balance = current - cost
-            await _repo.set_wallet_balance(uid, new_balance)
-            entry = Ledger(user_id=uid, amount=-cost, balance_after=new_balance, reason=f'مصرف {model}', idempotency_key=idempotency_key)
-            session.add(entry)
-        else:
-            new_balance = current
+        new_balance = current - cost
+        await _repo.set_wallet_balance(uid, new_balance)
+        entry = Ledger(user_id=uid, amount=-cost, balance_after=new_balance, reason=f'مصرف {model}', idempotency_key=idempotency_key)
+        session.add(entry)
     result['balance_after'] = new_balance
 
     try:

@@ -28,9 +28,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const NEW_AUTH_TOKEN = 'sanjabai_auth_token'
+  const OLD_AUTH_TOKEN = 'sanjhubai_auth_token' // TODO: Remove after 90 days
+
+  const readAuthToken = useCallback(() => {
+    const t = localStorage.getItem(NEW_AUTH_TOKEN)
+    if (t) return t
+    const legacy = localStorage.getItem(OLD_AUTH_TOKEN)
+    if (legacy) {
+      localStorage.setItem(NEW_AUTH_TOKEN, legacy)
+      localStorage.removeItem(OLD_AUTH_TOKEN)
+      return legacy
+    }
+    return null
+  }, [])
+
   // Restore session on mount
   useEffect(() => {
-    const t = localStorage.getItem('sanjabai_auth_token')
+    const t = readAuthToken()
     if (t) {
       setToken(t)
       fetch('/api/auth/me', { headers: { Authorization: `Bearer ${t}` } })
@@ -39,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Only clear token on definitive auth failures (401/403).
           // Transient errors (500, 502, network) should NOT destroy a valid session.
           if (r.status === 401 || r.status === 403) {
-            localStorage.removeItem('sanjabai_auth_token')
+            localStorage.removeItem(NEW_AUTH_TOKEN)
             setToken(null)
           }
           return Promise.reject()
@@ -50,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } else {
       setLoading(false)
     }
-  }, [])
+  }, [readAuthToken])
 
   const login = useCallback(async (email: string, password: string, captchaToken?: string, captchaAnswer?: string) => {
     const body: any = { email, password }
@@ -61,10 +76,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
     if (!res.ok) throw new Error((await res.json()).detail || 'login failed')
     const data = await res.json()
-    localStorage.setItem('sanjabai_auth_token', data.token)
+    localStorage.setItem(NEW_AUTH_TOKEN, data.token)
     setToken(data.token)
     setUser(data.user)
-  }, [])
+  }, [NEW_AUTH_TOKEN])
 
   const signup = useCallback(async (email: string, password: string, captchaToken?: string, captchaAnswer?: string) => {
     const body: any = { email, password }
@@ -75,17 +90,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })
     if (!res.ok) throw new Error((await res.json()).detail || 'signup failed')
     const data = await res.json()
-    localStorage.setItem('sanjabai_auth_token', data.token)
+    localStorage.setItem(NEW_AUTH_TOKEN, data.token)
     setToken(data.token)
     setUser(data.user)
-  }, [])
+  }, [NEW_AUTH_TOKEN])
 
   const logout = useCallback(() => {
     if (token) fetch('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {})
-    localStorage.removeItem('sanjabai_auth_token')
+    localStorage.removeItem(NEW_AUTH_TOKEN)
     setToken(null)
     setUser(null)
-  }, [token])
+  }, [token, NEW_AUTH_TOKEN])
 
   return (
     <AuthContext.Provider value={{ user, token, loading, login, signup, logout }}>

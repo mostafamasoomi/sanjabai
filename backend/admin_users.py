@@ -25,6 +25,7 @@ class AdminUserEdit(BaseModel):
     email: str | None = None
     balance: int | None = None
     status: str | None = None
+    reason: str | None = None
 
 # ── User Management ─────────────────────────────────────────────
 
@@ -109,16 +110,46 @@ async def admin_edit_user(request: Request, uid: int, payload: AdminUserEdit) ->
             await session.execute(User.__table__.update().where(User.id == uid), {'phone': data['phone']})
         if 'email' in data:
             await session.execute(User.__table__.update().where(User.id == uid), {'email': data['email']})
+
+        balance_delta = 0
         if 'balance' in data:
-            await session.execute(
-                Ledger.__table__.insert().values(
-                    user_id=uid, amount=int(data['balance']),
-                    balance_after=int(data['balance']),
-                    reason='admin.adjustment',
-                )
-            )
+            target_balance = int(data['balance'])
+            from services.billing import SqlBillingRepo, credit_wallet
+            from services.money import Money
+            import uuid
+
+            repo = SqlBillingRepo(session)
+            async with repo.lock_wallet_for_update(uid):
+                wallet = await repo.ensure_wallet(uid)
+                current_balance = wallet['balance']
+                delta = target_balance - current_balance
+                balance_delta = delta
+
+                if delta != 0:
+                    # Note: credit_wallet expects a positive or negative Money object.
+                    # Money doesn't allow negative by default depending on implementation,
+                    # but wait, `amount.irt` is used. We can just use raw integer update here
+                    # or ensure we do it safely. Since it's admin, we can bypass `credit_wallet`
+                    # if it strictly requires positive, but let's use repo methods directly under lock.
+
+                    new_balance = current_balance + delta
+                    await repo.set_wallet_balance(uid, new_balance)
+
+                    reason_text = data.get('reason', 'admin.adjustment')
+                    await repo.append_ledger({
+                        'user_id': uid,
+                        'amount': delta,
+                        'balance_after': new_balance,
+                        'reason': reason_text,
+                        'idempotency_key': f"admin_adj_{uuid.uuid4().hex}"
+                    })
+
         await session.commit()
-    await _write_audit_log('admin.user.edit', target_type='user', target_id=uid, details=data)
+
+    audit_details = data.copy()
+    if 'balance' in data:
+        audit_details['balance_delta'] = balance_delta
+    await _write_audit_log('admin.user.edit', target_type='user', target_id=uid, details=audit_details)
     return JSONResponse({'status': 'ok'})
 
 

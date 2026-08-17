@@ -145,14 +145,39 @@ async def compare_models(request: Request, payload: CompareRequest) -> Response:
         async with async_session() as _bill_session:
             _repo = SqlBillingRepo(_bill_session)
             _bill_svc = BillingService(_repo)
+
+            # Token-aware estimate
+            _prompt_tokens = sum(len(m.get('content', '')) // 4 for m in messages if isinstance(m, dict))
+            _est_cost_a = max(10, (_prompt_tokens + 4000) // 100)
+            _est_cost_b = max(10, (_prompt_tokens + 4000) // 100)
+
+            try:
+                import sqlalchemy
+                _price_res = await _bill_session.execute(
+                    sqlalchemy.text(
+                        'SELECT provider_model_id, input_per_million, output_per_million FROM model_catalog '
+                        'WHERE provider_model_id IN (:ma, :mb) AND availability = :avail'
+                    ),
+                    {'ma': model_a, 'mb': model_b, 'avail': 'available'},
+                )
+                prices = {row.provider_model_id: row for row in _price_res.fetchall()}
+                if model_a in prices:
+                    r = prices[model_a]
+                    _est_cost_a = max(1, int((_prompt_tokens * int(r.input_per_million or 0) + 4000 * int(r.output_per_million or 0) + 500_000) // 1_000_000))
+                if model_b in prices:
+                    r = prices[model_b]
+                    _est_cost_b = max(1, int((_prompt_tokens * int(r.input_per_million or 0) + 4000 * int(r.output_per_million or 0) + 500_000) // 1_000_000))
+            except Exception:
+                pass
+
             reservation_a = await _bill_svc.reserve(
-                uid, Money(1000),
-                idempotency_key=f"cmp:{secrets.token_hex(8)}",
+                uid, Money(_est_cost_a),
+                idempotency_key=f"cmpA:{secrets.token_hex(8)}",
                 model=model_a,
             )
             reservation_b = await _bill_svc.reserve(
-                uid, Money(1000),
-                idempotency_key=f"cmp:{secrets.token_hex(8)}",
+                uid, Money(_est_cost_b),
+                idempotency_key=f"cmpB:{secrets.token_hex(8)}",
                 model=model_b,
             )
             await _bill_session.commit()
@@ -175,17 +200,21 @@ async def compare_models(request: Request, payload: CompareRequest) -> Response:
 
     result_a, result_b = results
 
-    # Release reservations
-    for res in (reservation_a, reservation_b):
+    # Settle or release reservations based on actual cost
+    for res, outcome in [(reservation_a, result_a), (reservation_b, result_b)]:
         if res:
             try:
                 async with async_session() as _rel_session:
                     _rel_repo = SqlBillingRepo(_rel_session)
                     _rel_svc = BillingService(_rel_repo)
-                    await _rel_svc.release(res['reservation_id'])
+                    act_cost = outcome.get('cost', 0)
+                    if not outcome.get('error') and act_cost > 0:
+                        await _rel_svc.settle(res['reservation_id'], Money(act_cost))
+                    else:
+                        await _rel_svc.release(res['reservation_id'], reason='upstream_error' if outcome.get('error') else 'no_cost')
                     await _rel_session.commit()
             except Exception as _rel_e:
-                logger.warning(f"Compare BillingService.release failed uid={uid}: {_rel_e}")
+                logger.warning(f"Compare BillingService settle/release failed uid={uid}: {_rel_e}")
 
     # Determine winner stats
     faster = None

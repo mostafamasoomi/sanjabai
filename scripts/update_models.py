@@ -141,68 +141,82 @@ def get_db_engine():
 
 
 def update_pricing_table(models: list[dict], irr_rate: float) -> int:
-    """Upsert pricing for each model. Returns count of changed rows."""
-    from sqlalchemy import create_engine, text
-
-    # We need psycopg2 for sync; try it, fall back to asyncpg via subprocess
-    engine = get_db_engine()
-    if engine is None:
-        return update_pricing_via_subprocess(models, irr_rate)
+    """Upsert pricing for each model using the unified pricing service. Returns count of changed rows."""
+    import asyncio
+    import sys
+    # Add backend path to sys.path
+    backend_dir = SCRIPT_DIR.parent / "backend"
+    if str(backend_dir) not in sys.path:
+        sys.path.insert(0, str(backend_dir))
 
     toman_rate = irr_rate / 10  # IRR → Toman
-    changed = 0
 
-    with engine.begin() as conn:
-        for m in models:
-            mid = m["id"]
-            pricing = m.get("pricing", {})
-            prompt_usd = float(pricing.get("prompt", "0") or "0")
-            completion_usd = float(pricing.get("completion", "0") or "0")
+    async def _do_update():
+        from database import async_session
+        from services.pricing import set_model_price, invalidate_pricing_cache
+        from sqlalchemy import text
 
-            # Convert: USD/token → per-million tokens → Toman with margin
-            input_toman = int(prompt_usd * 1_000_000 * toman_rate * MARGIN)
-            output_toman = int(completion_usd * 1_000_000 * toman_rate * MARGIN)
+        if async_session is None:
+            # Manually initialize DB if needed
+            from sqlalchemy.ext.asyncio import create_async_engine
+            from sqlalchemy.orm import sessionmaker
+            from sqlalchemy.ext.asyncio import AsyncSession
+            import database as _db
+            _eng = create_async_engine(DB_URL, echo=False)
+            _db.set_engine(_eng)
+            _db.set_async_session(sessionmaker(_eng, class_=AsyncSession, expire_on_commit=False))
 
-            # Check if active price exists and differs
-            row = conn.execute(
-                text("""
-                    SELECT id, input_per_million, output_per_million
-                    FROM pricing
-                    WHERE model = :model AND effective_to IS NULL
-                    ORDER BY effective_from DESC, price_version DESC
-                    LIMIT 1
-                """),
-                {"model": mid},
-            ).fetchone()
+        changed = 0
+        from database import async_session as active_session
 
-            if row and row.input_per_million == input_toman and row.output_per_million == output_toman:
-                continue  # no change
+        async with active_session() as session:
+            for m in models:
+                mid = m["id"]
+                pricing = m.get("pricing", {})
+                prompt_usd = float(pricing.get("prompt", "0") or "0")
+                completion_usd = float(pricing.get("completion", "0") or "0")
 
-            # Get next version
-            max_ver = conn.execute(
-                text("SELECT COALESCE(MAX(price_version), 0) FROM pricing WHERE model = :model"),
-                {"model": mid},
-            ).scalar() or 0
+                input_toman = int(prompt_usd * 1_000_000 * toman_rate * MARGIN)
+                output_toman = int(completion_usd * 1_000_000 * toman_rate * MARGIN)
 
-            # Close old version
-            conn.execute(
-                text("UPDATE pricing SET effective_to = NOW() WHERE model = :model AND effective_to IS NULL"),
-                {"model": mid},
-            )
+                row = await session.execute(
+                    text("""
+                        SELECT input_per_million, output_per_million
+                        FROM pricing
+                        WHERE model = :model AND effective_to IS NULL
+                        ORDER BY effective_from DESC, price_version DESC
+                        LIMIT 1
+                    """),
+                    {"model": mid},
+                )
+                existing = row.fetchone()
 
-            # Insert new version
-            conn.execute(
-                text("""
-                    INSERT INTO pricing (model, provider, input_per_million, output_per_million, currency, source, price_version, effective_from, effective_to, created_at)
-                    VALUES (:model, 'openrouter', :input, :output, 'IRT', 'openrouter_api', :ver, NOW(), NULL, NOW())
-                """),
-                {"model": mid, "input": input_toman, "output": output_toman, "ver": max_ver + 1},
-            )
-            changed += 1
-            log.info("Updated pricing for %s: input=%d, output=%d Toman (v%d)", mid, input_toman, output_toman, max_ver + 1)
+                if existing and existing.input_per_million == input_toman and existing.output_per_million == output_toman:
+                    continue  # no change
 
-    engine.dispose()
-    return changed
+                # Close old version
+                await session.execute(
+                    text("UPDATE pricing SET effective_to = NOW() WHERE model = :model AND effective_to IS NULL"),
+                    {"model": mid},
+                )
+
+                # Use unified service
+                await set_model_price(
+                    session,
+                    model_id=mid,
+                    input_per_million=input_toman,
+                    output_per_million=output_toman,
+                    currency='IRT',
+                    source='openrouter_api'
+                )
+                changed += 1
+                log.info("Updated pricing for %s: input=%d, output=%d Toman", mid, input_toman, output_toman)
+            await session.commit()
+            if changed > 0:
+                await invalidate_pricing_cache()
+        return changed
+
+    return asyncio.run(_do_update())
 
 
 def update_pricing_via_subprocess(models: list[dict], irr_rate: float) -> int:

@@ -20,12 +20,13 @@ const nextConfig = {
   },
   async rewrites() {
     return [
-      // Proxy /api/* to backend
-      { source: '/api/:path*', destination: `${API_BACKEND}/:path*` },
+      // /api/* is handled by the filesystem route app/api/[...path]/route.ts
+      // (single source of truth for the proxy layer; it forwards cookies and
+      // controls headers). Do NOT re-add an /api/:path* rewrite here — a
+      // duplicate rewrite and filesystem route both proxy the same prefix with
+      // different defaults, which was the source the two-defaults bug.
       // Proxy /v1/* to backend (chat completions)
       { source: '/v1/:path*', destination: `${API_BACKEND}/v1/:path*` },
-      // Proxy /admin/* API calls to backend
-      // { source: '/admin/:path+', destination: `${API_BACKEND}/admin/:path+` },
     ]
   },
 }

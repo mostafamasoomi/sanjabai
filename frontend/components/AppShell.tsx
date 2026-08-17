@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { AuthProvider, useAuth } from '@/lib/auth'
@@ -10,6 +10,8 @@ import { LanguageToggle } from '@/components/LanguageToggle'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { useCommandPalette } from '@/components/CommandPalette'
 import { isOnboarded } from '@/lib/onboarding'
+import { ENABLE_EXTENDED_FEATURES, EXTENDED_ROUTES } from '@/lib/features'
+import { ComingSoon } from '@/components/ComingSoon'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Sanjabai Aurora — AppShell v2
@@ -24,28 +26,30 @@ type NavItem = {
   admin?: boolean
 }
 
-const NAV: NavItem[] = [
+const ALL_NAV: NavItem[] = [
   { href: '/chat', label: 'چت', icon: 'chat', section: 'main' },
-  { href: '/models', label: 'مدل\u200cها', icon: 'models', section: 'main' },
+  { href: '/models', label: 'مدل‌ها', icon: 'models', section: 'main' },
   { href: '/compare', label: 'مقایسه', icon: 'compare', section: 'main' },
   { href: '/status', label: 'وضعیت مدل‌ها', icon: 'chart', section: 'main' },
   { href: '/dashboard', label: 'داشبورد', icon: 'dashboard', section: 'tools' },
   { href: '/wallet', label: 'کیف پول', icon: 'wallet', section: 'tools' },
-  { href: '/pricing', label: 'تعرفه\u200cها', icon: 'pricing', section: 'tools' },
+  { href: '/pricing', label: 'تعرفه‌ها', icon: 'pricing', section: 'tools' },
   { href: '/usage', label: 'مصرف', icon: 'chart', section: 'tools' },
   { href: '/api-keys', label: 'کلید API', icon: 'key', section: 'tools' },
   { href: '/search', label: 'جستجو', icon: 'search', section: 'tools' },
-  { href: '/skills', label: 'اسکیل\u200cها', icon: 'cpu', section: 'tools' },
+  { href: '/skills', label: 'اسکیل‌ها', icon: 'cpu', section: 'tools' },
   { href: '/hermes', label: 'سرور هرمس', icon: 'rocket', section: 'tools' },
   { href: '/assistants', label: 'دستیارها', icon: 'sparkles', section: 'tools' },
   { href: '/memory', label: 'حافظه', icon: 'clock', section: 'tools' },
-  { href: '/tasks', label: 'تسک\u200cها', icon: 'calendar', section: 'tools' },
+  { href: '/tasks', label: 'تسک‌ها', icon: 'calendar', section: 'tools' },
   { href: '/documents', label: 'سندساز', icon: 'file', section: 'tools' },
-  { href: '/developer', label: 'توسعه\u200cدهندگان', icon: 'code', section: 'tools' },
+  { href: '/developer', label: 'توسعه‌دهندگان', icon: 'code', section: 'tools' },
   { href: '/profile', label: 'پروفایل', icon: 'profile', section: 'account' },
   { href: '/referral', label: 'دعوت', icon: 'referral', section: 'account' },
   { href: '/admin', label: 'مدیریت', icon: 'settings', section: 'account', admin: true },
 ]
+
+const NAV = ALL_NAV.filter(item => ENABLE_EXTENDED_FEATURES || !EXTENDED_ROUTES.has(item.href))
 
 /**
  * Routes that render without the product sidebar/topbar. The landing page and
@@ -174,6 +178,9 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
   if (!loading && !user && !isPublic) return null
 
+  const isRouteDisabled = !ENABLE_EXTENDED_FEATURES && EXTENDED_ROUTES.has(pathname ?? '')
+  const content = isRouteDisabled ? <ComingSoon /> : children
+
   const NavItemLink = ({ item }: { item: NavItem }) => (
     <Link
       key={item.href}
@@ -267,7 +274,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
       {/* ── Main Area ──────────────────────────────────────── */}
       <div className={`layout-main${flush ? ' layout-main--flush' : ''}`}>
-        {/* Top bar */}
+        {/* Header */}
         <header className="topbar-glass">
           <div className="flex items-center gap-2">
             {/* Burger only opens something when there is a sidebar to open. */}
@@ -281,15 +288,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               </button>
             )}
 
-            {/* The brand used to be `md:hidden`, which left signed-out visitors
-                on a desktop with no logo and no way back to the home page —
-                /models and /pricing were dead ends. It is now always present
-                for them, and stands in for the marketing header.
-
-                For a signed-in user on a wide screen the sidebar carries the
-                same lockup ~200px away, so this copy is marked as the
-                duplicate and hidden from md up. Below md there is no sidebar,
-                so it is the only brand and the only route home. */}
+            {/* Brand */}
             <Link
               href="/"
               className={`topbar-brand${user ? ' topbar-brand--duplicate' : ''}`}
@@ -298,11 +297,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               <span>Sanjabai</span>
             </Link>
 
-            {/* Command palette. It lives at the start of the bar rather than
-                the end because that is where the removed duplicate brand left
-                a hole, and because it is the only thing in the topbar a user
-                reaches for repeatedly — the language and theme toggles are
-                set-once controls and belong out of the way. */}
+            {/* Command palette */}
             {user && (
               <button
                 onClick={() => openPalette(true)}
@@ -315,8 +310,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               </button>
             )}
 
-            {/* Public pages get the marketing links inline, since they have no
-                sidebar to carry them. */}
+            {/* Public pages */}
             {!loading && !user && (
               <nav className="topbar-public-nav" aria-label="پیمایش عمومی">
                 <Link href="/models">مدل‌ها</Link>
@@ -339,7 +333,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Content */}
-        <main className={`layout-content${flush ? ' layout-content--flush' : ''}`}>{children}</main>
+        <main className={`layout-content${flush ? ' layout-content--flush' : ''}`}>{content}</main>
 
         {/* Mobile bottom nav — hidden when not logged in */}
         {user && (
@@ -366,8 +360,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         </nav>
         )}
 
-        {/* Clears the fixed mobile bottom nav. Suppressed on flush routes,
-            which already subtract --bottomnav-h from their own height. */}
+        {/* Clears the mobile spacing */}
         <div className="md:hidden h-14 layout-bottomnav-spacer" />
       </div>
 

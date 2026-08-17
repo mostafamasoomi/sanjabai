@@ -10,6 +10,20 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const ONBOARDED_KEY = 'sanjabai_onboarded'
+const LEGACY_ONBOARDED_KEY = 'sanjhubai_onboarded' // TODO: Remove after 90 days
+
+function migrateLegacyOnboarded(): void {
+  try {
+    if (localStorage.getItem(ONBOARDED_KEY)) return
+    const legacy = localStorage.getItem(LEGACY_ONBOARDED_KEY)
+    if (legacy) {
+      localStorage.setItem(ONBOARDED_KEY, legacy)
+      localStorage.removeItem(LEGACY_ONBOARDED_KEY)
+    }
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
 
 export function markOnboarded() {
   try {
@@ -20,6 +34,7 @@ export function markOnboarded() {
 }
 
 export function isOnboarded(): boolean {
+  migrateLegacyOnboarded()
   try {
     return localStorage.getItem(ONBOARDED_KEY) === '1'
   } catch {

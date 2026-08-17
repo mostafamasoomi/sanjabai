@@ -160,6 +160,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     _hermes_renewal_task = asyncio.create_task(_hermes_renewal_loop())
 
+    # Provider config cache refresh.
+    # The configured_providers() accessor is sync, so it pulls from a global
+    # in-memory cache that this loop updates from the DB every minute.
+    async def _providers_cache_loop():
+        await asyncio.sleep(5) # initial delay
+        while True:
+            try:
+                from providers import refresh_providers_cache
+                await refresh_providers_cache()
+            except Exception as e:
+                print(f"[providers-cache] error: {e}")
+            await asyncio.sleep(60) # every minute
+
+    _providers_cache_task = asyncio.create_task(_providers_cache_loop())
+
     # Model discovery + health.
     #
     # Discovery keeps model_catalog in step with what the upstreams expose;
@@ -195,6 +210,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _discovery_task.cancel()
     _pricing_task.cancel()
     _hermes_renewal_task.cancel()
+    _providers_cache_task.cancel()
     if _db._real_http:
         await _db._real_http.aclose()
     await _eng.dispose()

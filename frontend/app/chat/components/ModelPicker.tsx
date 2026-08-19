@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { type HealthStatus, type ModelCatalogItem } from '@/types/catalog'
 import { Icon } from '@/components/ui/Icon'
 import { faNum } from '@/lib/format'
+import { priceBand, PRICE_BAND_LABEL, PRICE_BAND_ORDER, type PriceBand } from '@/lib/useCatalog'
 import {
   healthOf,
   isUsableModel,
@@ -12,7 +13,6 @@ import {
   getModelIcon,
   formatPriceIRT,
   formatContextWindow,
-  getProviderLabel,
   isRecommendedModel,
 } from './modelUtils'
 
@@ -122,7 +122,6 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
       const hay = [
         m.displayName,
         m.id,
-        m.provider,
         m.providerModelId,
         (m.description || ''),
         (m.capabilities || []).join(' '),
@@ -138,25 +137,21 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
     return uniqueById(list).slice(0, 12)
   }, [filtered])
 
-  const groupedByProvider = useMemo(() => {
-    const map = new Map<string, ModelCatalogItem[]>()
+  // Used to group by `provider` (an internal routing id like "bynara" or
+  // "freellmapi-s2") — that leaked which upstream serves a model, which only
+  // admins should see. Grouping now uses a price band derived from
+  // pricing.inputPerMillion instead: it's honest, user-meaningful, and (like
+  // provider) actually varies across the catalog.
+  const groupedByBand = useMemo(() => {
+    const map = new Map<PriceBand, ModelCatalogItem[]>()
     for (const m of filtered) {
-      const key = m.provider || 'other'
+      const key = priceBand(m, filtered)
       if (!map.has(key)) map.set(key, [])
       map.get(key)!.push(m)
     }
-    // sort providers: bynara/mistral/tenc... first, then alpha
-    const entries = Array.from(map.entries())
-    const priority = ['bynara', 'mistral', 'tencent', 'kimi', 'openai', 'google', 'anthropic', 'xai']
-    entries.sort((a, b) => {
-      const ai = priority.indexOf(a[0].toLowerCase())
-      const bi = priority.indexOf(b[0].toLowerCase())
-      if (ai !== -1 && bi !== -1) return ai - bi
-      if (ai !== -1) return -1
-      if (bi !== -1) return 1
-      return a[0].localeCompare(b[0])
-    })
-    return entries
+    return PRICE_BAND_ORDER
+      .filter(band => map.has(band))
+      .map(band => [band, map.get(band)!] as [PriceBand, ModelCatalogItem[]])
   }, [filtered])
 
   // flat list in display order for keyboard nav
@@ -170,11 +165,11 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
     }
     // order: recommended then groups in order
     push(recommended)
-    for (const [, groupModels] of groupedByProvider) {
+    for (const [, groupModels] of groupedByBand) {
       push(groupModels)
     }
     return flat
-  }, [recommended, groupedByProvider])
+  }, [recommended, groupedByBand])
 
   const flatList = useMemo(() => getFlatFiltered(), [getFlatFiltered])
 
@@ -301,7 +296,7 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
                   ref={inputRef}
                   type="text"
                   className="model-picker-search"
-                  placeholder="جستجوی مدل، ارائه‌دهنده، قابلیت..."
+                  placeholder="جستجوی مدل، قابلیت..."
                   value={query}
                   onChange={e => {
                     setQuery(e.target.value)
@@ -360,15 +355,12 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
                       <span className="model-picker-section-count">{faNum(filtered.length)}</span>
                     </div>
 
-                    {groupedByProvider.map(([provider, groupModels]) => (
-                      <div key={provider} className="model-picker-provider-group">
-                        {groupedByProvider.length > 1 && (
-                          <div className="model-picker-provider-group-title" dir="ltr">
-                            {/* dir on the element that actually holds the Latin
-                                run, not just an ancestor — the isolation then
-                                travels with the badge if it is ever moved. */}
-                            <span className="model-provider-badge" dir="ltr">
-                              {getProviderLabel(provider)}
+                    {groupedByBand.map(([band, groupModels]) => (
+                      <div key={band} className="model-picker-provider-group">
+                        {groupedByBand.length > 1 && (
+                          <div className="model-picker-provider-group-title">
+                            <span className="model-provider-badge">
+                              {PRICE_BAND_LABEL[band]}
                             </span>
                             <span className="text-muted" style={{ fontSize: '10px' }}>{faNum(groupModels.length)} مدل</span>
                           </div>
@@ -382,7 +374,7 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
                             const w = healthOf(m).status
                             return (
                               <ModelCard
-                                key={`${provider}-${m.id}`}
+                                key={`${band}-${m.id}`}
                                 model={m}
                                 isSelected={isSel}
                                 isFocused={isFocused}

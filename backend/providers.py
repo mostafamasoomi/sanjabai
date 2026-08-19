@@ -105,6 +105,31 @@ def configured_providers() -> list[Provider]:
                 health_path='/health',
             )
         )
+
+    # OpenRouter: registered as a `provider` row (see migration
+    # 0024_openrouter_provider.sql) with enabled=false by default.
+    #
+    # NOTE: OPENROUTER_API_KEY is already present in this deployment's .env
+    # for an unrelated purpose (services/embeddings.py uses it as a fallback
+    # embeddings backend, and content.py reads OpenRouter's public pricing
+    # without needing a key at all). Gating solely on "is the key set" would
+    # therefore silently turn OpenRouter into a live, probed, discoverable
+    # chat upstream the moment this code ships — not what "disabled by
+    # default" means. A second, explicit switch (OPENROUTER_ENABLED) is
+    # required in addition to the key, mirroring the opt-in pattern already
+    # used for 9Router/OmniRoute above. A key with the flag off — or the flag
+    # on with no key — is skipped quietly rather than erroring.
+    if _env_flag('OPENROUTER_ENABLED'):
+        openrouter_key = os.getenv('OPENROUTER_API_KEY', '').strip()
+        if openrouter_key:
+            providers.append(
+                Provider(
+                    name='openrouter',
+                    base_url=os.getenv('OPENROUTER_BASE_URL', 'https://openrouter.ai/api').rstrip('/'),
+                    api_key=openrouter_key,
+                    health_path=None,
+                )
+            )
     return providers
 
 

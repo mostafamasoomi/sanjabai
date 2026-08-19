@@ -287,7 +287,18 @@ async def recompute_states() -> int:
             sqlalchemy.text(
                 """
                 UPDATE model_catalog c SET availability = CASE s.status
-                        WHEN 'healthy'  THEN 'available'
+                        WHEN 'healthy'  THEN
+                            -- Reachability alone must not put a model in front of
+                            -- users. `maintenance` is a deliberate parking state --
+                            -- discovery lands new models there and an admin hides
+                            -- models there -- so a health probe may never undo it.
+                            -- An unpriced model would bill nothing, so it stays
+                            -- parked until someone prices it.
+                            CASE
+                                WHEN c.availability = 'maintenance' THEN 'maintenance'
+                                WHEN COALESCE(c.input_per_million, 0) <= 0 THEN 'maintenance'
+                                ELSE 'available'
+                            END
                         WHEN 'degraded' THEN 'degraded'
                         WHEN 'down'     THEN 'disabled'
                         ELSE c.availability

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
-import { useCatalog } from '@/lib/useCatalog'
+import { useCatalog, priceBand, PRICE_BAND_LABEL } from '@/lib/useCatalog'
 import { toast } from '@/components/ui'
 import { Icon, type IconName } from '@/components/ui/Icon'
 
@@ -348,7 +348,7 @@ export default function AssistantDetailPage() {
                     <option value="">بدون مدل پیش‌فرض (استفاده از مدل انتخابی کاربر)</option>
                     {models.map((m) => (
                       <option key={m.id} value={m.providerModelId || m.id}>
-                        {m.displayName} ({m.provider})
+                        {m.displayName} ({PRICE_BAND_LABEL[priceBand(m, models)]})
                       </option>
                     ))}
                   </select>

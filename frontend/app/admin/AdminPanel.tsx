@@ -7,6 +7,7 @@ import { toast } from '@/components/ui'
 import dynamic from 'next/dynamic'
 
 const AdminCharts = dynamic(() => import('./components/AdminCharts'), { ssr: false })
+const ModelsTab = dynamic(() => import('./components/ModelsTab'), { ssr: false })
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Sanjabai Admin Panel — Aurora Design System
@@ -149,7 +150,7 @@ const NAV_ITEMS: { key: Page; label: string; icon: IconName }[] = [
 
 let TOKEN = ''
 
-async function api(path: string, opts: RequestInit = {}) {
+export async function api(path: string, opts: RequestInit = {}) {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (TOKEN) headers['Authorization'] = 'Bearer ' + TOKEN
   const res = await fetch(path, { ...opts, headers })
@@ -1684,24 +1685,7 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {models.length === 0 ? (
-                <div className="admin-card text-center py-12">
-                  <Icon name="models" size={40} style={{ color: 'var(--text-muted)', margin: '0 auto 12px' }} />
-                  <p className="text-muted">مدلی بارگذاری نشده</p>
-                  <p className="text-xs mt-1 text-muted">پروکسی را بررسی کنید</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {models.map((m) => (
-                    <div key={m} className="admin-card flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--accent-dim)' }}>
-                        <Icon name="models" size={16} className="text-accent" />
-                      </div>
-                      <span className="text-sm font-mono text-primary">{m}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <ModelsTab api={api} />
             </div>
           )}
 

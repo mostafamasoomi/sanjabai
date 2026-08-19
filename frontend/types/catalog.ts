@@ -27,8 +27,11 @@ export type ModelHealth = {
 
 export type ModelCatalogItem = {
   id: string
+  /** Routes the chat/compare requests — NOT the same as the upstream
+      provider. Which provider actually serves a model is an admin-only
+      concern (see GET /admin/catalog/models); this public contract never
+      carries it. */
   providerModelId: string
-  provider: string
   displayName: string
   description?: string
   modalities: { input: string[]; output: string[] }

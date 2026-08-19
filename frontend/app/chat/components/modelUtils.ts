@@ -102,25 +102,6 @@ export function formatContextWindow(ctx: number): string {
   return `${ctx}`
 }
 
-export function getProviderLabel(provider: string): string {
-  if (!provider) return 'نامشخص'
-  const p = provider.toLowerCase()
-  const map: Record<string, string> = {
-    bynara: 'Bynara',
-    mistral: 'Mistral',
-    openai: 'OpenAI',
-    anthropic: 'Anthropic',
-    google: 'Google',
-    tencent: 'Tencent',
-    kimi: 'Kimi',
-    moonshot: 'Moonshot',
-    agnes: 'Agnes',
-    xai: 'xAI',
-    mimo: 'Mimo',
-  }
-  return map[p] ?? provider
-}
-
 export function isRecommendedModel(m: {
   id: string
   recommendedFor?: string[]

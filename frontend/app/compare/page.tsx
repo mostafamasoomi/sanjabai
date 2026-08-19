@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '@/lib/auth'
-import { useCatalog } from '@/lib/useCatalog'
+import { useCatalog, priceBand, PRICE_BAND_LABEL } from '@/lib/useCatalog'
 import { type ModelCatalogItem } from '@/types/catalog'
 import { Icon } from '@/components/ui/Icon'
 import { faNum } from '@/lib/format'
@@ -151,7 +151,7 @@ export default function ComparePage() {
               {model ? (
                 <>
                   <span className="compare-model-name" dir="ltr">{model.displayName}</span>
-                  <span className="compare-model-provider" dir="ltr">{model.provider}</span>
+                  <span className="compare-model-provider">{PRICE_BAND_LABEL[priceBand(model, models)]}</span>
                 </>
               ) : (
                 <span className="text-sm text-[var(--text-muted)]">مدل انتخاب نشده</span>

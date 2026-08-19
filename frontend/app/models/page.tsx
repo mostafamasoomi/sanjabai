@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { Skeleton, EmptyState, toast } from '@/components/ui'
 import { useAuth } from '@/lib/auth'
-import { useCatalog } from '@/lib/useCatalog'
+import { useCatalog, priceBand, PRICE_BAND_LABEL, PRICE_BAND_ORDER } from '@/lib/useCatalog'
 import { Num, faNum } from '@/lib/format'
 import { HEALTH_LABEL, healthOf } from '@/app/chat/components/modelUtils'
 import type { Availability, ModelCatalogItem } from '@/types/catalog'
@@ -36,9 +36,10 @@ const AVAILABILITY_NOTE: Partial<Record<Availability, string>> = {
    Card
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function ModelTile({ model, probe }: { model: ModelCatalogItem; probe?: { ok: boolean } }) {
+function ModelTile({ model, probe, allModels }: { model: ModelCatalogItem; probe?: { ok: boolean }; allModels: ModelCatalogItem[] }) {
   const health = healthOf(model)
   const note = AVAILABILITY_NOTE[model.availability]
+  const band = priceBand(model, allModels)
 
   return (
     <article className="model-tile">
@@ -47,7 +48,7 @@ function ModelTile({ model, probe }: { model: ModelCatalogItem; probe?: { ok: bo
           {/* h2, not h3: the page h1 is the only level above it, and an
               h1 → h3 jump broke the outline for heading navigation. */}
           <h2 className="model-tile__name" dir="ltr">{model.displayName}</h2>
-          <p className="model-tile__provider" dir="ltr">{model.provider}</p>
+          <p className="model-tile__provider">{PRICE_BAND_LABEL[band]}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {probe && <span className="text-xs">{probe.ok ? '✅' : '❌'}</span>}
@@ -149,13 +150,15 @@ export default function ModelsPage() {
     if (error) toast('خطا در دریافت فهرست مدل‌ها', 'error')
   }, [error])
 
-  const providers = Array.from(new Set(models.map((m) => m.provider)))
-  const chips = [{ key: 'all', label: 'همه' }, ...providers.map((p) => ({ key: p, label: p }))]
-  const filtered = (filter === 'all' ? models : models.filter((m) => m.provider === filter)).filter(
-    (m) =>
-      !search ||
-      m.displayName.toLowerCase().includes(search.toLowerCase()) ||
-      m.provider.toLowerCase().includes(search.toLowerCase()),
+  // Grouping/filtering used to be by `provider` (an internal routing id).
+  // That field is no longer in the public catalog contract — users should
+  // never see which upstream serves a model. Price band is the closest
+  // honest, user-meaningful substitute: it's derived from data the item
+  // already carries (pricing.inputPerMillion) and actually varies.
+  const bands = PRICE_BAND_ORDER.filter((b) => models.some((m) => priceBand(m, models) === b))
+  const chips = [{ key: 'all', label: 'همه' }, ...bands.map((b) => ({ key: b, label: PRICE_BAND_LABEL[b] }))]
+  const filtered = (filter === 'all' ? models : models.filter((m) => priceBand(m, models) === filter)).filter(
+    (m) => !search || m.displayName.toLowerCase().includes(search.toLowerCase()),
   )
 
   const header = (
@@ -257,7 +260,6 @@ export default function ModelsPage() {
               onClick={() => setFilter(f.key)}
               className={`aurora-chip ${filter === f.key ? 'active' : ''}`}
               aria-pressed={filter === f.key}
-              dir={f.key === 'all' ? undefined : 'ltr'}
             >
               {f.label}
             </button>
@@ -278,6 +280,7 @@ export default function ModelsPage() {
             <ModelTile
               key={m.id}
               model={m}
+              allModels={models}
               probe={testResults.find((r) => r.id === m.id || r.id === m.providerModelId)}
             />
           ))}

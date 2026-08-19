@@ -25,7 +25,8 @@ from typing import Any
 import sqlalchemy
 
 from database import async_session
-from providers import Provider, configured_providers, list_models
+from provider_catalog import cached_provider_models
+from providers import Provider, configured_providers
 
 logger = logging.getLogger('model_discovery')
 
@@ -78,11 +79,17 @@ def _context_window(raw: dict[str, Any]) -> int:
 
 
 async def sync_provider(p: Provider) -> dict[str, Any]:
-    """Upsert every model one provider reports. Returns a small summary."""
+    """Upsert every model one provider reports. Returns a small summary.
+
+    Reads the model list from the provider_catalog cache rather than calling
+    the upstream directly — some upstreams (9Router) take ~9.5s to answer
+    `GET /v1/models`, and that must never block anything on this path either,
+    even though this runs off a background loop rather than a user request.
+    """
     if async_session is None:
         return {'provider': p.name, 'error': 'no_db'}
 
-    models = await list_models(p)
+    models = await cached_provider_models(p.name)
     if not models:
         return {'provider': p.name, 'seen': 0, 'inserted': 0, 'skipped': 0}
 

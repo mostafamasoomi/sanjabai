@@ -117,13 +117,18 @@ async def set_pricing(request: Request, payload: dict[str, Any]) -> JSONResponse
     return JSONResponse({'status': 'updated', 'model': model})
 
 
-@router.post('/admin/models/{model_id}/toggle')
+@router.post('/admin/models/{model_id:path}/toggle')
 async def toggle_model(request: Request, model_id: str) -> JSONResponse:
     """Admin: flip a model between 'available' and 'disabled'.
 
     Same effect as the legacy admin/app.py toggle endpoints, exposed here so
     the React admin panel (the one actually in front of admins day-to-day)
     doesn't need the separate Jinja admin app just to kill a broken model.
+
+    Uses the `:path` converter — the same fix as
+    admin_catalog.py's set-upstream route — because most catalog ids
+    (~96%) contain a literal `/` (e.g. "freellmapi/agnes-1.5-flash"), which
+    a plain `{model_id}` segment never matches.
     """
     if not await admin_required(request):
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
@@ -148,13 +153,15 @@ async def toggle_model(request: Request, model_id: str) -> JSONResponse:
     return JSONResponse({'status': 'ok', 'model': model_id, 'availability': new_avail})
 
 
-@router.post('/admin/models/{model_id}/test')
+@router.post('/admin/models/{model_id:path}/test')
 async def test_model(request: Request, model_id: str) -> JSONResponse:
     """Admin: send a minimal live probe to a model and report the result.
 
     Reuses providers.probe_model (the same probe model_health.py runs on a
     schedule) so "test now" in the admin panel and the status page's
     background health checks agree on what "working" means.
+
+    `:path` converter — see toggle_model above.
     """
     if not await admin_required(request):
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)

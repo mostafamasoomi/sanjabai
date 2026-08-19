@@ -186,13 +186,28 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except Exception as e:
             print(f"[model-health] loop stopped: {e}")
 
+    # Provider model-list cache: refreshes each configured provider's
+    # `GET /v1/models` into Redis on an interval (default 15 min, see
+    # PROVIDER_CATALOG_REFRESH_INTERVAL). Discovery/health read this cache
+    # instead of ever calling a slow upstream synchronously.
+    async def _provider_catalog_loop():
+        try:
+            from provider_catalog import refresh_loop
+            await refresh_loop()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[provider-catalog] loop stopped: {e}")
+
     _discovery_task = asyncio.create_task(_discovery_loop())
     _health_task = asyncio.create_task(_health_loop())
+    _provider_catalog_task = asyncio.create_task(_provider_catalog_loop())
 
     yield
 
     _health_task.cancel()
     _discovery_task.cancel()
+    _provider_catalog_task.cancel()
     _pricing_task.cancel()
     _hermes_renewal_task.cancel()
     if _db._real_http:
@@ -251,6 +266,7 @@ from skills import router as skills_router
 from assistants import router as assistants_router
 from wallet import router as wallet_router
 from admin import router as admin_router
+from admin_catalog import router as admin_catalog_router
 from api_keys import router as api_keys_router
 from pricing import router as pricing_router
 from payment_endpoints import router as payment_router
@@ -273,6 +289,7 @@ app.include_router(skills_router)
 app.include_router(assistants_router)
 app.include_router(wallet_router)
 app.include_router(admin_router)
+app.include_router(admin_catalog_router)
 app.include_router(api_keys_router)
 app.include_router(pricing_router)
 app.include_router(payment_router)

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
-import { useCatalog } from '@/lib/useCatalog'
+import { useCatalog, priceBand, PRICE_BAND_LABEL } from '@/lib/useCatalog'
 import { type ModelCatalogItem, type Currency } from '@/types/catalog'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { Skeleton } from '@/components/ui'
@@ -86,7 +86,11 @@ const STEP_LABELS = ['خوشآمد', 'هدف شما', 'انتخاب مدل', 'م
 
 type Recommendation = {
   displayName: string
-  provider: string
+  /** A price-band label ("رایگان"/"استاندارد"/"حرفه‌ای") for a live catalog
+      match, or a well-known example brand name for the static fallback used
+      when the catalog is unavailable. Never the internal routing provider —
+      that field isn't part of the public catalog contract. */
+  badgeLabel: string
   description?: string
   pricing?: ModelCatalogItem['pricing']
   contextWindow?: number
@@ -111,7 +115,7 @@ function recommendFor(goal: Goal, models: ModelCatalogItem[], favoriteIds: strin
   if (match) {
     return {
       displayName: match.displayName,
-      provider: match.provider,
+      badgeLabel: PRICE_BAND_LABEL[priceBand(match, models)],
       description: match.description,
       pricing: match.pricing,
       contextWindow: match.contextWindow,
@@ -121,7 +125,7 @@ function recommendFor(goal: Goal, models: ModelCatalogItem[], favoriteIds: strin
   }
   return {
     displayName: goal.fallbackModel,
-    provider: goal.fallbackProvider,
+    badgeLabel: goal.fallbackProvider,
     fromCatalog: false,
   }
 }
@@ -435,7 +439,7 @@ export default function OnboardingPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="font-semibold text-sm truncate">{m.displayName}</span>
-                              <span className="badge badge-accent text-[10px] shrink-0">{m.provider}</span>
+                              <span className="badge badge-accent text-[10px] shrink-0">{PRICE_BAND_LABEL[priceBand(m, models)]}</span>
                             </div>
                             <div className="text-xs text-[var(--text-muted)] mt-1">
                               {formatPriceShort(m.pricing)}
@@ -503,7 +507,7 @@ export default function OnboardingPage() {
                         <div className="flex-1 min-w-0">
                           <div className="text-xl font-bold">{recommendation.displayName}</div>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            <span className="badge badge-accent">{recommendation.provider}</span>
+                            <span className="badge badge-accent">{recommendation.badgeLabel}</span>
                             {recommendation.fromCatalog ? (
                               <span className="badge badge-positive">از کاتالوگ زنده</span>
                             ) : (

@@ -39,6 +39,10 @@ EXCHANGE_RATE_CACHE_KEY = "exchange_rate:usd_irt:resolved"
 EXCHANGE_RATE_NEGATIVE_TTL = 300  # cache upstream failures briefly too
 TGJU_TIMEOUT_S = 4.0  # was an effectively unbounded 15s through a dead proxy
 CATALOG_CACHE_TTL = 600
+# Flat margin added to the USD->IRT rate, in Toman. Applied centrally in
+# _get_exchange_rate so every price consumer derives the same effective
+# rate; a per-model markup would make margin wildly uneven across tiers.
+USD_IRT_FLAT_MARKUP = float(os.getenv('USD_IRT_FLAT_MARKUP', '2000'))
 
 
 # ── Catalog helpers ─────────────────────────────────────────────
@@ -48,7 +52,9 @@ def _catalog_row_to_item(m: dict[str, Any], rate_irt: float = 126488, markup_pct
     return {
         'id': m['id'],
         'providerModelId': m['provider_model_id'],
-        'provider': m['provider'],
+        # 'provider' (internal routing id, e.g. "bynara") is intentionally
+        # NOT exposed here — end users must never see which upstream serves
+        # a model, only admins do (see GET /admin/catalog/models).
         'displayName': m['display_name'],
         'description': m.get('description'),
         'modalities': m.get('modalities') or {'input': ['text'], 'output': ['text']},
@@ -109,10 +115,11 @@ async def _litellm_fallback_catalog() -> list[dict[str, Any]]:
                 mid = str(entry.get('id') or '').strip()
                 if not mid:
                     continue
-                provider = mid.split('/')[0] if '/' in mid else (entry.get('owned_by') or 'unknown')
                 items.append({
                     'id': mid.replace('/', '-').lower(),
-                    'providerModelId': mid, 'provider': provider, 'displayName': mid,
+                    # No 'provider' key — same rule as _catalog_row_to_item:
+                    # this fallback list is also user-facing.
+                    'providerModelId': mid, 'displayName': mid,
                     'description': None,
                     'modalities': {'input': ['text'], 'output': ['text']},
                     'capabilities': ['chat'], 'recommendedFor': [],
@@ -435,7 +442,8 @@ async def _get_exchange_rate() -> tuple[float, int]:
         cached = await rds.get(EXCHANGE_RATE_CACHE_KEY)
         if cached:
             payload = json.loads(cached)
-            return float(payload["rate_irt"]), int(payload.get("markup_pct", 0))
+            base = float(payload["rate_irt"])
+            return base + USD_IRT_FLAT_MARKUP, int(payload.get("markup_pct", 0))
     except Exception as e:
         logger.warning("exchange rate cache read failed: %s", e)
 
@@ -451,7 +459,10 @@ async def _get_exchange_rate() -> tuple[float, int]:
     except Exception as e:
         logger.warning("exchange rate cache write failed: %s", e)
 
-    return rate_irt, markup_pct
+    # Redis holds the bare market rate; the margin is added on the way out so a
+    # markup change takes effect on the next call instead of waiting out the TTL.
+    return rate_irt + USD_IRT_FLAT_MARKUP, markup_pct
+
 
 async def _fetch_tgju_eur_rate() -> float | None:
     """Fetch the live EUR→IRR market rate from tgju.org.
@@ -743,6 +754,32 @@ async def refresh_pricing() -> dict[str, Any]:
         except Exception as e:
             return {'status': 'error', 'detail': str(e)}
 
+    # 3b. A model that is offered to users but has no price bills nothing.
+    # The health checker promotes models back to `available` on its own and has
+    # no notion of pricing, so this has to be re-checked every cycle rather than
+    # fixed once.
+    unpriced_demoted = 0
+    if async_session is not None:
+        try:
+            async with async_session() as session:
+                res = await session.execute(sqlalchemy.text(
+                    "UPDATE model_catalog SET availability = 'maintenance', "
+                    "updated_at = now() "
+                    "WHERE availability = 'available' "
+                    "AND (input_per_million IS NULL OR input_per_million <= 0) "
+                    "RETURNING id"
+                ))
+                demoted = [r[0] for r in res.fetchall()]
+                await session.commit()
+                unpriced_demoted = len(demoted)
+                if demoted:
+                    logger.warning(
+                        'demoted %d unpriced model(s) out of `available`: %s',
+                        len(demoted), ', '.join(demoted),
+                    )
+        except Exception as e:
+            logger.warning('unpriced-model guard failed: %s', e)
+
     # 4. Invalidate caches
     for key in ['cache:catalog:models', 'cache:catalog:pricing', 'cache:api:pricing']:
         await rds.delete(key)
@@ -754,6 +791,7 @@ async def refresh_pricing() -> dict[str, Any]:
         'markup_pct': markup_pct,
         'models_matched': len(or_prices) // 3,
         'models_updated': updated,
+        'unpriced_demoted': unpriced_demoted,
         'refreshed_at': datetime.now(timezone.utc).isoformat(),
     }
 

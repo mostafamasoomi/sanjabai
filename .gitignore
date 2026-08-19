@@ -67,3 +67,4 @@ backend/Dockerfile.litellm
 security/*.xml
 SESSION_HANDOFF.md
 backend/*.bak.*
+docker-compose.yml.bak.*

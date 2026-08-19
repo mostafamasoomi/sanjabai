@@ -1,0 +1,33 @@
+# sanjabai.com — TLS terminates here; everything behind it speaks plain HTTP on
+# the compose network. Caddy obtains and renews Let's Encrypt certificates on its
+# own, and redirects :80 to :443 automatically.
+#
+# All traffic goes to the Next.js frontend, including /api/* and /v1/*: the
+# frontend already rewrites those to the API container (see next.config), so
+# routing them separately here would duplicate that mapping in a second place
+# and let the two drift apart.
+
+sanjabai.com, www.sanjabai.com {
+	encode zstd gzip
+
+	# Do not advertise the stack we run.
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	reverse_proxy sanjabai_frontend:3000 {
+		# Streaming chat responses must not be buffered into silence.
+		flush_interval -1
+	}
+
+	log {
+		output file /var/log/caddy/sanjabai.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}

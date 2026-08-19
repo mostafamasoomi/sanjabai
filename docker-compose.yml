@@ -85,9 +85,28 @@ services:
       API_URL: http://sanjabai-sanjabai_api-1:8000
     networks: [sanjabai_net]
 
+  sanjabai_caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - sanjabai_frontend
+    ports:
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+      - "0.0.0.0:443:443/udp"
+    volumes:
+      - ./infra/Caddyfile:/etc/caddy/Caddyfile:ro
+      - sanjabai_caddy_data:/data
+      - sanjabai_caddy_config:/config
+      - sanjabai_caddy_logs:/var/log/caddy
+    networks: [sanjabai_net]
+
 volumes:
   sanjabai_pg_data:
   sanjabai_redis_data:
+  sanjabai_caddy_data:
+  sanjabai_caddy_config:
+  sanjabai_caddy_logs:
 
 networks:
   sanjabai_net:

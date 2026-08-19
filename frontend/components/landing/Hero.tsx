@@ -6,12 +6,8 @@ import { HERO_ROTATION, HERO_TRUST, PREVIEW_THREADS } from './content'
 import { useTilt } from './useTilt'
 import { useScrollParallax } from './useScrollParallax'
 import { Constellation } from './Constellation'
+import { VortexIntro } from './VortexIntro'
 
-/** Each blob drifts at its own fraction of scroll speed — the closer the
- * fraction is to 0, the farther back the layer reads as sitting. `baseX`
- * mirrors each blob's own CSS `translate` x-component (blob 1 is centered
- * via `inset-inline-start: 50%` + `translate: -50% 0`), since the parallax
- * hook writes the whole `translate` property and would otherwise wipe it. */
 const AURA_DEPTHS = [
   { depth: 0.06, baseX: '-50%' },
   { depth: 0.1, baseX: '0' },
@@ -34,17 +30,11 @@ function Rotator() {
 
   return (
     <span className="lp-hero__rotator">
-      {/* Invisible stack sizes the box to the widest word, so swapping the
-          visible word below never reflows the headline. */}
       <span className="lp-hero__rotator-sizer" aria-hidden="true">
         {HERO_ROTATION.map((word) => (
           <span key={word}>{word}</span>
         ))}
       </span>
-      {/* Only the current word is ever actually mounted -- a key-based
-          remount plus a CSS entrance animation, not a cross-fade of several
-          stacked, simultaneously-opaque elements -- so two different words
-          can never be visible at once. */}
       <span key={index} className="lp-hero__rotator-word">
         {HERO_ROTATION[index]}
       </span>
@@ -60,14 +50,6 @@ function ProductPreview() {
   const previewRef = useRef<HTMLDivElement>(null)
   useTilt(previewRef, true, 5)
 
-  // Types the answer out when the reader switches model tabs.
-  //
-  // The initial state is the *complete* answer, so the server-rendered HTML
-  // carries real content and a reader without JavaScript still sees a finished
-  // conversation. That makes the first mount a special case: replaying the
-  // animation there would blank the bubble that was just painted and retype
-  // it, which reads as a flash. So the first run only arms the ref, and the
-  // typewriter starts from the first genuine tab change onward.
   const [typed, setTyped] = useState(thread.answer)
   const timerRef = useRef<number>()
   const mounted = useRef(false)
@@ -138,23 +120,17 @@ function ProductPreview() {
             <span className="lp-msg__avatar">
               {thread.logo ? <ProviderLogo src={thread.logo} size={15} /> : '؟'}
             </span>
-            {/* No aria-live here on purpose: announcing a decorative typewriter
-                two characters at a time would flood a screen reader. The bubble
-                is ordinary content and is read when the user reaches it. */}
             <p className="lp-msg__bubble">
               {typed}
               {!done && <span className="lp-msg__caret" aria-hidden="true" />}
             </p>
           </div>
 
-          {/* Deliberately no latency or per-message price here: any number we
-              printed would be invented. The real figures are computed per
-              request and shown in the product itself. */}
           <div className="lp-preview__meta">
             <span>
               مدل: <b dir="ltr">{thread.label}</b>
             </span>
-            <span>هزینه‌ی تخمینی هر پیام، پیش از ارسال در خود چت نمایش داده می‌شود</span>
+            <span>هزینه‌ی تخمینی هر پیام، پیش از ارسال نمایش داده می‌شود</span>
           </div>
         </div>
       </div>
@@ -165,12 +141,6 @@ function ProductPreview() {
 /* ── Hero ─────────────────────────────────────────────────────────────────── */
 
 export function Hero() {
-  // Tilt is attached to the section, not .lp-aura itself: the aura has
-  // pointer-events: none (so it never steals clicks from the content sitting
-  // on top of it) and so can never *receive* the pointermove that would
-  // drive it. Setting --tx/--ty here and reading them on .lp-aura (a plain
-  // inherited custom property) lets the background read depth from the
-  // cursor while the foreground content stays perfectly still and legible.
   const sectionRef = useRef<HTMLElement>(null)
   useTilt(sectionRef, true, 2.5)
 
@@ -188,8 +158,12 @@ export function Hero() {
   useScrollParallax(sectionRef, blobLayers)
 
   return (
-    <section className="lp-hero" ref={sectionRef}>
-      {/* Ambient layers sit behind everything via z-index: -1 on .lp-aura. */}
+    <section className="lp-hero lp-hero--with-vortex" ref={sectionRef}>
+      {/* Dynamic Tornado Background */}
+      <div className="lp-hero__vortex-bg">
+        <VortexIntro />
+      </div>
+
       <div className="lp-grid-lines" aria-hidden="true" />
       <div className="lp-aura" aria-hidden="true">
         <span className="lp-aura__blob" ref={blobRef1} />
@@ -198,26 +172,27 @@ export function Hero() {
         <Constellation />
       </div>
 
-      <div className="lp-container">
+      <div className="lp-container lp-hero__content-wrap">
         <div className="lp-hero__inner">
-          <a href="/signup" className="lp-pill">
+          <a href="/signup" className="lp-pill lp-pill--glow">
             <span className="lp-pill__dot" />
-            ثبت‌نام رایگان — بدون کارت اعتباری
+            <span className="lp-pill__text">دسترسی مستقیم به ۲۳ مدل پیشرفته</span>
           </a>
 
           <h1 className="lp-hero__title">
-            ۲۳ مدل هوش مصنوعی،
+            <span className="lp-hero__title-highlight">۲۳ مدل هوش مصنوعی،</span>
+            <br />
             <Rotator />
           </h1>
 
           <p className="lp-hero__lead">
             با DeepSeek، Mistral، Gemini، Llama و ۱۹ مدل دیگر در یک فضای کاری فارسی کار
-            کنید. عامل بسازید، خروجی‌ها را مقایسه کنید و همه را با یک API به محصول خودتان
-            وصل کنید — با پرداخت به تومان و بدون اشتراک ماهانه.
+            کنید. مدل ایده‌آل را بیابید و همه را با یک API به محصول خودتان وصل کنید —
+            با پرداخت به تومان و بدون نیاز به فیلترشکن.
           </p>
 
           <div className="lp-hero__actions">
-            <a href="/signup" className="lp-btn lp-btn--primary lp-btn--lg">
+            <a href="/signup" className="lp-btn lp-btn--primary lp-btn--lg lp-btn--glow">
               شروع رایگان
               <ForwardArrow />
             </a>

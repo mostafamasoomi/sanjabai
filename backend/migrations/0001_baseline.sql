@@ -1,4 +1,4 @@
--- Phase 0 baseline: core tables for Sanjhubai.
+-- Phase 0 baseline: core tables for Sanjabai.
 -- Idempotent — uses IF NOT EXISTS.
 
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -133,3 +133,14 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     details JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS conversations (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title TEXT DEFAULT 'گفتگوی جدید',
+    model TEXT DEFAULT '',
+    messages JSONB,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_conversations_user ON conversations(user_id);

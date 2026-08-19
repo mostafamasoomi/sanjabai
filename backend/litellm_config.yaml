@@ -125,3 +125,50 @@ model_list:
     api_key: freellmapi-25c68362f62ede985e6b1eab28c8d8282edfb894c9e47676
     model: openai/compound-mini
   model_name: compound-mini
+
+# === Bynara direct catalog (deduplicated public model IDs) ===
+- litellm_params:
+    api_base: https://router.bynara.id/v1
+    api_key: os.environ/BYNARA_API_KEY
+    model: openai/agnes-2.5-flash
+  model_name: agnes-2.5-flash
+- litellm_params:
+    api_base: https://router.bynara.id/v1
+    api_key: os.environ/BYNARA_API_KEY
+    model: openai/deepseek-v4-flash-free
+  model_name: deepseek-v4-flash-free
+- litellm_params:
+    api_base: https://router.bynara.id/v1
+    api_key: os.environ/BYNARA_API_KEY
+    model: openai/laguna-s-2.1
+  model_name: laguna-s-2.1
+- litellm_params:
+    api_base: https://router.bynara.id/v1
+    api_key: os.environ/BYNARA_API_KEY
+    model: openai/ling-3.0-flash-free
+  model_name: ling-3.0-flash-free
+- litellm_params:
+    api_base: https://router.bynara.id/v1
+    api_key: os.environ/BYNARA_API_KEY
+    model: openai/mimo-v2.5-free
+  model_name: mimo-v2.5-free
+- litellm_params:
+    api_base: https://router.bynara.id/v1
+    api_key: os.environ/BYNARA_API_KEY
+    model: openai/qwen-3.8-max-free
+  model_name: qwen-3.8-max-free
+- litellm_params:
+    api_base: https://router.bynara.id/v1
+    api_key: os.environ/BYNARA_API_KEY
+    model: openai/stepfun-3.7-flash
+  model_name: stepfun-3.7-flash
+- litellm_params:
+    api_base: https://router.bynara.id/v1
+    api_key: os.environ/BYNARA_API_KEY
+    model: openai/tencent-hy3-free
+  model_name: tencent-hy3-free
+- litellm_params:
+    api_base: https://router.bynara.id/v1
+    api_key: os.environ/BYNARA_API_KEY
+    model: openai/grok-4.5
+  model_name: grok-4.5

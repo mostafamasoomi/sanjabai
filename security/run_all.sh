@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # security/run_all.sh — run the full black-box smoke + security suite
-# against a deployed Sanjhubai instance and print a single pass/fail
+# against a deployed Sanjabai instance and print a single pass/fail
 # summary. Meant to be run non-interactively (CI, or an agent given only a
 # URL) — every sub-check that's missing a credential skips cleanly instead
 # of blocking the rest of the run.
@@ -23,7 +23,7 @@ export BACKEND_URL FRONTEND_URL
 FAIL=0
 
 echo "════════════════════════════════════════════════════════════════"
-echo " Sanjhubai security & smoke suite"
+echo " Sanjabai security & smoke suite"
 echo "   BACKEND_URL=$BACKEND_URL"
 echo "   FRONTEND_URL=$FRONTEND_URL"
 echo "   ADMIN_TOKEN set: $([ -n "${ADMIN_TOKEN:-}" ] && echo yes || echo no)"

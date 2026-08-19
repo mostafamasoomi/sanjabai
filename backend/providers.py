@@ -83,6 +83,17 @@ def configured_providers() -> list[Provider]:
         ),
     ]
 
+
+    omni_url = os.getenv('OMNIROUTER_URL', '').strip()
+    if omni_url or _env_flag('OMNIROUTER_ENABLED'):
+        providers.append(
+            Provider(
+                name='omniroute',
+                base_url=(omni_url or 'http://172.18.0.1:20130').rstrip('/'),
+                api_key=os.getenv('OMNIROUTER_API_KEY', ''),
+                health_path=None,
+            )
+        )
     nine_url = os.getenv('NINEROUTER_URL', '').strip()
     if nine_url or _env_flag('NINEROUTER_ENABLED'):
         providers.append(

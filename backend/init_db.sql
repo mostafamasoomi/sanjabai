@@ -1,4 +1,4 @@
--- Initialize sanjhubai database
+-- Initialize sanjabai database
 
 -- Pricing
 INSERT INTO pricing (model, input_per_million, output_per_million, currency, updated_at) VALUES
@@ -31,5 +31,5 @@ ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, body = EXCLUDED.body, upd
 -- NOTE: this credential is hardcoded and has been sitting in git history —
 -- flagged separately as needing rotation, independent of this rename.
 INSERT INTO proxy_config (proxy_url, proxy_type, active, updated_at) VALUES
-('socks5://ted:T%23d%40123234@sanjhubai_tunnel:9090', 'socks5', TRUE, NOW())
+('socks5://ted:T%23d%40123234@sanjabai_tunnel:9090', 'socks5', TRUE, NOW())
 ON CONFLICT (id) DO UPDATE SET proxy_url = EXCLUDED.proxy_url, proxy_type = EXCLUDED.proxy_type, active = EXCLUDED.active, updated_at = EXCLUDED.updated_at;

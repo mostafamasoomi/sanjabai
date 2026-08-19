@@ -1,8 +1,8 @@
-# SOC Security Hardening Plan — Multiai
+# SOC Security Hardening Plan — Sanjabai
 
 > **Goal:** Bring all 5 security dimensions to 9+/10 through systematic senior-managed improvements.
 
-**Architecture:** Wazuh SIEM + Multiai App Security + Financial Watchdog + SOC Dashboard — all integrated.
+**Architecture:** Wazuh SIEM + Sanjabai App Security + Financial Watchdog + SOC Dashboard — all integrated.
 
 **Current Scores:**
 | Dimension | Current | Target |
@@ -38,17 +38,17 @@
 
 ## Phase 2: SOC/SIEM Integration (3→9)
 
-### Task 2.1: Install Wazuh Agent on Multiai API
+### Task 2.1: Install Wazuh Agent on Sanjabai API
 - **Action:** Add wazuh-agent container to docker-compose
 - **Config:** Point to wazuh-manager:1514
 - **Verify:** Agent appears in Wazuh dashboard
 
-### Task 2.2: Log Forwarding from Multiai to Wazuh
+### Task 2.2: Log Forwarding from Sanjabai to Wazuh
 - **Action:** Configure rsyslog/filebeat in API container
 - **Forward:** FastAPI access logs, auth logs, watchdog alerts
 - **Verify:** Logs appear in Wazuh index
 
-### Task 2.3: Custom Wazuh Rules for Multiai
+### Task 2.3: Custom Wazuh Rules for Sanjabai
 - **File:** `/var/ossec/etc/rules/local_rules.xml`
 - **Rules:** 
   - Failed login attempts (brute force detection)
@@ -57,7 +57,7 @@
   - Rate limit violations
   - Unusual API access patterns
 
-### Task 2.4: Wazuh Active Response for Multiai
+### Task 2.4: Wazuh Active Response for Sanjabai
 - **Action:** Configure active response to auto-block IPs
 - **Integration:** Wazuh → firewall-drop on critical alerts
 
@@ -140,7 +140,7 @@ After each phase: **evaluation** → if score < 9, iterate.
 - [ ] Wazuh indexer password changed
 - [ ] Ports 2057/9200 not externally accessible
 - [ ] Wazuh agent connected and reporting
-- [ ] Multiai logs forwarding to Wazuh
+- [ ] Sanjabai logs forwarding to Wazuh
 - [ ] Custom rules triggering correctly
 - [ ] Account lockout working
 - [ ] Audit trail complete

@@ -3,7 +3,7 @@ import { CheckGlyph, ForwardArrow } from './primitives'
 import { PRICING_COLUMNS } from './content'
 
 /**
- * Sanjhubai bills per token against a prepaid wallet — see app/pricing/page.tsx.
+ * Sanjabai bills per token against a prepaid wallet — see app/pricing/page.tsx.
  * These columns explain that model rather than inventing subscription tiers,
  * so this section can't end up contradicting the real pricing page. The
  * per-model rate table lives on /pricing; this just links there.

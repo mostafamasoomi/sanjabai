@@ -54,7 +54,7 @@ export default function PlaygroundPage() {
 
   const curlSnippet = useMemo(
     () =>
-      `curl https://api.sanjhubai.ir/v1/chat/completions \\\n` +
+      `curl https://api.sanjabai.ir/v1/chat/completions \\\n` +
       `  -H "Authorization: Bearer YOUR_API_KEY" \\\n` +
       `  -H "Content-Type: application/json" \\\n` +
       `  -d '${JSON.stringify(requestBody, null, 2)}'`,

@@ -38,7 +38,7 @@ async def get_wallet(request: Request) -> JSONResponse:
             {'uid': uid}
         )
         row = res.fetchone()
-        balance = row.balance if row else 0
+        balance = float(row.balance) if row and row.balance is not None else 0.0
     return JSONResponse({'balance': balance})
 
 

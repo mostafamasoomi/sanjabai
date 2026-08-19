@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-test.describe('Sanjhubai Frontend Tests', () => {
+test.describe('Sanjabai Frontend Tests', () => {
   
   test.describe('Authentication Flow', () => {
     test('should load login page', async ({ page }) => {

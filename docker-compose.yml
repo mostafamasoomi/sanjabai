@@ -1,0 +1,94 @@
+name: sanjabai
+
+services:
+  sanjabai_pg:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sanjabai
+      POSTGRES_PASSWORD: sanjabai
+      POSTGRES_DB: sanjabai
+    volumes:
+      - sanjabai_pg_data:/var/lib/postgresql/data
+    networks: [sanjabai_net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sanjabai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  sanjabai_redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "yes"]
+    volumes:
+      - sanjabai_redis_data:/data
+    networks: [sanjabai_net]
+
+  sanjabai_litellm:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.litellm
+    restart: unless-stopped
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]
+    volumes:
+      - ./backend/litellm_config.yaml:/app/config.yaml:ro
+    environment:
+      BYNARA_API_KEY: ${BYNARA_API_KEY:?BYNARA_API_KEY must be set in .env}
+      BYNARA_API_KEY_2: ${BYNARA_API_KEY_2:?BYNARA_API_KEY_2 must be set in .env}
+    networks: [sanjabai_net]
+
+  sanjabai_api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      sanjabai_pg:
+        condition: service_healthy
+      sanjabai_redis:
+        condition: service_started
+      sanjabai_litellm:
+        condition: service_started
+    env_file: .env
+    environment:
+      - ADMIN_TOKEN=${ADMIN_TOKEN:?ADMIN_TOKEN must be set in .env}
+    ports:
+      - "0.0.0.0:8001:8000"
+    networks: [sanjabai_net]
+
+  sanjabai_frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://sanjabai-sanjabai_api-1:8000
+    restart: unless-stopped
+    depends_on:
+      - sanjabai_api
+    environment:
+      NEXT_PUBLIC_API_URL: http://sanjabai-sanjabai_api-1:8000
+      HOSTNAME: 0.0.0.0
+    ports:
+      - "0.0.0.0:3003:3000"
+    networks: [sanjabai_net]
+
+  sanjabai_bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    restart: on-failure:3
+    depends_on:
+      - sanjabai_api
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      API_URL: http://sanjabai-sanjabai_api-1:8000
+    networks: [sanjabai_net]
+
+volumes:
+  sanjabai_pg_data:
+  sanjabai_redis_data:
+
+networks:
+  sanjabai_net:
+    driver: bridge

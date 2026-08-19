@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -25,12 +26,19 @@ _PROVIDER_DISPLAY = {
     "openai": "OpenAI",
 }
 from database import async_session, rds, _http, LITELLM_HOST, ADMIN_TOKEN
+import logging
+
+logger = logging.getLogger(__name__)
 from models import AboutContent, Feature, Discount, ProxyConfig, Pricing
 from dependencies import admin_required
 
 router = APIRouter()
 
 EXCHANGE_RATE_CACHE_TTL = 3600  # 1 hour
+EXCHANGE_RATE_CACHE_KEY = "exchange_rate:usd_irt:resolved"
+EXCHANGE_RATE_NEGATIVE_TTL = 300  # cache upstream failures briefly too
+TGJU_TIMEOUT_S = 4.0  # was an effectively unbounded 15s through a dead proxy
+CATALOG_CACHE_TTL = 600
 
 
 # ── Catalog helpers ─────────────────────────────────────────────
@@ -83,7 +91,7 @@ async def _load_catalog_rows() -> list[dict[str, Any]]:
                 'reasoning_per_million, price_version, effective_from, availability, audience, '
                 'rate_limit, deprecated_at, last_verified_at, provenance, '
                 'usd_input_per_million, usd_output_per_million '
-                "FROM model_catalog WHERE availability = 'available' ORDER BY provider, id"
+                "FROM model_catalog WHERE availability = 'available' AND NOT (audience @> '[\"admin\"]') ORDER BY provider, id"
             ))
             return [dict(r._mapping) for r in res.fetchall()]
     except Exception:
@@ -139,7 +147,7 @@ async def list_models(request: Request) -> dict[str, Any]:
                         "SELECT id, provider_model_id, display_name, context_window, availability, "
                         "input_per_million, output_per_million, currency, "
                         "usd_input_per_million, usd_output_per_million "
-                        "FROM model_catalog WHERE availability = 'available' ORDER BY id"
+                        "FROM model_catalog WHERE availability = 'available' AND NOT (audience @> '[\"admin\"]') ORDER BY id"
                     )
                 )
                 for row in res.fetchall():
@@ -147,7 +155,7 @@ async def list_models(request: Request) -> dict[str, Any]:
                     usd_out = float(row.usd_output_per_million or 0)
                     models.append({
                         'id': row.provider_model_id, 'object': 'model', 'created': 0,
-                        'owned_by': 'sanjhubai', 'display_name': row.display_name,
+                        'owned_by': 'sanjabai', 'display_name': row.display_name,
                         'context_window': row.context_window,
                         'pricing': {
                             'currency': row.currency or 'IRT',
@@ -214,7 +222,7 @@ async def catalog_models(request: Request) -> JSONResponse:
         'generatedAt': datetime.now(timezone.utc),
         'source': source,
     })
-    await rds.setex('cache:catalog:models', 120, json.dumps(result))
+    await rds.setex('cache:catalog:models', CATALOG_CACHE_TTL, json.dumps(result))
     return JSONResponse(result)
 
 
@@ -259,7 +267,7 @@ async def catalog_pricing(request: Request) -> JSONResponse:
         'generatedAt': datetime.now(timezone.utc),
         'priceVersion': pricing[0]['priceVersion'] if pricing else 'v1',
     })
-    await rds.setex('cache:catalog:pricing', 120, json.dumps(result))
+    await rds.setex('cache:catalog:pricing', CATALOG_CACHE_TTL, json.dumps(result))
     return JSONResponse(result)
 
 
@@ -345,28 +353,28 @@ async def api_exchange_rate() -> JSONResponse:
 
 
 async def _fetch_tgju_rate() -> float | None:
-    """Fetch live USD→IRR market rate from tgju.org via the HTTP proxy.
+    """Fetch the live USD→IRR market rate from tgju.org.
 
-    Returns the rate in IRR (Rial); callers convert to IRT (Toman) by /10.
-    Returns None on any failure so callers can fall back.
+    Uses the shared async httpx client so the event loop stays free. Returns the
+    rate in IRR (Rial); callers convert to IRT (Toman) by /10. Returns None on any
+    failure so callers can fall back.
     """
     try:
-        import re
-        import urllib.request as _ur
-        proxy_url = os.getenv("HTTP_PROXY", os.getenv("HTTPS_PROXY", "http://10.10.11.2:8888"))
-        _proxy = _ur.ProxyHandler({"http": proxy_url, "https": proxy_url})
-        _opener = _ur.build_opener(_proxy)
-        _resp = _opener.open("https://www.tgju.org/profile/price_dollar_rl", timeout=15)
-        _text = _resp.read().decode()
-        _m = re.search(r'class="price"[^>]*>([\d,]+)<', _text)
-        if _m:
-            return float(_m.group(1).replace(",", ""))
+        resp = await _http.get(
+            "https://www.tgju.org/profile/price_dollar_rl",
+            follow_redirects=True,
+            timeout=TGJU_TIMEOUT_S,
+        )
+        resp.raise_for_status()
+        m = re.search(r'class="price"[^>]*>([\d,]+)<', resp.text)
+        if m:
+            return float(m.group(1).replace(",", ""))
     except Exception as e:
-        print(f"[warn] _fetch_tgju_rate failed: {e}")
+        logger.warning("tgju USD rate fetch failed: %s", e)
     return None
 
 
-async def _get_exchange_rate() -> tuple[float, int]:
+async def _compute_exchange_rate() -> tuple[float, int]:
     """Return the live USD→IRT (Toman) rate and markup percentage.
 
     Order of resolution:
@@ -414,25 +422,54 @@ async def _get_exchange_rate() -> tuple[float, int]:
     return rate_irt, markup_pct
 
 
-async def _fetch_tgju_eur_rate() -> float | None:
-    """Fetch live EUR→IRR market rate from tgju.org via the HTTP proxy.
+async def _get_exchange_rate() -> tuple[float, int]:
+    """Redis-cached USD→IRT rate.
 
-    Returns the rate in IRR (Rial); callers convert to IRT (Toman) by /10.
-    Returns None on any failure so callers can fall back.
+    The uncached resolver reaches out to tgju.org and open.er-api.com. Without a
+    cache every catalog cache miss paid that cost on the request path, which is
+    what made the first page load after login take 15 seconds. A negative result
+    is cached too (for a shorter window) so an upstream outage cannot turn every
+    request into a fresh timeout.
     """
     try:
-        import re
-        import urllib.request as _ur
-        proxy_url = os.getenv("HTTP_PROXY", os.getenv("HTTPS_PROXY", "http://10.10.11.2:8888"))
-        _proxy = _ur.ProxyHandler({"http": proxy_url, "https": proxy_url})
-        _opener = _ur.build_opener(_proxy)
-        _resp = _opener.open("https://www.tgju.org/profile/price_eur", timeout=15)
-        _text = _resp.read().decode()
-        _m = re.search(r'class="price"[^>]*>([\d,]+)<', _text)
-        if _m:
-            return float(_m.group(1).replace(",", ""))
+        cached = await rds.get(EXCHANGE_RATE_CACHE_KEY)
+        if cached:
+            payload = json.loads(cached)
+            return float(payload["rate_irt"]), int(payload.get("markup_pct", 0))
     except Exception as e:
-        print(f"[warn] _fetch_tgju_eur_rate failed: {e}")
+        logger.warning("exchange rate cache read failed: %s", e)
+
+    rate_irt, markup_pct = await _compute_exchange_rate()
+
+    try:
+        ttl = EXCHANGE_RATE_CACHE_TTL if rate_irt else EXCHANGE_RATE_NEGATIVE_TTL
+        await rds.setex(
+            EXCHANGE_RATE_CACHE_KEY,
+            ttl,
+            json.dumps({"rate_irt": rate_irt, "markup_pct": markup_pct}),
+        )
+    except Exception as e:
+        logger.warning("exchange rate cache write failed: %s", e)
+
+    return rate_irt, markup_pct
+
+async def _fetch_tgju_eur_rate() -> float | None:
+    """Fetch the live EUR→IRR market rate from tgju.org.
+
+    Async twin of _fetch_tgju_rate. Returns IRR (Rial), or None on failure.
+    """
+    try:
+        resp = await _http.get(
+            "https://www.tgju.org/profile/price_eur",
+            follow_redirects=True,
+            timeout=TGJU_TIMEOUT_S,
+        )
+        resp.raise_for_status()
+        m = re.search(r'class="price"[^>]*>([\d,]+)<', resp.text)
+        if m:
+            return float(m.group(1).replace(",", ""))
+    except Exception as e:
+        logger.warning("tgju EUR rate fetch failed: %s", e)
     return None
 
 
@@ -782,31 +819,21 @@ from PIL import Image, ImageDraw, ImageFont
 
 @router.get("/captcha")
 async def captcha_image(request: Request):
-    """Generate a simple math captcha image."""
-    a = random.randint(1, 15)
-    b = random.randint(1, 15)
-    answer = a + b
-    text = f"{a} + {b} = ?"
+    """Generate a professional alphanumeric captcha image."""
+    import string
+    
+    # 5 random characters (uppercase and digits, excluding ambiguous ones like O, 0, I, 1)
+    chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    answer = "".join(random.choices(chars, k=5))
     
     # Store answer in redis for 5 minutes
     token = base64.urlsafe_b64encode(f"{random.getrandbits(64)}".encode()).decode()[:12]
-    await rds.setex(f"captcha:{token}", 300, str(answer))
+    await rds.setex(f"captcha:{token}", 300, answer)
     
-    # Generate image — larger, more readable
-    W, H = 280, 80
-    img = Image.new("RGB", (W, H), (24, 24, 36))
+    W, H = 200, 70
+    # Background color (off-white for contrast)
+    img = Image.new("RGB", (W, H), (245, 245, 250))
     draw = ImageDraw.Draw(img)
-    
-    # Background noise lines (subtle)
-    for _ in range(8):
-        x1, y1 = random.randint(0, W), random.randint(0, H)
-        x2, y2 = random.randint(0, W), random.randint(0, H)
-        draw.line([(x1, y1), (x2, y2)], fill=(random.randint(40, 80), random.randint(40, 80), random.randint(60, 100)), width=1)
-    
-    # Noise dots
-    for _ in range(80):
-        x, y = random.randint(0, W-1), random.randint(0, H-1)
-        draw.point((x, y), fill=(random.randint(80, 160), random.randint(80, 160), random.randint(100, 180)))
     
     # Load font with fallback chain
     font = None
@@ -816,28 +843,49 @@ async def captcha_image(request: Request):
         "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
     ]:
         try:
-            font = ImageFont.truetype(font_path, 36)
+            font = ImageFont.truetype(font_path, 42)
             break
         except Exception:
             continue
     if font is None:
-        try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
-        except Exception:
-            font = ImageFont.load_default()
-    
-    # Center text
-    bbox = draw.textbbox((0, 0), text, font=font)
-    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    x = (W - tw) // 2
-    y = (H - th) // 2 - bbox[1]
-    
-    # Draw text with slight shadow for depth
-    draw.text((x+1, y+1), text, fill=(60, 60, 80), font=font)
-    draw.text((x, y), text, fill=(220, 220, 255), font=font)
-    
+        font = ImageFont.load_default()
+        
+    # Draw noise lines and arcs
+    for _ in range(5):
+        x1, y1 = random.randint(0, W), random.randint(0, H)
+        x2, y2 = random.randint(0, W), random.randint(0, H)
+        draw.line([(x1, y1), (x2, y2)], fill=(random.randint(100, 200), random.randint(100, 200), random.randint(100, 200)), width=random.randint(1, 3))
+        
+    for _ in range(4):
+        x1, y1 = random.randint(-50, W), random.randint(-50, H)
+        x2, y2 = random.randint(x1, W+50), random.randint(y1, H+50)
+        draw.arc([x1, y1, x2, y2], random.randint(0, 180), random.randint(180, 360), fill=(random.randint(100, 200), random.randint(100, 200), random.randint(100, 200)), width=random.randint(1, 3))
+
+    # Draw individual characters with rotation and slight jitter
+    x_offset = 15
+    for char in answer:
+        # Create a blank image for the char
+        char_img = Image.new("RGBA", (45, 60), (255, 255, 255, 0))
+        char_draw = ImageDraw.Draw(char_img)
+        char_color = (random.randint(20, 80), random.randint(20, 80), random.randint(20, 80))
+        char_draw.text((0, 0), char, font=font, fill=char_color)
+        
+        # Rotate
+        char_img = char_img.rotate(random.randint(-30, 30), expand=1, resample=Image.BICUBIC)
+        
+        # Paste into main image
+        y_offset = random.randint(0, 10)
+        img.paste(char_img, (x_offset, y_offset), char_img)
+        x_offset += random.randint(30, 36)
+
+    # Add dot noise
+    for _ in range(120):
+        x, y = random.randint(0, W-1), random.randint(0, H-1)
+        draw.point((x, y), fill=(random.randint(50, 150), random.randint(50, 150), random.randint(50, 150)))
+        
     buf = io.BytesIO()
     img.save(buf, "PNG")
     b64 = base64.b64encode(buf.getvalue()).decode()
     
     return JSONResponse({"captcha": f"data:image/png;base64,{b64}", "token": token})
+

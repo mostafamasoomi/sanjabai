@@ -96,6 +96,12 @@ services:
       dockerfile: Dockerfile
     command: ["python", "watchdog.py"]
     restart: unless-stopped
+    # The shared API image carries an HTTP HEALTHCHECK, but watchdog.py serves no
+    # HTTP — that probe can only ever fail, leaving the container permanently
+    # "unhealthy" and masking a real failure. Liveness is the log line
+    # "Watchdog check: all N rules passed" instead.
+    healthcheck:
+      disable: true
     depends_on:
       sanjabai_pg:
         condition: service_healthy
@@ -115,8 +121,17 @@ services:
     # Uptime-Kuma lives on this same deploy server. Not published to the host:
     # the API reaches it over sanjabai_net by service name (KUMA_BASE_URL in
     # .env = http://uptime_kuma:3001), never by IP or a host port.
-    image: louislam/uptime-kuma:1
+    # Pinned to an exact version, not a floating major: backend/status_page.py
+    # parses this specific status-page JSON shape, which has drifted between
+    # Kuma releases. Bumping this tag means re-checking _parse_kuma against
+    # /api/status-page/<slug> and /api/status-page/heartbeat/<slug>.
+    image: louislam/uptime-kuma:2.5.0
     restart: unless-stopped
+    environment:
+      # Kuma 2.x otherwise stops at an interactive "choose a database" wizard
+      # and never starts the real server. SQLite, not the embedded MariaDB
+      # option: this box has 3.7GB of RAM and already runs Postgres.
+      - UPTIME_KUMA_DB_TYPE=sqlite
     volumes:
       - sanjabai_kuma_data:/app/data
     networks: [sanjabai_net]

@@ -4,7 +4,15 @@ import { useState, useEffect } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { Skeleton, EmptyState, toast } from '@/components/ui'
 import { useAuth } from '@/lib/auth'
-import { useCatalog, priceBand, PRICE_BAND_LABEL, PRICE_BAND_ORDER } from '@/lib/useCatalog'
+import {
+  useCatalog,
+  priceBand,
+  PRICE_BAND_LABEL,
+  PRICE_BAND_ORDER,
+  contextBand,
+  CONTEXT_BAND_LABEL,
+  CONTEXT_BAND_ORDER,
+} from '@/lib/useCatalog'
 import { Num, faNum } from '@/lib/format'
 import { HEALTH_LABEL, healthOf } from '@/app/chat/components/modelUtils'
 import type { Availability, ModelCatalogItem } from '@/types/catalog'
@@ -126,6 +134,7 @@ export default function ModelsPage() {
   const { models, loading, error } = useCatalog()
   const { token } = useAuth()
   const [filter, setFilter] = useState('all')
+  const [contextFilter, setContextFilter] = useState('all')
   const [search, setSearch] = useState('')
   const [testing, setTesting] = useState(false)
   const [testResults, setTestResults] = useState<{ id: string; ok: boolean }[]>([])
@@ -157,9 +166,33 @@ export default function ModelsPage() {
   // already carries (pricing.inputPerMillion) and actually varies.
   const bands = PRICE_BAND_ORDER.filter((b) => models.some((m) => priceBand(m, models) === b))
   const chips = [{ key: 'all', label: 'همه' }, ...bands.map((b) => ({ key: b, label: PRICE_BAND_LABEL[b] }))]
-  const filtered = (filter === 'all' ? models : models.filter((m) => priceBand(m, models) === filter)).filter(
-    (m) => !search || m.displayName.toLowerCase().includes(search.toLowerCase()),
-  )
+
+  // Same pattern as the price chips: only offer bands that at least one
+  // model on screen actually falls into, so the control never shows a
+  // choice that would immediately empty the grid.
+  const ctxBands = CONTEXT_BAND_ORDER.filter((b) => models.some((m) => contextBand(m.contextWindow) === b))
+  const ctxChips = [
+    { key: 'all', label: 'همه' },
+    ...ctxBands.map((b) => ({ key: b, label: CONTEXT_BAND_LABEL[b] })),
+  ]
+
+  const searchQuery = search.trim().toLowerCase()
+  const filtered = models
+    .filter((m) => filter === 'all' || priceBand(m, models) === filter)
+    .filter((m) => contextFilter === 'all' || contextBand(m.contextWindow) === contextFilter)
+    .filter(
+      (m) =>
+        !searchQuery ||
+        m.displayName.toLowerCase().includes(searchQuery) ||
+        (m.description ?? '').toLowerCase().includes(searchQuery),
+    )
+
+  const hasActiveFilters = filter !== 'all' || contextFilter !== 'all' || searchQuery.length > 0
+  const clearFilters = () => {
+    setFilter('all')
+    setContextFilter('all')
+    setSearch('')
+  }
 
   const header = (
     <header className="models-header">
@@ -236,7 +269,7 @@ export default function ModelsPage() {
             type="text"
             className="input"
             style={{ paddingInlineStart: '2.25rem' }}
-            placeholder="جستجوی مدل..."
+            placeholder="جستجو در نام یا توضیح مدل..."
             aria-label="جستجوی مدل"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -254,6 +287,7 @@ export default function ModelsPage() {
           )}
         </div>
         <div className="models-filters">
+          <span className="models-filter-label">قیمت:</span>
           {chips.map((f) => (
             <button
               key={f.key}
@@ -265,15 +299,44 @@ export default function ModelsPage() {
             </button>
           ))}
         </div>
-        <p className="models-count">{faNum(filtered.length)} مدل</p>
+        <div className="models-filters">
+          <span className="models-filter-label">پنجره‌ی متن:</span>
+          {ctxChips.map((f) => (
+            <button
+              key={f.key}
+              onClick={() => setContextFilter(f.key)}
+              className={`aurora-chip ${contextFilter === f.key ? 'active' : ''}`}
+              aria-pressed={contextFilter === f.key}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        {hasActiveFilters && (
+          <button type="button" onClick={clearFilters} className="btn btn-ghost btn-sm">
+            <Icon name="close" size={12} />
+            پاک کردن فیلترها
+          </button>
+        )}
+        <p className="models-count">{faNum(filtered.length)} مدل{hasActiveFilters ? ` از ${faNum(models.length)}` : ''}</p>
       </div>
 
       {filtered.length === 0 ? (
         <EmptyState
           icon="search"
           title="مدلی یافت نشد"
-          description="برای فیلتر انتخابی شما مدلی موجود نیست."
-        />
+          description={
+            hasActiveFilters
+              ? 'برای فیلترها و عبارت جستجوی انتخابی شما مدلی موجود نیست.'
+              : 'در حال حاضر مدلی در فهرست موجود نیست.'
+          }
+        >
+          {hasActiveFilters && (
+            <button type="button" className="btn btn-secondary btn-sm" onClick={clearFilters}>
+              پاک کردن فیلترها
+            </button>
+          )}
+        </EmptyState>
       ) : (
         <div className="models-grid">
           {filtered.map((m) => (

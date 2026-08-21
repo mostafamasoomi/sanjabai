@@ -34,7 +34,11 @@ const NAV: NavItem[] = [
   { href: '/pricing', label: 'تعرفه\u200cها', icon: 'pricing', section: 'tools' },
   { href: '/usage', label: 'مصرف', icon: 'chart', section: 'tools' },
   { href: '/api-keys', label: 'کلید API', icon: 'key', section: 'tools' },
-  { href: '/search', label: 'جستجو', icon: 'search', section: 'tools' },
+  /* '/search' (standalone conversation search) archived 2026-08-21 — search
+     already lives inside chat, so a separate section was redundant. Page
+     moved to app/search/page.tsx.bak.before-archive-search-20260821; restore
+     by moving it back to app/search/page.tsx and restoring this nav entry:
+     { href: '/search', label: 'جستجو', icon: 'search', section: 'tools' }, */
   { href: '/skills', label: 'اسکیل\u200cها', icon: 'cpu', section: 'tools' },
   { href: '/hermes', label: 'سرور هرمس', icon: 'rocket', section: 'tools' },
   { href: '/assistants', label: 'دستیارها', icon: 'sparkles', section: 'tools' },

@@ -1044,7 +1044,8 @@ img, svg, video, canvas {
 .models-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
 .models-toolbar { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .models-search { position: relative; flex: 0 1 20rem; min-width: 12rem; }
-.models-filters { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.models-filters { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.models-filter-label { font-size: var(--fs-xs); color: var(--text-dim); white-space: nowrap; }
 /* Follows the chips on the same line instead of occupying a row of its own —
    it is the result of the filters, so it belongs next to them. */
 .models-count { font-size: var(--fs-xs); color: var(--text-dim); white-space: nowrap; }

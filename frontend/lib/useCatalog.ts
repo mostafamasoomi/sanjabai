@@ -82,6 +82,38 @@ export function priceBand(
   return price <= median ? 'standard' : 'premium'
 }
 
+/* ── Context-window band ─────────────────────────────────────────────
+   `capabilities` and `recommendedFor` are `[]` on every row in the catalog
+   today (checked directly against model_catalog: 0/1134 rows have either
+   populated), so a filter built on them would render a control with nothing
+   to select. `modalities` is populated, but identically on every single row
+   — `{"input":["text"],"output":["text"]}` for all 1134 — so a filter there
+   would offer exactly one option that never actually excludes anything,
+   which is the same "broken control" problem in a different shape. Neither
+   ships.
+
+   `contextWindow`, by contrast, has real spread across the full catalog (13
+   distinct values from 8,192 to 1,050,000, clustered well apart), so it is
+   bucketed the same way price is: a small fixed set of bands relative to the
+   whole catalog rather than one chip per exact number. */
+export type ContextBand = 'small' | 'medium' | 'large' | 'xlarge'
+
+export const CONTEXT_BAND_LABEL: Record<ContextBand, string> = {
+  small: 'کوچک (تا ۳۲ هزار توکن)',
+  medium: 'متوسط (تا ۱۵۰ هزار توکن)',
+  large: 'بزرگ (تا ۶۰۰ هزار توکن)',
+  xlarge: 'خیلی‌بزرگ (بیش از ۶۰۰ هزار توکن)',
+}
+
+export const CONTEXT_BAND_ORDER: ContextBand[] = ['small', 'medium', 'large', 'xlarge']
+
+export function contextBand(contextWindow: number): ContextBand {
+  if (contextWindow <= 32_000) return 'small'
+  if (contextWindow <= 150_000) return 'medium'
+  if (contextWindow <= 600_000) return 'large'
+  return 'xlarge'
+}
+
 /**
  * Single source of truth for the model catalog on the client.
  * Fetches from the API with module-level deduplication so multiple

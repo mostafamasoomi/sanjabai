@@ -16,6 +16,11 @@ Covers:
        and always writes a ledger row + logs the shortfall
        (chat._record_usage)
   L5 - the margin guard helper's boundary cases (services.margin)
+  Quota - self-healing upsert for the daily-usage counter, and a structural
+          check that the daily-limit *enforcement* gate is unreachable on
+          the normal request path (found during live verification of the
+          above; see TestQuotaSelfHealingUpsert /
+          TestDailyLimitGateStructurallyUnreachableOnHealthyPath below)
 
 Follows this suite's existing conventions (see test_wallet_balance_charge.py):
 a minimal fake AsyncSession double standing in for the handful of statements
@@ -25,6 +30,7 @@ from __future__ import annotations
 
 import logging
 import types
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -55,11 +61,13 @@ class _FakeSession:
     chat._record_usage / SqlBillingRepo issue: quota select/update, a raw
     text() pricing lookup, and the wallet select+update pair."""
 
-    def __init__(self, wallet_balance, price=None):
+    def __init__(self, wallet_balance, price=None, quota_row=None):
         self.wallet = types.SimpleNamespace(user_id=1, balance=wallet_balance, reserved=0)
         self.price = price
+        self.quota_row = quota_row  # None -> no existing row (the self-heal case)
         self.added = []
         self.wallet_updates = []
+        self.quota_updates = []
 
     async def execute(self, stmt, params=None, *a, **k):
         result = MagicMock()
@@ -81,7 +89,24 @@ class _FakeSession:
                 result.fetchone.return_value = (self.wallet,)
             return result
         if tname == "quota":
-            return result  # no quota row -> _record_usage skips quota update
+            if type(stmt).__name__ == "Update":
+                # chat._record_usage's quota update passes values as a
+                # separate params dict to execute(), not via .values() on
+                # the statement (unlike the wallet update) -- so the values
+                # live in `params`, not stmt.compile().params.
+                p = params if params is not None else stmt.compile().params
+                self.quota_updates.append(p)
+                if self.quota_row is not None:
+                    if "used_today" in p:
+                        self.quota_row.used_today = p["used_today"]
+                    if "reset_at" in p:
+                        self.quota_row.reset_at = p["reset_at"]
+                return result
+            # Quota.__table__.select() -- a Core table select, so fetchone()
+            # returns a Row with column attributes directly (unlike the
+            # wallet's ORM-entity select, which is wrapped in a 1-tuple).
+            result.fetchone.return_value = self.quota_row
+            return result
         return result
 
     def add(self, obj):
@@ -94,6 +119,10 @@ class _FakeSession:
 def _price(inp=1_000_000, out=1_000_000):
     # 1,000,000 IRT per million tokens -> 1 IRT per token, easy to hand-check.
     return types.SimpleNamespace(input_per_million=inp, output_per_million=out)
+
+
+def _usage(total=1000, prompt=800, completion=200):
+    return {"total_tokens": total, "prompt_tokens": prompt, "completion_tokens": completion}
 
 
 # ── L1: missing/malformed usage falls back to a local estimate ────────────
@@ -126,6 +155,26 @@ class TestL1MissingUsageFallsBackToEstimate:
         assert len(ledger_rows) == 1
         assert ledger_rows[0].amount == -result["cost"]
         assert any("LOCAL ESTIMATE" in r.message for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_estimate_log_states_it_is_a_known_lower_bound(self, caplog):
+        """The estimate fallback cannot see upstream-injected preamble
+        tokens (observed live: ~2784-5756 prompt_tokens for a 2-character
+        message on some routes, added server-side after our outgoing
+        payload leaves us). The same conversation can therefore show wildly
+        different input_tokens depending on whether usage came back for a
+        given request. The log must say this loudly, not just report a
+        number that looks authoritative."""
+        session = _FakeSession(wallet_balance=1_000_000, price=_price())
+        with caplog.at_level(logging.WARNING):
+            await chat_mod._record_usage(
+                session, uid=1,
+                payload={"model": "some-model", "messages": [{"role": "user", "content": "hello there"}]},
+                usage={}, response_text="hi",
+            )
+        messages = [r.message for r in caplog.records]
+        assert any("KNOWN LOWER BOUND" in m for m in messages)
+        assert any("do not treat this number as authoritative" in m for m in messages)
 
     def test_estimate_never_bills_less_than_one_token_per_side_of_real_text(self):
         """Sanity check on the estimate heuristic itself: non-trivial input
@@ -327,3 +376,100 @@ class TestL5MarginGuard:
 
     def test_default_min_margin_pct_is_twenty(self):
         assert MIN_MARGIN_PCT == 20.0
+
+
+# ── Quota tracking: self-healing upsert (found during live verification) ──
+#
+# _record_usage's quota update used to be UPDATE-shaped only: if no `quota`
+# row existed for a user, it matched zero rows and silently did nothing --
+# auth.py only creates a row for accounts that signed up AFTER that code
+# existed, so any earlier account (this deployment's only real user
+# included) tracked no usage at all, ever. Fixed to upsert: create the row
+# on first use if missing, and roll `used_today` over when `reset_at` has
+# passed (previously only the rarely-reached _check_quota_pre fallback did
+# that rollover).
+
+class TestQuotaSelfHealingUpsert:
+    @pytest.mark.asyncio
+    async def test_no_existing_row_creates_one(self):
+        session = _FakeSession(wallet_balance=1_000_000, price=_price(), quota_row=None)
+        await chat_mod._record_usage(
+            session, uid=7, payload={"model": "kr/gpt-4o-mini"}, usage=_usage(),
+        )
+        quota_rows = [o for o in session.added if type(o).__name__ == "Quota"]
+        assert len(quota_rows) == 1
+        assert quota_rows[0].user_id == 7
+        assert quota_rows[0].used_today == 1000  # _usage() total_tokens
+        assert quota_rows[0].daily_limit == 200000
+        assert quota_rows[0].reset_at is not None
+
+    @pytest.mark.asyncio
+    async def test_existing_row_within_window_increments(self):
+        quota_row = types.SimpleNamespace(
+            used_today=500,
+            reset_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6),
+        )
+        session = _FakeSession(wallet_balance=1_000_000, price=_price(), quota_row=quota_row)
+        await chat_mod._record_usage(
+            session, uid=7, payload={"model": "kr/gpt-4o-mini"}, usage=_usage(total=1000, prompt=800, completion=200),
+        )
+        assert session.quota_updates
+        assert session.quota_updates[-1]["used_today"] == 1500  # 500 + 1000
+        # reset_at untouched (still in the future) -- no rollover.
+        assert session.quota_updates[-1]["reset_at"] == quota_row.reset_at
+        quota_rows = [o for o in session.added if type(o).__name__ == "Quota"]
+        assert quota_rows == []  # updated, not re-created
+
+    @pytest.mark.asyncio
+    async def test_existing_row_past_reset_at_rolls_over(self):
+        """Previously only _check_quota_pre (a fallback rarely reached on
+        the normal request path) rolled used_today over at reset_at --
+        _record_usage now does this rollover too."""
+        quota_row = types.SimpleNamespace(
+            used_today=199_999,
+            reset_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1),
+        )
+        session = _FakeSession(wallet_balance=1_000_000, price=_price(), quota_row=quota_row)
+        await chat_mod._record_usage(
+            session, uid=7, payload={"model": "kr/gpt-4o-mini"}, usage=_usage(total=1000, prompt=800, completion=200),
+        )
+        assert session.quota_updates
+        # Rolled over: today's usage only, not 199_999 + 1000.
+        assert session.quota_updates[-1]["used_today"] == 1000
+        assert session.quota_updates[-1]["reset_at"] > datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+# ── Confirming/refuting the daily-limit ENFORCEMENT gate (coordinator ask) ─
+#
+# _check_quota_pre is the only place in the codebase that reads
+# Quota.daily_limit / used_today for enforcement (the 'quota_exceeded' /
+# 'daily_limit' 429). It is called from chat()/chat_with_file()/
+# compare_models()/smart_chat() *exclusively* inside the `except Exception`
+# fallback after BillingService.reserve() -- i.e. only when reserve() raises
+# something other than InsufficientBalanceError. On the normal, healthy
+# request path reserve() just succeeds, so _check_quota_pre -- and the
+# daily-limit check inside it -- never runs at all. This is verified
+# structurally here (all 4 call sites are inside that except block, not
+# unconditional) rather than by re-deriving the whole request flow.
+
+class TestDailyLimitGateStructurallyUnreachableOnHealthyPath:
+    def test_check_quota_pre_only_called_inside_reserve_except_blocks(self):
+        import inspect
+        src = inspect.getsource(chat_mod)
+        # Every call site must be preceded (within a small window) by the
+        # BillingService.reserve() fallback comment/except pattern this
+        # audit found -- a crude but effective regression guard: if a
+        # future change makes _check_quota_pre part of the normal path
+        # (e.g. called unconditionally before reserve()), the surrounding
+        # text will no longer match this fallback-only shape and this
+        # assertion will need updating (that would be a real behavior
+        # change worth reviewing, not a false failure to silence).
+        call_sites = [
+            src[max(0, i - 400):i]
+            for i in range(len(src))
+            if src.startswith('quota_err = await _check_quota_pre(uid)', i)
+        ]
+        assert len(call_sites) == 4, "expected exactly 4 _check_quota_pre call sites"
+        for window in call_sites:
+            assert 'except Exception' in window
+            assert 'reserve' in window.lower()

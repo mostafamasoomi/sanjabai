@@ -20,7 +20,7 @@ import os
 import traceback
 import re as _re
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import sqlalchemy
@@ -682,24 +682,76 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
         return result
 
     if estimated:
+        # KNOWN LOWER BOUND, not a best-effort match to real usage: every
+        # upstream route has been observed to inject a large preamble
+        # server-side, AFTER our outgoing payload leaves us (a system
+        # prompt / template the upstream adds before calling the actual
+        # model) -- our messages-based estimate has no way to see it and
+        # cannot be corrected for it here (the size is upstream/route-
+        # specific and not reliably knowable from this side). Measured
+        # prompt_tokens for the SAME 2-character message: ~2784 on the
+        # gemini routes, ~5756 on kr/glm-5 -- thousands of tokens this
+        # estimate will never include. So a real conversation can show
+        # wildly different input_tokens between a request where usage came
+        # back (large, real, includes the preamble) and one where it did
+        # not (small, estimated, preamble-blind). Logged at WARNING with
+        # the literal numbers so this gap is loud, not silently absorbed
+        # into "billing succeeded."
         logger.warning(
-            f"_record_usage: upstream usage incomplete for model={model!r} "
-            f"uid={uid} -- billing a LOCAL ESTIMATE "
-            f"(input_tokens={input_tokens} output_tokens={output_tokens}, "
-            f"chars_per_token={ESTIMATE_CHARS_PER_TOKEN})"
+            f"_record_usage: BILLING ESTIMATE (LOCAL ESTIMATE, not real usage) for "
+            f"model={model!r} uid={uid} -- input_tokens={input_tokens} "
+            f"output_tokens={output_tokens} (chars_per_token={ESTIMATE_CHARS_PER_TOKEN}). "
+            f"KNOWN LOWER BOUND: excludes any upstream-side hidden preamble not present "
+            f"in our outgoing payload -- real prompt_tokens for this model/route may be "
+            f"thousands of tokens higher (observed ~2784-5756 on other routes for a "
+            f"2-character message) -- do not treat this number as authoritative."
         )
 
     total_tokens = input_tokens + output_tokens
     result['input_tokens'] = input_tokens
     result['output_tokens'] = output_tokens
 
+    # Quota tracking (self-healing upsert -- see loss-path audit follow-up).
+    # auth.py only creates a Quota row for users who signed up AFTER that
+    # code existed; any earlier account (this deployment's only real user
+    # included) has none. This used to be a bare UPDATE, which matches zero
+    # rows and silently does nothing when no row exists -- used_today was
+    # therefore never recorded for such users, at all, ever. Upsert instead
+    # of "create at signup only": it self-heals every existing gap (past and
+    # future) in one place rather than requiring a backfill migration, and
+    # this table has no unique constraint on user_id to build a real
+    # ON CONFLICT upsert on, so a plain select-then-insert/update is used.
+    # NOTE: this has a narrow race window under truly concurrent first
+    # requests from the same never-before-seen user (both could see no row
+    # and both INSERT) -- acceptable for a soft usage counter, not a money
+    # invariant like Ledger; worth a `UNIQUE(user_id)` constraint migration
+    # if that ever matters.
+    _now = datetime.now(timezone.utc).replace(tzinfo=None)
     res = await session.execute(Quota.__table__.select().where(Quota.user_id == uid))
     quota = res.fetchone()
     if quota:
+        if quota.reset_at and _now >= quota.reset_at:
+            # Roll the daily counter over. Previously only _check_quota_pre
+            # did this rollover, and that function is a fallback that only
+            # runs when BillingService.reserve() raises an unexpected
+            # exception -- it is not on the normal per-request path (see
+            # chat()/chat_with_file()/compare_models()/smart_chat()), so
+            # relying on it alone meant used_today could also just never
+            # roll over in practice.
+            new_used = total_tokens
+            new_reset_at = _now + timedelta(days=1)
+        else:
+            new_used = quota.used_today + total_tokens
+            new_reset_at = quota.reset_at
         await session.execute(
             Quota.__table__.update().where(Quota.user_id == uid),
-            {'used_today': quota.used_today + total_tokens, 'updated_at': datetime.now(timezone.utc).replace(tzinfo=None)},
+            {'used_today': new_used, 'reset_at': new_reset_at, 'updated_at': _now},
         )
+    else:
+        session.add(Quota(
+            user_id=uid, daily_limit=200000, used_today=total_tokens,
+            reset_at=_now + timedelta(days=1), updated_at=_now,
+        ))
 
     price_row = None
     try:

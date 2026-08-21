@@ -13,6 +13,11 @@ import type { TrafficHour, VolumeDay } from './MonitoringCharts'
    with empty data, never a 500) — this component mirrors that: each card
    renders what it has and shows a small error chip for what it doesn't,
    rather than letting one broken sub-query blank the whole page.
+
+   List-shaped sections (`upstreams`, `models`) have nowhere to put an inline
+   flag, so the server names them in a top-level `errors` array instead; the
+   `sectionFailed()` helper below reads it. Without that, a failed query is
+   served as `[]` and reads on screen as "there is nothing here".
    ═══════════════════════════════════════════════════════════════════════════ */
 
 type ModelStatus = 'healthy' | 'degraded' | 'down' | 'unknown'
@@ -72,7 +77,12 @@ interface MonitoringData {
     negativeBalancesError?: boolean
     ledgerMismatchesError?: boolean
   }
-  kuma: { monitoringUp: boolean; stale: boolean; source: 'cache' | 'last_good' | null; failing?: boolean }
+  kuma: { monitoringUp: boolean; stale: boolean; source: 'cache' | 'last_good' | null; failing?: boolean; error?: boolean }
+  /** Section keys the server could not produce. List-shaped sections
+      (`upstreams`, `models`) have nowhere to put an inline `error` flag, so
+      they degrade to `[]` — identical to "nothing configured". This names
+      them, so an empty panel is never silently read as "no data". */
+  errors?: string[]
   generatedAt: string
 }
 
@@ -153,6 +163,13 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
     return { aliveCount, upstreamCount: data.upstreams.length, downModels, errorRate }
   }, [data])
 
+  /** Did the server say it could not produce this section? Covers the
+      list-shaped sections that cannot carry an inline `error` flag. */
+  const sectionFailed = useCallback(
+    (key: string) => Boolean(data?.errors?.includes(key)),
+    [data],
+  )
+
   return (
     <div className="space-y-4">
       {/* ─── Header ─── */}
@@ -202,7 +219,7 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
 
           {/* ─── Upstreams ─── */}
           <div className="admin-card">
-            <SectionTitle>درگاه‌های بالادست</SectionTitle>
+            <SectionTitle error={sectionFailed('upstreams')}>درگاه‌های بالادست</SectionTitle>
             {data.upstreams.length === 0 ? (
               <p className="text-xs text-muted">موردی یافت نشد</p>
             ) : (
@@ -239,7 +256,7 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
 
           {/* ─── Models ─── */}
           <div className="admin-card overflow-x-auto">
-            <SectionTitle>مدل‌ها</SectionTitle>
+            <SectionTitle error={sectionFailed('models')}>مدل‌ها</SectionTitle>
             {sortedModels.length === 0 ? (
               <p className="text-xs text-muted">موردی یافت نشد</p>
             ) : (
@@ -428,7 +445,7 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
 
           {/* ─── Kuma ─── */}
           <div className="admin-card" style={{ maxWidth: 420 }}>
-            <SectionTitle>پایش بیرونی (Kuma)</SectionTitle>
+            <SectionTitle error={sectionFailed('kuma') || data.kuma.error}>پایش بیرونی (Kuma)</SectionTitle>
             <div className="flex items-center gap-2">
               <span
                 style={{

@@ -90,8 +90,12 @@ async def _upstreams_section() -> list[dict[str, Any]]:
             })
         return out
     except Exception as e:
+        # Re-raise instead of returning []: the caller gathers with
+        # return_exceptions=True and needs to tell "no upstreams configured"
+        # apart from "the query blew up". A bare [] made those identical and
+        # the admin had no way to know the panel was lying.
         logger.warning('admin_monitoring: upstreams section failed: %s', e)
-        return []
+        raise
 
 
 async def _models_section() -> list[dict[str, Any]]:
@@ -111,8 +115,10 @@ async def _models_section() -> list[dict[str, Any]]:
             for model_id, state in sorted(states.items())
         ]
     except Exception as e:
+        # See _upstreams_section: raise so the failure reaches the response
+        # as an explicit flag rather than an empty list.
         logger.warning('admin_monitoring: models section failed: %s', e)
-        return []
+        raise
 
 
 async def _traffic_section() -> dict[str, Any]:
@@ -304,22 +310,33 @@ async def _wallet_section() -> dict[str, Any]:
 
 async def _kuma_section() -> dict[str, Any]:
     """Read-only from Redis. Never fetches Kuma -- status_page.py owns that."""
+    # A Redis failure used to be indistinguishable from "monitoring is really
+    # down": both produced monitoringUp=False. Track read failures so the
+    # response can say "we could not find out" instead of asserting a state
+    # we never observed.
+    read_errors = 0
+
     try:
         cached = await rds.get(_KUMA_CACHE_KEY)
         if cached:
             data = json.loads(cached)
             return {'monitoringUp': bool(data.get('monitoringUp')), 'stale': False, 'source': 'cache'}
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning('admin_monitoring: kuma cache read failed: %s', e)
+        read_errors += 1
 
     try:
         failing = await rds.get(_KUMA_FAIL_KEY)
-    except Exception:
+    except Exception as e:
+        logger.warning('admin_monitoring: kuma failing-flag read failed: %s', e)
+        read_errors += 1
         failing = None
 
     try:
         last_good = await rds.get(_KUMA_LAST_GOOD_KEY)
-    except Exception:
+    except Exception as e:
+        logger.warning('admin_monitoring: kuma last-good read failed: %s', e)
+        read_errors += 1
         last_good = None
 
     if last_good:
@@ -334,11 +351,54 @@ async def _kuma_section() -> dict[str, Any]:
         except Exception:
             pass
 
-    return {'monitoringUp': False, 'stale': False, 'source': None, 'failing': bool(failing)}
+    out: dict[str, Any] = {
+        'monitoringUp': False, 'stale': False, 'source': None, 'failing': bool(failing),
+    }
+    # Every Redis read failed -- monitoringUp=False below is "unknown", not
+    # an observation. Flag it so the panel does not present it as fact.
+    if read_errors >= 3:
+        out['error'] = True
+    return out
 
 
-def _safe(value: Any, default: Any) -> Any:
-    return default if isinstance(value, BaseException) else value
+def _safe(value: Any, default: Any, *, name: str = '', failures: list[str] | None = None) -> Any:
+    """Substitute ``default`` when a gathered section raised.
+
+    Also records the failure: list-shaped sections cannot carry an ``error``
+    key of their own, so the endpoint exposes a top-level ``errors`` list.
+    Dict-shaped defaults additionally get ``error: True`` inline, matching the
+    convention the traffic/volume/billing sections already use.
+    """
+    if not isinstance(value, BaseException):
+        return value
+    logger.warning('admin_monitoring: %s section raised: %r', name or 'unknown', value)
+    if failures is not None and name:
+        failures.append(name)
+    if isinstance(default, dict):
+        return {**default, 'error': True}
+    return default
+
+
+def _self_reported_errors(payload: dict[str, Any]) -> list[str]:
+    """Section keys that flagged their own failure inline.
+
+    Sections signal trouble in three shapes that predate this helper: a
+    top-level ``error``, a ``<field>Error`` marker (wallet), or a nested
+    sub-dict carrying ``error`` (billing). Collect all three so the admin has
+    one place to look instead of three.
+    """
+    found: list[str] = []
+    for key, value in payload.items():
+        if not isinstance(value, dict):
+            continue
+        if value.get('error') or any(
+            k.endswith('Error') and v for k, v in value.items()
+        ):
+            found.append(key)
+            continue
+        if any(isinstance(v, dict) and v.get('error') for v in value.values()):
+            found.append(key)
+    return found
 
 
 # ── Endpoint ─────────────────────────────────────────────────────────────
@@ -369,17 +429,34 @@ async def admin_monitoring(request: Request) -> JSONResponse:
         return_exceptions=True,
     )
 
-    payload = jsonable_encoder({
-        'upstreams': _safe(upstreams, []),
-        'models': _safe(models, []),
-        'traffic': _safe(traffic, {'hours': []}),
-        'volume': _safe(volume, {'days': []}),
+    failures: list[str] = []
+    sections = {
+        'upstreams': _safe(upstreams, [], name='upstreams', failures=failures),
+        'models': _safe(models, [], name='models', failures=failures),
+        'traffic': _safe(traffic, {'hours': []}, name='traffic', failures=failures),
+        'volume': _safe(volume, {'days': []}, name='volume', failures=failures),
         'billing': _safe(billing, {
             'shortfall': {'count': 0, 'sum': 0, 'recent': []},
             'estimated': {'count24h': 0, 'count30d': 0, 'recent': []},
-        }),
-        'wallet': _safe(wallet, {'negativeBalances': [], 'ledgerMismatches': []}),
-        'kuma': _safe(kuma, {'monitoringUp': False, 'stale': False}),
+        }, name='billing', failures=failures),
+        'wallet': _safe(
+            wallet, {'negativeBalances': [], 'ledgerMismatches': []},
+            name='wallet', failures=failures,
+        ),
+        'kuma': _safe(
+            kuma, {'monitoringUp': False, 'stale': False},
+            name='kuma', failures=failures,
+        ),
+    }
+
+    # `errors` names every section the admin should NOT trust, whether it
+    # raised (captured above) or reported trouble inline. Without it, a failed
+    # query is served as an empty list and reads as "there is no data".
+    errors = sorted(set(failures) | set(_self_reported_errors(sections)))
+
+    payload = jsonable_encoder({
+        **sections,
+        'errors': errors,
         'generatedAt': datetime.now(timezone.utc),
     })
     try:

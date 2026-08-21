@@ -103,12 +103,50 @@ class TestSections:
 
         assert resp.status_code == 200
         body = resp.json()
-        # billing degraded to the safe default; every other section intact.
+        # billing degraded to the safe default, but now says so: a dict-shaped
+        # section carries `error: True` inline and is named in `errors`.
+        # Without that the admin cannot tell "no shortfalls" from "the query
+        # exploded", which is the whole point of this contract.
         assert body['billing'] == {
             'shortfall': {'count': 0, 'sum': 0, 'recent': []},
             'estimated': {'count24h': 0, 'count30d': 0, 'recent': []},
+            'error': True,
         }
+        assert body['errors'] == ['billing']
         assert 'upstreams' in body and 'models' in body
+
+    def test_healthy_response_reports_no_errors(self, mock_async_session, admin_ok):
+        """The happy path must say so explicitly, or `errors` is meaningless."""
+        mock_async_session._execute_result = make_result(fetchall=[])
+        with self._patch_providers_empty(), \
+             patch('admin_monitoring.health_map', new=AsyncMock(return_value={})):
+            resp = client.get('/admin/monitoring')
+        assert resp.status_code == 200
+        assert resp.json()['errors'] == []
+
+    def test_failing_list_sections_are_named_in_errors(self, mock_async_session, admin_ok):
+        """The regression this contract exists for.
+
+        `upstreams` and `models` are lists, so they cannot carry an inline
+        `error` key. They used to degrade to `[]` — indistinguishable from
+        "nothing configured" — and the admin was shown an empty panel with no
+        hint that a query had failed. They must now be named in `errors`.
+        """
+        mock_async_session._execute_result = make_result(fetchall=[])
+
+        def explode(*_a, **_kw):
+            raise RuntimeError('providers lookup exploded')
+
+        with patch('admin_monitoring.configured_providers', new=explode), \
+             patch('admin_monitoring.health_map',
+                   new=AsyncMock(side_effect=RuntimeError('health_map exploded'))):
+            resp = client.get('/admin/monitoring')
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body['upstreams'] == []
+        assert body['models'] == []
+        assert body['errors'] == ['models', 'upstreams']
 
     def test_wallet_reuses_watchdog_queries(self, mock_async_session, admin_ok):
         mock_async_session._execute_result = make_result(

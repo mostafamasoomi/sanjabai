@@ -192,6 +192,103 @@ async def _get_model_upstream(model_id: str) -> str | None:
     return _UPSTREAM_CACHE.get(model_id)
 
 
+# ── Public model id resolution ──────────────────────────────────
+#
+# migrations/0028_public_model_ids.sql adds model_catalog.public_id: a route
+# -free public id (e.g. "sanjab/mistral-large") that never leaks the upstream
+# prefix (bynara/, kr/, cc/, cx/, ag/, gemini-api/models/, nvidia/...) or the
+# word "free". model_catalog.id and provider_model_id are UNCHANGED and must
+# keep resolving indefinitely -- there is no deprecation window.
+#
+# THE HAZARD this exists to close: the incoming `model` string is forwarded
+# verbatim to the upstream (LiteLLM/9router have never heard of `sanjab/*`,
+# so an unresolved new id 502s) AND used verbatim as the price-lookup key in
+# _record_usage (`WHERE provider_model_id = :mid`) -- an unresolved
+# `sanjab/*` string MISSES that lookup and silently bills at the fallback
+# CEILING rate. _resolve_public_model() must therefore run exactly once, as
+# early as possible, at every chat/compare/smart-chat call site -- before the
+# free-tier gate, before the wallet reservation, before validation, before
+# the upstream call -- so everything downstream (routing, health, billing,
+# free-tier bucketing, reservations, usage) stays keyed on the SAME
+# provider_model_id it always was.
+#
+# Cached with the identical TTL/refresh-lock pattern as _UPSTREAM_CACHE
+# above: invalidated purely by TTL expiry (no explicit invalidation call
+# exists for _UPSTREAM_CACHE either), so a public_id an admin assigns takes
+# effect within _MODEL_RESOLVE_CACHE_TTL_SECONDS without a restart.
+_MODEL_RESOLVE_CACHE: dict[str, str] = {}
+_MODEL_RESOLVE_CACHE_TTL_SECONDS = 60
+_MODEL_RESOLVE_CACHE_LOADED_AT: float = 0.0
+_MODEL_RESOLVE_REFRESH_LOCK = asyncio.Lock()
+
+# One query, explicit ORDER BY: rnk=0 (public_id) beats rnk=1
+# (provider_model_id) beats rnk=2 (id) whenever the same string could match
+# more than one row/column (e.g. a stale bare id that happens to collide
+# with someone else's public_id). The cache-build loop below keeps only the
+# FIRST occurrence of each key, and rows arrive in rnk order, so precedence
+# is enforced by this ORDER BY, not by accident of iteration/dict order.
+_MODEL_RESOLVE_SQL = sqlalchemy.text(
+    """
+    SELECT key, provider_model_id FROM (
+        SELECT public_id AS key, provider_model_id, 0 AS rnk
+            FROM model_catalog WHERE public_id IS NOT NULL
+        UNION ALL
+        SELECT provider_model_id AS key, provider_model_id, 1 AS rnk
+            FROM model_catalog WHERE provider_model_id IS NOT NULL
+        UNION ALL
+        SELECT id AS key, provider_model_id, 2 AS rnk
+            FROM model_catalog WHERE id IS NOT NULL
+    ) precedence
+    ORDER BY rnk
+    """
+)
+
+
+async def _resolve_public_model(model: str) -> str:
+    """Canonicalize any model string (public_id, provider_model_id, or the
+    legacy `id`) to model_catalog.provider_model_id -- the id routing,
+    health, and billing have always been keyed on.
+
+    Returns ``model`` unchanged when it matches nothing (an unknown model
+    string must still fall through to the existing "not available" path
+    instead of crashing) and when the DB is unreachable (fails open onto
+    whatever was last cached, same as _get_model_upstream).
+    """
+    if not model:
+        return model
+    global _MODEL_RESOLVE_CACHE, _MODEL_RESOLVE_CACHE_LOADED_AT
+    if async_session is None:
+        return _MODEL_RESOLVE_CACHE.get(model, model)
+
+    now = _time.monotonic()
+    if now - _MODEL_RESOLVE_CACHE_LOADED_AT < _MODEL_RESOLVE_CACHE_TTL_SECONDS:
+        return _MODEL_RESOLVE_CACHE.get(model, model)
+
+    if _MODEL_RESOLVE_REFRESH_LOCK.locked():
+        # Someone else is already refreshing; use what we have rather than
+        # queuing up behind them.
+        return _MODEL_RESOLVE_CACHE.get(model, model)
+
+    async with _MODEL_RESOLVE_REFRESH_LOCK:
+        # Re-check: another request may have refreshed while we waited for
+        # the lock.
+        now = _time.monotonic()
+        if now - _MODEL_RESOLVE_CACHE_LOADED_AT < _MODEL_RESOLVE_CACHE_TTL_SECONDS:
+            return _MODEL_RESOLVE_CACHE.get(model, model)
+        try:
+            async with async_session() as session:
+                res = await session.execute(_MODEL_RESOLVE_SQL)
+                cache: dict[str, str] = {}
+                for row in res.fetchall():
+                    if row.key and row.key not in cache:
+                        cache[str(row.key)] = str(row.provider_model_id)
+                _MODEL_RESOLVE_CACHE = cache
+                _MODEL_RESOLVE_CACHE_LOADED_AT = _time.monotonic()
+        except Exception as e:
+            logger.warning(f"_resolve_public_model cache refresh failed, keeping previous cache: {e}")
+    return _MODEL_RESOLVE_CACHE.get(model, model)
+
+
 async def _resolve_provider(model_id: str):
     """The providers.Provider that should serve a chat completion for this model."""
     from providers import get_provider, chat_provider
@@ -224,12 +321,14 @@ async def get_working_models() -> frozenset[str]:
     try:
         async with async_session() as session:
             res = await session.execute(sqlalchemy.text(
-                "SELECT provider_model_id, id FROM model_catalog WHERE availability = 'available'"
+                "SELECT provider_model_id, id, public_id FROM model_catalog WHERE availability = 'available'"
             ))
             ids: set[str] = set()
             for row in res.fetchall():
                 ids.add(str(row.provider_model_id))
                 ids.add(str(row.id))
+                if row.public_id:
+                    ids.add(str(row.public_id))
             if ids:
                 _WORKING_SET_CACHE = ids
                 return frozenset(ids)
@@ -273,7 +372,7 @@ async def _is_model_allowed(model_id: str) -> bool:
         async with async_session() as session:
             res = await session.execute(
                 sqlalchemy.text(
-                    "SELECT 1 FROM model_catalog WHERE (provider_model_id = :mid OR id = :mid) AND availability='available' LIMIT 1"
+                    "SELECT 1 FROM model_catalog WHERE (provider_model_id = :mid OR id = :mid OR public_id = :mid) AND availability='available' LIMIT 1"
                 ),
                 {'mid': model_id},
             )
@@ -1168,6 +1267,13 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
 
     payload_dict = payload.model_dump(exclude_none=True)
 
+    # Canonicalize a public_id (or any legacy id) to provider_model_id FIRST,
+    # before the free-tier gate/reservation/validation/upstream call below --
+    # see _resolve_public_model's docstring for why this must happen exactly
+    # once, this early.
+    if payload_dict.get('model'):
+        payload_dict['model'] = await _resolve_public_model(payload_dict['model'])
+
     # Free-tier throttle gate — must run before any reservation is opened
     # (see services/free_tier.py: rejecting pre-reserve means there is never
     # a reservation to unwind, and reserve() call sites below are wrapped in
@@ -1317,6 +1423,11 @@ async def chat_with_file(
     uid = await _get_user_id(request)
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+
+    # Canonicalize a public_id (or any legacy id) to provider_model_id FIRST
+    # -- see _resolve_public_model's docstring in this file.
+    if model:
+        model = await _resolve_public_model(model)
 
     # Free-tier throttle gate — before any reservation is opened.
     _ft_model = model or 'tencent-hy3'
@@ -1521,15 +1632,27 @@ async def compare_models(request: Request, payload: CompareRequest) -> Response:
             status_code=400,
         )
 
-    # Validate both models
+    # Canonicalize both public_id(s)/legacy id(s) to provider_model_id FIRST
+    # -- see _resolve_public_model's docstring in this file. The ORIGINAL
+    # request strings are kept (model_a_requested/model_b_requested) purely
+    # to echo back in the response below -- a normal user must never see
+    # which upstream route a model resolved to (see content.py), so the
+    # response must report exactly what the caller sent, not the canonical
+    # provider_model_id used internally for routing/billing.
+    model_a_requested, model_b_requested = model_a, model_b
+    model_a = await _resolve_public_model(model_a)
+    model_b = await _resolve_public_model(model_b)
+
+    # Validate both models (error text echoes what the caller sent, not the
+    # resolved provider_model_id -- same route-hiding rule as everywhere else).
     if not await _is_model_allowed(model_a):
         return JSONResponse(
-            {'error': {'message': f'مدل {model_a} در دسترس نیست', 'type': 'invalid_request', 'code': 'model_not_available'}},
+            {'error': {'message': f'مدل {model_a_requested} در دسترس نیست', 'type': 'invalid_request', 'code': 'model_not_available'}},
             status_code=400,
         )
     if not await _is_model_allowed(model_b):
         return JSONResponse(
-            {'error': {'message': f'مدل {model_b} در دسترس نیست', 'type': 'invalid_request', 'code': 'model_not_available'}},
+            {'error': {'message': f'مدل {model_b_requested} در دسترس نیست', 'type': 'invalid_request', 'code': 'model_not_available'}},
             status_code=400,
         )
 
@@ -1575,6 +1698,11 @@ async def compare_models(request: Request, payload: CompareRequest) -> Response:
     )
 
     result_a, result_b = results
+    # Echo back exactly what the caller requested, never the resolved
+    # provider_model_id -- a normal user must never see which upstream route
+    # a model resolved to (see content.py's no-provider-leak rule).
+    result_a['model'] = model_a_requested
+    result_b['model'] = model_b_requested
 
     # Release reservations
     for res in (reservation_a, reservation_b):
@@ -1781,20 +1909,32 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
     original_model = payload_dict.get('model', '')
     force_model = request.headers.get('X-Smart-Model', '').strip()
     if force_model and force_model.lower() != 'auto':
-        # Whitelist validation for forced model
-        if not await _is_model_allowed(force_model if '/' not in force_model else force_model.split('/', 1)[1]):
+        # Canonicalize to provider_model_id FIRST -- see _resolve_public_model's
+        # docstring. This REPLACES the old `force_model.split('/', 1)[1]`
+        # slash-split: that produced a bare model name (e.g. "mistral-large"
+        # from "sanjab/mistral-large") which is a DIFFERENT physical
+        # model_catalog row (a degraded litellm one) with its own route and
+        # price -- wrong route AND wrong billing row. The resolver looks up
+        # the real provider_model_id instead of guessing from string shape.
+        selected_model = await _resolve_public_model(force_model)
+        if not await _is_model_allowed(selected_model):
             logger.info(f"smart_chat blocked forced model={force_model} uid={uid}")
             return JSONResponse(
                 {'error': {'message': f'مدل {force_model} در دسترس نیست', 'type': 'invalid_request', 'code': 'model_not_available'}},
                 status_code=400,
             )
-        if '/' in force_model:
-            selected_provider, selected_model = force_model.split('/', 1)
-        else:
-            selected_model = force_model
-            selected_provider = 'bynara2'
+        selected_provider = selected_model.split('/', 1)[0] if '/' in selected_model else 'bynara2'
+        # Display label: echo back exactly what the caller sent in the
+        # X-Smart-Model request header, never the resolved provider_model_id
+        # -- a normal user must never see which upstream route a model
+        # resolved to (see content.py's no-provider-leak rule). Only the
+        # forced-model path needs this: the auto-selection branch below
+        # already returns bare/hardcoded ids that predate public_id and were
+        # never gated behind this rule.
+        smart_model_label = force_model
     else:
         selected_model, selected_provider = await _select_smart_model_safe(category, balance, plan)
+        smart_model_label = selected_model
 
     # Free-tier throttle gate — before any reservation is opened.
     _ft_gate = await check_and_consume(uid, [selected_model])
@@ -1865,7 +2005,7 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
                     await _rel_session.commit()
             except Exception as _rel_e:
                 logger.warning(f"BillingService.release before stream failed uid={uid}: {_rel_e}")
-        return await _smart_chat_stream(payload_dict, request, selected_model, category)
+        return await _smart_chat_stream(payload_dict, request, selected_model, category, display_model=smart_model_label)
 
     try:
         _provider = await _resolve_provider(selected_model)
@@ -1909,7 +2049,7 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
             resp = Response(content=r.content, status_code=r.status_code, media_type='application/json')
         # P3: Fire background auto-memory extraction
         _fire_memory_extraction(uid, payload_dict.get('messages', []))
-        resp.headers['X-Smart-Model'] = selected_model
+        resp.headers['X-Smart-Model'] = smart_model_label
         resp.headers['X-Smart-Category'] = category
         resp.headers['X-Smart-Provider'] = selected_provider
         if original_model and original_model != selected_model:
@@ -1938,9 +2078,19 @@ async def _smart_chat_stream(
     request: Request,
     selected_model: str,
     category: str,
+    display_model: str | None = None,
 ):
-    """Stream smart chat completion via SSE."""
+    """Stream smart chat completion via SSE.
+
+    ``selected_model`` is the canonical provider_model_id used for routing
+    and billing; ``display_model`` (defaults to ``selected_model`` when not
+    given) is what's echoed back to the client in the `smart_info` SSE event
+    and the `X-Smart-Model` response header -- kept separate so a forced
+    `X-Smart-Model: sanjab/...` request never gets the resolved
+    provider_model_id leaked back to it (see smart_chat()).
+    """
     uid = await _get_user_id(request)
+    display_model = display_model if display_model is not None else selected_model
 
     # Dedup guard + helper (previously duplicated)
     if uid:
@@ -1976,7 +2126,7 @@ async def _smart_chat_stream(
                 headers={**_provider.headers(), 'Accept': 'text/event-stream'},
                 timeout=httpx.Timeout(90, connect=10, read=90),
             ) as r:
-                yield f'data: {json.dumps({"type": "smart_info", "model": selected_model, "category": category})}\n\n'
+                yield f'data: {json.dumps({"type": "smart_info", "model": display_model, "category": category})}\n\n'
                 async for line in r.aiter_lines():
                     if not client_gone and await request.is_disconnected():
                         client_gone = True
@@ -2044,6 +2194,6 @@ async def _smart_chat_stream(
                 _fire_memory_extraction(uid, payload.get('messages', []))
 
     response = StreamingResponse(event_stream(), media_type='text/event-stream')
-    response.headers['X-Smart-Model'] = selected_model
+    response.headers['X-Smart-Model'] = display_model
     response.headers['X-Smart-Category'] = category
     return response

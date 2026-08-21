@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from database import async_session
 from models import Conversation, UsageEvent
 from dependencies import _get_user_id
+from content import _public_ids_enabled
 
 router = APIRouter()
 
@@ -176,16 +177,35 @@ async def conversation_analytics(request: Request) -> JSONResponse:
             total_tokens_used = usage_row.total_tokens if usage_row else 0
             total_cost = usage_row.total_cost if usage_row else 0
 
-            models_res = await session.execute(
-                sqlalchemy.text(
+            # Historical usage_events rows store the raw model string they
+            # were billed under (route-prefixed pre-migration, e.g.
+            # "bynara/mistral-large") and that is NEVER rewritten -- ledger/
+            # usage_events/wallet_reservations/conversations all keep the id
+            # they were actually billed under, append-only. Translate at READ
+            # time only, via a LEFT JOIN against model_catalog, so this
+            # per-user breakdown doesn't leak the upstream route once
+            # PUBLIC_MODEL_IDS_ENABLED is on (see content.py). Flag OFF keeps
+            # this identical to before: COALESCE falls through to the raw
+            # ue.model with no join match.
+            if _public_ids_enabled():
+                models_sql = sqlalchemy.text(
+                    """SELECT COALESCE(mc.public_id, ue.model) as model, COUNT(*) as calls,
+                        SUM(ue.input_tokens + ue.output_tokens) as tokens,
+                        SUM(ue.charged_amount) as cost
+                    FROM usage_events ue
+                    LEFT JOIN model_catalog mc ON mc.provider_model_id = ue.model
+                    WHERE ue.user_id = :uid
+                    GROUP BY COALESCE(mc.public_id, ue.model) ORDER BY calls DESC"""
+                )
+            else:
+                models_sql = sqlalchemy.text(
                     """SELECT model, COUNT(*) as calls,
                         SUM(input_tokens + output_tokens) as tokens,
                         SUM(charged_amount) as cost
                     FROM usage_events WHERE user_id = :uid
                     GROUP BY model ORDER BY calls DESC"""
-                ),
-                {'uid': uid},
-            )
+                )
+            models_res = await session.execute(models_sql, {'uid': uid})
             models_used = {}
             for r in models_res.fetchall():
                 models_used[r.model] = {'calls': r.calls, 'tokens': r.tokens, 'cost': r.cost}

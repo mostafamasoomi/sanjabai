@@ -39,6 +39,26 @@ EXCHANGE_RATE_CACHE_KEY = "exchange_rate:usd_irt:resolved"
 EXCHANGE_RATE_NEGATIVE_TTL = 300  # cache upstream failures briefly too
 TGJU_TIMEOUT_S = 4.0  # was an effectively unbounded 15s through a dead proxy
 CATALOG_CACHE_TTL = 600
+
+# Kill switch for migrations/0028_public_model_ids.sql's model_catalog.public_id
+# column: default OFF so behavior is byte-for-byte identical to before the
+# migration until this is flipped on deliberately. When OFF, every public
+# response below keeps serving `id`/`provider_model_id` exactly as it does
+# today. When ON, `/v1/models`, `/catalog/models`, and `/catalog/pricing`
+# serve `public_id` instead (never `id`/`provider_model_id`, which leak the
+# upstream route), and rows with no public_id (collision losers, and any row
+# an admin hasn't named yet) are simply absent from these listings.
+#
+# Read fresh on every call (not cached at import time) so a test/deploy can
+# flip it without a process restart. chat.py's model-string RESOLVER
+# (_resolve_public_model) is intentionally NOT gated by this flag -- it is a
+# pure superset (an old id always still resolves) and must keep working even
+# with this flag off, so flipping it back off never breaks a client that
+# already adopted a `sanjab/*` id.
+def _public_ids_enabled() -> bool:
+    return os.getenv('PUBLIC_MODEL_IDS_ENABLED', 'false').strip().lower() in ('1', 'true', 'yes')
+
+
 # Flat margin added to the USD->IRT rate, in Toman. Applied centrally in
 # _get_exchange_rate so every price consumer derives the same effective
 # rate; a per-model markup would make margin wildly uneven across tiers.
@@ -48,9 +68,19 @@ USD_IRT_FLAT_MARKUP = float(os.getenv('USD_IRT_FLAT_MARKUP', '2000'))
 # ── Catalog helpers ─────────────────────────────────────────────
 
 def _catalog_row_to_item(m: dict[str, Any], rate_irt: float = 126488, markup_pct: int = 0) -> dict[str, Any]:
-    """Map a model_catalog DB row to the camelCase catalog contract."""
+    """Map a model_catalog DB row to the camelCase catalog contract.
+
+    When PUBLIC_MODEL_IDS_ENABLED is on, serves `public_id` (never `id`,
+    which may still carry the upstream route prefix -- see migrations/
+    0028_public_model_ids.sql). `_load_catalog_rows` already filters to
+    `public_id IS NOT NULL` in that case, so `m['public_id']` is always
+    present here when the flag is on; the `or m['id']` fallback only matters
+    for callers that pass a row _load_catalog_rows wouldn't have (defensive,
+    not expected to trigger in the flag-on path).
+    """
+    served_id = (m.get('public_id') or m['id']) if _public_ids_enabled() else m['id']
     return {
-        'id': m['id'],
+        'id': served_id,
         # 'providerModelId' / 'provider' (internal routing id, e.g. "bynara")
         # are intentionally NOT exposed here — end users must never see
         # which upstream serves a model, only admins do (see
@@ -85,19 +115,28 @@ def _catalog_row_to_item(m: dict[str, Any], rate_irt: float = 126488, markup_pct
 
 
 async def _load_catalog_rows() -> list[dict[str, Any]]:
-    """Load approved catalog from DB; return [] if unavailable/empty."""
+    """Load approved catalog from DB; return [] if unavailable/empty.
+
+    When PUBLIC_MODEL_IDS_ENABLED is on, rows with no public_id (collision
+    losers and anything an admin hasn't named yet -- see migrations/
+    0028_public_model_ids.sql) are excluded: they must not be publicly
+    listable, but they still work as chat ids (chat.py's resolver keeps
+    accepting their own `id`/`provider_model_id` indefinitely).
+    """
     if async_session is None:
         return []
     try:
         async with async_session() as session:
+            public_filter = " AND public_id IS NOT NULL" if _public_ids_enabled() else ""
             res = await session.execute(sqlalchemy.text(
                 'SELECT id, provider_model_id, provider, display_name, description, '
                 'modalities, capabilities, recommended_for, context_window, max_output_tokens, '
                 'currency, input_per_million, output_per_million, cached_input_per_million, '
                 'reasoning_per_million, price_version, effective_from, availability, audience, '
                 'rate_limit, deprecated_at, last_verified_at, provenance, '
-                'usd_input_per_million, usd_output_per_million '
-                "FROM model_catalog WHERE availability = 'available' AND NOT (audience @> '[\"admin\"]') ORDER BY provider, id"
+                'usd_input_per_million, usd_output_per_million, public_id '
+                "FROM model_catalog WHERE availability = 'available' AND NOT (audience @> '[\"admin\"]')"
+                f"{public_filter} ORDER BY provider, id"
             ))
             return [dict(r._mapping) for r in res.fetchall()]
     except Exception:
@@ -159,19 +198,27 @@ async def list_models(request: Request) -> dict[str, Any]:
         try:
             rate_irt, markup_pct = await _get_exchange_rate()
             async with async_session() as session:
+                public_only = _public_ids_enabled()
+                public_filter = " AND public_id IS NOT NULL" if public_only else ""
                 res = await session.execute(
                     sqlalchemy.text(
-                        "SELECT id, provider_model_id, display_name, context_window, availability, "
+                        "SELECT id, provider_model_id, public_id, display_name, context_window, availability, "
                         "input_per_million, output_per_million, currency, "
                         "usd_input_per_million, usd_output_per_million "
-                        "FROM model_catalog WHERE availability = 'available' AND NOT (audience @> '[\"admin\"]') ORDER BY id"
+                        "FROM model_catalog WHERE availability = 'available' AND NOT (audience @> '[\"admin\"]')"
+                        f"{public_filter} ORDER BY id"
                     )
                 )
                 for row in res.fetchall():
                     usd_in = float(row.usd_input_per_million or 0)
                     usd_out = float(row.usd_output_per_million or 0)
+                    # public_id when the flag is on (never provider_model_id,
+                    # which leaks the upstream route -- see migrations/
+                    # 0028_public_model_ids.sql); provider_model_id unchanged
+                    # otherwise, byte-for-byte as before this flag existed.
+                    served_id = (row.public_id or row.provider_model_id) if public_only else row.provider_model_id
                     models.append({
-                        'id': row.provider_model_id, 'object': 'model', 'created': 0,
+                        'id': served_id, 'object': 'model', 'created': 0,
                         'owned_by': 'sanjabai', 'display_name': row.display_name,
                         'context_window': row.context_window,
                         'pricing': {
@@ -256,8 +303,10 @@ async def catalog_pricing(request: Request) -> JSONResponse:
     rows = await _load_catalog_rows()
     pricing = []
     for m in rows:
+        # Same public_id substitution as _catalog_row_to_item -- see there.
+        served_id = (m.get('public_id') or m['id']) if _public_ids_enabled() else m['id']
         pricing.append({
-            'id': m['id'],
+            'id': served_id,
             'currency': m.get('currency') or 'IRT',
             'inputPerMillion': float(m.get('input_per_million') or 0),
             'outputPerMillion': float(m.get('output_per_million') or 0),

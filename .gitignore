@@ -75,3 +75,4 @@ docker-compose.yml.bak.*
 # internal docs — repo is PUBLIC, never push these
 docs/NEXT-SESSION.md
 docs/ROADMAP.md
+docs/NEXT-SESSION-PROMPT.md

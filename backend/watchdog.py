@@ -42,15 +42,26 @@ except ImportError:
 
 # ── Logging ────────────────────────────────────────────────────────────────────
 
-LOG_PATH = os.getenv('WATCHDOG_LOG', '/root/sanjabai/backend/watchdog.log')
+LOG_PATH = os.getenv('WATCHDOG_LOG', '/tmp/watchdog.log')
 
 logger = logging.getLogger('watchdog')
 logger.setLevel(logging.INFO)
 
-# JSON lines file handler
-_fh = logging.FileHandler(LOG_PATH, encoding='utf-8')
-_fh.setFormatter(logging.Formatter('%(message)s'))
-logger.addHandler(_fh)
+# JSON lines file handler. Constructing a FileHandler used to crash at import
+# time whenever LOG_PATH's directory did not exist or was not writable — the
+# old default (/root/sanjabai/backend/watchdog.log) only ever worked on a
+# specific host filesystem and killed the process instantly inside a
+# container, before main() even got a chance to run. Guarded here so an
+# unwritable/missing path degrades to console-only logging instead of a
+# crash loop; WATCHDOG_LOG (above) lets a deployment point it somewhere real.
+try:
+    _fh = logging.FileHandler(LOG_PATH, encoding='utf-8')
+    _fh.setFormatter(logging.Formatter('%(message)s'))
+    logger.addHandler(_fh)
+except OSError as e:
+    logging.getLogger('watchdog').warning(
+        'watchdog: cannot open log file %r (%s); logging to console only', LOG_PATH, e
+    )
 
 # Console handler
 _ch = logging.StreamHandler()

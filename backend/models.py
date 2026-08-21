@@ -319,6 +319,24 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(default=_utcnow)
 
 
+class StatusIncident(Base):
+    """Public status-page incident banner (see 0027_status_incident.sql).
+
+    Admin-managed via POST/DELETE /admin/status/incident (status_page.py).
+    At most one row is expected to be `active` at a time; /status/summary
+    surfaces it alongside the Kuma heartbeat data.
+    """
+    __tablename__ = 'status_incident'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(nullable=False)
+    body: Mapped[str] = mapped_column(default='')
+    severity: Mapped[str] = mapped_column(default='warning')
+    active: Mapped[bool] = mapped_column(default=True)
+    started_at: Mapped[datetime] = mapped_column(default=_utcnow)
+    resolved_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(default=_utcnow)
+
+
 class Plan(Base):
     """Subscription plan definitions."""
     __tablename__ = 'plans'

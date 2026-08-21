@@ -519,9 +519,26 @@ async def models_health(request: Request) -> JSONResponse:
     for m in models:
         counts[m['status']] = counts.get(m['status'], 0) + 1
 
+    # Run concurrently, not sequentially: 9Router legitimately takes up to
+    # ~11s to answer, and upstream_alive's default timeout is only 5s. A
+    # sequential loop over N providers at up to 15s each turned one slow-but-
+    # alive upstream into a multi-provider pileup and got the tunnel wrongly
+    # declared dead. timeout=15.0 gives 9Router room; gather runs every
+    # provider's check in parallel so total latency is bounded by the
+    # slowest single provider, not the sum of all of them.
+    providers_list = configured_providers()
+    alive_results = await asyncio.gather(
+        *(upstream_alive(p, timeout=15.0) for p in providers_list),
+        return_exceptions=True,
+    )
     upstreams = []
-    for p in configured_providers():
-        r = await upstream_alive(p)
+    for p, r in zip(providers_list, alive_results):
+        if isinstance(r, BaseException):
+            upstreams.append({
+                'name': p.name, 'ok': False, 'latencyMs': None,
+                'error': type(r).__name__,
+            })
+            continue
         upstreams.append({
             'name': p.name,
             'ok': r.ok,

@@ -298,8 +298,12 @@ from rag_endpoints import router as rag_router
 from document_generator import router as doc_gen_router
 from model_health import router as model_health_router
 from hermes import router as hermes_router
+from status_page import router as status_page_router
+from admin_monitoring import router as admin_monitoring_router
 
 app.include_router(model_health_router)
+app.include_router(status_page_router)
+app.include_router(admin_monitoring_router)
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(content_router)

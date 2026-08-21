@@ -88,8 +88,51 @@ services:
       - SOCKS5_PROXY_URL=${SOCKS5_PROXY_URL:?SOCKS5_PROXY_URL must be set in .env}
       - HTTPS_PROXY=${SOCKS5_PROXY_URL}
       - HTTP_PROXY=${SOCKS5_PROXY_URL}
+      # Internal-network URL, never an IP: uptime_kuma is not published to the
+      # host, so this only ever resolves inside sanjabai_net (compose service
+      # DNS). Empty KUMA_STATUS_SLUG default matches status_page.py's own
+      # fallback; override both once the status page is created in Kuma.
+      - KUMA_BASE_URL=${KUMA_BASE_URL:-http://uptime_kuma:3001}
+      - KUMA_STATUS_SLUG=${KUMA_STATUS_SLUG:-sanjabai}
     ports:
       - "0.0.0.0:8001:8000"
+    networks: [sanjabai_net]
+
+  sanjabai_watchdog:
+    # Financial anomaly watchdog (backend/watchdog.py): 13 SQL rules checked
+    # on a loop, with Telegram alerts for CRITICAL/HIGH tiers. Runs the same
+    # image as the API, just with a different command -- it needs no ports
+    # and talks to pg/redis by their compose service names, same as the API.
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["python", "watchdog.py"]
+    restart: unless-stopped
+    depends_on:
+      sanjabai_pg:
+        condition: service_healthy
+      sanjabai_redis:
+        condition: service_started
+    environment:
+      - DATABASE_URL=postgresql://sanjabai:sanjabai@sanjabai_pg:5432/sanjabai
+      - REDIS_URL=redis://sanjabai_redis:6379/0
+      - WATCHDOG_LOG=/tmp/watchdog.log
+      # Empty defaults are deliberate: an unconfigured bot token/chat id must
+      # not block the container from starting, it should just skip sending
+      # (watchdog.py logs a warning and continues -- see _send_telegram).
+      - WATCHDOG_BOT_TOKEN=${WATCHDOG_BOT_TOKEN:-}
+      - WATCHDOG_CHAT_ID=${WATCHDOG_CHAT_ID:-}
+    networks: [sanjabai_net]
+
+  uptime_kuma:
+    # Every sanjabai.com component lives on this deploy server -- uptime-kuma
+    # is no exception, even though it only monitors things. Not published to
+    # the host: Caddy or sanjabai_api reach it over sanjabai_net by service
+    # name (see KUMA_BASE_URL above), never by IP or a host port.
+    image: louislam/uptime-kuma:1
+    restart: unless-stopped
+    volumes:
+      - sanjabai_kuma_data:/app/data
     networks: [sanjabai_net]
 
   sanjabai_frontend:
@@ -123,6 +166,7 @@ services:
 volumes:
   sanjabai_pg_data:
   sanjabai_redis_data:
+  sanjabai_kuma_data:
 
 networks:
   sanjabai_net:

@@ -2,12 +2,20 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Icon, type IconName } from '@/components/ui/Icon'
-import { faNum, toFaDigits } from '@/lib/format'
+import { faNum } from '@/lib/format'
 import { toast } from '@/components/ui'
 import dynamic from 'next/dynamic'
+import { Field } from './sections/shared'
+import DashboardSection from './sections/DashboardSection'
+import UsersSection from './sections/UsersSection'
+import PricingSection from './sections/PricingSection'
+import FeaturesSection from './sections/FeaturesSection'
+import DiscountsSection from './sections/DiscountsSection'
+import AboutSection from './sections/AboutSection'
+import ProxySection from './sections/ProxySection'
+import ModelsSection from './sections/ModelsSection'
+import SecuritySection from './sections/SecuritySection'
 
-const AdminCharts = dynamic(() => import('./components/AdminCharts'), { ssr: false })
-const ModelsTab = dynamic(() => import('./components/ModelsTab'), { ssr: false })
 const MonitoringTab = dynamic(() => import('./components/MonitoringTab'), { ssr: false })
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -19,7 +27,7 @@ const MonitoringTab = dynamic(() => import('./components/MonitoringTab'), { ssr:
 
 type Page = 'dashboard' | 'pricing' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'users' | 'security' | 'monitoring'
 
-interface Analytics {
+export interface Analytics {
   user_count: number
   active_users: number
   total_revenue: number
@@ -28,7 +36,7 @@ interface Analytics {
   recent_ledger: { id: number; user_id: number; amount: number; reason: string; created_at: string }[]
 }
 
-interface PricingRow {
+export interface PricingRow {
   model: string
   input_per_million: number
   output_per_million: number
@@ -36,14 +44,14 @@ interface PricingRow {
   availability?: string
 }
 
-interface ModelTestResult {
+export interface ModelTestResult {
   ok: boolean
   latency_ms: number
   error: string | null
   upstream?: string
 }
 
-interface CreditPackageRow {
+export interface CreditPackageRow {
   id: string
   name_fa: string
   name_en: string
@@ -55,7 +63,7 @@ interface CreditPackageRow {
   sort_order: number
 }
 
-interface FeatureRow {
+export interface FeatureRow {
   id: number
   title: string
   description: string
@@ -64,20 +72,20 @@ interface FeatureRow {
   active: boolean
 }
 
-interface DiscountRow {
+export interface DiscountRow {
   id: number
   code: string
   percent: number
   active: boolean
 }
 
-interface ProxyConfig {
+export interface ProxyConfig {
   proxy_type: string
   proxy_url: string
   active: boolean
 }
 
-interface SecurityStats {
+export interface SecurityStats {
   threat_level: 'low' | 'medium' | 'high' | 'critical'
   failed_logins_24h: number
   active_sessions: number
@@ -85,7 +93,7 @@ interface SecurityStats {
   banned_users: { id: number; email: string; username: string; banned_at: string }[]
 }
 
-interface SecurityEvent {
+export interface SecurityEvent {
   id: number
   event_type: string
   user_id: number | null
@@ -95,7 +103,7 @@ interface SecurityEvent {
   created_at: string
 }
 
-interface AuditLog {
+export interface AuditLog {
   id: number
   admin_id: number
   action: string
@@ -105,7 +113,7 @@ interface AuditLog {
   created_at: string
 }
 
-interface UserRow {
+export interface UserRow {
   id: number
   email: string
   username: string
@@ -114,7 +122,7 @@ interface UserRow {
   wallet_balance: number
 }
 
-interface UserDetail {
+export interface UserDetail {
   user: {
     id: number; email: string; phone: string; telegram_id: number;
     display_name: string; bio: string; avatar_url: string;
@@ -131,7 +139,7 @@ interface UserDetail {
   }
 }
 
-type UserDetailTab = 'overview' | 'conversations' | 'usage' | 'ledger' | 'payments'
+export type UserDetailTab = 'overview' | 'conversations' | 'usage' | 'ledger' | 'payments'
 
 // ─── Sidebar Navigation ──────────────────────────────────────────────────────
 
@@ -162,44 +170,6 @@ export async function api(path: string, opts: RequestInit = {}) {
   }
   if (!res.ok) throw new Error(`خطای سرور (${res.status})`)
   return res
-}
-
-// ─── Stat Card ───────────────────────────────────────────────────────────────
-
-function StatCard({ icon, label, value, color }: { icon: React.ComponentProps<typeof Icon>['name']; label: string; value: string | number; color: string }) {
-  return (
-    <div className="admin-card" style={{ borderRight: `3px solid ${color}` }}>
-      <div className="flex items-center gap-3 mb-2">
-        <div className="p-2 rounded-lg" style={{ background: `${color}15` }}>
-          <Icon name={icon} size={18} className="opacity-80" style={{ color }} />
-        </div>
-        <span className="text-xs text-muted">{label}</span>
-      </div>
-      <p className="text-2xl font-bold text-primary">{value}</p>
-    </div>
-  )
-}
-
-// ─── Section Header ──────────────────────────────────────────────────────────
-
-function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
-  return (
-    <div className="mb-6">
-      <h1 className="text-xl font-bold text-primary">{title}</h1>
-      {subtitle && <p className="text-sm mt-1 text-muted">{subtitle}</p>}
-    </div>
-  )
-}
-
-// ─── Form Field ──────────────────────────────────────────────────────────────
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs font-medium mb-1.5 text-secondary">{label}</label>
-      {children}
-    </div>
-  )
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -815,1245 +785,170 @@ export default function AdminPage() {
           {/* ─────────────────────────────────────────────────────────────
               داشبورد
              ───────────────────────────────────────────────────────────── */}
-          {page === 'dashboard' && (
-            <div className="space-y-6">
-              {analytics ? (
-                <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-                    <StatCard icon="profile" label="کل کاربران" value={faNum(analytics.user_count)} color="var(--accent)" />
-                    <StatCard icon="check" label="کاربران فعال" value={faNum(analytics.active_users)} color="var(--positive)" />
-                    <StatCard icon="payment" label="درآمد کل (تومان)" value={faNum(analytics.total_revenue, { fallback: '۰' })} color="var(--info)" />
-                    <StatCard icon="code" label="توکن مصرفی" value={faNum(analytics.total_tokens, { fallback: '۰' })} color="var(--warning)" />
-                    <StatCard icon="chat" label="گفتگوها" value={faNum(analytics.conv_count, { fallback: '۰' })} color="var(--accent)" />
-                  </div>
+          {page === 'dashboard' && <DashboardSection analytics={analytics} />}
 
-                  {/* Charts */}
-                  <AdminCharts />
-
-                  <div className="admin-card">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Icon name="history" size={18} className="text-secondary" />
-                      <h3 className="font-semibold text-sm text-primary">تراکنش‌های اخیر</h3>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <table className="admin-table w-full text-sm">
-                        <thead>
-                          <tr>
-                            <th className="text-right p-3">شناسه کاربر</th>
-                            <th className="text-right p-3">مبلغ</th>
-                            <th className="text-right p-3">شرح</th>
-                            <th className="text-right p-3">تاریخ</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(analytics.recent_ledger || []).length === 0 ? (
-                            <tr>
-                              <td colSpan={4} className="p-6 text-center text-sm text-muted">
-                                تراکنشی ثبت نشده
-                              </td>
-                            </tr>
-                          ) : (
-                            (analytics.recent_ledger || []).map((l: any) => (
-                              <tr key={l.id}>
-                                <td className="p-3 text-xs font-mono">{l.user_id}</td>
-                                <td className="p-3">
-                                  <span className={l.amount > 0 ? 'badge badge-positive' : 'badge badge-danger'}>
-                                    {l.amount > 0 ? '+' : ''}{faNum(l.amount)}
-                                  </span>
-                                </td>
-                                <td className="p-3 text-xs text-secondary">{l.reason}</td>
-                                <td className="p-3 text-xs text-muted">
-                                  {new Date(l.created_at).toLocaleDateString('fa-IR')}
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <div key={i} className="admin-card">
-                      <div className="skeleton h-3 w-20 mb-3 rounded" />
-                      <div className="skeleton h-7 w-16 rounded" />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ─────────────────────────────────────────────────────────────
-              Users
-             ───────────────────────────────────────────────────────────── */}
-          {page === 'users' && !selectedUserId && (
-            <div className="space-y-4">
-              <SectionHeader title="مدیریت کاربران" subtitle={`${faNum(users.length)} کاربر ثبت‌نام شده`} />
-              <div className="admin-card">
-                <div style={{ position: 'relative' }}>
-                  <Icon name="search" size={16} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
-                  <input
-                    className="input w-full"
-                    placeholder="جستجو: ایمیل، نام، شناسه..."
-                    value={userSearch}
-                    onChange={(e) => setUserSearch(e.target.value)}
-                    style={{ paddingRight: '2.5rem' }}
-                  />
-                </div>
-              </div>
-              <div className="admin-card overflow-x-auto">
-                <table className="admin-table w-full text-sm">
-                  <thead>
-                    <tr>
-                      <th className="text-right p-3">شناسه</th>
-                      <th className="text-right p-3">نام کاربری</th>
-                      <th className="text-right p-3">ایمیل</th>
-                      <th className="text-right p-3">پلن</th>
-                      <th className="text-right p-3">موجودی</th>
-                      <th className="text-right p-3">وضعیت</th>
-                      <th className="text-right p-3">عملیات</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {users.filter(u => {
-                      if (!userSearch) return true
-                      const q = userSearch.toLowerCase()
-                      return (u.username || '').toLowerCase().includes(q) ||
-                             (u.email || '').toLowerCase().includes(q) ||
-                             String(u.id).includes(q)
-                    }).length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="p-6 text-center text-sm text-muted">
-                          کاربری یافت نشد
-                        </td>
-                      </tr>
-                    ) : (
-                      users.filter(u => {
-                        if (!userSearch) return true
-                        const q = userSearch.toLowerCase()
-                        return (u.username || '').toLowerCase().includes(q) ||
-                               (u.email || '').toLowerCase().includes(q) ||
-                               String(u.id).includes(q)
-                      }).map((u) => (
-                        <tr key={u.id} className="cursor-pointer hover:bg-[var(--bg-elevated)]" onClick={() => openUserDetail(u.id)}>
-                          <td className="p-3 text-xs font-mono">{u.id}</td>
-                          <td className="p-3 text-sm font-medium text-primary">{u.username || '—'}</td>
-                          <td className="p-3 text-xs text-secondary">{u.email}</td>
-                          <td className="p-3">
-                            <span className="badge badge-accent">{u.plan || 'رایگان'}</span>
-                          </td>
-                          <td className="p-3 text-xs">{faNum(u.wallet_balance)}</td>
-                          <td className="p-3">
-                            <span className={u.is_active ? 'badge badge-positive' : 'badge badge-danger'}>
-                              {u.is_active ? 'فعال' : 'غیرفعال'}
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                              <button className="btn btn-sm" onClick={() => setEditingUser(u)} title="ویرایش">
-                                <Icon name="settings" size={14} />
-                              </button>
-                              <button className="btn btn-sm" onClick={() => openUserDetail(u.id)} title="جزئیات">
-                                <Icon name="search" size={14} />
-                              </button>
-                              {u.is_active && (
-                                <button className="btn btn-sm btn-danger" onClick={() => banUser(u.id)} title="مسدودسازی">
-                                  <Icon name="security" size={14} />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* User Edit Modal */}
-              {editingUser && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setEditingUser(null)}>
-                  <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-                  <div className="card relative w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-bold text-primary">ویرایش کاربر</h3>
-                      <button className="btn btn-icon btn-sm" onClick={() => setEditingUser(null)}>
-                        <Icon name="close" size={16} />
-                      </button>
-                    </div>
-                    <div className="space-y-3">
-                      <Field label="نام کاربری">
-                        <input className="input w-full" value={editingUser.username || ''} onChange={(e) => setEditingUser({ ...editingUser, username: e.target.value })} />
-                      </Field>
-                      <Field label="ایمیل">
-                        <input className="input w-full" value={editingUser.email || ''} onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })} />
-                      </Field>
-                      <Field label="پلن">
-                        <select className="input w-full" value={editingUser.plan || ''} onChange={(e) => setEditingUser({ ...editingUser, plan: e.target.value })}>
-                          <option value="">رایگان</option>
-                          <option value="pro">Pro</option>
-                          <option value="enterprise">Enterprise</option>
-                        </select>
-                      </Field>
-                      <Field label="موجودی کیف پول">
-                        <input className="input w-full" type="number" value={editingUser.wallet_balance || 0} onChange={(e) => setEditingUser({ ...editingUser, wallet_balance: +e.target.value })} />
-                      </Field>
-                    </div>
-                    <div className="flex gap-2 mt-5">
-                      <button className="btn flex-1" onClick={saveUserEdit}>ذخیره</button>
-                      <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={() => setEditingUser(null)}>انصراف</button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── User Detail View ─────────────────────────────────────── */}
-          {page === 'users' && selectedUserId && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <button className="btn btn-ghost btn-sm" onClick={() => { setSelectedUserId(null); setUserDetail(null); setUserTabData(null) }}>
-                  <Icon name="close" size={14} /> بازگشت
-                </button>
-                <SectionHeader title={`کاربر #${selectedUserId}`} subtitle={userDetail?.user?.email || ''} />
-              </div>
-
-              {loadingDetail && !userDetail && (
-                <div className="admin-card"><div className="skeleton h-40 w-full rounded" /></div>
-              )}
-
-              {userDetail && (
-                <>
-                  {/* Stat Cards */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
-                    <StatCard icon="wallet" label="موجودی" value={faNum(userDetail.balance)} color="#22c55e" />
-                    <StatCard icon="models" label="توکن مصرفی" value={faNum(userDetail.stats.total_tokens)} color="#3b82f6" />
-                    <StatCard icon="chat" label="گفتگوها" value={userDetail.stats.conversation_count} color="#a855f7" />
-                    <StatCard icon="pricing" label="هزینه کل" value={faNum(userDetail.stats.total_cost)} color="#f59e0b" />
-                    <StatCard icon="wallet" label="پرداخت‌ها" value={userDetail.stats.payment_count} color="#06b6d4" />
-                    <StatCard icon="dashboard" label="درخواست‌ها" value={userDetail.stats.usage_events} color="#ec4899" />
-                  </div>
-
-                  {/* User Info Card */}
-                  <div className="admin-card">
-                    <div className="flex items-start gap-4">
-                      <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
-                        {(userDetail.user.display_name || userDetail.user.email || '?')[0].toUpperCase()}
-                      </div>
-                      <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
-                        <div><span className="text-muted">نام</span><p className="font-medium">{userDetail.user.display_name || '—'}</p></div>
-                        <div><span className="text-muted">ایمیل</span><p className="font-medium">{userDetail.user.email || '—'}</p></div>
-                        <div><span className="text-muted">تلگرام</span><p className="font-medium">{userDetail.user.telegram_id || '—'}</p></div>
-                        <div><span className="text-muted">تلفن</span><p className="font-medium">{userDetail.user.phone || '—'}</p></div>
-                        <div><span className="text-muted">کیف پول</span><p className="font-medium">{faNum(userDetail.wallet.balance)} (رزرو: {faNum(userDetail.wallet.reserved)})</p></div>
-                        <div><span className="text-muted">سهمیه روزانه</span><p className="font-medium">{faNum(userDetail.quota?.daily_limit) || '—'}</p></div>
-                        <div><span className="text-muted">مصرف امروز</span><p className="font-medium">{faNum(userDetail.quota?.used_today, { fallback: '۰' })}</p></div>
-                        <div><span className="text-muted">عضویت</span><p className="font-medium">{new Date(userDetail.user.created_at).toLocaleDateString('fa-IR')}</p></div>
-                      </div>
-                    </div>
-                    {String(userDetail.user.preferences?.ai_personality || '') && (
-                      <div className="mt-3 p-3 rounded-lg text-xs" style={{ background: 'var(--bg-elevated)' }}>
-                        <span className="font-bold text-accent">🧠 Soul: </span>
-                        <span className="text-secondary">{String(userDetail.user.preferences.ai_personality)}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Tabs */}
-                  <div className="flex gap-1 border-b" style={{ borderColor: 'var(--border)' }}>
-                    {(['overview', 'conversations', 'usage', 'ledger', 'payments'] as UserDetailTab[]).map(tab => (
-                      <button
-                        key={tab}
-                        className={`px-4 py-2 text-xs font-medium transition-colors ${userDetailTab === tab ? 'border-b-2' : 'opacity-60 hover:opacity-100'}`}
-                        style={userDetailTab === tab ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : { color: 'var(--text-secondary)' }}
-                        onClick={() => loadUserTab(tab)}
-                      >
-                        {{ overview: 'نمای کلی', conversations: 'گفتگوها', usage: 'مصرف توکن', ledger: 'تراکنش‌ها', payments: 'پرداخت‌ها' }[tab]}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Tab Content */}
-                  <div className="admin-card min-h-[200px]">
-                    {loadingDetail && <div className="skeleton h-32 w-full rounded" />}
-                    {!loadingDetail && userDetailTab === 'overview' && (
-                      <div className="text-sm text-secondary">
-                        <p>از تب‌های بالا برای مشاهده جزئیات استفاده کنید.</p>
-                      </div>
-                    )}
-                    {!loadingDetail && userDetailTab === 'conversations' && userTabData && (
-                      <div className="overflow-x-auto">
-                        <table className="admin-table w-full text-sm">
-                          <thead><tr>
-                            <th className="text-right p-2">شناسه</th><th className="text-right p-2">عنوان</th>
-                            <th className="text-right p-2">مدل</th><th className="text-right p-2">پیامها</th>
-                            <th className="text-right p-2">تاریخ</th>
-                          </tr></thead>
-                          <tbody>
-                            {(userTabData?.items || []).map((c: any) => (
-                              <tr key={c.id}>
-                                <td className="p-2 text-xs font-mono">{c.id}</td>
-                                <td className="p-2 text-xs">{c.title}</td>
-                                <td className="p-2 text-xs"><span className="badge badge-accent">{c.model || '—'}</span></td>
-                                <td className="p-2 text-xs">{c.msg_count || '—'}</td>
-                                <td className="p-2 text-xs">{new Date(c.updated_at).toLocaleDateString('fa-IR')}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        <p className="text-xs mt-2 text-muted">
-                          {(userTabData?.total || 0)} گفتگو
-                        </p>
-                      </div>
-                    )}
-                    {!loadingDetail && userDetailTab === 'usage' && userTabData && (
-                      <div className="space-y-4">
-                        <h3 className="text-sm font-bold text-primary">مصرف بر اساس مدل</h3>
-                        <table className="admin-table w-full text-sm">
-                          <thead><tr>
-                            <th className="text-right p-2">مدل</th><th className="text-right p-2">درخواست</th>
-                            <th className="text-right p-2">ورودی</th><th className="text-right p-2">خروجی</th>
-                            <th className="text-right p-2">هزینه</th><th className="text-right p-2">آخرین استفاده</th>
-                          </tr></thead>
-                          <tbody>
-                            {(userTabData?.by_model || []).map((m: any, i: number) => (
-                              <tr key={i}>
-                                <td className="p-2 text-xs font-medium">{m.model}</td>
-                                <td className="p-2 text-xs">{m.calls}</td>
-                                <td className="p-2 text-xs">{faNum(m.input_tokens || 0)}</td>
-                                <td className="p-2 text-xs">{faNum(m.output_tokens || 0)}</td>
-                                <td className="p-2 text-xs">{faNum(m.total_cost || 0)}</td>
-                                <td className="p-2 text-xs">{m.last_used ? new Date(m.last_used).toLocaleDateString('fa-IR') : '—'}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                    {!loadingDetail && userDetailTab === 'ledger' && userTabData && (
-                      <div className="overflow-x-auto">
-                        <table className="admin-table w-full text-sm">
-                          <thead><tr>
-                            <th className="text-right p-2">شناسه</th><th className="text-right p-2">مبلغ</th>
-                            <th className="text-right p-2">مانده</th><th className="text-right p-2">شرح</th>
-                            <th className="text-right p-2">تاریخ</th>
-                          </tr></thead>
-                          <tbody>
-                            {(userTabData?.items || []).map((l: any) => (
-                              <tr key={l.id}>
-                                <td className="p-2 text-xs font-mono">{l.id}</td>
-                                <td className={`p-2 text-xs font-bold ${l.amount >= 0 ? 'text-green-400' : 'text-red-400'}`}>{l.amount >= 0 ? '+' : ''}{faNum(l.amount)}</td>
-                                <td className="p-2 text-xs">{faNum(l.balance_after)}</td>
-                                <td className="p-2 text-xs">{l.reason}</td>
-                                <td className="p-2 text-xs">{new Date(l.created_at).toLocaleDateString('fa-IR')}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        <p className="text-xs mt-2 text-muted">
-                          {(userTabData?.total || 0)} تراکنش
-                        </p>
-                      </div>
-                    )}
-                    {!loadingDetail && userDetailTab === 'payments' && userTabData && (
-                      <div className="space-y-4">
-                        <h3 className="text-sm font-bold text-primary">پرداخت‌ها</h3>
-                        <table className="admin-table w-full text-sm">
-                          <thead><tr>
-                            <th className="text-right p-2">شناسه</th><th className="text-right p-2">مبلغ</th>
-                            <th className="text-right p-2">وضعیت</th><th className="text-right p-2">نوع</th>
-                            <th className="text-right p-2">کد مرجع</th><th className="text-right p-2">تاریخ</th>
-                          </tr></thead>
-                          <tbody>
-                            {(userTabData?.payments || []).map((p: any) => (
-                              <tr key={p.id}>
-                                <td className="p-2 text-xs font-mono">{p.id}</td>
-                                <td className="p-2 text-xs font-bold">{faNum(p.amount)}</td>
-                                <td className="p-2"><span className={`badge ${p.status === 'verified' ? 'badge-positive' : p.status === 'pending' ? 'badge-accent' : 'badge-danger'}`}>{p.status === 'verified' ? 'تایید شده' : p.status === 'pending' ? 'در انتظار' : 'ناموفق'}</span></td>
-                                <td className="p-2 text-xs">{p.payment_type}</td>
-                                <td className="p-2 text-xs font-mono">{p.ref_id || '—'}</td>
-                                <td className="p-2 text-xs">{new Date(p.created_at).toLocaleDateString('fa-IR')}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        {(userTabData?.subscriptions || []).length > 0 && (
-                          <>
-                            <h3 className="text-sm font-bold text-primary">اشتراکها</h3>
-                            <table className="admin-table w-full text-sm">
-                              <thead><tr>
-                                <th className="text-right p-2">پلن</th><th className="text-right p-2">وضعیت</th>
-                                <th className="text-right p-2">شروع</th><th className="text-right p-2">پایان</th>
-                                <th className="text-right p-2">مبلغ</th>
-                              </tr></thead>
-                              <tbody>
-                                {(userTabData?.subscriptions || []).map((s: any, i: number) => (
-                                  <tr key={i}>
-                                    <td className="p-2 text-xs font-medium">{s.plan}</td>
-                                    <td className="p-2"><span className={`badge ${s.status === 'active' ? 'badge-positive' : 'badge-accent'}`}>{s.status === 'active' ? 'فعال' : s.status}</span></td>
-                                    <td className="p-2 text-xs">{new Date(s.starts_at).toLocaleDateString('fa-IR')}</td>
-                                    <td className="p-2 text-xs">{s.ends_at ? new Date(s.ends_at).toLocaleDateString('fa-IR') : '—'}</td>
-                                    <td className="p-2 text-xs">{faNum(s.price_paid)}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
+          {page === 'users' && (
+            <UsersSection
+              users={users}
+              userSearch={userSearch}
+              setUserSearch={setUserSearch}
+              editingUser={editingUser}
+              setEditingUser={setEditingUser}
+              selectedUserId={selectedUserId}
+              setSelectedUserId={setSelectedUserId}
+              userDetail={userDetail}
+              setUserDetail={setUserDetail}
+              userDetailTab={userDetailTab}
+              userTabData={userTabData}
+              setUserTabData={setUserTabData}
+              loadingDetail={loadingDetail}
+              openUserDetail={openUserDetail}
+              loadUserTab={loadUserTab}
+              banUser={banUser}
+              saveUserEdit={saveUserEdit}
+            />
           )}
 
           {/* ─────────────────────────────────────────────────────────────
               Pricing
              ───────────────────────────────────────────────────────────── */}
           {page === 'pricing' && (
-            <div className="space-y-6">
-              <SectionHeader title="مدیریت تعرفه‌ها" subtitle="قیمت‌گذاری مدل‌ها به ازای هر میلیون توکن" />
-
-              <div className="admin-card overflow-x-auto">
-                <table className="admin-table w-full text-sm">
-                  <thead>
-                    <tr>
-                      <th className="text-right p-3">مدل</th>
-                      <th className="text-right p-3">ورودی</th>
-                      <th className="text-right p-3">خروجی</th>
-                      <th className="text-right p-3">واحد</th>
-                      <th className="text-right p-3">وضعیت</th>
-                      <th className="text-right p-3">تست</th>
-                      <th className="text-right p-3">عملیات</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {prices.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="p-6 text-center text-sm text-muted">
-                          تعرفه‌ای ثبت نشده
-                        </td>
-                      </tr>
-                    ) : (
-                      prices.map((p: any) => {
-                        const testResult = testResults[p.model]
-                        const isDisabled = p.availability === 'disabled'
-                        return (
-                          <tr key={p.model}>
-                            <td className="p-3 text-sm font-mono font-medium text-primary">{p.model}</td>
-                            <td className="p-3 text-xs">{faNum(p.input_per_million)}</td>
-                            <td className="p-3 text-xs">{faNum(p.output_per_million)}</td>
-                            <td className="p-3"><span className="badge">{p.currency}</span></td>
-                            <td className="p-3">
-                              <button
-                                className="badge"
-                                style={{
-                                  cursor: 'pointer',
-                                  background: isDisabled ? 'var(--danger-dim, #4a1a1a)' : 'var(--success-dim, #143a1e)',
-                                  color: isDisabled ? 'var(--danger, #e35d5d)' : 'var(--success, #4ade80)',
-                                }}
-                                disabled={togglingModel === p.model}
-                                onClick={() => toggleModel(p.model, p.availability)}
-                                title="کلیک برای تغییر وضعیت"
-                              >
-                                {togglingModel === p.model ? '...' : (isDisabled ? 'غیرفعال' : 'فعال')}
-                              </button>
-                            </td>
-                            <td className="p-3">
-                              <button className="btn btn-sm" disabled={testingModel === p.model} onClick={() => testModel(p.model)}>
-                                {testingModel === p.model ? (
-                                  <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-                                ) : 'تست'}
-                              </button>
-                              {testResult && (
-                                <span className="text-xs mr-2" style={{ color: testResult.ok ? 'var(--success, #4ade80)' : 'var(--danger, #e35d5d)' }}>
-                                  {testResult.ok ? `${faNum(testResult.latency_ms)}ms` : (testResult.error || 'خطا')}
-                                </span>
-                              )}
-                            </td>
-                            <td className="p-3">
-                              <button className="btn btn-sm" onClick={() => { setPzModel(p.model); setPzIn(String(p.input_per_million)); setPzOut(String(p.output_per_million)); setPzCur(p.currency) }}>
-                                <Icon name="settings" size={14} />
-                              </button>
-                            </td>
-                          </tr>
-                        )
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="admin-card">
-                <h3 className="font-semibold text-sm mb-4 text-primary">
-                  {pzModel ? `ویرایش ${pzModel}` : 'افزودن تعرفه جدید'}
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Field label="نام مدل">
-                    <input className="input w-full" value={pzModel} onChange={(e) => setPzModel(e.target.value)} placeholder="gpt-4o" />
-                  </Field>
-                  <Field label="ورودی / میلیون توکن">
-                    <input className="input w-full" type="number" value={pzIn} onChange={(e) => setPzIn(e.target.value)} placeholder="0" />
-                  </Field>
-                  <Field label="خروجی / میلیون توکن">
-                    <input className="input w-full" type="number" value={pzOut} onChange={(e) => setPzOut(e.target.value)} placeholder="0" />
-                  </Field>
-                  <Field label="واحد پول">
-                    <input className="input w-full" value={pzCur} onChange={(e) => setPzCur(e.target.value)} />
-                  </Field>
-                </div>
-                <div className="flex gap-2 mt-4">
-                  <button className="btn" onClick={savePricing}>
-                    <Icon name="check" size={16} />
-                    <span>ذخیره</span>
-                  </button>
-                  {pzModel && (
-                    <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={() => { setPzModel(''); setPzIn(''); setPzOut(''); setPzCur('IRT') }}>
-                      انصراف
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Token / Credit Packages — "N million tokens of <model> for <price>" bundles */}
-              <SectionHeader title="بسته‌های اعتباری / توکن" subtitle="بسته‌هایی که در کیف پول کاربران قابل خریدند — با برچسب مدل، به‌صورت «N میلیون توکن مدل X» نمایش داده می‌شوند" />
-
-              <div className="admin-card overflow-x-auto">
-                <table className="admin-table w-full text-sm">
-                  <thead>
-                    <tr>
-                      <th className="text-right p-3">شناسه</th>
-                      <th className="text-right p-3">نام</th>
-                      <th className="text-right p-3">مدل</th>
-                      <th className="text-right p-3">مبلغ (تومان)</th>
-                      <th className="text-right p-3">وضعیت</th>
-                      <th className="text-right p-3">عملیات</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {creditPackages.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="p-6 text-center text-sm text-muted">
-                          بسته‌ای ثبت نشده — از فرم پایین برای افزودن یک بسته استفاده کنید
-                        </td>
-                      </tr>
-                    ) : (
-                      creditPackages.map((pkg) => (
-                        <tr key={pkg.id}>
-                          <td className="p-3 text-sm font-mono text-primary">{pkg.id}</td>
-                          <td className="p-3 text-sm">{pkg.name_fa}</td>
-                          <td className="p-3 text-xs font-mono">{pkg.model_id || '—'}</td>
-                          <td className="p-3 text-xs">{faNum(pkg.base_amount)}</td>
-                          <td className="p-3">
-                            <button
-                              className="badge"
-                              style={{
-                                cursor: 'pointer',
-                                background: pkg.active ? 'var(--success-dim, #143a1e)' : 'var(--danger-dim, #4a1a1a)',
-                                color: pkg.active ? 'var(--success, #4ade80)' : 'var(--danger, #e35d5d)',
-                              }}
-                              onClick={() => toggleCreditPackageActive(pkg)}
-                            >
-                              {pkg.active ? 'فعال' : 'غیرفعال'}
-                            </button>
-                          </td>
-                          <td className="p-3">
-                            <button
-                              className="btn btn-sm"
-                              onClick={() => {
-                                setCpId(pkg.id); setCpNameFa(pkg.name_fa); setCpNameEn(pkg.name_en)
-                                setCpBaseAmount(String(pkg.base_amount)); setCpTotalCredits(String(pkg.total_credits))
-                                setCpBonusPercent(String(pkg.bonus_percent)); setCpModelId(pkg.model_id || '')
-                              }}
-                            >
-                              <Icon name="settings" size={14} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="admin-card">
-                <h3 className="font-semibold text-sm mb-4 text-primary">
-                  {cpId ? `ویرایش بسته ${cpId}` : 'افزودن بسته جدید'}
-                </h3>
-                <p className="text-xs text-muted mb-4">
-                  «مبلغ پرداختی» همان چیزی است که واقعاً از کاربر گرفته می‌شود؛ «اعتبار دریافتی» چیزی است که به کیف پول اضافه می‌شود — اگر اعتبار دریافتی بیشتر از مبلغ پرداختی باشد، تفاوت همان بونوس واقعی است. هر دو به ریال هستند. مدل انتخابی صرفاً برچسب است؛ اعتبار در کیف پول عمومی کاربر شارژ می‌شود و طبق قیمت زنده هر مدل مصرف می‌شود.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <Field label="شناسه بسته (یکتا)">
-                    <input className="input w-full" value={cpId} onChange={(e) => setCpId(e.target.value)} placeholder="pkg_mimo_20m" disabled={!!cpId && creditPackages.some((p) => p.id === cpId)} />
-                  </Field>
-                  <Field label="نام فارسی">
-                    <input className="input w-full" value={cpNameFa} onChange={(e) => setCpNameFa(e.target.value)} placeholder="۲۰ میلیون توکن mimo" />
-                  </Field>
-                  <Field label="نام انگلیسی">
-                    <input className="input w-full" value={cpNameEn} onChange={(e) => setCpNameEn(e.target.value)} placeholder="20M mimo tokens" />
-                  </Field>
-                  <Field label="مدل مرتبط (اختیاری)">
-                    <select className="input w-full" value={cpModelId} onChange={(e) => setCpModelId(e.target.value)} style={{ appearance: 'auto' }}>
-                      <option value="">— بدون مدل (اعتبار عمومی) —</option>
-                      {models.map((m) => (
-                        <option key={m} value={m}>{m}</option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="مبلغ پرداختی (ریال)">
-                    <input className="input w-full" type="number" value={cpBaseAmount} onChange={(e) => setCpBaseAmount(e.target.value)} placeholder="200000" />
-                  </Field>
-                  <Field label="اعتبار دریافتی (ریال)">
-                    <input className="input w-full" type="number" value={cpTotalCredits} onChange={(e) => setCpTotalCredits(e.target.value)} placeholder="200000" />
-                  </Field>
-                </div>
-                <div className="flex gap-2 mt-4">
-                  <button className="btn" onClick={saveCreditPackage} disabled={cpSaving}>
-                    {cpSaving ? (
-                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-                    ) : (<><Icon name="check" size={16} /><span>ذخیره</span></>)}
-                  </button>
-                  {cpId && (
-                    <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={() => { setCpId(''); setCpNameFa(''); setCpNameEn(''); setCpBaseAmount(''); setCpTotalCredits(''); setCpBonusPercent('0'); setCpModelId('') }}>
-                      انصراف
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
+            <PricingSection
+              prices={prices}
+              testResults={testResults}
+              togglingModel={togglingModel}
+              testingModel={testingModel}
+              toggleModel={toggleModel}
+              testModel={testModel}
+              pzModel={pzModel}
+              setPzModel={setPzModel}
+              pzIn={pzIn}
+              setPzIn={setPzIn}
+              pzOut={pzOut}
+              setPzOut={setPzOut}
+              pzCur={pzCur}
+              setPzCur={setPzCur}
+              savePricing={savePricing}
+              creditPackages={creditPackages}
+              models={models}
+              cpId={cpId}
+              setCpId={setCpId}
+              cpNameFa={cpNameFa}
+              setCpNameFa={setCpNameFa}
+              cpNameEn={cpNameEn}
+              setCpNameEn={setCpNameEn}
+              cpBaseAmount={cpBaseAmount}
+              setCpBaseAmount={setCpBaseAmount}
+              cpTotalCredits={cpTotalCredits}
+              setCpTotalCredits={setCpTotalCredits}
+              cpBonusPercent={cpBonusPercent}
+              setCpBonusPercent={setCpBonusPercent}
+              cpModelId={cpModelId}
+              setCpModelId={setCpModelId}
+              cpSaving={cpSaving}
+              saveCreditPackage={saveCreditPackage}
+              toggleCreditPackageActive={toggleCreditPackageActive}
+            />
           )}
 
           {/* ─────────────────────────────────────────────────────────────
               Features
              ───────────────────────────────────────────────────────────── */}
           {page === 'features' && (
-            <div className="space-y-6">
-              <SectionHeader title="امکانات و ویژگی‌ها" subtitle={`${faNum(features.length)} ویژگی ثبت شده`} />
-
-              <div className="space-y-2">
-                {features.length === 0 && (
-                  <div className="admin-card text-center py-8 text-muted">
-                    ویژگی‌ای ثبت نشده
-                  </div>
-                )}
-                {features.map((f) => (
-                  <div key={f.id} className="admin-card flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm" style={{ background: 'var(--bg-elevated)' }}>
-                        {f.icon || '—'}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-primary">{f.title}</p>
-                        <p className="text-xs text-muted">{f.description || 'بدون توضیح'}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={f.active ? 'badge badge-positive' : 'badge badge-warning'}>
-                        {f.active ? 'فعال' : 'غیرفعال'}
-                      </span>
-                      <span className="badge text-[10px]">#{f.order_idx}</span>
-                      <button className="btn btn-sm" onClick={() => editFeature(f)}>
-                        <Icon name="settings" size={14} />
-                      </button>
-                      <button className="btn btn-sm btn-danger" onClick={() => delFeature(f.id)}>
-                        <Icon name="close" size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="admin-card">
-                <h3 className="font-semibold text-sm mb-4 text-primary">
-                  {ftId ? 'ویرایش ویژگی' : 'افزودن ویژگی جدید'}
-                </h3>
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label="عنوان">
-                      <input className="input w-full" value={ftTitle} onChange={(e) => setFtTitle(e.target.value)} placeholder="چت هوشمند" />
-                    </Field>
-                    <Field label="آیکون">
-                      <input className="input w-full" value={ftIcon} onChange={(e) => setFtIcon(e.target.value)} placeholder="icon-name" />
-                    </Field>
-                  </div>
-                  <Field label="توضیحات">
-                    <textarea className="input w-full min-h-[80px] resize-y" value={ftDesc} onChange={(e) => setFtDesc(e.target.value)} />
-                  </Field>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Field label="ترتیب نمایش">
-                      <input className="input w-full" type="number" value={ftOrder} onChange={(e) => setFtOrder(e.target.value)} />
-                    </Field>
-                    <Field label="وضعیت">
-                      <select className="input w-full" value={String(ftActive)} onChange={(e) => setFtActive(e.target.value === 'true')}>
-                        <option value="true">فعال</option>
-                        <option value="false">غیرفعال</option>
-                      </select>
-                    </Field>
-                  </div>
-                </div>
-                <div className="flex gap-2 mt-4">
-                  <button className="btn" onClick={saveFeature}>
-                    <Icon name="check" size={16} />
-                    <span>{ftId ? 'بروزرسانی' : 'افزودن'}</span>
-                  </button>
-                  {ftId && (
-                    <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={resetFeatureForm}>
-                      انصراف
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
+            <FeaturesSection
+              features={features}
+              ftId={ftId}
+              ftTitle={ftTitle}
+              setFtTitle={setFtTitle}
+              ftDesc={ftDesc}
+              setFtDesc={setFtDesc}
+              ftIcon={ftIcon}
+              setFtIcon={setFtIcon}
+              ftOrder={ftOrder}
+              setFtOrder={setFtOrder}
+              ftActive={ftActive}
+              setFtActive={setFtActive}
+              saveFeature={saveFeature}
+              editFeature={editFeature}
+              delFeature={delFeature}
+              resetFeatureForm={resetFeatureForm}
+            />
           )}
 
           {/* ─────────────────────────────────────────────────────────────
               Discounts
              ───────────────────────────────────────────────────────────── */}
           {page === 'discounts' && (
-            <div className="space-y-6">
-              <SectionHeader title="کدهای تخفیف" subtitle={`${faNum(discounts.length)} کد تخفیف فعال`} />
-
-              <div className="space-y-2">
-                {discounts.length === 0 && (
-                  <div className="admin-card text-center py-8 text-muted">
-                    کد تخفیفی ثبت نشده
-                  </div>
-                )}
-                {discounts.map((d) => (
-                  <div key={d.id} className="admin-card flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="px-3 py-1.5 rounded-lg font-mono text-sm font-bold" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
-                        {d.code}
-                      </div>
-                      <span className="text-sm text-primary">{d.percent}%</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={d.active ? 'badge badge-positive' : 'badge badge-warning'}>
-                        {d.active ? 'فعال' : 'غیرفعال'}
-                      </span>
-                      <button className="btn btn-sm" onClick={() => editDiscount(d)}>
-                        <Icon name="settings" size={14} />
-                      </button>
-                      <button className="btn btn-sm btn-danger" onClick={() => delDiscount(d.id)}>
-                        <Icon name="close" size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="admin-card">
-                <h3 className="font-semibold text-sm mb-4 text-primary">
-                  {dcId ? 'ویرایش کد تخفیف' : 'افزودن کد تخفیف'}
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <Field label="کد تخفیف">
-                    <input className="input w-full" value={dcCode} onChange={(e) => setDcCode(e.target.value)} placeholder="WELCOME10" />
-                  </Field>
-                  <Field label="درصد تخفیف">
-                    <input className="input w-full" type="number" value={dcPercent} onChange={(e) => setDcPercent(e.target.value)} />
-                  </Field>
-                  <Field label="وضعیت">
-                    <select className="input w-full" value={String(dcActive)} onChange={(e) => setDcActive(e.target.value === 'true')}>
-                      <option value="true">فعال</option>
-                      <option value="false">غیرفعال</option>
-                    </select>
-                  </Field>
-                </div>
-                <div className="flex gap-2 mt-4">
-                  <button className="btn" onClick={saveDiscount}>
-                    <Icon name="check" size={16} />
-                    <span>{dcId ? 'بروزرسانی' : 'افزودن'}</span>
-                  </button>
-                  {dcId && (
-                    <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={resetDiscountForm}>
-                      انصراف
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
+            <DiscountsSection
+              discounts={discounts}
+              dcId={dcId}
+              dcCode={dcCode}
+              setDcCode={setDcCode}
+              dcPercent={dcPercent}
+              setDcPercent={setDcPercent}
+              dcActive={dcActive}
+              setDcActive={setDcActive}
+              saveDiscount={saveDiscount}
+              editDiscount={editDiscount}
+              delDiscount={delDiscount}
+              resetDiscountForm={resetDiscountForm}
+            />
           )}
 
           {/* ─────────────────────────────────────────────────────────────
               About
              ───────────────────────────────────────────────────────────── */}
           {page === 'about' && (
-            <div className="space-y-6">
-              <SectionHeader title="درباره ما" subtitle="محتوای صفحه درباره ما" />
-
-              <div className="admin-card">
-                <div className="space-y-4">
-                  <Field label="عنوان">
-                    <input className="input w-full" value={abTitle} onChange={(e) => setAbTitle(e.target.value)} placeholder="درباره Sanjabai" />
-                  </Field>
-                  <Field label="متن">
-                    <textarea
-                      className="input w-full min-h-[200px] resize-y leading-relaxed"
-                      value={abBody}
-                      onChange={(e) => setAbBody(e.target.value)}
-                      placeholder="متن درباره ما به فارسی..."
-                    />
-                  </Field>
-                </div>
-                <button className="btn mt-4" onClick={saveAbout}>
-                  <Icon name="check" size={16} />
-                  <span>ذخیره</span>
-                </button>
-              </div>
-            </div>
+            <AboutSection abTitle={abTitle} setAbTitle={setAbTitle} abBody={abBody} setAbBody={setAbBody} saveAbout={saveAbout} />
           )}
 
           {/* ─────────────────────────────────────────────────────────────
               Proxy
              ───────────────────────────────────────────────────────────── */}
           {page === 'proxy' && (
-            <div className="space-y-6">
-              <SectionHeader title="تنظیمات پروکسی" subtitle="مدیریت تونل و پروکسی اتصال" />
-
-              <div className="admin-card">
-                <div className="flex items-center gap-3 mb-4 p-3 rounded-lg" style={{ background: proxyConfig.active ? 'var(--positive)' + '15' : 'var(--warning)' + '15' }}>
-                  <Icon name={proxyConfig.active ? 'check' : 'notification'} size={18} style={{ color: proxyConfig.active ? 'var(--positive)' : 'var(--warning)' }} />
-                  <span className="text-sm font-medium" style={{ color: proxyConfig.active ? 'var(--positive)' : 'var(--warning)' }}>
-                    {proxyConfig.active ? 'تونل فعال است' : 'تونل غیرفعال است'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <Field label="نوع پروکسی">
-                    <select className="input w-full" value={pxType} onChange={(e) => setPxType(e.target.value)}>
-                      <option value="socks5">SOCKS5</option>
-                      <option value="http">HTTP</option>
-                    </select>
-                  </Field>
-                  <Field label="آدرس پروکسی">
-                    <input className="input w-full" value={pxUrl} onChange={(e) => setPxUrl(e.target.value)} placeholder="socks5://user:pass@host:port" />
-                  </Field>
-                  <Field label="وضعیت">
-                    <select className="input w-full" value={String(pxActive)} onChange={(e) => setPxActive(e.target.value === 'true')}>
-                      <option value="true">فعال</option>
-                      <option value="false">غیرفعال</option>
-                    </select>
-                  </Field>
-                </div>
-                <button className="btn mt-4" onClick={saveProxy}>
-                  <Icon name="check" size={16} />
-                  <span>ذخیره و اعمال</span>
-                </button>
-              </div>
-            </div>
+            <ProxySection
+              proxyConfig={proxyConfig}
+              pxType={pxType}
+              setPxType={setPxType}
+              pxUrl={pxUrl}
+              setPxUrl={setPxUrl}
+              pxActive={pxActive}
+              setPxActive={setPxActive}
+              saveProxy={saveProxy}
+            />
           )}
 
           {/* ─────────────────────────────────────────────────────────────
               Models
              ───────────────────────────────────────────────────────────── */}
           {page === 'models' && (
-            <div className="space-y-6">
-              <SectionHeader title="مدل‌های فعال" subtitle={`${faNum(models.length)} مدل در دسترس`} />
-
-              {/* Org Default Model */}
-              <div className="admin-card">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--accent-dim)' }}>
-                    <Icon name="models" size={16} className="text-accent" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-primary">مدل پیشفرض سازمان</h3>
-                    <p className="text-xs text-muted">مدلی که کاربران جدید به‌صورت پیشفرض استفاده می‌کنند</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <select
-                    className="input flex-1"
-                    value={orgDefaultModel}
-                    onChange={(e) => setOrgDefaultModel(e.target.value)}
-                  >
-                    <option value="">بدون مدل پیشفرض (اولین مدل لیست)</option>
-                    {models.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
-                  <button className="btn" onClick={saveOrgDefaultModel} disabled={orgDefaultSaving}>
-                    {orgDefaultSaving ? (
-                      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-                    ) : 'ذخیره'}
-                  </button>
-                </div>
-              </div>
-
-              <ModelsTab api={api} />
-            </div>
+            <ModelsSection
+              models={models}
+              orgDefaultModel={orgDefaultModel}
+              setOrgDefaultModel={setOrgDefaultModel}
+              orgDefaultSaving={orgDefaultSaving}
+              saveOrgDefaultModel={saveOrgDefaultModel}
+              api={api}
+            />
           )}
 
           {/* ─────────────────────────────────────────────────────────────
               داشبورد امنیت
              ───────────────────────────────────────────────────────────── */}
           {page === 'security' && (
-            <div className="space-y-6">
-              <SectionHeader
-                title="مرکز عملیات امنیتی (SOC)"
-                subtitle="نظارت بر تهدیدات، رویدادها و فعالیت کاربران"
-              />
-
-              {/* ─── Threat Level + Stats Row ──────────────────────────── */}
-              {securityStats ? (
-                <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                    {/* Threat Level Card */}
-                    <div
-                      className="admin-card"
-                      style={{
-                        borderRight: `3px solid ${
-                          securityStats.threat_level === 'critical' ? '#ef4444'
-                          : securityStats.threat_level === 'high' ? '#f97316'
-                          : securityStats.threat_level === 'medium' ? '#eab308'
-                          : '#22c55e'
-                        }`,
-                      }}
-                    >
-                      <div className="flex items-center gap-3 mb-3">
-                        <div
-                          className="p-2 rounded-lg"
-                          style={{
-                            background: `${
-                              securityStats.threat_level === 'critical' ? '#ef4444'
-                              : securityStats.threat_level === 'high' ? '#f97316'
-                              : securityStats.threat_level === 'medium' ? '#eab308'
-                              : '#22c55e'
-                            }15`,
-                          }}
-                        >
-                          <Icon
-                            name="warning"
-                            size={18}
-                            style={{
-                              color: securityStats.threat_level === 'critical' ? '#ef4444'
-                                : securityStats.threat_level === 'high' ? '#f97316'
-                                : securityStats.threat_level === 'medium' ? '#eab308'
-                                : '#22c55e',
-                            }}
-                          />
-                        </div>
-                        <span className="text-xs text-muted">سطح تهدید</span>
-                      </div>
-                      <p
-                        className="text-xl font-bold"
-                        style={{
-                          color: securityStats.threat_level === 'critical' ? '#ef4444'
-                            : securityStats.threat_level === 'high' ? '#f97316'
-                            : securityStats.threat_level === 'medium' ? '#eab308'
-                            : '#22c55e',
-                        }}
-                      >
-                        {{ low: 'پایین', medium: 'متوسط', high: 'بالا', critical: 'بحرانی' }[securityStats.threat_level]}
-                      </p>
-                    </div>
-
-                    <StatCard
-                      icon="lock"
-                      label="ورودهای ناموفق (۲۴ ساعت)"
-                      value={faNum(securityStats.failed_logins_24h)}
-                      color="var(--danger)"
-                    />
-                    <StatCard
-                      icon="user"
-                      label="نشستهای فعال"
-                      value={faNum(securityStats.active_sessions)}
-                      color="var(--info)"
-                    />
-                    <StatCard
-                      icon="security"
-                      label="کاربران مسدود شده"
-                      value={faNum(securityStats.banned_users?.length, { fallback: '۰' })}
-                      color="var(--warning)"
-                    />
-                  </div>
-
-                  {/* ─── Failed Login Chart (sparkline-style bars) ──────── */}
-                  <div className="admin-card">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Icon name="chart" size={18} className="text-secondary" />
-                      <h3 className="font-semibold text-sm text-primary">
-                        نمودار ورودهای ناموفق (۲۴ ساعت اخیر)
-                      </h3>
-                    </div>
-                    <div className="flex items-end gap-1 h-24">
-                      {(securityStats.failed_login_chart || []).slice(-24).map((bar, i) => {
-                        const maxCount = Math.max(...(securityStats.failed_login_chart || []).map((b) => b.count), 1)
-                        const heightPct = (bar.count / maxCount) * 100
-                        return (
-                          <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                            <div
-                              className="w-full rounded-t transition-all duration-300"
-                              style={{
-                                height: `${Math.max(heightPct, 4)}%`,
-                                background: bar.count > maxCount * 0.7
-                                  ? 'var(--danger)'
-                                  : bar.count > maxCount * 0.3
-                                    ? 'var(--warning)'
-                                    : 'var(--accent)',
-                                opacity: 0.8,
-                              }}
-                              title={`${bar.hour}: ${bar.count} تلاش ناموفق`}
-                            />
-                          </div>
-                        )
-                      })}
-                    </div>
-                    <div className="flex justify-between mt-2">
-                      <span className="text-[10px] text-muted">
-                        {securityStats.failed_login_chart?.[0]?.hour || ''}
-                      </span>
-                      <span className="text-[10px] text-muted">
-                        {securityStats.failed_login_chart?.[securityStats.failed_login_chart.length - 1]?.hour || ''}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* ─── Banned Users ──────────────────────────────────── */}
-                  <div className="admin-card">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Icon name="security" size={18} className="text-warning" />
-                      <h3 className="font-semibold text-sm text-primary">
-                        کاربران مسدود شده
-                      </h3>
-                      <span className="badge badge-warning mr-auto">{securityStats.banned_users?.length || 0}</span>
-                    </div>
-                    {(securityStats.banned_users || []).length === 0 ? (
-                      <div className="text-center py-6 text-sm text-muted">
-                        کاربر مسدود شده‌ای وجود ندارد
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="admin-table w-full text-sm">
-                          <thead>
-                            <tr>
-                              <th className="text-right p-3">شناسه</th>
-                              <th className="text-right p-3">نام کاربری</th>
-                              <th className="text-right p-3">ایمیل</th>
-                              <th className="text-right p-3">تاریخ مسدودیت</th>
-                              <th className="text-right p-3">عملیات</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(securityStats.banned_users || []).map((u) => (
-                              <tr key={u.id}>
-                                <td className="p-3 text-xs font-mono">{u.id}</td>
-                                <td className="p-3 text-sm text-primary">{u.username || '—'}</td>
-                                <td className="p-3 text-xs text-secondary">{u.email}</td>
-                                <td className="p-3 text-xs text-muted">
-                                  {u.banned_at ? new Date(u.banned_at).toLocaleDateString('fa-IR') : '—'}
-                                </td>
-                                <td className="p-3">
-                                  <button
-                                    className="btn btn-sm"
-                                    style={{ background: 'var(--positive)', color: 'var(--text-on-accent)' }}
-                                    onClick={() => unbanUser(u.id)}
-                                  >
-                                    رفع مسدودیت
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                </>
-              ) : (
-                /* Loading skeleton */
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="admin-card">
-                      <div className="skeleton h-3 w-20 mb-3 rounded" />
-                      <div className="skeleton h-7 w-16 rounded" />
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* ─── Security Events Table ──────────────────────────── */}
-              <div className="admin-card">
-                <div className="flex items-center gap-2 mb-4">
-                  <Icon name="notification" size={18} className="text-danger" />
-                  <h3 className="font-semibold text-sm text-primary">
-                    رویدادهای امنیتی اخیر
-                  </h3>
-                  {securityLoading && (
-                    <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin inline-block" />
-                  )}
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="admin-table w-full text-sm">
-                    <thead>
-                      <tr>
-                        <th className="text-right p-3">نوع رویداد</th>
-                        <th className="text-right p-3">کاربر</th>
-                        <th className="text-right p-3">آدرس IP</th>
-                        <th className="text-right p-3">جزئیات</th>
-                        <th className="text-right p-3">زمان</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {securityEvents.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className="p-6 text-center text-sm text-muted">
-                            رویداد امنیتی ثبت نشده
-                          </td>
-                        </tr>
-                      ) : (
-                        securityEvents.map((ev) => (
-                          <tr key={ev.id}>
-                            <td className="p-3">
-                              <span className={`badge ${
-                                ev.event_type?.includes('failed') || ev.event_type?.includes('lockout')
-                                  ? 'badge-danger'
-                                  : ev.event_type?.includes('login') || ev.event_type?.includes('success')
-                                    ? 'badge-positive'
-                                    : 'badge-accent'
-                              }`}>
-                                {ev.event_type || 'نامشخص'}
-                              </span>
-                            </td>
-                            <td className="p-3 text-xs text-secondary">
-                              {ev.user_email || ev.user_id || '—'}
-                            </td>
-                            <td className="p-3 text-xs font-mono text-muted">
-                              {ev.ip_address || '—'}
-                            </td>
-                            <td className="p-3 text-xs text-secondary">
-                              {ev.details || '—'}
-                            </td>
-                            <td className="p-3 text-xs text-muted">
-                              {toFaDigits(new Date(ev.created_at).toLocaleString('fa-IR'))}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* ─── Audit Log Table ─────────────────────────────────── */}
-              <div className="admin-card">
-                <div className="flex items-center gap-2 mb-4">
-                  <Icon name="history" size={18} className="text-accent" />
-                  <h3 className="font-semibold text-sm text-primary">
-                    لاگ عملیات ادمین
-                  </h3>
-                </div>
-
-                {/* Filter bar */}
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {[
-                    { label: 'همه', value: '' },
-                    { label: 'ban', value: 'ban' },
-                    { label: 'unban', value: 'unban' },
-                    { label: 'edit_user', value: 'edit_user' },
-                    { label: 'create', value: 'create' },
-                    { label: 'delete', value: 'delete' },
-                    { label: 'update', value: 'update' },
-                  ].map((f) => (
-                    <button
-                      key={f.value}
-                      className={`btn btn-sm ${auditActionFilter === f.value ? 'font-bold' : ''}`}
-                      style={{
-                        background: auditActionFilter === f.value ? 'var(--accent-dim)' : 'var(--bg-elevated)',
-                        color: auditActionFilter === f.value ? 'var(--accent)' : 'var(--text-secondary)',
-                      }}
-                      onClick={() => loadAuditWithFilter(f.value)}
-                    >
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="admin-table w-full text-sm">
-                    <thead>
-                      <tr>
-                        <th className="text-right p-3">شناسه</th>
-                        <th className="text-right p-3">عملیات</th>
-                        <th className="text-right p-3">نوع هدف</th>
-                        <th className="text-right p-3">شناسه هدف</th>
-                        <th className="text-right p-3">جزئیات</th>
-                        <th className="text-right p-3">زمان</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {auditLogs.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="p-6 text-center text-sm text-muted">
-                            لاگ عملیاتی ثبت نشده
-                          </td>
-                        </tr>
-                      ) : (
-                        auditLogs.map((log) => (
-                          <tr key={log.id}>
-                            <td className="p-3 text-xs font-mono">{log.id}</td>
-                            <td className="p-3">
-                              <span className={`badge ${
-                                log.action?.includes('ban') ? 'badge-danger'
-                                : log.action?.includes('delete') ? 'badge-warning'
-                                : log.action?.includes('create') ? 'badge-positive'
-                                : 'badge-accent'
-                              }`}>
-                                {log.action || '—'}
-                              </span>
-                            </td>
-                            <td className="p-3 text-xs text-secondary">
-                              {log.target_type || '—'}
-                            </td>
-                            <td className="p-3 text-xs font-mono">
-                              {log.target_id || '—'}
-                            </td>
-                            <td className="p-3 text-xs text-secondary">
-                              {log.details || '—'}
-                            </td>
-                            <td className="p-3 text-xs text-muted">
-                              {toFaDigits(new Date(log.created_at).toLocaleString('fa-IR'))}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Pagination */}
-                {auditTotal > 50 && (
-                  <div className="flex items-center justify-between mt-4 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
-                    <span className="text-xs text-muted">
-                      صفحه {auditPage} از {Math.ceil(auditTotal / 50)}
-                    </span>
-                    <div className="flex gap-2">
-                      <button
-                        className="btn btn-sm"
-                        disabled={auditPage <= 1}
-                        onClick={() => { setAuditPage(Math.max(1, auditPage - 1)); loadSecurityData() }}
-                      >
-                        قبلی
-                      </button>
-                      <button
-                        className="btn btn-sm"
-                        disabled={auditPage >= Math.ceil(auditTotal / 50)}
-                        onClick={() => { setAuditPage(auditPage + 1); loadSecurityData() }}
-                      >
-                        بعدی
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+            <SecuritySection
+              securityStats={securityStats}
+              securityEvents={securityEvents}
+              auditLogs={auditLogs}
+              auditPage={auditPage}
+              setAuditPage={setAuditPage}
+              auditTotal={auditTotal}
+              auditActionFilter={auditActionFilter}
+              securityLoading={securityLoading}
+              unbanUser={unbanUser}
+              loadAuditWithFilter={loadAuditWithFilter}
+              loadSecurityData={loadSecurityData}
+            />
           )}
           {page === 'monitoring' && <MonitoringTab api={api} />}
         </main>

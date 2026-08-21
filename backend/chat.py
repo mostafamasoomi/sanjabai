@@ -563,6 +563,45 @@ async def _web_search(query: str, max_results: int = 5) -> str:
     return ''
 
 
+async def _apply_web_search(payload_dict: dict[str, Any], *, handler: str) -> None:
+    """Pop ``web_search`` off ``payload_dict`` and, if truthy, inject search
+    results as a system message ahead of the last user question.
+
+    Shared by ``/v1/chat/completions`` and ``/v1/smart-chat`` so the two
+    handlers cannot drift apart again -- this exact bug (smart-chat silently
+    dropping ``web_search`` and forwarding the stray key upstream unread) is
+    what this helper was extracted to fix. Mutates ``payload_dict`` in place.
+    ``handler`` is a short label ('chat.completions' / 'smart-chat') used only
+    for logging, so an incident like the one that motivated this fix is
+    diagnosable from logs instead of silently invisible.
+    """
+    if not payload_dict.pop('web_search', False):
+        return
+    _msgs = payload_dict.get('messages', [])
+    _query = ''
+    for _m in reversed(_msgs):
+        if isinstance(_m, dict) and _m.get('role') == 'user':
+            _query = _m.get('content', '')
+            break
+    _query_log = _query if isinstance(_query, str) else str(_query)
+    if not _query:
+        logger.info(f"web_search requested handler={handler} but no user message found; skipping")
+        return
+    logger.info(f"web_search requested handler={handler} query={_query_log[:80]!r}")
+    _results = await _web_search(_query)
+    if _results:
+        logger.info(f"web_search succeeded handler={handler} query={_query_log[:80]!r}")
+        _search_msg = {'role': 'system', 'content': f'[نتایج جستجوی وب برای: {_query_log[:100]}]\n{_results}\n\nمهم: این نتایج جستجوی لحظه‌ای از اینترنت هستند. از آنها مستقیماً برای پاسخ استفاده کن. هرگز نگو "به اینترنت دسترسی ندارم" یا "اطلاعات من قدیمی است" — چون نتایج جستجوی زنده بالا در دسترس تو هستند. پاسخ را بر اساس این نتایج بنویس و منبع خبر را ذکر کن.'}
+        _idx = 0
+        for _i, _m in enumerate(_msgs):
+            if isinstance(_m, dict) and _m.get('role') == 'system':
+                _idx = _i + 1
+        _msgs.insert(_idx, _search_msg)
+        payload_dict['messages'] = _msgs
+    else:
+        logger.info(f"web_search failed/no-results handler={handler} query={_query_log[:80]!r}")
+
+
 # ── Billing fallbacks (loss-path hardening) ──────────────────────
 #
 # Owner's hard requirement: "we must be profitable on the price we offer
@@ -1206,24 +1245,8 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
     except Exception as e:
         logger.warning(f"chat injection failed uid={uid}: {e}")
 
-    # Web search injection
-    if payload_dict.pop('web_search', False):
-        _msgs = payload_dict.get('messages', [])
-        _query = ''
-        for _m in reversed(_msgs):
-            if isinstance(_m, dict) and _m.get('role') == 'user':
-                _query = _m.get('content', '')
-                break
-        if _query:
-            _results = await _web_search(_query)
-            if _results:
-                _search_msg = {'role': 'system', 'content': f'[نتایج جستجوی وب برای: {_query[:100]}]\n{_results}\n\nمهم: این نتایج جستجوی لحظه‌ای از اینترنت هستند. از آنها مستقیماً برای پاسخ استفاده کن. هرگز نگو "به اینترنت دسترسی ندارم" یا "اطلاعات من قدیمی است" — چون نتایج جستجوی زنده بالا در دسترس تو هستند. پاسخ را بر اساس این نتایج بنویس و منبع خبر را ذکر کن.'}
-                _idx = 0
-                for _i, _m in enumerate(_msgs):
-                    if isinstance(_m, dict) and _m.get('role') == 'system':
-                        _idx = _i + 1
-                _msgs.insert(_idx, _search_msg)
-                payload_dict['messages'] = _msgs
+    # Web search injection (shared helper -- see _apply_web_search)
+    await _apply_web_search(payload_dict, handler='chat.completions')
 
     # Compress old messages to reduce token usage
     try:
@@ -1814,6 +1837,11 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
             payload_dict['messages'] = messages
     except Exception as e:
         logger.warning(f"smart_chat injection failed uid={uid}: {e}")
+
+    # Web search injection (shared helper -- see _apply_web_search). Previously
+    # smart-chat never read `web_search` at all: the flag was silently dropped
+    # AND the stray key was forwarded upstream in the JSON body unread.
+    await _apply_web_search(payload_dict, handler='smart-chat')
 
     # Compress old messages to reduce token usage (smart_chat)
     try:

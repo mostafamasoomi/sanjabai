@@ -84,6 +84,29 @@ const LOW_BALANCE_TOMAN = 5000
 
 function generateId() { return Date.now().toString(36) + Math.random().toString(36).slice(2) }
 
+/* ── Search-intent detection ──────────────────────────────────────────
+   The web-search feature only ever fires from the globe toggle (default
+   OFF), so a user typing "search the internet" in plain language sees
+   nothing happen. This is a lightweight, no-dependency heuristic used only
+   to offer an inline hint to turn the toggle on and re-send -- it never
+   auto-enables search or auto-resends by itself. */
+const SEARCH_INTENT_PATTERNS: RegExp[] = [
+  /search\s+(the\s+)?(internet|web|online)/i,
+  /google\s+(it|this|that)/i,
+  /look\s+(it|this)?\s*up\s+online/i,
+  /browse\s+the\s+web/i,
+  /جستجو(ی)?\s*(در\s*)?(اینترنت|وب|آنلاین|نت|گوگل)/,
+  /(اینترنت|نت|وب)\s*(رو|را)?\s*(جستجو|سرچ)/,
+  /سرچ\s*(کن|بزن|بکن)/,
+  /گوگل\s*(کن|بزن)/,
+  /بگرد(ی)?\s*(تو|توی|در)?\s*(اینترنت|نت|وب)/,
+]
+
+function hasSearchIntent(text: string): boolean {
+  if (!text) return false
+  return SEARCH_INTENT_PATTERNS.some(re => re.test(text))
+}
+
 /* ── Date formatting helper ──────────────────────────────────────────── */
 function formatDate(dateStr: string): string {
   try {
@@ -199,6 +222,10 @@ export default function ChatPage() {
   const [smartMode, setSmartMode] = useState<boolean>(() => {
     try { return localStorage.getItem('sanjabai_smart_mode') === 'true' } catch { return false }
   })
+  // Inline hint offering to re-send with web search on, when the user typed
+  // a search-intent message but the globe toggle is off. Never auto-enables
+  // search or auto-resends -- only a click on the hint's button does that.
+  const [searchHintFor, setSearchHintFor] = useState<{ userMsgId: string; content: string } | null>(null)
   const [smartModel, setSmartModel] = useState<string | null>(null)
   const [exportMenuOpen, setExportMenuOpen] = useState(false)
   const [usageStats, setUsageStats] = useState<UsageStats>({ promptTokens: 0, completionTokens: 0, totalTokens: 0, estimatedCost: 0 })
@@ -416,6 +443,7 @@ export default function ChatPage() {
     setMobileDrawerOpen(false)
     setUsageStats({ promptTokens: 0, completionTokens: 0, totalTokens: 0, estimatedCost: 0 })
     setSmartModel(null)
+    setSearchHintFor(null)
   }, [])
 
   /* ── Date grouping helper ──────────────────────────────────────────────── */
@@ -547,7 +575,7 @@ export default function ChatPage() {
     if (sendMessageRef.current) await sendMessageRef.current(userMsg.content, newMsgs)
   }, [messages, model])
 
-  const sendMessage = useCallback(async (content: string, existingMsgs?: Message[]) => {
+  const sendMessage = useCallback(async (content: string, existingMsgs?: Message[], forceWebSearch?: boolean) => {
     let currentModel = model;
     if (!currentModel && models.length > 0) {
         currentModel = models[0];
@@ -557,8 +585,14 @@ export default function ChatPage() {
       toast('لطفاً یک مدل را انتخاب کنید.', 'error');
       return;
     }
+    const effectiveWebSearch = forceWebSearch ?? webSearch
+    if (forceWebSearch && !webSearch) setWebSearch(true)
     const msgs = existingMsgs || messages
     const userMsg: Message = { id: generateId(), role: 'user', content }
+    // Offer the re-send-with-search hint only for organic sends (not the
+    // forced resend itself) when search is off but the message reads like
+    // a search request.
+    setSearchHintFor(!forceWebSearch && !webSearch && hasSearchIntent(content) ? { userMsgId: userMsg.id, content } : null)
     const updated = [...msgs, userMsg]
     setMessages(updated)
     setInput('')
@@ -602,7 +636,7 @@ export default function ChatPage() {
             model: currentModel!.providerModelId || currentModel!.id,
             messages: updated.map(m => ({ role: m.role, content: m.content })),
             stream: true,
-            ...(webSearch ? { web_search: true } : {}),
+            ...(effectiveWebSearch ? { web_search: true } : {}),
             ...(activeAssistant ? { assistant_id: activeAssistant.id } : {}),
           }),
           signal: controller.signal,
@@ -717,6 +751,19 @@ export default function ChatPage() {
 
   // Keep ref in sync so retry() can call sendMessage without circular deps
   useEffect(() => { sendMessageRef.current = sendMessage }, [sendMessage])
+
+  // Explicit user action from the search-intent hint: drop the non-search
+  // turn and re-send the same question with web search forced on.
+  const handleResendWithSearch = useCallback(() => {
+    if (!searchHintFor) return
+    const { userMsgId, content } = searchHintFor
+    const idx = messages.findIndex(m => m.id === userMsgId)
+    setSearchHintFor(null)
+    if (idx === -1) return
+    const newMsgs = messages.slice(0, idx)
+    setMessages(newMsgs)
+    sendMessage(content, newMsgs, true)
+  }, [searchHintFor, messages, sendMessage])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -1133,6 +1180,46 @@ export default function ChatPage() {
                 <polyline points="6 9 12 15 18 9" />
               </svg>
             </button>
+          )}
+
+          {/* ── Search-intent hint ───────────────────────────────────── */}
+          {searchHintFor && !webSearch && (
+            <div
+              dir="rtl"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '8px 14px',
+                margin: '0 12px 8px',
+                background: 'var(--bg-secondary, rgba(255,255,255,0.05))',
+                border: '1px solid var(--border)',
+                borderRadius: '10px',
+                fontSize: '0.8125rem',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              <Icon name="globe" size={14} />
+              <span style={{ flex: 1 }}>
+                به نظر می‌رسد می‌خواهید در اینترنت جستجو شود، ولی جستجوی وب خاموش است.
+              </span>
+              <button
+                type="button"
+                onClick={handleResendWithSearch}
+                className="btn btn-ghost btn-sm"
+                style={{ fontSize: '0.75rem', color: 'var(--accent)', whiteSpace: 'nowrap', fontWeight: 600 }}
+              >
+                فعال‌سازی جستجوی وب و ارسال دوباره
+              </button>
+              <button
+                type="button"
+                onClick={() => setSearchHintFor(null)}
+                aria-label="بستن"
+                style={{ display: 'inline-flex', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: '2px' }}
+              >
+                <Icon name="close" size={12} />
+              </button>
+            </div>
           )}
 
           {/* ── Composer ────────────────────────────────────────────── */}

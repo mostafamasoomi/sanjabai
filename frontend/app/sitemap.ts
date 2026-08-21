@@ -1,7 +1,7 @@
 import { MetadataRoute } from 'next'
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = 'https://sanjabai.ir'
+  const baseUrl = 'https://sanjabai.com'
 
   const pages = [
     { path: '', priority: 1, changeFreq: 'weekly' as const },

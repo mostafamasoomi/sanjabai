@@ -284,7 +284,7 @@ export default function ApiKeysPage() {
             </h3>
             <pre className="apikeys-pre">
               <code>{`curl -H "Authorization: Bearer *** \\
-  https://sanjabai.ir/v1/chat/completions`}</code>
+  https://sanjabai.com/v1/chat/completions`}</code>
             </pre>
           </div>
           <div>
@@ -306,7 +306,7 @@ export default function ApiKeysPage() {
             </h3>
             <pre className="apikeys-pre">
               <code>{`curl -H "Authorization: Bearer *** \\
-  https://sanjabai.ir/v1/models`}</code>
+  https://sanjabai.com/v1/models`}</code>
             </pre>
           </div>
         </div>

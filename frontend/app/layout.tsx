@@ -4,7 +4,7 @@ import './globals.css'
 import '../styles-chat-sidebar.css'
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://sanjabai.ir'),
+  metadataBase: new URL('https://sanjabai.com'),
   title: {
     default: 'Sanjabai — پلتفرم هوش مصنوعی فارسی',
     template: '%s | Sanjabai',

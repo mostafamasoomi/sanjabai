@@ -9,7 +9,7 @@
    Every factual claim below is sourced from the codebase, not invented:
 
    - Model list        backend/litellm_config.yaml  (23 chat models)
-   - API base URL      app/developer/page.tsx       (https://sanjabai.ir/v1)
+   - API base URL      app/developer/page.tsx       (https://sanjabai.com/v1)
    - Billing model     app/pricing/page.tsx         (per-token, wallet, no
                                                      monthly subscription)
    - Top-up amounts    app/wallet/page.tsx          (PRESET_AMOUNTS, MIN_TOPUP)
@@ -19,8 +19,8 @@
 
 import type { IconName } from '../ui/Icon'
 
-/** Documented in app/developer/page.tsx. Not `api.sanjabai.ir`. */
-export const API_BASE_URL = 'https://sanjabai.ir/v1'
+/** Documented in app/developer/page.tsx. The bare domain; there is no `api.` subdomain. */
+export const API_BASE_URL = 'https://sanjabai.com/v1'
 
 /** app/wallet/page.tsx → MIN_TOPUP */
 export const MIN_TOPUP_LABEL = '۱۰ هزار تومان'

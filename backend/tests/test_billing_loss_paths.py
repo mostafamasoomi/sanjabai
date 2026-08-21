@@ -389,6 +389,42 @@ class TestL5MarginGuard:
 # passed (previously only the rarely-reached _check_quota_pre fallback did
 # that rollover).
 
+class TestAsNaiveUtc:
+    """_as_naive_utc: the tz-normalization helper that fixes the live
+    'can't compare offset-naive and offset-aware datetimes' crash found
+    while verifying the quota upsert (quota.reset_at comes back tz-aware
+    from a TIMESTAMPTZ column; this codebase's convention everywhere else
+    is naive UTC)."""
+
+    def test_none_passes_through(self):
+        assert chat_mod._as_naive_utc(None) is None
+
+    def test_naive_passes_through_unchanged(self):
+        dt = datetime(2026, 1, 1, 12, 0, 0)
+        assert chat_mod._as_naive_utc(dt) == dt
+        assert chat_mod._as_naive_utc(dt).tzinfo is None
+
+    def test_aware_utc_is_stripped_to_naive(self):
+        aware = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        result = chat_mod._as_naive_utc(aware)
+        assert result.tzinfo is None
+        assert result == datetime(2026, 1, 1, 12, 0, 0)
+
+    def test_aware_non_utc_converts_to_utc_before_stripping(self):
+        from datetime import timedelta as _td
+        tz_plus_3 = timezone(_td(hours=3))
+        aware = datetime(2026, 1, 1, 15, 0, 0, tzinfo=tz_plus_3)  # == 12:00 UTC
+        result = chat_mod._as_naive_utc(aware)
+        assert result.tzinfo is None
+        assert result == datetime(2026, 1, 1, 12, 0, 0)
+
+    def test_naive_and_aware_now_can_be_compared_without_raising(self):
+        """The actual regression: this must not raise TypeError."""
+        aware_past = datetime.now(timezone.utc) - timedelta(hours=1)
+        now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+        assert now_naive >= chat_mod._as_naive_utc(aware_past)
+
+
 class TestQuotaSelfHealingUpsert:
     @pytest.mark.asyncio
     async def test_no_existing_row_creates_one(self):
@@ -405,9 +441,17 @@ class TestQuotaSelfHealingUpsert:
 
     @pytest.mark.asyncio
     async def test_existing_row_within_window_increments(self):
+        # reset_at is tz-AWARE here on purpose: quota.reset_at is a
+        # TIMESTAMPTZ column, and asyncpg/SQLAlchemy hand back a
+        # timezone-aware datetime for it in real life. An earlier version
+        # of this test used a naive datetime, which passed here but
+        # crashed in production with "can't compare offset-naive and
+        # offset-aware datetimes" -- exactly because the double didn't
+        # match reality. Keep it tz-aware so this test would have caught
+        # that regression.
         quota_row = types.SimpleNamespace(
             used_today=500,
-            reset_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=6),
+            reset_at=datetime.now(timezone.utc) + timedelta(hours=6),
         )
         session = _FakeSession(wallet_balance=1_000_000, price=_price(), quota_row=quota_row)
         await chat_mod._record_usage(
@@ -415,8 +459,10 @@ class TestQuotaSelfHealingUpsert:
         )
         assert session.quota_updates
         assert session.quota_updates[-1]["used_today"] == 1500  # 500 + 1000
-        # reset_at untouched (still in the future) -- no rollover.
-        assert session.quota_updates[-1]["reset_at"] == quota_row.reset_at
+        # reset_at untouched (still in the future) -- no rollover. Compared
+        # as naive-UTC since that's the codebase-wide storage convention
+        # (_as_naive_utc normalizes on the way in).
+        assert session.quota_updates[-1]["reset_at"] == quota_row.reset_at.astimezone(timezone.utc).replace(tzinfo=None)
         quota_rows = [o for o in session.added if type(o).__name__ == "Quota"]
         assert quota_rows == []  # updated, not re-created
 
@@ -424,10 +470,11 @@ class TestQuotaSelfHealingUpsert:
     async def test_existing_row_past_reset_at_rolls_over(self):
         """Previously only _check_quota_pre (a fallback rarely reached on
         the normal request path) rolled used_today over at reset_at --
-        _record_usage now does this rollover too."""
+        _record_usage now does this rollover too. tz-aware reset_at, same
+        reasoning as the test above."""
         quota_row = types.SimpleNamespace(
             used_today=199_999,
-            reset_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1),
+            reset_at=datetime.now(timezone.utc) - timedelta(hours=1),
         )
         session = _FakeSession(wallet_balance=1_000_000, price=_price(), quota_row=quota_row)
         await chat_mod._record_usage(

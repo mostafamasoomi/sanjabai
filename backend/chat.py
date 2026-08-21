@@ -297,6 +297,29 @@ async def _release_reservation(reservation: dict | None, uid: int, label: str = 
     except Exception as e:
         logger.warning(f"release_reservation failed uid={uid} {label}: {e}")
 
+def _as_naive_utc(dt: datetime | None) -> datetime | None:
+    """Normalize a datetime that MAY be timezone-aware to this codebase's
+    naive-UTC convention (see models.py::_utcnow(), used for every other
+    timestamp column).
+
+    quota.reset_at is a TIMESTAMPTZ column; asyncpg/SQLAlchemy returns it as
+    a timezone-AWARE datetime when read back, while `datetime.now(timezone.
+    utc).replace(tzinfo=None)` (used everywhere else in this file) is naive.
+    Comparing the two directly raises `TypeError: can't compare offset-naive
+    and offset-aware datetimes`. Found live: that TypeError was being
+    silently swallowed by a broad `except Exception` in both
+    _check_quota_pre and _record_usage, which rolled back the *entire*
+    billing transaction (ledger + quota + wallet) every time a quota row's
+    reset_at needed a rollover comparison -- a served, billable request
+    recorded as if it never happened, purely because of a tz mismatch.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
 async def _check_quota_pre(uid: int) -> JSONResponse | None:
     """Pre-flight quota and balance check before calling LiteLLM."""
     if async_session is None:
@@ -308,7 +331,7 @@ async def _check_quota_pre(uid: int) -> JSONResponse | None:
             if quota:
                 limit = quota.daily_limit
                 used = quota.used_today
-                reset_at = quota.reset_at
+                reset_at = _as_naive_utc(quota.reset_at)
                 now = datetime.now(timezone.utc).replace(tzinfo=None)
                 if reset_at and now >= reset_at:
                     await session.execute(
@@ -730,7 +753,8 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
     res = await session.execute(Quota.__table__.select().where(Quota.user_id == uid))
     quota = res.fetchone()
     if quota:
-        if quota.reset_at and _now >= quota.reset_at:
+        _quota_reset_at = _as_naive_utc(quota.reset_at)
+        if _quota_reset_at and _now >= _quota_reset_at:
             # Roll the daily counter over. Previously only _check_quota_pre
             # did this rollover, and that function is a fallback that only
             # runs when BillingService.reserve() raises an unexpected
@@ -742,7 +766,7 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
             new_reset_at = _now + timedelta(days=1)
         else:
             new_used = quota.used_today + total_tokens
-            new_reset_at = quota.reset_at
+            new_reset_at = _quota_reset_at
         await session.execute(
             Quota.__table__.update().where(Quota.user_id == uid),
             {'used_today': new_used, 'reset_at': new_reset_at, 'updated_at': _now},

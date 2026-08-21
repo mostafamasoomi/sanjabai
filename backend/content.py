@@ -51,10 +51,10 @@ def _catalog_row_to_item(m: dict[str, Any], rate_irt: float = 126488, markup_pct
     """Map a model_catalog DB row to the camelCase catalog contract."""
     return {
         'id': m['id'],
-        'providerModelId': m['provider_model_id'],
-        # 'provider' (internal routing id, e.g. "bynara") is intentionally
-        # NOT exposed here — end users must never see which upstream serves
-        # a model, only admins do (see GET /admin/catalog/models).
+        # 'providerModelId' / 'provider' (internal routing id, e.g. "bynara")
+        # are intentionally NOT exposed here — end users must never see
+        # which upstream serves a model, only admins do (see
+        # GET /admin/catalog/models).
         'displayName': m['display_name'],
         'description': m.get('description'),
         'modalities': m.get('modalities') or {'input': ['text'], 'output': ['text']},
@@ -104,10 +104,19 @@ async def _load_catalog_rows() -> list[dict[str, Any]]:
         return []
 
 
-async def _litellm_fallback_catalog() -> list[dict[str, Any]]:
-    """Build a minimal fallback catalog from litellm when DB has no entries."""
+async def _litellm_fallback_catalog() -> tuple[list[dict[str, Any]], list[str]]:
+    """Build a minimal fallback catalog from litellm when DB has no entries.
+
+    Returns ``(items, health_keys)``. ``items`` is the user-facing list (no
+    provider/providerModelId — same rule as `_catalog_row_to_item`).
+    ``health_keys[i]`` is the raw upstream id for ``items[i]`` (the ``mid``
+    before it gets normalized into the public ``id`` via
+    ``mid.replace('/', '-').lower()``); callers need it to join against
+    `model_health` state, since the normalized public id won't match there.
+    """
     now = datetime.now(timezone.utc)
     items: list[dict[str, Any]] = []
+    health_keys: list[str] = []
     try:
         r = await _http.get(f"{LITELLM_HOST}/v1/models", timeout=8)
         if r.status_code == 200:
@@ -119,7 +128,7 @@ async def _litellm_fallback_catalog() -> list[dict[str, Any]]:
                     'id': mid.replace('/', '-').lower(),
                     # No 'provider' key — same rule as _catalog_row_to_item:
                     # this fallback list is also user-facing.
-                    'providerModelId': mid, 'displayName': mid,
+                    'displayName': mid,
                     'description': None,
                     'modalities': {'input': ['text'], 'output': ['text']},
                     'capabilities': ['chat'], 'recommendedFor': [],
@@ -134,9 +143,10 @@ async def _litellm_fallback_catalog() -> list[dict[str, Any]]:
                     'rateLimit': None, 'deprecatedAt': None,
                     'lastVerifiedAt': now, 'provenance': 'fallback',
                 })
+                health_keys.append(mid)
     except Exception:
         pass
-    return items
+    return items, health_keys
 
 
 # ── Routes ──────────────────────────────────────────────────────
@@ -197,9 +207,13 @@ async def catalog_models(request: Request) -> JSONResponse:
     rows = await _load_catalog_rows()
     if rows:
         data = [_catalog_row_to_item(r, rate_irt, markup_pct) for r in rows]
+        # Health-lookup keys taken from the source DB rows (server-side only,
+        # never serialized to the client) — NOT from the public dicts above,
+        # which no longer carry providerModelId.
+        health_keys: list[str | None] = [r.get('provider_model_id') for r in rows]
         source = 'approved-catalog'
     else:
-        data = await _litellm_fallback_catalog()
+        data, health_keys = await _litellm_fallback_catalog()
         source = 'fallback'
 
     # Attach live health so clients can hide models that are not answering,
@@ -208,8 +222,8 @@ async def catalog_models(request: Request) -> JSONResponse:
         from model_health import health_map
 
         states = await health_map()
-        for item in data:
-            state = states.get(item.get('providerModelId')) or states.get(item.get('id'))
+        for item, health_key in zip(data, health_keys):
+            state = states.get(health_key) or states.get(item.get('id'))
             item['health'] = state or {
                 'status': 'unknown',
                 'successRate': None,
@@ -569,12 +583,18 @@ async def api_pricing(request: Request) -> JSONResponse:
     if async_session is None:
         return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
+    # NOTE: `models_out` is built but deliberately NOT returned below (this
+    # endpoint currently answers with `generatedAt` only). It is kept as a
+    # ready-made shape, so it must stay leak-free: `provider` is the internal
+    # upstream routing id and this route is UNAUTHENTICATED. Anyone who later
+    # wires `models_out` into the response must not reintroduce it — end users
+    # never see which upstream serves a model (see GET /admin/catalog/models).
     models_out = []
     async with async_session() as session:
         from sqlalchemy import text as sql_text
         res = await session.execute(sql_text("""
             SELECT DISTINCT ON (model)
-                model, provider, input_per_million, output_per_million, currency, source, price_version, effective_from
+                model, input_per_million, output_per_million, currency, source, price_version, effective_from
             FROM pricing
             WHERE effective_to IS NULL
             ORDER BY model, effective_from DESC, price_version DESC
@@ -583,7 +603,7 @@ async def api_pricing(request: Request) -> JSONResponse:
 
     for r in rows:
         models_out.append({
-            'model': r['model'], 'provider': r['provider'],
+            'model': r['model'],
             'inputPerMillion': r['input_per_million'],
             'outputPerMillion': r['output_per_million'],
             'currency': r['currency'] or 'IRT', 'source': r['source'],

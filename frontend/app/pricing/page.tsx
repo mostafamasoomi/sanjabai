@@ -13,7 +13,10 @@ import { Num } from '@/lib/format'
 
 type ModelPricing = {
   id: string
-  providerModelId: string
+  /** No longer sent by the public /api/catalog/models response — provider
+      routing is admin-only. Kept optional (not deleted) since `getModelTier`/
+      `getModelIcon` below still fall back to `id`. */
+  providerModelId?: string
   displayName: string
   description?: string
   contextWindow?: number
@@ -211,8 +214,8 @@ export default function PricingPage() {
           </div>
         ) : (
           sortedModels.map((model, idx) => {
-            const tier = getModelTier(model.providerModelId)
-            const icon = getModelIcon(model.providerModelId)
+            const tier = getModelTier(model.providerModelId || model.id)
+            const icon = getModelIcon(model.providerModelId || model.id)
             const inputPct = (model.pricing.inputPerMillion / maxInput) * 100
             const outputPct = (model.pricing.outputPerMillion / maxOutput) * 100
 
@@ -236,7 +239,6 @@ export default function PricingPage() {
                   <span style={{ fontSize: 22, lineHeight: 1 }}>{icon}</span>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{model.displayName}</div>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFeatureSettings: '"tnum"', direction: 'ltr', textAlign: 'left' }}>{model.providerModelId}</div>
                   </div>
                 </div>
 

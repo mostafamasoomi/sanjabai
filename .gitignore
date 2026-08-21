@@ -68,3 +68,6 @@ security/*.xml
 SESSION_HANDOFF.md
 backend/*.bak.*
 docker-compose.yml.bak.*
+# internal docs — repo is PUBLIC, never push these
+docs/NEXT-SESSION.md
+docs/ROADMAP.md

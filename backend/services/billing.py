@@ -293,6 +293,7 @@ async def credit_wallet(
 
         await repo.append_ledger({
             "user_id": user_id,
+            "txn_type": "credit",
             "amount": amount.irt,
             "balance_after": new_balance,
             "reason": reason,
@@ -512,6 +513,7 @@ class BillingService:
         await self.repo.set_wallet_reserved(user_id, new_reserved)
         await self.repo.append_ledger({
             "user_id": user_id,
+            "txn_type": "settlement",
             "amount": -final_amount.irt,
             "balance_after": new_balance,
             "reason": "settlement",

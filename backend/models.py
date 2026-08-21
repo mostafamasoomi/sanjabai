@@ -73,6 +73,20 @@ class Ledger(Base):
     __tablename__ = 'ledger'
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(index=True)
+    # `ledger.txn_type` has been `NOT NULL` with no DB-side default since
+    # migrations/0001_baseline.sql, but this model never mapped it -- every
+    # ORM-built Ledger row (chat usage debits, wallet top-ups, referral
+    # bonuses, Hermes renewals) has therefore been failing at INSERT with a
+    # NotNullViolationError, silently swallowed by the broad
+    # `except Exception: logger.warning(...)` at each call site. That is why
+    # `ledger` had exactly one row (a manually-seeded 'initial_credit') and
+    # zero real debits despite served chat traffic -- discovered while
+    # fixing the billing loss-path audit (see chat.py::_record_usage). No
+    # code anywhere reads txn_type today (grepped the whole backend), so a
+    # generic default is safe for existing call sites that don't pass one
+    # explicitly (e.g. hermes.py); chat.py/services/billing.py now pass an
+    # explicit value ('usage' / 'credit' / 'settlement').
+    txn_type: Mapped[str] = mapped_column(default='ledger_entry')
     amount: Mapped[int]
     balance_after: Mapped[int]
     reason: Mapped[str]

@@ -771,7 +771,7 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
         reason = f'مصرف {model}'
         if charged < cost:
             reason += ' (کسری موجودی)'
-        entry = Ledger(user_id=uid, amount=-charged, balance_after=new_balance, reason=reason, idempotency_key=idempotency_key)
+        entry = Ledger(user_id=uid, txn_type='usage', amount=-charged, balance_after=new_balance, reason=reason, idempotency_key=idempotency_key)
         session.add(entry)
     result['cost'] = charged
     result['balance_after'] = new_balance

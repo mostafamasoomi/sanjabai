@@ -78,7 +78,12 @@ function uptimePercent(value: number | null): string {
   if (value == null || Number.isNaN(value)) return '—'
   const pct = value > 1 ? value : value * 100
   const clamped = Math.min(100, Math.max(0, pct))
-  return `${fa(clamped)}٪`
+  // Truncate to one decimal, never round: rounding turns 99.6% into "۱۰۰٪" and
+  // 92.86% into "۹۳٪", claiming uptime we did not actually deliver. Flooring
+  // can only ever understate, which is the side of the honest-labelling rule
+  // we want to err on. A clean 100 still reads "۱۰۰٪", not "۱۰۰٫۰٪".
+  const floored = Math.floor(clamped * 10) / 10
+  return `${faNum(floored, { decimals: Number.isInteger(floored) ? 0 : 1 })}٪`
 }
 
 const SEVERITY_COLOR: Record<StatusIncidentSeverity, string> = {

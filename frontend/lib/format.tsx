@@ -64,7 +64,19 @@ export function faNum(
   return sign + toFaDigits(body)
 }
 
-/** Integer tomans plus the unit. The unit is Persian, so no isolation needed. */
+/**
+ * Integer tomans plus the unit. The unit is Persian, so no isolation needed.
+ *
+ * THE RULE: every money value that reaches a component is already raw,
+ * integer TOMAN — that is the backend's one canonical unit end to end
+ * (`backend/services/money.py`; `GET /wallet` sums the ledger in toman).
+ * Render it through `faPrice` (or `faNum(value, { unit: 'تومان' })` /
+ * `<Num unit="تومان">` when the number needs to sit inside other markup).
+ * Never divide or multiply a money value in a component, and never define a
+ * page-local money formatter — that is exactly how the toman/rial mixups
+ * happened before. If a page needs Rial (a payment-gateway URL, for
+ * example), that conversion belongs in the backend gateway adapter, not here.
+ */
 export function faPrice(value: number | null | undefined, options?: NumOptions): string {
   const n = faNum(value, options)
   return n === (options?.fallback ?? '—') ? n : `${n} تومان`

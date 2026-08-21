@@ -48,8 +48,11 @@ const MAX_TOPUP = 100_000_000_000
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 // Numerals and money go through lib/format so every surface agrees; see the
-// note there on why toLocaleString is not called directly.
-const fmtIRR = (n: number) => faNum(n)
+// note there on why toLocaleString is not called directly. No page-local
+// money-formatter alias lives here any more -- one used to wrap `faNum`
+// under a name that implied a different currency, and that mismatch is
+// exactly what caused this page's toman/rial mixups. Call `faNum` /
+// `faPrice` from lib/format directly.
 const fmtToman = (n: number) => faPrice(n)
 const fmtDate = (s: string) =>
   toFaDigits(
@@ -235,8 +238,8 @@ export default function WalletPage() {
 
   const initiateTopup = () => {
     const amount = effectiveAmount
-    if (!amount || amount < MIN_TOPUP) return toast(`حداقل مبلغ شارژ ${fmtIRR(MIN_TOPUP)} تومان است`, 'error')
-    if (amount > MAX_TOPUP) return toast(`حداکثر مبلغ شارژ ${fmtIRR(MAX_TOPUP)} تومان است`, 'error')
+    if (!amount || amount < MIN_TOPUP) return toast(`حداقل مبلغ شارژ ${faNum(MIN_TOPUP)} تومان است`, 'error')
+    if (amount > MAX_TOPUP) return toast(`حداکثر مبلغ شارژ ${faNum(MAX_TOPUP)} تومان است`, 'error')
     setShowConfirm(true)
   }
 
@@ -245,28 +248,22 @@ export default function WalletPage() {
     setShowConfirm(false)
     setBusy(true)
     try {
-      const res = await fetch('/api/wallet/topup', {
+      // /api/wallet/topup was dead (required a payment_order_id the
+      // frontend never sent and queried a column that no longer exists) and
+      // is being removed. The gateway entry point is /payment/request,
+      // which returns { authority, url, amount } -- not payment_url -- and
+      // there is no synchronous "credit applied" branch: the wallet is only
+      // credited later, atomically, when the gateway calls back
+      // (backend/payment_endpoints.py:26-57, :211).
+      const res = await fetch('/api/payment/request', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: effectiveAmount }),
+        body: JSON.stringify({ amount: effectiveAmount, description: 'شارژ کیف پول' }),
       })
       const data = await res.json()
-      if (res.ok && data.payment_url) {
+      if (res.ok && data.url) {
         toast('در حال انتقال به درگاه پرداخت...', 'info')
-        window.location.href = data.payment_url
-      } else if (res.ok) {
-        setBalance(data.balance_after ?? balance)
-        setLedger((prev) => [
-          {
-            id: Date.now(),
-            amount: effectiveAmount,
-            balance_after: data.balance_after ?? 0,
-            reason: 'شارژ حساب',
-            created_at: new Date().toISOString(),
-          },
-          ...prev,
-        ])
-        toast('شارژ با موفقیت انجام شد', 'success')
+        window.location.href = data.url
       } else {
         toast(data.detail || 'خطا در شارژ', 'error')
       }
@@ -397,7 +394,7 @@ export default function WalletPage() {
 
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 8, marginBottom: 4 }}>
               <span className="wallet-balance-amount">
-                {fmtIRR(balance ?? 0)}
+                {faNum(balance ?? 0)}
               </span>
               <span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 500 }}>تومان</span>
             </div>
@@ -438,7 +435,7 @@ export default function WalletPage() {
               >
                 {p.label}
                 <span className="wallet-preset-sub">
-                  {fmtIRR(p.value)} تومان
+                  {faNum(p.value)} تومان
                 </span>
               </button>
             ))}
@@ -456,7 +453,7 @@ export default function WalletPage() {
               type="number"
               value={topupAmount}
               onChange={(e) => handleCustomAmount(e.target.value)}
-              placeholder="مبلغ دلخواه (ریال)"
+              placeholder="مبلغ دلخواه (تومان)"
               min={MIN_TOPUP}
               max={MAX_TOPUP}
               style={{
@@ -469,7 +466,7 @@ export default function WalletPage() {
 
           {effectiveAmount > 0 && effectiveAmount < MIN_TOPUP && (
             <p style={{ fontSize: 11, color: 'var(--danger)', marginBottom: 8 }}>
-              حداقل مبلغ: {fmtIRR(MIN_TOPUP)} ریال
+              حداقل مبلغ: {faNum(MIN_TOPUP)} تومان
             </p>
           )}
 
@@ -487,7 +484,7 @@ export default function WalletPage() {
             }}
           >
             <Icon name="send" size={16} />
-            {busy ? 'در حال پردازش...' : `شارژ ${effectiveAmount > 0 ? fmtIRR(effectiveAmount) + ' ریال' : 'حساب'}`}
+            {busy ? 'در حال پردازش...' : `شارژ ${effectiveAmount > 0 ? faNum(effectiveAmount) + ' تومان' : 'حساب'}`}
           </button>
         </div>
       </div>
@@ -498,7 +495,7 @@ export default function WalletPage() {
           <Icon name="gift" size={16} className="text-accent" />
           <h2 className="card-title">بسته‌های اعتباری</h2>
           {creditPackages.length > 0 && (
-            <span className="badge badge-accent" style={{ marginLeft: 4 }}>{fmtIRR(creditPackages.length)}</span>
+            <span className="badge badge-accent" style={{ marginLeft: 4 }}>{faNum(creditPackages.length)}</span>
           )}
         </div>
 
@@ -508,12 +505,12 @@ export default function WalletPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
             {creditPackages.map((pkg) => {
               const isPurchasing = purchasingPkgId === pkg.id
-              const baseToman = faNum(pkg.base_amount / 10)
+              const baseToman = faNum(pkg.base_amount)
               const bonusToman = pkg.bonus_percent > 0
-                ? faNum((pkg.total_credits - pkg.base_amount) / 10)
+                ? faNum(pkg.total_credits - pkg.base_amount)
                 : null
               const outputRate = pkg.model_id ? modelOutputRates[pkg.model_id] : undefined
-              const approxTokens = outputRate ? Math.round((pkg.total_credits / 10 / outputRate) * 1_000_000) : null
+              const approxTokens = outputRate ? Math.round((pkg.total_credits / outputRate) * 1_000_000) : null
               return (
                 <div
                   key={pkg.id}
@@ -563,7 +560,7 @@ export default function WalletPage() {
 
                   <div className="flex-1">
                     <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 4, fontFeatureSettings: '"tnum"' }}>
-                      {fmtIRR(pkg.total_credits)} <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)' }}>ریال</span>
+                      {faNum(pkg.total_credits)} <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)' }}>تومان</span>
                     </div>
                     <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>
                       شما {baseToman} تومان پرداخت می‌کنید
@@ -613,7 +610,7 @@ export default function WalletPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon name="history" size={16} className="text-accent" />
             <h2 className="card-title">تاریخچه تراکنش‌ها</h2>
-            <span className="badge badge-accent" style={{ marginLeft: 4 }}>{fmtIRR(ledger.length)}</span>
+            <span className="badge badge-accent" style={{ marginLeft: 4 }}>{faNum(ledger.length)}</span>
           </div>
 
           {/* Filter tabs */}
@@ -668,10 +665,10 @@ export default function WalletPage() {
                       <td
                         className={`wallet-td-amount ${isCredit ? 'positive' : 'negative'}`}
                       >
-                        {isCredit ? '+' : ''}{fmtIRR(l.amount)} <span className="wallet-currency">ریال</span>
+                        {isCredit ? '+' : ''}{faNum(l.amount)} <span className="wallet-currency">تومان</span>
                       </td>
                       <td className="wallet-td-balance">
-                        {fmtIRR(l.balance_after)}
+                        {faNum(l.balance_after)}
                       </td>
                     </tr>
                   )
@@ -714,7 +711,7 @@ export default function WalletPage() {
                         #{p.id}
                       </td>
                       <td className="wallet-td-amount text-primary">
-                        {fmtIRR(p.amount)} <span className="wallet-currency">ریال</span>
+                        {faNum(p.amount)} <span className="wallet-currency">تومان</span>
                       </td>
                       <td style={{ padding: '12px' }}>
                         <span className={`badge ${st.badge}`}>{st.text}</span>
@@ -741,7 +738,7 @@ export default function WalletPage() {
                 آیا از شارژ حساب به مبلغ
               </p>
               <p className="wallet-modal-amount">
-                {fmtIRR(effectiveAmount)} ریال
+                {faNum(effectiveAmount)} تومان
               </p>
               <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>اطمینان دارید؟</p>
             </div>

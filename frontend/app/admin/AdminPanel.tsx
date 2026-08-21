@@ -1346,7 +1346,7 @@ export default function AdminPage() {
                           <td className="p-3 text-sm font-mono text-primary">{pkg.id}</td>
                           <td className="p-3 text-sm">{pkg.name_fa}</td>
                           <td className="p-3 text-xs font-mono">{pkg.model_id || '—'}</td>
-                          <td className="p-3 text-xs">{faNum(Math.round(pkg.base_amount / 10))}</td>
+                          <td className="p-3 text-xs">{faNum(pkg.base_amount)}</td>
                           <td className="p-3">
                             <button
                               className="badge"

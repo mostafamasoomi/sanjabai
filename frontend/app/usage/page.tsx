@@ -45,7 +45,9 @@ type RangeKey = 'week' | 'month' | 'all'
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const fmtToman = (n: number) => faPrice(n)
-const fmtIRR = (n: number) => faNum(n)
+// No page-local money-formatter alias here -- call `faNum` directly. A
+// same-shaped wrapper named for the wrong currency used to live in this
+// spot, and was one of the two places that habit caused a 10x display bug.
 // Was `1.2M` / `34.0K` — Latin abbreviations that the RTL paragraph reorders
 // away from their number. faCompact gives the Persian equivalent instead.
 const fmtTokens = (n: number) => faCompact(n)
@@ -500,7 +502,7 @@ export default function UsagePage() {
                 مصرف {rangeLabels[range]}
               </div>
               <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{fmtToman(rangedEvents.reduce((s, e) => s + e.cost, 0))}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>{fmtIRR(rangedEvents.length)} درخواست</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>{faNum(rangedEvents.length)} درخواست</div>
             </FadeInCard>
 
             {/* Total tokens */}
@@ -539,7 +541,7 @@ export default function UsagePage() {
                   <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{fmtDate(mostExpensive.created_at)}</div>
                 </div>
                 <div style={{ textAlign: 'left' }}>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{fmtIRR(mostExpensive.cost)}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{faNum(mostExpensive.cost)}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFeatureSettings: '"tnum"' }}>
                     {fmtTokens(mostExpensive.input_tokens)} ورودی / {fmtTokens(mostExpensive.output_tokens)} خروجی
                   </div>
@@ -560,7 +562,7 @@ export default function UsagePage() {
                 <>
                   <DonutChart
                     data={donutData}
-                    centerValue={fmtIRR(totalModelCost)}
+                    centerValue={faNum(totalModelCost)}
                     centerLabel="تومان"
                   />
                   <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -583,7 +585,7 @@ export default function UsagePage() {
                         <div style={{ width: 10, height: 10, borderRadius: 'var(--radius-full)', background: m.color, flexShrink: 0 }} />
                         <span style={{ flex: 1, color: 'var(--text-secondary)', fontWeight: 600 }}>{m.name}</span>
                         <span style={{ color: 'var(--text-muted)', fontFeatureSettings: '"tnum"' }}>{fmtPct(m.cost / totalModelCost)}</span>
-                        <span style={{ color: 'var(--text-primary)', fontWeight: 700, fontFeatureSettings: '"tnum"', minWidth: 72, textAlign: 'left' }}>{fmtIRR(m.cost)}</span>
+                        <span style={{ color: 'var(--text-primary)', fontWeight: 700, fontFeatureSettings: '"tnum"', minWidth: 72, textAlign: 'left' }}>{faNum(m.cost)}</span>
                       </div>
                     ))}
                   </div>
@@ -617,7 +619,7 @@ export default function UsagePage() {
                   return (
                     <div
                       key={i}
-                      title={`${fmtDateShort(b.date.toISOString())}: ${fmtIRR(b.cost)} تومان · ${b.calls} درخواست`}
+                      title={`${fmtDateShort(b.date.toISOString())}: ${faNum(b.cost)} تومان · ${b.calls} درخواست`}
                       style={{
                         flex: 1,
                         height: `${h}%`,
@@ -670,7 +672,7 @@ export default function UsagePage() {
                           <Icon name="compare" size={11} style={{ display: 'inline', verticalAlign: -1, marginInlineStart: 3 }} />
                           میانگین: {fmtTokens(Math.round(m.avgTokensPerCall))} توکن/درخواست
                         </span>
-                        <span>هزینه/درخواست: {fmtIRR(Math.round(m.costPerCall))}</span>
+                        <span>هزینه/درخواست: {faNum(Math.round(m.costPerCall))}</span>
                       </div>
                     </div>
                   )
@@ -722,7 +724,7 @@ export default function UsagePage() {
                       <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{modelName(evt.model)}</div>
                       <div style={{ color: 'var(--text-secondary)', fontFeatureSettings: '"tnum"' }}>{fmtTokens(evt.input_tokens)}</div>
                       <div style={{ color: 'var(--text-secondary)', fontFeatureSettings: '"tnum"' }}>{fmtTokens(evt.output_tokens)}</div>
-                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{fmtIRR(evt.cost)}</div>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{faNum(evt.cost)}</div>
                       <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{fmtDate(evt.created_at)}</div>
                     </div>
                   ))}

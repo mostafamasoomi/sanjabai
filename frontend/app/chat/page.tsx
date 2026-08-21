@@ -77,6 +77,11 @@ const PRESETS = [
   { icon: 'dashboard' as const, label: 'تحلیل', description: 'تحلیل دادهها و اطلاعات', prompt: 'داده‌های زیر را تحلیل کن:\n\n' },
 ]
 
+// walletBalance is raw Toman (see backend/wallet.py, GET /wallet) — the
+// threshold below and the <Num> that renders the same value must agree on
+// that unit, so name it here instead of repeating the bare literal.
+const LOW_BALANCE_TOMAN = 5000
+
 function generateId() { return Date.now().toString(36) + Math.random().toString(36).slice(2) }
 
 /* ── Date formatting helper ──────────────────────────────────────────── */
@@ -1224,7 +1229,7 @@ export default function ChatPage() {
                 </span>
               )}
               {/* ── Wallet balance / warning ────────────────────────── */}
-              {walletBalance !== null && walletBalance < 5000 && (
+              {walletBalance !== null && walletBalance < LOW_BALANCE_TOMAN && (
                 <a href="/wallet" className="wallet-warning" title="موجودی کم — شارژ کنید">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
@@ -1233,12 +1238,12 @@ export default function ChatPage() {
                   موجودی کم
                 </a>
               )}
-              {walletBalance !== null && walletBalance >= 5000 && (
+              {walletBalance !== null && walletBalance >= LOW_BALANCE_TOMAN && (
                 <span className="wallet-balance-inline">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8z"/>
                   </svg>
-                  <Num value={walletBalance / 10} unit="تومان" />
+                  <Num value={walletBalance} unit="تومان" />
                 </span>
               )}
               {/* ── Prompt Library button ───────────────────────────── */}

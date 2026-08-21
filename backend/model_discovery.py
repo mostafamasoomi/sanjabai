@@ -31,14 +31,34 @@ from providers import Provider, configured_providers
 logger = logging.getLogger('model_discovery')
 
 
+# Aggregator/reseller tokens that must never reach a user-facing name -- see
+# the standing rule that the ordinary user must never learn which upstream
+# serves a model. Only tokens confirmed to be OUR OWN routing/reseller
+# identifiers are listed here (proven by appearing fused into a raw model id,
+# e.g. `openrouter_gpt_4_o`). Deliberately NOT listed: `omni`, `agnes`,
+# `antigravity` -- each also appears as a genuine fragment of a real upstream
+# model name in this catalog (NVIDIA "Nemotron ... Omni", Xiaomi "MiMo ...
+# Omni", Google's own "antigravity-preview" id, and an unconfirmed-but-
+# plausible "Agnes" brand from a reseller) and stripping them blindly would
+# mangle a real product name instead of hiding a provider.
+_INFRA_TOKENS = frozenset({
+    'router', '9router', 'ninerouter', 'omniroute', 'freellmapi', 'bynara',
+    'bynaraa2', 'cloudflare', 'opencode', 'horde', 'openrouter', 'tllm',
+    'ddgw', 'nothink',
+})
+
+
 def _display_name(model_id: str) -> str:
     """Turn `deepseek-v4-pro` into `Deepseek V4 Pro` as a starting point.
 
     Only used for models an admin has not named yet; it is a placeholder, not
-    an attempt at correct branding.
+    an attempt at correct branding. Words that are one of our own routing or
+    reseller identifiers (`_INFRA_TOKENS`) are dropped first, so a raw id like
+    `omni/tllm/openrouter_gpt_4_o` cannot regenerate a leaking name like
+    "Openrouter Gpt 4 O" on rediscovery.
     """
     bare = model_id.split('/')[-1]
-    words = re.split(r'[-_.]+', bare)
+    words = [w for w in re.split(r'[-_.]+', bare) if w and w.lower() not in _INFRA_TOKENS]
     return ' '.join(w.upper() if len(w) <= 2 else w.capitalize() for w in words if w)
 
 

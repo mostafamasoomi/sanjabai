@@ -389,6 +389,32 @@ class TestL5MarginGuard:
 # passed (previously only the rarely-reached _check_quota_pre fallback did
 # that rollover).
 
+class TestUsageIdempotencyKeyIsNotUpstreamDependent:
+    """Found live (2026-08-21) while verifying the quota fix: the ledger
+    idempotency_key used to be f"usage:{resp_id}" alone. tencent-hy3-free
+    and mimo-v2.5-free were both observed returning the IDENTICAL
+    completion `id` across genuinely distinct requests -- every billing
+    attempt after the first for that model then hit
+    uq_ledger_idempotency_key and rolled back the whole transaction
+    (ledger + wallet + quota), for a fully served response. The key must
+    now be unique regardless of what the upstream sends."""
+
+    def test_same_resp_id_produces_different_keys(self):
+        """The exact regression: reusing the same (buggy-upstream) resp_id
+        across two calls must not collide."""
+        k1 = chat_mod._usage_idempotency_key("chatcmpl-fe76178")
+        k2 = chat_mod._usage_idempotency_key("chatcmpl-fe76178")
+        assert k1 != k2
+
+    def test_missing_resp_id_still_produces_a_usable_key(self):
+        key = chat_mod._usage_idempotency_key(None)
+        assert key and key.startswith("usage:")
+
+    def test_resp_id_is_preserved_for_debugging(self):
+        key = chat_mod._usage_idempotency_key("chatcmpl-abc123")
+        assert "chatcmpl-abc123" in key
+
+
 class TestAsNaiveUtc:
     """_as_naive_utc: the tz-normalization helper that fixes the live
     'can't compare offset-naive and offset-aware datetimes' crash found

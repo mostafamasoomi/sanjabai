@@ -637,6 +637,28 @@ def _extract_reasoning_tokens(usage: dict) -> int:
     return 0
 
 
+def _usage_idempotency_key(resp_id: str | None) -> str:
+    """Idempotency key for a non-streaming usage-charge ledger row.
+
+    Found live (2026-08-21): this used to be `f"usage:{resp_id}"` alone, on
+    the assumption that the upstream's completion `id` is unique per
+    request. Confirmed empirically FALSE for at least two models
+    (tencent-hy3-free and mimo-v2.5-free both returned the IDENTICAL id
+    across genuinely distinct, differently-worded requests) -- every
+    billing attempt after the first for that model then collided with the
+    ledger's UNIQUE(idempotency_key) constraint, raising IntegrityError and
+    rolling back the ENTIRE transaction (ledger + wallet + quota) for a
+    fully served response. There is no retry wrapper around _track_usage,
+    so genuine double-submission protection was never actually
+    load-bearing here; _bill_stream_usage (the streaming path) has never
+    passed an idempotency_key at all and has not needed one. Generate a
+    guaranteed-unique key instead of trusting an upstream implementation
+    detail we do not control; resp_id is kept in the value purely as a
+    human debugging breadcrumb, not for its uniqueness.
+    """
+    return f"usage:{resp_id or 'noid'}:{secrets.token_hex(8)}"
+
+
 def _extract_response_text(response_data: dict) -> str:
     """Concatenate visible assistant text across all choices, for the L1
     output-token estimate fallback on the non-streaming path."""
@@ -899,8 +921,7 @@ async def _track_usage(request: Request, payload: dict[str, Any], response_data:
             f"response_keys={sorted(response_data.keys()) if isinstance(response_data, dict) else type(response_data).__name__} "
             f"usage_field_type={type(response_data.get('usage')).__name__ if isinstance(response_data, dict) else 'n/a'}"
         )
-    resp_id = response_data.get('id')
-    idempotency_key = f"usage:{resp_id}" if resp_id else None
+    idempotency_key = _usage_idempotency_key(response_data.get('id'))
     response_text = _extract_response_text(response_data)
     try:
         async with async_session() as session:

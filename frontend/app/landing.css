@@ -31,10 +31,16 @@
   --lp-ink-2: #b3a08c;
   --lp-ink-3: #645630;
 
-  /* ── Brand — squirrel chestnut/amber, with forest-green + gold accents ── */
-  --lp-brand: #912813;
-  --lp-brand-soft: rgba(181, 80, 31, 0.14);
-  --lp-violet: #3f7d52;
+  /* ── Brand — the squirrel mark's own gradient (F26712 -> B83D05). Mirrors
+     globals.css exactly: --lp-brand is text/icon-safe on this near-black
+     surface, --lp-brand-fill is the darker tone the few solid #fff-on-brand
+     surfaces (CTA button, chat bubble, plan badge) need instead. --lp-cyan
+     is a warm gold second stop, kept for the hero's gradient moments — see
+     the task report for why gold stays and the green (formerly --lp-violet)
+     does not. */
+  --lp-brand: #e46b25;
+  --lp-brand-fill: #b83d05;
+  --lp-brand-soft: rgba(228, 107, 37, 0.14);
   --lp-cyan: #b37926;
   --lp-mint: #34d399;
 
@@ -81,10 +87,14 @@
   --lp-ink-2: #5c4630;
   --lp-ink-3: #8a745c;
 
-  --lp-brand: #a8451e;
-  --lp-brand-soft: rgba(168, 69, 30, 0.1);
-  --lp-violet: #2f6b3e;
-  --lp-cyan: #b8791c;
+  --lp-brand: #b83d05;
+  --lp-brand-fill: #b83d05;
+  --lp-brand-soft: rgba(184, 61, 5, 0.1);
+  --lp-cyan: #97640c;
+  /* Same story as --lp-cyan: #34d399 (tuned for the near-black surface)
+     drops to ~1.9:1 on cream. Darkened to clear 4.5:1 for .lp-billing__save,
+     the one spot this is set as text rather than a small svg checkmark. */
+  --lp-mint: #187c52;
 
   --lp-shadow: 0 1px 2px rgba(40, 24, 10, 0.05), 0 12px 32px -12px rgba(40, 24, 10, 0.16);
   --lp-shadow-lg: 0 2px 4px rgba(40, 24, 10, 0.05), 0 32px 64px -24px rgba(40, 24, 10, 0.2);
@@ -257,23 +267,23 @@
 }
 
 .lp-btn--primary {
-  background: var(--lp-brand);
+  background: var(--lp-brand-fill);
   color: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px -8px var(--lp-brand);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px -8px var(--lp-brand-fill);
 }
 
 /* Lift on hover, punch back down past rest on :active (translateY(1px),
    above) — a full press arc instead of just a colour fade, on the one
    button most likely to actually get clicked. */
 .lp-btn--primary:hover {
-  background: color-mix(in srgb, var(--lp-brand) 88%, #fff);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 16px 36px -10px var(--lp-brand);
+  background: color-mix(in srgb, var(--lp-brand-fill) 88%, #fff);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 16px 36px -10px var(--lp-brand-fill);
   transform: translateY(-2px);
 }
 
 .lp-btn--primary:active {
   transform: translateY(1px);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 6px 16px -8px var(--lp-brand);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 6px 16px -8px var(--lp-brand-fill);
 }
 
 .lp-btn--secondary {
@@ -721,7 +731,7 @@ a.lp-pill:hover {
 .lp-hero__rotator {
   display: grid;
   justify-items: center;
-  background: linear-gradient(100deg, var(--lp-brand), var(--lp-violet) 55%, var(--lp-cyan));
+  background: linear-gradient(100deg, var(--lp-brand), var(--lp-cyan));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -1021,7 +1031,7 @@ a.lp-pill:hover {
 }
 
 .lp-msg--user .lp-msg__bubble {
-  background: var(--lp-brand);
+  background: var(--lp-brand-fill);
   color: #fff;
   border-end-end-radius: 4px;
 }
@@ -1125,7 +1135,7 @@ a.lp-pill:hover {
 }
 
 .lp-capshow__tabbtn[aria-selected='true'] .lp-capshow__tabicon {
-  background: var(--lp-brand);
+  background: var(--lp-brand-fill);
   color: #fff;
 }
 
@@ -1782,7 +1792,7 @@ a.lp-pill:hover {
 }
 
 .lp-billing__opt[aria-pressed='true'] {
-  background: var(--lp-brand);
+  background: var(--lp-brand-fill);
   color: #fff;
 }
 
@@ -1849,7 +1859,7 @@ a.lp-pill:hover {
   translate: -50% -50%;
   padding: 0.2rem 0.8rem;
   border-radius: var(--lp-r-pill);
-  background: var(--lp-brand);
+  background: var(--lp-brand-fill);
   color: #fff;
   font-size: 0.72rem;
   font-weight: 700;

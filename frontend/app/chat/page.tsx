@@ -1155,7 +1155,7 @@ export default function ChatPage() {
                 className={"btn btn-ghost btn-icon rounded-xl shrink-0" + (webSearch ? " text-[var(--accent)]" : "")}
                 aria-label="جستجوی وب"
                 title="جستجوی وب"
-                style={webSearch ? { color: 'var(--accent, #3b82f6)' } : {}}
+                style={webSearch ? { color: 'var(--accent)' } : {}}
               >
                 <Icon name="globe" size={18} />
               </button>

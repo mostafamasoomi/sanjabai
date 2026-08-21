@@ -206,7 +206,7 @@ export default function DeveloperPage() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
         <div style={{
           width: 40, height: 40, borderRadius: 12,
-          background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)',
+          background: 'linear-gradient(135deg, var(--accent-hover), var(--accent-fill))',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           <Icon name="code" size={20} style={{ color: 'var(--text-on-accent)' }} />
@@ -484,7 +484,7 @@ export default function DeveloperPage() {
                   padding: '3px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700,
                   fontFamily: 'var(--font-mono)',
                   background: ep.method === 'POST' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.1)',
-                  color: ep.method === 'POST' ? 'var(--positive)' : '#3b82f6',
+                  color: ep.method === 'POST' ? 'var(--positive)' : 'var(--info)',
                 }}>
                   {ep.method}
                 </span>

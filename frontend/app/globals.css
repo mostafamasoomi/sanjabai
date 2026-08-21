@@ -127,18 +127,30 @@ img, svg, video, canvas {
   --text-secondary: #cdb9a2;
   --text-on-accent: #ffffff;
 
-  /* Accent — squirrel chestnut/amber (--accent-purple kept as a var name
-     for compat; it now holds the forest-green secondary accent, not purple) */
-  --accent: #b5501f;
-  --accent-hover: #d97b3f;
-  --accent-dim: rgba(181,80,31,0.16);
-  --accent-bg: rgba(181,80,31,0.10);
-  --accent-glow: rgba(181,80,31,0.35);
+  /* Accent — pulled straight from the squirrel mark's own gradient
+     (F26712 -> B83D05, see brand/sanjabai-squirrel.svg). --accent is the
+     text/icon-safe tone for this near-black surface; --accent-fill is the
+     darker tone solid buttons/bubbles use under --text-on-accent, because
+     one hue cannot be both "light enough to read as text on near-black"
+     and "dark enough to hold white text" at once. --accent-2 is a second,
+     brighter stop reserved for gradients (never paired with on-accent
+     text). --accent-purple kept as a var name for compat; it now holds the
+     forest-green secondary accent used only to tell "model B" apart from
+     "model A" on /compare — deliberately off-hue, deliberately untouched. */
+  --accent: #e46b25;
+  --accent-hover: #c7490a;
+  --accent-fill: #b83d05;
+  --accent-2: #f0884c;
+  --accent-dim: rgba(228,107,37,0.10);
+  --accent-bg: rgba(228,107,37,0.06);
+  --accent-glow: rgba(228,107,37,0.35);
   --accent-purple: #3f7d52;
 
-  /* Semantic */
+  /* Semantic — unchanged from brand hue on purpose: distinct from the ~20°
+     accent hue and already >=4.5:1 on this surface. */
   --positive: #34d399;
   --success: #34d399;
+  --success-dim: rgba(52,211,153,0.12);
   --warning: #fbbf24;
   --danger: #f87171;
   --danger-dim: rgba(248,113,113,0.12);
@@ -221,9 +233,32 @@ img, svg, video, canvas {
   --border-strong: rgba(30,20,12,0.18);
   --glass: rgba(30,20,12,0.03);
 
+  /* Accent — on cream, "text-safe" and "fill-safe" are the same
+     requirement (both want darker), so --accent and --accent-fill share
+     one value: the squirrel mark's own dark rust stop. --accent-2 goes
+     darker still for gradients, since cream tolerates almost no lightening
+     before body-text contrast breaks (see contrast.py sweep in the task
+     report). --accent-hover is a lighter in-between step for the one
+     interactive state that needs to visibly shift on press/hover. */
+  --accent: #b83d05;
+  --accent-hover: #bd460a;
+  --accent-fill: #b83d05;
+  --accent-2: #8d3407;
+  --accent-dim: rgba(184,61,5,0.10);
+  --accent-bg: rgba(184,61,5,0.06);
+  --accent-glow: rgba(184,61,5,0.35);
+
+  /* Semantic — the dark-theme values (tuned for a near-black surface) drop
+     to well under 3:1 on cream. Same hues, darkened until each clears
+     4.5:1 on --bg-base; --accent-purple is left un-overridden because its
+     dark-theme value already clears 4.5:1 here. */
+  --positive: #187c52;
+  --success: #187c52;
+  --success-dim: rgba(24,124,82,0.10);
+  --warning: #8d6007;
+  --danger: #c91d22;
   --danger-dim: rgba(220,38,38,0.08);
-  --accent-dim: rgba(181,80,31,0.1);
-  --accent-bg: rgba(181,80,31,0.06);
+  --info: #1b63bb;
 
   --shadow-sm: 0 1px 2px rgba(30,20,12,0.06);
   --shadow-md: 0 4px 16px rgba(30,20,12,0.08);
@@ -234,7 +269,7 @@ img, svg, video, canvas {
 
 /* ── Utilities ────────────────────────────────────────────────────────────── */
 .text-gradient {
-  background: linear-gradient(135deg, var(--accent), var(--accent-purple));
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -255,7 +290,7 @@ img, svg, video, canvas {
   white-space: nowrap;
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-primary { background: var(--accent); color: var(--text-on-accent); box-shadow: var(--shadow-sm); }
+.btn-primary { background: var(--accent-fill); color: var(--text-on-accent); box-shadow: var(--shadow-sm); }
 .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
 .btn-secondary { background: var(--bg-elevated); color: var(--text-primary); border-color: var(--border); }
 .btn-secondary:hover:not(:disabled) { border-color: var(--border-strong); }
@@ -638,7 +673,7 @@ img, svg, video, canvas {
 .chat-bubble-user { align-items: flex-end; }
 .chat-bubble-ai { align-items: flex-start; }
 .chat-bubble-content { padding: 0.7rem 1rem; border-radius: var(--radius-lg); font-size: 0.9rem; line-height: 1.75; }
-.chat-bubble-user .chat-bubble-content { background: var(--accent); color: var(--text-on-accent); }
+.chat-bubble-user .chat-bubble-content { background: var(--accent-fill); color: var(--text-on-accent); }
 .chat-bubble-ai .chat-bubble-content { background: var(--bg-elevated); color: var(--text-primary); }
 .chat-bubble-plain { white-space: pre-wrap; word-break: break-word; }
 .chat-typing { display: flex; gap: 0.25rem; padding: 0.7rem 1rem; }
@@ -1090,7 +1125,7 @@ img, svg, video, canvas {
 .aurora-trust-signals { display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border); font-size: 0.75rem; color: var(--text-muted); }
 .aurora-signup-wrapper { min-height: 80vh; display: flex; align-items: center; justify-content: center; padding: var(--space-6); }
 .aurora-signup-card { width: 100%; max-width: 26rem; padding: var(--space-8); }
-.aurora-signup-logo { width: 3rem; height: 3rem; border-radius: var(--radius-xl); display: flex; align-items: center; justify-content: center; margin: 0 auto var(--space-4); background: linear-gradient(135deg, var(--accent), var(--accent-purple)); box-shadow: var(--shadow-glow); }
+.aurora-signup-logo { width: 3rem; height: 3rem; border-radius: var(--radius-xl); display: flex; align-items: center; justify-content: center; margin: 0 auto var(--space-4); background: linear-gradient(135deg, var(--accent-hover), var(--accent-fill)); box-shadow: var(--shadow-glow); }
 .aurora-signup-btn { width: 100%; }
 .aurora-signup-error { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.9rem; border-radius: var(--radius-md); background: var(--danger-dim); color: var(--danger); font-size: 0.85rem; margin-bottom: var(--space-4); }
 .aurora-input-error { border-color: var(--danger) !important; }

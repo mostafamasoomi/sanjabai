@@ -280,7 +280,7 @@ export default function OnboardingPage() {
                       style={{
                         width: done || current ? '100%' : '0%',
                         background: current
-                          ? 'linear-gradient(90deg, var(--accent), #a78bfa)'
+                          ? 'linear-gradient(90deg, var(--accent), var(--accent-2))'
                           : 'var(--accent)',
                       }}
                     />

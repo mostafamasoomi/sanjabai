@@ -388,9 +388,9 @@ export default function ProfilePage() {
             )}
             <div style={{
               position: 'absolute', bottom: 0, right: 0,
-              background: 'var(--accent)', borderRadius: '50%',
+              background: 'var(--accent-fill)', borderRadius: '50%',
               width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              border: '2px solid var(--bg-card, #1a1a2e)',
+              border: '2px solid var(--bg-card)',
             }}>
               {avatarUploading ? (
                 <div className="apikeys-spinner" style={{ width: 12, height: 12 }} />
@@ -622,15 +622,15 @@ export default function ProfilePage() {
                 gap: 12,
                 padding: '14px 16px',
                 borderRadius: 10,
-                border: `2px solid ${autonomyLevel === level.value ? 'var(--accent)' : 'var(--border, #2a2a4a)'}`,
-                background: autonomyLevel === level.value ? 'var(--accent-bg, rgba(99,102,241,0.08))' : 'transparent',
+                border: `2px solid ${autonomyLevel === level.value ? 'var(--accent)' : 'var(--border)'}`,
+                background: autonomyLevel === level.value ? 'var(--accent-bg)' : 'transparent',
                 cursor: 'pointer',
                 transition: 'all 0.2s',
               }}
             >
               <div style={{
                 width: 20, height: 20, borderRadius: '50%', marginTop: 2, flexShrink: 0,
-                border: `2px solid ${autonomyLevel === level.value ? 'var(--accent)' : 'var(--border, #4a4a6a)'}`,
+                border: `2px solid ${autonomyLevel === level.value ? 'var(--accent)' : 'var(--border)'}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
                 {autonomyLevel === level.value && (

@@ -78,19 +78,19 @@ def _append(state: PureBillingState, *, amount: int, idempotency_key: str,
 
 def reserve(state: PureBillingState, amount: Money, reservation_id: str,
             actor_id: int, idempotency_key: Optional[str] = None) -> PureBillingState:
-    if amount.irt <= 0:
+    if amount.toman <= 0:
         raise ValueError("reservation amount must be positive")
-    if amount.irt > state.wallet.available_paid:
+    if amount.toman > state.wallet.available_paid:
         raise ValueError("insufficient balance")
     if reservation_id in state.reservations:
-        if state.reservations[reservation_id] != amount.irt:
+        if state.reservations[reservation_id] != amount.toman:
             raise ValueError("reservation id reused with different amount")
         return state
-    state.wallet.available_paid -= amount.irt
-    state.wallet.reserved_paid += amount.irt
-    state.reservations[reservation_id] = amount.irt
+    state.wallet.available_paid -= amount.toman
+    state.wallet.reserved_paid += amount.toman
+    state.reservations[reservation_id] = amount.toman
     _append(
-        state, amount=-amount.irt, idempotency_key=idempotency_key or f"reserve:{reservation_id}",
+        state, amount=-amount.toman, idempotency_key=idempotency_key or f"reserve:{reservation_id}",
         source_type="reservation", source_id=reservation_id, actor_id=actor_id,
     )
     return state
@@ -101,16 +101,16 @@ def settle(state: PureBillingState, reservation_id: str, actual: Money,
     if reservation_id not in state.reservations:
         raise ValueError("unknown reservation")
     reserved = state.reservations[reservation_id]
-    if actual.irt > reserved:
+    if actual.toman > reserved:
         raise ValueError("settled amount exceeds reservation")
-    remainder = reserved - actual.irt
+    remainder = reserved - actual.toman
     state.wallet.reserved_paid -= reserved
-    state.wallet.available_paid -= actual.irt
+    state.wallet.available_paid -= actual.toman
     if remainder > 0:
         state.wallet.available_paid += remainder
     del state.reservations[reservation_id]
     _append(
-        state, amount=-actual.irt, idempotency_key=idempotency_key or f"settle:{reservation_id}",
+        state, amount=-actual.toman, idempotency_key=idempotency_key or f"settle:{reservation_id}",
         source_type="settlement", source_id=reservation_id, actor_id=actor_id,
     )
     return state

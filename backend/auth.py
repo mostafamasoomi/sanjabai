@@ -192,13 +192,40 @@ async def signup(payload: AuthSignup) -> JSONResponse:
                         SqlBillingRepo(s2), referrer.id, Money(5000),
                         reason=f'پاداش دعوت کاربر {user.email}',
                         idempotency_key=f'referral-bonus:{user.id}',
+                        txn_type='referral_bonus',
                     )
                     await s2.commit()
+
+        # Signup gift: every new signup gets 10,000 Toman, credited via the
+        # ledger, idempotent on the user id. This never applies retroactively
+        # to existing users. txn_type='signup_bonus' is kept distinct from
+        # 'topup' so a "has this user ever really paid?" check never mistakes
+        # the gift for a real payment. Failure here must not block signup, but
+        # must never fail silently (a broad swallowing `except` already cost
+        # this codebase months of billing history once).
+        try:
+            from services.billing import SqlBillingRepo, credit_wallet
+            from services.money import Money
+            await credit_wallet(
+                SqlBillingRepo(session), user.id, Money(10000),
+                reason='هدیه ثبت‌نام',
+                idempotency_key=f'signup-gift:{user.id}',
+                txn_type='signup_bonus',
+            )
+        except Exception:
+            _logging.getLogger(__name__).error(
+                'Failed to credit signup gift for user %s', user.id, exc_info=True,
+            )
+
         quota = Quota(user_id=user.id, daily_limit=200000, used_today=0, reset_at=(datetime.now(timezone.utc) + timedelta(days=1)).replace(tzinfo=None))
         session.add(quota)
         await session.commit()
         token = await _create_session(user.id)
-        response = JSONResponse({'token': token, 'user': {'id': user.id, 'email': user.email}})
+        response = JSONResponse({
+            'token': token,
+            'user': {'id': user.id, 'email': user.email},
+            'gift': {'amount': 10000},
+        })
         _set_session_cookie(response, token)
         await _write_audit_log('auth.signup', target_type='user', target_id=user.id, details={'email': user.email})
         return response

@@ -70,6 +70,28 @@ class TestSignup:
         response = client.post('/auth/signup', json={})
         assert response.status_code == 422
 
+    def test_signup_credits_gift_and_includes_it_in_response(self, client, mock_async_session):
+        # No existing user, no existing wallet/ledger row for the new id.
+        from models import Ledger
+        mock_async_session._execute_result = make_result(fetchone=None)
+        with patch('app.rds.setex', new_callable=AsyncMock), \
+             patch('app.rds.get', new_callable=AsyncMock, return_value='1234'):
+            response = client.post('/auth/signup', json={
+                'email': 'gift@example.com', 'password': 'securepass123', **CAPTCHA,
+            })
+            assert response.status_code == 200
+            assert response.json()['gift'] == {'amount': 10000}
+
+        # The ledger row added for the gift carries txn_type='signup_bonus',
+        # distinct from a real payment ('topup').
+        ledger_adds = [
+            call.args[0] for call in mock_async_session.add.call_args_list
+            if isinstance(call.args[0], Ledger)
+        ]
+        assert len(ledger_adds) == 1
+        assert ledger_adds[0].txn_type == 'signup_bonus'
+        assert ledger_adds[0].amount == 10000
+
 
 class TestLogin:
     def test_login_success(self, client, mock_async_session):

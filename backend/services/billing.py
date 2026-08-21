@@ -266,6 +266,7 @@ async def credit_wallet(
     amount: Money,
     reason: str,
     idempotency_key: Optional[str] = None,
+    txn_type: str = "credit",
 ) -> None:
     """Atomically credit a wallet and append a ledger effect.
 
@@ -274,6 +275,12 @@ async def credit_wallet(
     Idempotent: if a ledger row with the same ``idempotency_key`` already
     exists (and a key was supplied), no change is made (prevents double-credit
     on payment replay).
+
+    ``txn_type`` labels the ledger row (defaults to ``"credit"``, preserving
+    prior behaviour). Callers that need a distinguishable ledger category
+    (e.g. ``"signup_bonus"``, ``"referral_bonus"``) should pass it explicitly
+    so downstream reporting never mistakes a promotional credit for a real
+    payment (``"topup"``).
     """
     if not isinstance(amount, Money):
         raise TypeError("amount must be a Money instance")
@@ -285,16 +292,16 @@ async def credit_wallet(
     async with repo.lock_wallet_for_update(user_id):
         row = await repo.get_wallet(user_id)
         if row is None:
-            await repo.create_wallet(user_id, amount.irt)
-            new_balance = amount.irt
+            await repo.create_wallet(user_id, amount.toman)
+            new_balance = amount.toman
         else:
-            new_balance = row["balance"] + amount.irt
+            new_balance = row["balance"] + amount.toman
             await repo.set_wallet_balance(user_id, new_balance)
 
         await repo.append_ledger({
             "user_id": user_id,
-            "txn_type": "credit",
-            "amount": amount.irt,
+            "txn_type": txn_type,
+            "amount": amount.toman,
             "balance_after": new_balance,
             "reason": reason,
             "idempotency_key": idempotency_key,
@@ -444,7 +451,7 @@ class BillingService:
         """Return True iff ``amount`` can be covered by available balance."""
         wallet = await self.repo.get_wallet(user_id) or {"balance": 0, "reserved": 0}
         available = wallet["balance"] - wallet["reserved"]
-        return amount.irt <= available
+        return amount.toman <= available
 
     async def reserve(
         self,
@@ -457,10 +464,10 @@ class BillingService:
         async with self.repo.lock_wallet_for_update(user_id):
             wallet = await self.repo.ensure_wallet(user_id)
             available = wallet["balance"] - wallet["reserved"]
-            if amount.irt > available:
+            if amount.toman > available:
                 raise InsufficientBalanceError(
                     f"insufficient balance: available {available}, "
-                    f"requested {amount.irt}"
+                    f"requested {amount.toman}"
                 )
             existing = await self.repo.get_reservation_by_idem(idempotency_key)
             if existing is not None:
@@ -469,7 +476,7 @@ class BillingService:
             reservation = {
                 "reservation_id": reservation_id,
                 "user_id": user_id,
-                "hold_amount": amount.irt,
+                "hold_amount": amount.toman,
                 "status": "reserved",
                 "idempotency_key": idempotency_key,
                 "model": model,
@@ -477,7 +484,7 @@ class BillingService:
                 "charged_amount": None,
             }
             await self.repo.set_wallet_reserved(
-                user_id, wallet["reserved"] + amount.irt
+                user_id, wallet["reserved"] + amount.toman
             )
             await self.repo.create_reservation(reservation)
             return reservation
@@ -501,27 +508,27 @@ class BillingService:
                 f"reservation {reservation_id} is '{resv['status']}', cannot settle"
             )
         hold = resv["hold_amount"]
-        if final_amount.irt > hold:
+        if final_amount.toman > hold:
             raise ReservationError(
-                f"final charge {final_amount.irt} exceeds reservation hold {hold}"
+                f"final charge {final_amount.toman} exceeds reservation hold {hold}"
             )
         user_id = resv["user_id"]
         wallet = await self.repo.ensure_wallet(user_id)
-        new_balance = wallet["balance"] - final_amount.irt
+        new_balance = wallet["balance"] - final_amount.toman
         new_reserved = wallet["reserved"] - hold
         await self.repo.set_wallet_balance(user_id, new_balance)
         await self.repo.set_wallet_reserved(user_id, new_reserved)
         await self.repo.append_ledger({
             "user_id": user_id,
             "txn_type": "settlement",
-            "amount": -final_amount.irt,
+            "amount": -final_amount.toman,
             "balance_after": new_balance,
             "reason": "settlement",
             "idempotency_key": f"settle:{reservation_id}",
         })
         resv["status"] = "settled"
-        resv["charged_amount"] = final_amount.irt
-        await self.repo.mark_reservation_settled(reservation_id, final_amount.irt)
+        resv["charged_amount"] = final_amount.toman
+        await self.repo.mark_reservation_settled(reservation_id, final_amount.toman)
         return resv
 
     async def release(self, reservation_id: str, reason: Optional[str] = None) -> dict:

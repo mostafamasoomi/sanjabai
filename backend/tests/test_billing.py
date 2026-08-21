@@ -379,6 +379,55 @@ def test_compute_charge_is_exact_integer_math():
     assert compute_charge({"input_per_million": 3}, input_tokens=1_500_000).amount == 5
 
 
+# ── Money value object ────────────────────────────────────────────────────
+def test_money_toman_field_and_no_irt_alias():
+    m = Money(5)
+    assert m.toman == 5
+    assert m.amount == 5
+    assert hasattr(m, 'irt') is False
+
+
+# ── credit_wallet txn_type ───────────────────────────────────────────────
+def test_credit_wallet_default_txn_type_is_credit():
+    async def run():
+        repo = MemoryBillingRepo()
+        await credit_wallet(repo, 1, Money(100), "topup")
+        assert repo.ledger[-1]["txn_type"] == "credit"
+
+    _run(run())
+
+
+def test_credit_wallet_custom_txn_type_is_recorded():
+    async def run():
+        repo = MemoryBillingRepo()
+        await credit_wallet(
+            repo, 1, Money(10000), "هدیه ثبت‌نام",
+            idempotency_key="signup-gift:1", txn_type="signup_bonus",
+        )
+        assert repo.ledger[-1]["txn_type"] == "signup_bonus"
+        assert repo.wallets[1]["balance"] == 10000
+
+    _run(run())
+
+
+def test_credit_wallet_same_idempotency_key_credits_once():
+    async def run():
+        repo = MemoryBillingRepo()
+        await credit_wallet(
+            repo, 1, Money(10000), "هدیه ثبت‌نام",
+            idempotency_key="signup-gift:1", txn_type="signup_bonus",
+        )
+        await credit_wallet(
+            repo, 1, Money(10000), "هدیه ثبت‌نام",
+            idempotency_key="signup-gift:1", txn_type="signup_bonus",
+        )
+        assert repo.wallets[1]["balance"] == 10000
+        gift_entries = [e for e in repo.ledger if e["idempotency_key"] == "signup-gift:1"]
+        assert len(gift_entries) == 1
+
+    _run(run())
+
+
 def test_record_usage_persists_event():
     async def run():
         repo = MemoryBillingRepo()

@@ -479,6 +479,14 @@ class TestQuotaSelfHealingUpsert:
             used_today=500,
             reset_at=datetime.now(timezone.utc) + timedelta(hours=6),
         )
+        # Snapshot the expectation BEFORE the call. _record_usage normalizes
+        # reset_at in place, so after it returns quota_row.reset_at is already
+        # naive-UTC; deriving the expected value from it afterwards then ran
+        # .astimezone() on a naive datetime, which Python reads as LOCAL time.
+        # That is a no-op on a UTC host (CI, the API container) but shifts by
+        # the offset anywhere else, so the test passed in production and failed
+        # on a UTC+08:00 dev box. The production code was right both times.
+        expected_reset_at = quota_row.reset_at.astimezone(timezone.utc).replace(tzinfo=None)
         session = _FakeSession(wallet_balance=1_000_000, price=_price(), quota_row=quota_row)
         await chat_mod._record_usage(
             session, uid=7, payload={"model": "kr/gpt-4o-mini"}, usage=_usage(total=1000, prompt=800, completion=200),
@@ -488,7 +496,7 @@ class TestQuotaSelfHealingUpsert:
         # reset_at untouched (still in the future) -- no rollover. Compared
         # as naive-UTC since that's the codebase-wide storage convention
         # (_as_naive_utc normalizes on the way in).
-        assert session.quota_updates[-1]["reset_at"] == quota_row.reset_at.astimezone(timezone.utc).replace(tzinfo=None)
+        assert session.quota_updates[-1]["reset_at"] == expected_reset_at
         quota_rows = [o for o in session.added if type(o).__name__ == "Quota"]
         assert quota_rows == []  # updated, not re-created
 

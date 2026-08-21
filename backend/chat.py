@@ -121,25 +121,71 @@ _WORKING_SET_CACHE: set[str] | None = None
 # only models actually verified to exist behind it get sent there.
 _UPSTREAM_CACHE: dict[str, str] = {}
 
+# TTL for _UPSTREAM_CACHE. Kept short (not "cache forever") because the admin
+# panel's set-upstream endpoint (admin_catalog.py) can repoint a model to a
+# different upstream at any time, and that change must take effect on the
+# next handful of chat requests, not after a container restart.
+_UPSTREAM_CACHE_TTL_SECONDS = 60
+_UPSTREAM_CACHE_LOADED_AT: float = 0.0
+# Set while a refresh is already in flight, so concurrent requests that all
+# see a stale cache at once don't all fire the same full-table query
+# (thundering herd on cache expiry).
+_UPSTREAM_CACHE_REFRESH_LOCK = asyncio.Lock()
+
+# Known aliases for upstream names that predate/deviate from the registered
+# providers.Provider names (e.g. a hand-run DB fix that used '9router'
+# instead of the registered 'ninerouter'). Normalizing here means a stray
+# non-canonical value in model_catalog.upstream degrades gracefully instead
+# of silently falling back to litellm.
+_UPSTREAM_ALIASES = {
+    '9router': 'ninerouter',
+    'nine_router': 'ninerouter',
+    'omni': 'omniroute',
+    'omni_route': 'omniroute',
+}
+
 
 async def _get_model_upstream(model_id: str) -> str | None:
-    """Which named upstream (providers.Provider.name) serves this model, if any."""
-    global _UPSTREAM_CACHE
+    """Which named upstream (providers.Provider.name) serves this model, if any.
+
+    Cached for _UPSTREAM_CACHE_TTL_SECONDS to avoid a full-table scan of
+    model_catalog on every chat request. On a DB read failure, or while a
+    refresh is already in flight, the previous cache is kept rather than
+    cleared -- serving slightly-stale routing beats failing every request.
+    """
+    global _UPSTREAM_CACHE, _UPSTREAM_CACHE_LOADED_AT
     if async_session is None:
         return _UPSTREAM_CACHE.get(model_id)
-    try:
-        async with async_session() as session:
-            res = await session.execute(sqlalchemy.text(
-                "SELECT id, provider_model_id, upstream FROM model_catalog WHERE upstream IS NOT NULL"
-            ))
-            cache: dict[str, str] = {}
-            for row in res.fetchall():
-                if row.upstream:
-                    cache[str(row.id)] = row.upstream
-                    cache[str(row.provider_model_id)] = row.upstream
-            _UPSTREAM_CACHE = cache
-    except Exception as e:
-        logger.warning(f"_get_model_upstream DB read failed: {e}")
+
+    now = _time.monotonic()
+    if now - _UPSTREAM_CACHE_LOADED_AT < _UPSTREAM_CACHE_TTL_SECONDS:
+        return _UPSTREAM_CACHE.get(model_id)
+
+    if _UPSTREAM_CACHE_REFRESH_LOCK.locked():
+        # Someone else is already refreshing; use what we have rather than
+        # queuing up behind them.
+        return _UPSTREAM_CACHE.get(model_id)
+
+    async with _UPSTREAM_CACHE_REFRESH_LOCK:
+        # Re-check: another request may have refreshed while we waited for
+        # the lock.
+        now = _time.monotonic()
+        if now - _UPSTREAM_CACHE_LOADED_AT < _UPSTREAM_CACHE_TTL_SECONDS:
+            return _UPSTREAM_CACHE.get(model_id)
+        try:
+            async with async_session() as session:
+                res = await session.execute(sqlalchemy.text(
+                    "SELECT id, provider_model_id, upstream FROM model_catalog WHERE upstream IS NOT NULL"
+                ))
+                cache: dict[str, str] = {}
+                for row in res.fetchall():
+                    if row.upstream:
+                        cache[str(row.id)] = row.upstream
+                        cache[str(row.provider_model_id)] = row.upstream
+                _UPSTREAM_CACHE = cache
+                _UPSTREAM_CACHE_LOADED_AT = _time.monotonic()
+        except Exception as e:
+            logger.warning(f"_get_model_upstream DB read failed, keeping previous cache: {e}")
     return _UPSTREAM_CACHE.get(model_id)
 
 
@@ -149,8 +195,16 @@ async def _resolve_provider(model_id: str):
     upstream = await _get_model_upstream(model_id)
     if upstream:
         p = get_provider(upstream)
+        if p is None:
+            alias = _UPSTREAM_ALIASES.get(upstream)
+            if alias:
+                p = get_provider(alias)
         if p:
             return p
+        logger.warning(
+            f"_resolve_provider: upstream={upstream!r} for model={model_id!r} did not "
+            "resolve to a configured Provider; falling back to chat_provider() (litellm)"
+        )
     return chat_provider()
 
 

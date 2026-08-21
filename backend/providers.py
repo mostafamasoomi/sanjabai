@@ -12,8 +12,10 @@ Two providers ship today:
 
     litellm      the existing LiteLLM host (proxies Bynara)
     ninerouter   9Router, a self-hosted OpenAI-compatible gateway that defaults
-                 to port 20128 and exposes an unauthenticated GET /health
-                 *outside* the /v1 prefix
+                 to port 20128 and exposes an unauthenticated GET /api/health
+                 *outside* the /v1 prefix (measured directly against the
+                 upstream: /health, /healthz, /v1/health and /status all 404;
+                 only /api/health answers, with {"ok":true})
 
 Both speak the same three operations we need: list models, probe a model, and
 report whether the upstream itself is reachable.
@@ -101,8 +103,10 @@ def configured_providers() -> list[Provider]:
                 name='ninerouter',
                 base_url=(nine_url or 'http://9router:20128').rstrip('/'),
                 api_key=os.getenv('NINEROUTER_API_KEY', ''),
-                # 9Router serves GET /health unauthenticated, outside /v1.
-                health_path='/health',
+                # 9Router serves GET /api/health unauthenticated, outside /v1.
+                # (/health, /healthz, /v1/health and /status all 404 -- verified
+                # against the live upstream; only /api/health answers 200.)
+                health_path='/api/health',
             )
         )
 

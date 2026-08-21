@@ -83,10 +83,12 @@ class TestProviderConfiguration:
         by_name = {p.name: p for p in providers.configured_providers()}
         assert 'ninerouter' in by_name
         nine = by_name['ninerouter']
-        # base_url is an origin; /v1 is appended by the adapter, and /health
-        # deliberately sits outside it.
+        # base_url is an origin; /v1 is appended by the adapter, and
+        # /api/health deliberately sits outside it. (/health, /healthz,
+        # /v1/health and /status all 404 against the real upstream; only
+        # /api/health answers 200.)
         assert nine.v1 == 'http://9router.test:20128/v1'
-        assert nine.health_path == '/health'
+        assert nine.health_path == '/api/health'
 
     def test_trailing_slash_is_not_doubled(self, monkeypatch):
         monkeypatch.setenv('NINEROUTER_URL', 'http://9router.test:20128/')

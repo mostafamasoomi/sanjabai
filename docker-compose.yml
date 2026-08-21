@@ -85,6 +85,42 @@ services:
       API_URL: http://sanjabai-sanjabai_api-1:8000
     networks: [sanjabai_net]
 
+  sanjabai_watchdog:
+    # Financial anomaly watchdog (backend/watchdog.py): SQL rules on a loop with
+    # optional Telegram alerts. Same image as the API, different command; no
+    # ports. NOTE: watchdog.py uses asyncpg.create_pool directly, which rejects
+    # the SQLAlchemy "postgresql+asyncpg://" scheme in .env — so DATABASE_URL is
+    # set explicitly here to a plain postgresql:// URL, NOT via env_file.
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: ["python", "watchdog.py"]
+    restart: unless-stopped
+    depends_on:
+      sanjabai_pg:
+        condition: service_healthy
+      sanjabai_redis:
+        condition: service_started
+    environment:
+      - DATABASE_URL=postgresql://sanjabai:sanjabai@sanjabai_pg:5432/sanjabai
+      - REDIS_URL=redis://sanjabai_redis:6379/0
+      - WATCHDOG_LOG=/tmp/watchdog.log
+      # Empty defaults are deliberate: an unconfigured bot token/chat id must
+      # not block startup, watchdog.py just skips sending (see _send_telegram).
+      - WATCHDOG_BOT_TOKEN=${WATCHDOG_BOT_TOKEN:-}
+      - WATCHDOG_CHAT_ID=${WATCHDOG_CHAT_ID:-}
+    networks: [sanjabai_net]
+
+  uptime_kuma:
+    # Uptime-Kuma lives on this same deploy server. Not published to the host:
+    # the API reaches it over sanjabai_net by service name (KUMA_BASE_URL in
+    # .env = http://uptime_kuma:3001), never by IP or a host port.
+    image: louislam/uptime-kuma:1
+    restart: unless-stopped
+    volumes:
+      - sanjabai_kuma_data:/app/data
+    networks: [sanjabai_net]
+
   sanjabai_caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -107,6 +143,7 @@ volumes:
   sanjabai_caddy_data:
   sanjabai_caddy_config:
   sanjabai_caddy_logs:
+  sanjabai_kuma_data:
 
 networks:
   sanjabai_net:

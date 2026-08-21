@@ -15,6 +15,8 @@ import asyncio
 import io
 import json
 import logging
+import math
+import os
 import traceback
 import re as _re
 import secrets
@@ -501,16 +503,193 @@ async def _web_search(query: str, max_results: int = 5) -> str:
     return ''
 
 
-async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any], usage: dict[str, Any], idempotency_key: str | None = None) -> dict[str, Any]:
-    """Shared billing logic for tracking and billing usage. Returns cost info dict."""
+# ── Billing fallbacks (loss-path hardening) ──────────────────────
+#
+# Owner's hard requirement: "we must be profitable on the price we offer
+# the user, and must never lose money on any request, in the ratio of the
+# user's usage of each model against what we pay per token." The constants
+# and helpers below back the loss paths _record_usage otherwise has.
+
+# L1: chars-per-token used to estimate tokens locally when an upstream
+# omits `usage` (or returns a malformed/all-zero usage block). 9router fans
+# out to dozens of heterogeneous backends and any one of them may ignore
+# stream_options.include_usage or just not send a usage object -- serving
+# the response and billing zero for that request is a 100% loss.
+#
+# No tokenizer dependency (tiktoken/transformers) exists in requirements.txt
+# and we were told not to add a heavyweight one just for this, so this is a
+# documented chars-per-token heuristic, not an exact count. The product UI
+# is Persian, which runs far denser than English (~1.5-3 chars/token vs
+# ~4 for English/code). We use the LOW end of the Persian range: fewer
+# chars assumed per token means the same text produces a HIGHER estimated
+# token count, which is the conservative direction for a "never bill less
+# than what was served" policy -- it trades a possible over-estimate on
+# English/code-heavy messages for the guarantee that a Persian message is
+# never under-counted.
+ESTIMATE_CHARS_PER_TOKEN = 1.5
+
+# L2: floor price used only when a served model has no price row in
+# model_catalog (a data bug -- every available model should have one).
+# Defaults are the CEILING of the catalog's current price band -- the max
+# input_per_million / output_per_million among availability='available'
+# rows as of 2026-08-21 (kr/claude-sonnet-4.5-thinking: 571,800 in /
+# 2,859,000 out, IRT per million) -- so a lookup miss can never under-bill
+# relative to what any real available model actually costs at our prices.
+# Configurable because the catalog's price ceiling moves as models are
+# added/repriced.
+FALLBACK_PRICE_PER_MILLION_IN = int(os.getenv('FALLBACK_PRICE_PER_MILLION_IN', '571800'))
+FALLBACK_PRICE_PER_MILLION_OUT = int(os.getenv('FALLBACK_PRICE_PER_MILLION_OUT', '2859000'))
+
+
+def _estimate_tokens_from_chars(n_chars: int) -> int:
+    """Conservative local token estimate from a raw character count."""
+    if n_chars <= 0:
+        return 0
+    return max(1, math.ceil(n_chars / ESTIMATE_CHARS_PER_TOKEN))
+
+
+def _estimate_message_text_chars(messages: list | None) -> int:
+    """Sum of visible text characters across an outgoing chat payload's
+    messages, plus a small fixed overhead per message for role/formatting
+    tokens (every real tokenizer charges something for these)."""
+    total = 0
+    for m in messages or []:
+        if not isinstance(m, dict):
+            continue
+        content = m.get('content', '')
+        if isinstance(content, str):
+            total += len(content)
+        elif isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict):
+                    text = part.get('text')
+                    if isinstance(text, str):
+                        total += len(text)
+        total += 8  # per-message role/formatting overhead
+    return total
+
+
+def _estimate_input_tokens(messages: list | None) -> int:
+    """L1: local input-token estimate from the outgoing payload['messages']
+    -- the text we actually sent upstream."""
+    return _estimate_tokens_from_chars(_estimate_message_text_chars(messages))
+
+
+def _estimate_output_tokens(text: str) -> int:
+    """L1: local output-token estimate from response text (non-streaming)
+    or accumulated streamed deltas (streaming)."""
+    return _estimate_tokens_from_chars(len(text or ''))
+
+
+def _extract_reasoning_tokens(usage: dict) -> int:
+    """L3: reasoning/thinking tokens the upstream produced, from whichever
+    field it happens to expose. Thinking models are live in production
+    (kr/claude-sonnet-4.5-thinking, availability='available') and reasoning
+    tokens are real generated tokens that must be billed -- nothing reads
+    model_catalog.reasoning_per_million today so they were simply dropped.
+
+    Only ONE field is read (never summed across fields) so a gateway that
+    exposes reasoning tokens both nested (OpenAI-style
+    usage.completion_tokens_details.reasoning_tokens) and top-level (seen
+    from some non-OpenAI-shaped gateways as usage.reasoning_tokens /
+    usage.thinking_tokens) is never counted twice.
+    """
+    if not isinstance(usage, dict):
+        return 0
+    details = usage.get('completion_tokens_details')
+    if isinstance(details, dict):
+        v = details.get('reasoning_tokens')
+        if v:
+            try:
+                return max(0, int(v))
+            except (TypeError, ValueError):
+                pass
+    for key in ('reasoning_tokens', 'thinking_tokens'):
+        v = usage.get(key)
+        if v:
+            try:
+                return max(0, int(v))
+            except (TypeError, ValueError):
+                continue
+    return 0
+
+
+def _extract_response_text(response_data: dict) -> str:
+    """Concatenate visible assistant text across all choices, for the L1
+    output-token estimate fallback on the non-streaming path."""
+    parts = []
+    for choice in (response_data or {}).get('choices') or []:
+        if not isinstance(choice, dict):
+            continue
+        content = (choice.get('message') or {}).get('content')
+        if isinstance(content, str):
+            parts.append(content)
+    return ''.join(parts)
+
+
+async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any], usage: dict[str, Any], idempotency_key: str | None = None, response_text: str = '') -> dict[str, Any]:
+    """Shared billing logic for tracking and billing usage. Returns cost info dict.
+
+    Implements the loss-path fixes documented above (L1 missing/partial
+    usage -> local estimate, L2 price-lookup-miss floor, L3 reasoning
+    tokens, L4 shortfall still charges + records).
+    """
     result = {'input_tokens': 0, 'output_tokens': 0, 'cost': 0, 'balance_after': 0}
-    total_tokens = usage.get('total_tokens', 0)
-    if total_tokens <= 0:
-        return result
+    usage = usage or {}
     model = payload.get('model', '')
+
     input_tokens = int(usage.get('prompt_tokens') or usage.get('input_tokens') or 0)
     output_tokens = int(usage.get('completion_tokens') or usage.get('output_tokens') or 0)
+    reasoning_tokens = _extract_reasoning_tokens(usage)
 
+    # L1: local estimate for whichever side the upstream omitted. Handles
+    # both a fully-missing usage block (the common case: some 9router
+    # backend ignores stream_options.include_usage entirely) and a partial
+    # one (real prompt_tokens but a botched/absent completion_tokens, or
+    # vice versa) -- either way a served response must never be billed as
+    # if it cost zero tokens.
+    estimated = False
+    if input_tokens <= 0 and output_tokens <= 0 and reasoning_tokens <= 0:
+        input_tokens = _estimate_input_tokens(payload.get('messages'))
+        output_tokens = _estimate_output_tokens(response_text)
+        estimated = True
+    else:
+        if input_tokens <= 0:
+            input_tokens = _estimate_input_tokens(payload.get('messages'))
+            estimated = True
+        if output_tokens <= 0 and reasoning_tokens <= 0:
+            output_tokens = _estimate_output_tokens(response_text)
+            estimated = True
+
+    # L3: fold reasoning tokens into output_tokens (billed at the output
+    # rate -- model_catalog.reasoning_per_million is not populated for any
+    # row today, so a separate reasoning rate would just be an unbilled
+    # column; folding into output is simple, conservative, and correct
+    # either way). The OpenAI spec says completion_tokens already includes
+    # reasoning tokens, but not every gateway honours that, and nothing in
+    # the response tells us which case we're in -- we bill as though it
+    # does NOT (the conservative side of "never lose money"): in the
+    # spec-compliant case this slightly over-bills by reasoning_tokens
+    # rather than risk under-billing a thinking model that forgot to fold
+    # them in.
+    if reasoning_tokens > 0:
+        output_tokens = output_tokens + reasoning_tokens
+
+    if input_tokens <= 0 and output_tokens <= 0:
+        # Nothing real and nothing estimable (e.g. empty messages and an
+        # empty response) -- nothing was actually served, so there is
+        # nothing to bill. Do not fabricate a charge.
+        return result
+
+    if estimated:
+        logger.warning(
+            f"_record_usage: upstream usage incomplete for model={model!r} "
+            f"uid={uid} -- billing a LOCAL ESTIMATE "
+            f"(input_tokens={input_tokens} output_tokens={output_tokens}, "
+            f"chars_per_token={ESTIMATE_CHARS_PER_TOKEN})"
+        )
+
+    total_tokens = input_tokens + output_tokens
     result['input_tokens'] = input_tokens
     result['output_tokens'] = output_tokens
 
@@ -535,14 +714,25 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
     except Exception as e:
         logger.warning(f"_record_usage price lookup failed model={model} uid={uid}: {e}")
 
-    if price_row:
+    if price_row and (price_row.input_per_million or price_row.output_per_million):
         inp_rate = int(price_row.input_per_million or 0)
         out_rate = int(price_row.output_per_million or 0)
-        cost = max(1, int((input_tokens * inp_rate + output_tokens * out_rate + 500_000) // 1_000_000))
     else:
-        cost = max(1, total_tokens // 1000)
-
-    result['cost'] = cost
+        # L2: no price row for a model we just served -- a catalog data bug,
+        # not a billing decision. Bill at the configurable ceiling rate
+        # (FALLBACK_PRICE_PER_MILLION_* above) instead of the old
+        # `total_tokens // 1000` guess, which undercharged real rates
+        # (e.g. Gemini 2.5 Pro at ~238/1000 tokens) by roughly two orders
+        # of magnitude. Logged as an ERROR (not a warning) because it means
+        # the catalog needs fixing, not just "this one request was odd".
+        inp_rate = FALLBACK_PRICE_PER_MILLION_IN
+        out_rate = FALLBACK_PRICE_PER_MILLION_OUT
+        logger.error(
+            f"_record_usage: no price row for served model={model!r} uid={uid} "
+            f"-- billing at fallback ceiling rate in={inp_rate}/M out={out_rate}/M; "
+            f"this model_catalog entry needs fixing"
+        )
+    cost = max(1, int((input_tokens * inp_rate + output_tokens * out_rate + 500_000) // 1_000_000))
 
     # Charge against Wallet.balance itself (the source of truth that
     # BillingService.reserve() gates future requests against), not just the
@@ -559,26 +749,51 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
         wallet = await _repo.ensure_wallet(uid)
         current = wallet['balance']
         if current >= cost:
+            charged = cost
             new_balance = current - cost
-            await _repo.set_wallet_balance(uid, new_balance)
-            entry = Ledger(user_id=uid, amount=-cost, balance_after=new_balance, reason=f'مصرف {model}', idempotency_key=idempotency_key)
-            session.add(entry)
         else:
-            new_balance = current
+            # L4: actual usage cost exceeds the current balance. reserve()
+            # gates the common case pre-flight; this is the residual where
+            # real usage ran over the reserved estimate. Charge whatever is
+            # left rather than silently charging (and recording) nothing.
+            # Do NOT let the wallet go negative and do NOT change the
+            # overdraft policy -- going into debt is a product decision the
+            # owner has not made -- just stop the silent zero and make the
+            # shortfall visible for reconciliation.
+            charged = current
+            new_balance = 0
+            logger.warning(
+                f"_record_usage: L4 shortfall uid={uid} model={model!r} "
+                f"cost={cost} balance_before={current} charged={charged} "
+                f"shortfall={cost - charged}"
+            )
+        await _repo.set_wallet_balance(uid, new_balance)
+        reason = f'مصرف {model}'
+        if charged < cost:
+            reason += ' (کسری موجودی)'
+        entry = Ledger(user_id=uid, amount=-charged, balance_after=new_balance, reason=reason, idempotency_key=idempotency_key)
+        session.add(entry)
+    result['cost'] = charged
     result['balance_after'] = new_balance
 
     try:
         from services.metering import record_usage
         from services.money import Money
+        meta: dict[str, Any] = {'estimated': estimated, 'source': 'local_estimate' if estimated else 'upstream'}
+        if charged < cost:
+            meta['listed_cost'] = cost
+            meta['shortfall'] = cost - charged
         await record_usage(
             _repo,
             request_id=secrets.token_hex(8),
             user_id=uid,
             model=model,
-            charge=Money(cost),
+            charge=Money(charged),
             upstream_status='success',
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            reasoning_tokens=reasoning_tokens,
+            meta=meta,
         )
     except Exception as e:
         logger.warning(f"_record_usage metering failed model={model} uid={uid}: {e}")
@@ -587,18 +802,33 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
 
 
 async def _track_usage(request: Request, payload: dict[str, Any], response_data: dict[str, Any]) -> dict[str, Any]:
-    """Record token usage for non-streaming requests. Returns cost info."""
+    """Record token usage for non-streaming requests. Returns cost info.
+
+    L1: does NOT early-return when usage is missing/zero -- that early
+    return was exactly the bug (a served response billed nothing because
+    the upstream omitted `usage`). _record_usage now falls back to a local
+    estimate in that case, so it must always be given the chance to run.
+    """
     uid = await _get_user_id(request)
     if not uid or async_session is None:
         return {}
-    usage = response_data.get('usage', {})
-    if usage.get('total_tokens', 0) <= 0:
-        return {}
+    usage = response_data.get('usage') or {}
+    if not usage:
+        # Diagnose WHY, not just paper over it with the estimate fallback:
+        # log the SHAPE of what actually came back (keys only, never
+        # content) so a future occurrence of this is diagnosable instead of
+        # silently invisible like the incident this fix responds to.
+        logger.warning(
+            f"_track_usage: no usable usage block model={payload.get('model')!r} "
+            f"response_keys={sorted(response_data.keys()) if isinstance(response_data, dict) else type(response_data).__name__} "
+            f"usage_field_type={type(response_data.get('usage')).__name__ if isinstance(response_data, dict) else 'n/a'}"
+        )
     resp_id = response_data.get('id')
     idempotency_key = f"usage:{resp_id}" if resp_id else None
+    response_text = _extract_response_text(response_data)
     try:
         async with async_session() as session:
-            cost_info = await _record_usage(session, uid, payload, usage, idempotency_key=idempotency_key)
+            cost_info = await _record_usage(session, uid, payload, usage, idempotency_key=idempotency_key, response_text=response_text)
             await session.commit()
             return cost_info
     except Exception as e:
@@ -606,13 +836,17 @@ async def _track_usage(request: Request, payload: dict[str, Any], response_data:
         return {}
 
 
-async def _bill_stream_usage(uid: int, payload: dict[str, Any], usage: dict[str, Any]) -> dict[str, Any]:
-    """Bill the user after a streaming chat completes. Returns cost info."""
-    if usage.get('total_tokens', 0) <= 0:
-        return {}
+async def _bill_stream_usage(uid: int, payload: dict[str, Any], usage: dict[str, Any], response_text: str = '') -> dict[str, Any]:
+    """Bill the user after a streaming chat completes. Returns cost info.
+
+    L1: no early return on missing/zero usage -- see _track_usage docstring.
+    ``response_text`` is the accumulated assistant text from the SSE deltas,
+    used as the L1 output-token estimate when the upstream never sent a
+    usage chunk at all.
+    """
     try:
         async with async_session() as session:
-            cost_info = await _record_usage(session, uid, payload, usage)
+            cost_info = await _record_usage(session, uid, payload, usage or {}, response_text=response_text)
             await session.commit()
             return cost_info
     except Exception as e:
@@ -644,6 +878,25 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
 
     async def event_stream():
         usage_data = None
+        accum_text: list[str] = []
+        chunk_count = 0
+        client_gone = False
+        drain_after_disconnect = 0
+        # Root-cause note (loss-path audit, 2026-08-21 incident): a live
+        # probe of this exact upstream/model combination showed the usage
+        # block arrives as its OWN trailing SSE chunk, one line AFTER the
+        # chunk carrying finish_reason='stop' -- not merged into it. Many
+        # SSE clients (browsers included) stop reading as soon as they see
+        # finish_reason and close their connection to us before that
+        # trailing chunk is ever read. request.is_disconnected() then goes
+        # true and the old code `break`-ed immediately, discarding a usage
+        # chunk the upstream was about to send (or had already sent) --
+        # billing zero for a fully-served response with no upstream fault
+        # at all. Fix: once the client is gone, stop yielding to them
+        # (nothing is listening) but keep draining a bounded number of
+        # further lines from upstream so a same-request trailing usage
+        # chunk still gets captured for billing.
+        MAX_DRAIN_LINES_AFTER_DISCONNECT = 20
         try:
             payload['stream'] = True
             payload.setdefault('stream_options', {})
@@ -660,11 +913,18 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
                 timeout=httpx.Timeout(90, connect=10, read=90),
             ) as r:
                 async for line in r.aiter_lines():
-                    # Disconnect handling
-                    if await request.is_disconnected():
-                        logger.info(f"_chat_stream client disconnected uid={uid} model={payload.get('model')}")
-                        break
+                    if not client_gone and await request.is_disconnected():
+                        client_gone = True
+                        logger.info(
+                            f"_chat_stream client disconnected uid={uid} model={payload.get('model')} "
+                            f"-- draining up to {MAX_DRAIN_LINES_AFTER_DISCONNECT} more lines for a trailing usage chunk"
+                        )
+                    if client_gone:
+                        drain_after_disconnect += 1
+                        if drain_after_disconnect > MAX_DRAIN_LINES_AFTER_DISCONNECT:
+                            break
                     if line:
+                        chunk_count += 1
                         stripped = line.strip()
                         if stripped.startswith('data:'):
                             data_str = stripped[5:].strip()
@@ -674,16 +934,38 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
                                 chunk = json.loads(data_str)
                                 if isinstance(chunk.get('usage'), dict) and chunk['usage']:
                                     usage_data = chunk['usage']
+                                    if client_gone:
+                                        break  # got what we needed; stop draining
+                                # L1: accumulate visible assistant text so a
+                                # missing/zero usage block still has
+                                # something to estimate output tokens from.
+                                for _c in chunk.get('choices') or []:
+                                    _piece = ((_c or {}).get('delta') or {}).get('content')
+                                    if isinstance(_piece, str):
+                                        accum_text.append(_piece)
                             except (json.JSONDecodeError, ValueError):
                                 pass
-                        yield f"{line}\n\n"
+                        if not client_gone:
+                            yield f"{line}\n\n"
         except Exception as e:
             logger.warning(f"_chat_stream error uid={uid} model={payload.get('model')}: {e}")
-            yield f'data: {json.dumps({"error": "سرویس موقتاً در دسترس نیست", "code": "gateway_error"})}\n\n'
+            if not client_gone:
+                yield f'data: {json.dumps({"error": "سرویس موقتاً در دسترس نیست", "code": "gateway_error"})}\n\n'
         finally:
-            if uid and usage_data and async_session is not None:
+            # L1: bill even when usage_data is None, as long as something
+            # was actually served (real usage chunk OR accumulated text) --
+            # previously `usage_data` being falsy skipped billing entirely,
+            # which is exactly the "served for free" bug when an upstream
+            # never sends a usage chunk at all.
+            if uid and async_session is not None and not usage_data and not accum_text:
+                logger.warning(
+                    f"_chat_stream: no usage and no content captured uid={uid} "
+                    f"model={payload.get('model')!r} chunk_count={chunk_count} "
+                    f"client_gone={client_gone} -- nothing to bill"
+                )
+            if uid and async_session is not None and (usage_data or accum_text):
                 try:
-                    cost_info = await _bill_stream_usage(uid, payload, usage_data)
+                    cost_info = await _bill_stream_usage(uid, payload, usage_data or {}, response_text=''.join(accum_text))
                     if cost_info and cost_info.get('cost', 0) > 0:
                         billing_event = json.dumps({
                             'type': 'billing',
@@ -1483,6 +1765,15 @@ async def _smart_chat_stream(
 
     async def event_stream():
         usage_data = None
+        accum_text: list[str] = []
+        chunk_count = 0
+        client_gone = False
+        drain_after_disconnect = 0
+        # See _chat_stream for the root-cause rationale: usage arrives as
+        # its own trailing SSE chunk, after finish_reason -- a client that
+        # stops reading right after finish_reason otherwise causes us to
+        # discard a usage chunk the upstream already sent/was sending.
+        MAX_DRAIN_LINES_AFTER_DISCONNECT = 20
         try:
             payload['stream'] = True
             payload.setdefault('stream_options', {})
@@ -1499,10 +1790,18 @@ async def _smart_chat_stream(
             ) as r:
                 yield f'data: {json.dumps({"type": "smart_info", "model": selected_model, "category": category})}\n\n'
                 async for line in r.aiter_lines():
-                    if await request.is_disconnected():
-                        logger.info(f"_smart_chat_stream disconnected uid={uid} model={selected_model}")
-                        break
+                    if not client_gone and await request.is_disconnected():
+                        client_gone = True
+                        logger.info(
+                            f"_smart_chat_stream disconnected uid={uid} model={selected_model} "
+                            f"-- draining up to {MAX_DRAIN_LINES_AFTER_DISCONNECT} more lines for a trailing usage chunk"
+                        )
+                    if client_gone:
+                        drain_after_disconnect += 1
+                        if drain_after_disconnect > MAX_DRAIN_LINES_AFTER_DISCONNECT:
+                            break
                     if line:
+                        chunk_count += 1
                         stripped = line.strip()
                         if stripped.startswith('data:'):
                             data_str = stripped[5:].strip()
@@ -1512,16 +1811,34 @@ async def _smart_chat_stream(
                                 chunk = json.loads(data_str)
                                 if isinstance(chunk.get('usage'), dict) and chunk['usage']:
                                     usage_data = chunk['usage']
+                                    if client_gone:
+                                        break
+                                # L1: accumulate visible assistant text (see
+                                # _chat_stream for the rationale).
+                                for _c in chunk.get('choices') or []:
+                                    _piece = ((_c or {}).get('delta') or {}).get('content')
+                                    if isinstance(_piece, str):
+                                        accum_text.append(_piece)
                             except (json.JSONDecodeError, ValueError):
                                 pass
-                        yield f'{line}\n\n'
+                        if not client_gone:
+                            yield f'{line}\n\n'
         except Exception as e:
             logger.warning(f"_smart_chat_stream error uid={uid} model={selected_model}: {e}")
-            yield f'data: {json.dumps({"error": f"upstream unavailable: {e}"})}\n\n'
+            if not client_gone:
+                yield f'data: {json.dumps({"error": f"upstream unavailable: {e}"})}\n\n'
         finally:
-            if uid and usage_data and async_session is not None:
+            # L1: bill even when usage_data is None, as long as something
+            # was actually served -- see _chat_stream for the rationale.
+            if uid and async_session is not None and not usage_data and not accum_text:
+                logger.warning(
+                    f"_smart_chat_stream: no usage and no content captured uid={uid} "
+                    f"model={selected_model!r} chunk_count={chunk_count} "
+                    f"client_gone={client_gone} -- nothing to bill"
+                )
+            if uid and async_session is not None and (usage_data or accum_text):
                 try:
-                    cost_info = await _bill_stream_usage(uid, payload, usage_data)
+                    cost_info = await _bill_stream_usage(uid, payload, usage_data or {}, response_text=''.join(accum_text))
                     if cost_info and cost_info.get('cost', 0) > 0:
                         billing_event = json.dumps({
                             'type': 'billing',

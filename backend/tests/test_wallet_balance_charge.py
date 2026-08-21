@@ -106,17 +106,28 @@ class TestRecordUsageChargesWallet:
         assert ledger_rows[0].balance_after == 9000
 
     @pytest.mark.asyncio
-    async def test_insufficient_balance_does_not_debit_or_go_negative(self):
+    async def test_insufficient_balance_charges_available_and_never_goes_negative(self):
+        """L4 fix (loss-path audit): actual usage cost can exceed the wallet
+        balance when it runs over the pre-flight reservation estimate.
+        Previously this branch charged nothing at all and wrote no ledger
+        row -- a served response recorded as if it never happened. The
+        fixed behavior charges whatever is available, zeroes the wallet
+        (never goes negative -- overdraft is a product decision the owner
+        has not made), and ALWAYS writes a ledger row so the shortfall is
+        visible instead of silently dropped."""
         session = _FakeSession(wallet_balance=500, price=_price())
         result = await chat_mod._record_usage(session, uid=1, payload={"model": "kr/gpt-4o-mini"}, usage=_usage())
 
-        assert result["cost"] == 1000
-        # Balance must never be pushed below zero / left mutated when it
-        # can't cover the charge.
-        assert session.wallet.balance == 500
-        assert result["balance_after"] == 500
+        # Listed cost is still 1000 (800in+200out @ 1 IRT/token), but only
+        # 500 is available -- charge the available balance, not the full
+        # listed cost, and never push the wallet below zero.
+        assert result["cost"] == 500
+        assert session.wallet.balance == 0
+        assert result["balance_after"] == 0
         ledger_rows = [o for o in session.added if type(o).__name__ == "Ledger"]
-        assert ledger_rows == []
+        assert len(ledger_rows) == 1
+        assert ledger_rows[0].amount == -500
+        assert ledger_rows[0].balance_after == 0
 
     @pytest.mark.asyncio
     async def test_exact_balance_is_fully_spendable(self):

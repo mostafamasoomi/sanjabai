@@ -34,6 +34,14 @@ async def create_payment(amount: int, description: str, callback_url: str, email
     payload = {
         'merchant_id': ZARINPAL_MERCHANT,
         'amount': amount,
+        # Sanjabai's internal unit is integer Toman everywhere (Money.toman) --
+        # declaring that unit to the gateway happens ONLY here, in this
+        # adapter. Without 'currency', Zarinpal v4 defaults to Rial, so the
+        # same integer would be interpreted as 10x its real value (user pays
+        # 1/10, wallet credited in full). No other component may ever
+        # multiply/divide this amount by 10 -- the number stays as-is, we
+        # just label it correctly.
+        'currency': 'IRT',
         'description': description,
         'callback_url': callback_url,
         'metadata': {'email': email, 'mobile': mobile},
@@ -66,6 +74,11 @@ async def verify_payment(amount: int, authority: str) -> dict:
     payload = {
         'merchant_id': ZARINPAL_MERCHANT,
         'amount': amount,
+        # Must match create_payment's currency declaration exactly (IRT =
+        # Toman, our sole internal unit) or Zarinpal falls back to Rial here
+        # while create_payment declared Toman, silently reintroducing the
+        # 10x mismatch. See the comment in create_payment for the full story.
+        'currency': 'IRT',
         'authority': authority,
     }
 

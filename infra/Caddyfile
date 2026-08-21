@@ -31,3 +31,29 @@ sanjabai.com, www.sanjabai.com {
 		}
 	}
 }
+
+# api.sanjabai.com — the documented API base for developer/API-key traffic.
+# Goes straight to the API container: there is no frontend rewrite to reuse on
+# this hostname, so routing through Next.js would only add a hop.
+api.sanjabai.com {
+	encode zstd gzip
+
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	reverse_proxy sanjabai_api:8000 {
+		# Streaming completions must not be buffered into silence.
+		flush_interval -1
+	}
+
+	log {
+		output file /var/log/caddy/sanjabai-api.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}

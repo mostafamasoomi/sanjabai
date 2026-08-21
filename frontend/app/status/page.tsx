@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui'
 import { faNum } from '@/lib/format'
 import { HEALTH_LABEL, HEALTH_TONE } from '@/app/chat/components/modelUtils'
 import type { HealthStatus, HealthSummary, ModelHealthEntry } from '@/types/catalog'
+import { useStatusSummary, StatusOverviewSections, SupportSection } from './StatusSections'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Live model status.
@@ -99,6 +100,7 @@ export default function StatusPage() {
   const [data, setData] = useState<HealthSummary | null>(null)
   const [error, setError] = useState(false)
   const [loading, setLoading] = useState(true)
+  const summary = useStatusSummary()
 
   const load = useCallback(async () => {
     try {
@@ -155,6 +157,8 @@ export default function StatusPage() {
           به‌روزرسانی
         </button>
       </header>
+
+      <StatusOverviewSections summary={summary} />
 
       {loading && (
         <div className="card status-skeletons">
@@ -266,6 +270,8 @@ export default function StatusPage() {
           </p>
         </>
       )}
+
+      <SupportSection summary={summary} />
     </div>
   )
 }

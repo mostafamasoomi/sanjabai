@@ -8,6 +8,7 @@ import dynamic from 'next/dynamic'
 
 const AdminCharts = dynamic(() => import('./components/AdminCharts'), { ssr: false })
 const ModelsTab = dynamic(() => import('./components/ModelsTab'), { ssr: false })
+const MonitoringTab = dynamic(() => import('./components/MonitoringTab'), { ssr: false })
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Sanjabai Admin Panel — Aurora Design System
@@ -16,7 +17,7 @@ const ModelsTab = dynamic(() => import('./components/ModelsTab'), { ssr: false }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Page = 'dashboard' | 'pricing' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'users' | 'security'
+type Page = 'dashboard' | 'pricing' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'users' | 'security' | 'monitoring'
 
 interface Analytics {
   user_count: number
@@ -144,6 +145,7 @@ const NAV_ITEMS: { key: Page; label: string; icon: IconName }[] = [
   { key: 'proxy', label: 'پروکسی', icon: 'security' },
   { key: 'models', label: 'مدل‌ها', icon: 'code' },
   { key: 'security', label: 'امنیت', icon: 'lock' },
+  { key: 'monitoring', label: 'پایش', icon: 'chart' },
 ]
 
 // ─── API Helper ──────────────────────────────────────────────────────────────
@@ -2053,6 +2055,7 @@ export default function AdminPage() {
               </div>
             </div>
           )}
+          {page === 'monitoring' && <MonitoringTab api={api} />}
         </main>
       </div>
     </div>

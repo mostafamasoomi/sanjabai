@@ -136,6 +136,18 @@ class TestStatusSummaryKuma:
         assert resp.status_code == 200
         assert resp.json()['monitoringUp'] is False
 
+    def test_support_info_present_and_none_when_empty(self, mock_async_session, monkeypatch):
+        monkeypatch.delenv('KUMA_BASE_URL', raising=False)
+        monkeypatch.delenv('SUPPORT_EMAIL', raising=False)
+        monkeypatch.setenv('SUPPORT_TELEGRAM', '@sanjabai_support')
+        mock_async_session._execute_result = make_result(fetchone=None)
+        with patch('status_page.rds.get', new=AsyncMock(return_value=None)):
+            resp = client.get('/status/summary')
+        assert resp.status_code == 200
+        support = resp.json()['support']
+        assert support['email'] is None
+        assert support['telegram'] == '@sanjabai_support'
+
     def test_dropped_monitor_not_in_label_map(self):
         from status_page import _parse_kuma
 

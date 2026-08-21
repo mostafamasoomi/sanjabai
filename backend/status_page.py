@@ -68,6 +68,16 @@ def _kuma_slug() -> str:
     return os.getenv('KUMA_STATUS_SLUG', 'sanjabai').strip()
 
 
+def _support_info() -> dict[str, str | None]:
+    """Support contacts for the public status page, read from env at request
+    time so a redeploy of .env takes effect without a code change. Empty or
+    unset values become None so the UI can hide the corresponding link."""
+    return {
+        'email': os.getenv('SUPPORT_EMAIL', '').strip() or None,
+        'telegram': os.getenv('SUPPORT_TELEGRAM', '').strip() or None,
+    }
+
+
 # ── Kuma fetch + defensive parse ─────────────────────────────────────────
 # Kuma's status-page JSON shape has drifted between releases (target here is
 # 2.5.0); every access below goes through .get() with a default and nothing
@@ -199,6 +209,7 @@ async def status_summary(request: Request) -> JSONResponse:
         logger.error('status_summary: unexpected failure, degrading to empty: %s', e)
         payload = jsonable_encoder({
             'services': [], 'monitoringUp': False, 'stale': False, 'incident': None,
+            'support': _support_info(),
             'generatedAt': datetime.now(timezone.utc),
         })
         return JSONResponse(payload)
@@ -268,6 +279,7 @@ async def _build_status_summary() -> JSONResponse:
         'monitoringUp': monitoring_up,
         'stale': stale,
         'incident': incident,
+        'support': _support_info(),
         'generatedAt': datetime.now(timezone.utc),
     })
     return JSONResponse(payload)

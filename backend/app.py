@@ -9,6 +9,7 @@ This is the thin orchestrator that:
 """
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -27,6 +28,8 @@ load_dotenv()
 
 # ── Import shared infrastructure ────────────────────────────────
 # These are imported first so they're available when route modules load
+logger = logging.getLogger(__name__)
+
 import database as _db
 from database import (
     engine, async_session, rds, _http, _start, Base, get_db, HealthResponse,
@@ -116,12 +119,30 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _db._start = datetime.now(timezone.utc)
 
     from migrate import migrate
-    # Migration with retry guard — reduces startup fragility
+    # Startup does NOT apply migrations by default.
+    #
+    # `docker compose build` copies untracked files into the image, so an
+    # auto-applying startup let an unreviewed migration reach the production
+    # schema simply because it happened to be sitting in the working tree when
+    # somebody rebuilt for an unrelated reason. Schema changes are now a
+    # deliberate act: `docker exec <api> python migrate.py`.
+    #
+    # Set AUTO_MIGRATE=true to restore the old apply-on-boot behaviour.
     import asyncio as _aio
+    _auto_migrate = os.getenv('AUTO_MIGRATE', 'false').strip().lower() in ('1', 'true', 'yes', 'on')
     _max_retries, _attempt = 1, 0
     while True:
         try:
-            await migrate(_eng)
+            _pending = await migrate(_eng, apply=_auto_migrate)
+            if _pending and not _auto_migrate:
+                logger.warning(
+                    'startup: %d migration(s) PENDING and not applied (AUTO_MIGRATE is off): %s '
+                    '— apply deliberately with: docker exec <api> python migrate.py',
+                    len(_pending), ', '.join(_pending),
+                )
+            elif _pending:
+                logger.warning('startup: applied %d pending migration(s): %s',
+                               len(_pending), ', '.join(_pending))
             break
         except Exception:
             _attempt += 1

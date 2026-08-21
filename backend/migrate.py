@@ -72,7 +72,17 @@ def split_sql(sql: str) -> list[str]:
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 
-async def migrate(engine: AsyncEngine) -> None:
+async def migrate(engine: AsyncEngine, apply: bool = True) -> list[str]:
+    """Apply pending SQL migrations in filename order.
+
+    Returns the list of versions that were pending on entry.
+
+    With apply=False nothing is executed and no schema_migrations row is
+    written -- the function only reports. Container startup uses that mode so
+    that a rebuild can never change the live schema on its own: `docker build`
+    bakes in untracked files, so auto-applying on boot let unreviewed DDL reach
+    production with no human decision in between.
+    """
     async with engine.begin() as conn:
         await conn.execute(text(
             "CREATE TABLE IF NOT EXISTS schema_migrations "
@@ -81,6 +91,11 @@ async def migrate(engine: AsyncEngine) -> None:
         result = await conn.execute(text("SELECT version FROM schema_migrations"))
         all_rows = result.all()
         applied = {row[0] for row in all_rows}
+
+        pending = [p.name for p in sorted(MIGRATIONS_DIR.glob("*.sql"))
+                   if p.name not in applied]
+        if not apply:
+            return pending
 
         for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
             version = path.name
@@ -92,6 +107,7 @@ async def migrate(engine: AsyncEngine) -> None:
                 text("INSERT INTO schema_migrations(version) VALUES (:version)"),
                 {"version": version}
             )
+        return pending
 
 
 async def main() -> None:

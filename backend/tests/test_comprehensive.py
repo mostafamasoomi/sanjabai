@@ -111,14 +111,16 @@ class TestWallet:
         """Ledger should support pagination"""
         response = client.get('/wallet/ledger?page=1&limit=10')
         assert response.status_code in [200, 401]
-    
-    def test_topup_validation(self):
-        """Topup should validate amount"""
-        response = client.post('/wallet/topup', json={
-            'amount': -100,
-            'payment_order_id': 'test-order'
-        })
-        assert response.status_code in [400, 401]
+
+    def test_free_tier_status_requires_auth(self):
+        """/free-tier/status replaced the dead /wallet/topup endpoint
+        (POST /wallet/topup 422'd on every real caller -- the frontend
+        never sent payment_order_id -- and queried a payment_orders.amount
+        column that doesn't exist; see migrations/0001_baseline.sql, which
+        defines amount_irr instead). Unauthenticated access must still be
+        rejected."""
+        response = client.get('/free-tier/status')
+        assert response.status_code == 401
 
 
 # ── Pricing Tests ───────────────────────────────────────────────────────────

@@ -308,7 +308,6 @@ READ_ENDPOINTS = [
 
 WRITE_ENDPOINTS = [
     ("post", "/conversations"),
-    ("post", "/wallet/topup"),
     ("post", "/api-keys"),
 ]
 
@@ -316,7 +315,7 @@ WRITE_ENDPOINTS = [
 @pytest.mark.parametrize("method,path", READ_ENDPOINTS + WRITE_ENDPOINTS)
 def test_unauthenticated_is_rejected(method, path):
     json_body = {"title": "t", "model": "m", "messages": []} if method == "post" and "conversations" in path \
-        else {"amount": 100, "payment_order_id": "1"} if "topup" in path else {"name": "k"}
+        else {"name": "k"}
     resp = _call_anon(method, path, json_body=json_body if method == "post" else None)
     assert resp.status_code == 401, f"{method} {path} should reject anon (got {resp.status_code})"
 
@@ -346,23 +345,6 @@ def test_conversation_create_owned_by_caller():
     assert conv is not None, f"expected a Conversation to be added; added={cap.added}"
     assert conv.user_id == USER_A
     assert conv.user_id != USER_B
-
-
-def test_wallet_topup_owned_by_caller():
-    # topup() requires a pre-existing *completed* payment order looked up by
-    # payment_order_id (and captcha is not required here — only signup and
-    # login check that).
-    store = {"payment_orders": [
-        _row(id=1, status="completed", amount=500, user_id=USER_A),
-    ]}
-    resp, cap, ev = _call_as(
-        USER_A, "post", "/wallet/topup",
-        json_body={"amount": 500, "payment_order_id": "1"}, store=store,
-    )
-    entry = next((o for o in cap.added if type(o).__name__ == "Ledger"), None)
-    assert entry is not None, f"expected a Ledger to be added; added={cap.added} (resp={resp.status_code} {resp.text})"
-    assert entry.user_id == USER_A
-    assert entry.user_id != USER_B
 
 
 def test_api_key_create_owned_by_caller():

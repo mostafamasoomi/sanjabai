@@ -1,28 +1,19 @@
 """
-Wallet endpoints: balance, ledger, topup.
+Wallet endpoints: balance, ledger, free-tier throttle status.
 """
 from __future__ import annotations
-
-from typing import Any
 
 import sqlalchemy
 from fastapi import APIRouter, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 
 from database import async_session
 from models import Ledger
 from dependencies import _get_user_id
-from services.billing import SqlBillingRepo, credit_wallet
-from services.money import Money
+from services.free_tier import get_status as _free_tier_status
 
 router = APIRouter()
-
-
-class TopupRequest(BaseModel):
-    amount: int
-    payment_order_id: str
 
 
 @router.get('/wallet')
@@ -38,7 +29,7 @@ async def get_wallet(request: Request) -> JSONResponse:
             {'uid': uid}
         )
         row = res.fetchone()
-        balance = float(row.balance) if row and row.balance is not None else 0.0
+        balance = int(row.balance) if row and row.balance is not None else 0
     return JSONResponse({'balance': balance})
 
 
@@ -66,38 +57,13 @@ async def get_ledger(request: Request) -> JSONResponse:
     return JSONResponse(jsonable_encoder({'items': rows, 'total': total, 'page': page, 'limit': limit}))
 
 
-@router.post('/wallet/topup')
-async def topup(request: Request, payload: TopupRequest) -> JSONResponse:
+@router.get('/free-tier/status')
+async def free_tier_status(request: Request) -> JSONResponse:
+    """Per-model free-tier throttle snapshot (reached by the browser as
+    /api/free-tier/status). See services/free_tier.py for the throttle
+    rules; this endpoint is read-only and never consumes budget."""
     uid = await _get_user_id(request)
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
-    if payload.amount <= 0:
-        return JSONResponse({'detail': 'مبلغ باید مثبت باشد'}, status_code=400)
-    if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
-    async with async_session() as session:
-        pay_res = await session.execute(
-            sqlalchemy.text("SELECT id, status, amount FROM payment_orders WHERE id = :pid AND user_id = :uid"),
-            {'pid': payload.payment_order_id, 'uid': uid}
-        )
-        pay_row = pay_res.fetchone()
-        if not pay_row:
-            return JSONResponse({'detail': 'سفارش پرداخت یافت نشد'}, status_code=404)
-        if pay_row.status != 'completed':
-            return JSONResponse({'detail': 'پرداخت تکمیل نشده است'}, status_code=400)
-        dup = await session.execute(
-            sqlalchemy.text("SELECT id FROM ledger WHERE reason = :reason LIMIT 1"),
-            {'reason': f'topup:{payload.payment_order_id}'}
-        )
-        if dup.fetchone():
-            return JSONResponse({'detail': 'پرداخت قبلاً ثبت شده است'}, status_code=409)
-        repo = SqlBillingRepo(session)
-        await credit_wallet(
-            repo, uid, Money(pay_row.amount),
-            reason=f'topup:{payload.payment_order_id}',
-            idempotency_key=f'topup:{payload.payment_order_id}',
-        )
-        wallet_row = await repo.get_wallet(uid)
-        new_balance = wallet_row['balance'] if wallet_row else 0
-        await session.commit()
-    return JSONResponse({'status': 'ok', 'balance_after': new_balance})
+    status = await _free_tier_status(uid)
+    return JSONResponse(status)

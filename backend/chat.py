@@ -37,6 +37,7 @@ from services.context_injection import get_injection_messages, inject_messages
 from services.billing import SqlBillingRepo, BillingService, InsufficientBalanceError
 from services.money import Money
 from services.memory_extractor import extract_memories, MIN_MSG_COUNT
+from services.free_tier import check_and_consume
 from middleware.compression import compress_messages, estimate_savings
 
 logger = logging.getLogger(__name__)
@@ -296,6 +297,42 @@ async def _release_reservation(reservation: dict | None, uid: int, label: str = 
             await s.commit()
     except Exception as e:
         logger.warning(f"release_reservation failed uid={uid} {label}: {e}")
+
+
+def _persian_duration(seconds: int) -> str:
+    """Render a countdown in Persian for the free-tier throttle message
+    (e.g. 15600 -> "۴ ساعت و ۲۰ دقیقه")."""
+    seconds = max(int(seconds), 0)
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    if hours and minutes:
+        return f'{_to_fa(hours)} ساعت و {_to_fa(minutes)} دقیقه'
+    if hours:
+        return f'{_to_fa(hours)} ساعت'
+    if minutes:
+        return f'{_to_fa(minutes)} دقیقه'
+    return f'{_to_fa(max(seconds, 1))} ثانیه'
+
+
+def _free_tier_response(gate: dict) -> JSONResponse:
+    """Build the 429 response for a free-tier throttle rejection."""
+    retry = int(gate.get('retry_after_seconds', 0))
+    model = gate.get('model', '')
+    message = (
+        f'سقف ۵ پیام رایگان این مدل پر شده است. حدود {_persian_duration(retry)} دیگر دوباره فعال می‌شود. '
+        'با اولین شارژ حساب، این محدودیت برای همیشه برداشته می‌شود.'
+    )
+    return JSONResponse(
+        {'error': {
+            'message': message,
+            'type': 'rate_limited',
+            'code': 'free_tier_throttle',
+            'model': model,
+            'retry_after_seconds': retry,
+        }},
+        status_code=429,
+    )
+
 
 def _as_naive_utc(dt: datetime | None) -> datetime | None:
     """Normalize a datetime that MAY be timezone-aware to this codebase's
@@ -1092,6 +1129,15 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
 
     payload_dict = payload.model_dump(exclude_none=True)
 
+    # Free-tier throttle gate — must run before any reservation is opened
+    # (see services/free_tier.py: rejecting pre-reserve means there is never
+    # a reservation to unwind, and reserve() call sites below are wrapped in
+    # a broad except that would otherwise swallow anything raised here).
+    _ft_model = payload_dict.get('model', '') or 'tencent-hy3'
+    _ft_gate = await check_and_consume(uid, [_ft_model])
+    if _ft_gate is not None:
+        return _free_tier_response(_ft_gate)
+
     # P1: BillingService reserve (replaces _check_quota_pre with proper FOR UPDATE locking)
     # Fall back to legacy _check_quota_pre if BillingService fails
     reservation = None
@@ -1109,7 +1155,7 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
             await _bill_session.commit()
     except InsufficientBalanceError:
         return JSONResponse(
-            {'error': {'message': 'insufficient wallet balance | موجودی کیف پول کافی نیست', 'type': 'quota_exceeded', 'code': 'balance'}},
+            {'error': {'message': 'موجودی کیف پول شما کافی نیست. لطفاً حساب خود را شارژ کنید.', 'type': 'quota_exceeded', 'code': 'balance'}},
             status_code=429,
         )
     except Exception as e:
@@ -1249,6 +1295,12 @@ async def chat_with_file(
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
 
+    # Free-tier throttle gate — before any reservation is opened.
+    _ft_model = model or 'tencent-hy3'
+    _ft_gate = await check_and_consume(uid, [_ft_model])
+    if _ft_gate is not None:
+        return _free_tier_response(_ft_gate)
+
     # P1: BillingService reserve (replaces _check_quota_pre with proper FOR UPDATE locking)
     # Fall back to legacy _check_quota_pre if BillingService fails
     reservation = None
@@ -1265,7 +1317,7 @@ async def chat_with_file(
             await _bill_session.commit()
     except InsufficientBalanceError:
         return JSONResponse(
-            {'error': {'message': 'insufficient wallet balance | موجودی کیف پول کافی نیست', 'type': 'quota_exceeded', 'code': 'balance'}},
+            {'error': {'message': 'موجودی کیف پول شما کافی نیست. لطفاً حساب خود را شارژ کنید.', 'type': 'quota_exceeded', 'code': 'balance'}},
             status_code=429,
         )
     except Exception as e:
@@ -1458,6 +1510,12 @@ async def compare_models(request: Request, payload: CompareRequest) -> Response:
             status_code=400,
         )
 
+    # Free-tier throttle gate — both models checked together in one call so
+    # a rejection on the second model never burns the first one's budget.
+    _ft_gate = await check_and_consume(uid, [model_a, model_b])
+    if _ft_gate is not None:
+        return _free_tier_response(_ft_gate)
+
     # P1: Reserve billing for both models (estimate worst-case)
     reservation_a = None
     reservation_b = None
@@ -1478,7 +1536,7 @@ async def compare_models(request: Request, payload: CompareRequest) -> Response:
             await _bill_session.commit()
     except InsufficientBalanceError:
         return JSONResponse(
-            {'error': {'message': 'insufficient wallet balance | موجودی کیف پول کافی نیست', 'type': 'quota_exceeded', 'code': 'balance'}},
+            {'error': {'message': 'موجودی کیف پول شما کافی نیست. لطفاً حساب خود را شارژ کنید.', 'type': 'quota_exceeded', 'code': 'balance'}},
             status_code=429,
         )
     except Exception as e:
@@ -1715,6 +1773,11 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
     else:
         selected_model, selected_provider = await _select_smart_model_safe(category, balance, plan)
 
+    # Free-tier throttle gate — before any reservation is opened.
+    _ft_gate = await check_and_consume(uid, [selected_model])
+    if _ft_gate is not None:
+        return _free_tier_response(_ft_gate)
+
     # P1: BillingService reserve (replaces _check_quota_pre with proper FOR UPDATE locking)
     # Fall back to legacy _check_quota_pre if BillingService fails
     reservation = None
@@ -1731,7 +1794,7 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
             await _bill_session.commit()
     except InsufficientBalanceError:
         return JSONResponse(
-            {'error': {'message': 'insufficient wallet balance | موجودی کیف پول کافی نیست', 'type': 'quota_exceeded', 'code': 'balance'}},
+            {'error': {'message': 'موجودی کیف پول شما کافی نیست. لطفاً حساب خود را شارژ کنید.', 'type': 'quota_exceeded', 'code': 'balance'}},
             status_code=429,
         )
     except Exception as e:

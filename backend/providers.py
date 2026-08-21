@@ -28,12 +28,15 @@ pointed at it.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import time
 from dataclasses import dataclass
 from typing import Any
 
 from database import _http, LITELLM_HOST
+
+logger = logging.getLogger(__name__)
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -87,14 +90,24 @@ def configured_providers() -> list[Provider]:
 
 
     omni_url = os.getenv('OMNIROUTER_URL', '').strip()
-    if omni_url or _env_flag('OMNIROUTER_ENABLED'):
+    if omni_url:
         providers.append(
             Provider(
                 name='omniroute',
-                base_url=(omni_url or 'http://172.18.0.1:20130').rstrip('/'),
+                base_url=omni_url.rstrip('/'),
                 api_key=os.getenv('OMNIROUTER_API_KEY', ''),
                 health_path=None,
             )
+        )
+    elif _env_flag('OMNIROUTER_ENABLED'):
+        # OMNIROUTER_ENABLED was set but OMNIROUTER_URL was not. There used to
+        # be a hard-coded Docker-bridge IP fallback here; this repo is public,
+        # so that literal is gone. Skip registering the provider rather than
+        # silently pointing at a host that may not exist on this deployment.
+        logger.warning(
+            "OMNIROUTER_ENABLED is set but OMNIROUTER_URL is empty; "
+            "the omniroute provider will NOT be registered. Set OMNIROUTER_URL "
+            "to enable it."
         )
     nine_url = os.getenv('NINEROUTER_URL', '').strip()
     if nine_url or _env_flag('NINEROUTER_ENABLED'):

@@ -6,7 +6,11 @@ lab/
 .env.*
 !.env.example
 # Secrets
-backend/litellm_config.yaml
+# NOTE: backend/litellm_config.yaml used to be listed here, but it was already
+# tracked — .gitignore never untracks — so 15 literal freellmapi keys and a
+# server IP stayed published in this PUBLIC repo. Every credential in that file
+# is now an os.environ/ reference, so it is safe to track and MUST stay tracked:
+# it is bind-mounted into the litellm container and a fresh clone needs it.
 infra/ssh_key
 infra/ssh_tunnel/
 # Python env

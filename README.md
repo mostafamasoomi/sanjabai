@@ -120,7 +120,7 @@ curl -X POST http://localhost:8081/v1/documents/generate \
 - نرخ **یورو** هم به همین الگو موازی محاسبه می‌شود (`eur_to_irt`، کش `exchange_rate:eur_irt`) — فقط برای قیمت‌گذاری داخلی سرور هرمس، هرگز به‌عنوان واحد پرداخت کاربر
 
 ### 🌐 Proxy / Egress پروایدرها
-- ترافیک مدل‌های Bynara از **backhaul HTTP proxy** (`HTTP(S)_PROXY` → `10.10.11.2:8888`) عبور می‌کند
+- ترافیک مدل‌های Bynara از **backhaul HTTP proxy** (`HTTP(S)_PROXY` — آدرس پروکسی داخلی backhaul، در `.env` تنظیم می‌شود) عبور می‌کند
 - `NO_PROXY` سرویس‌های داخلی Docker را مستقیم نگه می‌دارد
 - تونل SOCKS (`sanjabai_tunnel:9090`) برای web-search/آینده؛ اگر SSH jump down باشد، LiteLLM روی backhaul می‌ماند
 

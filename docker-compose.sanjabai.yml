@@ -45,6 +45,11 @@ services:
       BYNARA_API_KEY: ${BYNARA_API_KEY:?BYNARA_API_KEY must be set in .env}
       BYNARA_API_KEY_2: ${BYNARA_API_KEY_2:?BYNARA_API_KEY_2 must be set in .env}
       SOCKS5_PROXY_URL: ${SOCKS5_PROXY_URL:?SOCKS5_PROXY_URL must be set in .env}
+      # freellmapi credentials used to be literals inside litellm_config.yaml,
+      # which is tracked in a PUBLIC repo. They are env-only now — same pattern
+      # as BYNARA_* above. Fail fast rather than start with a broken route.
+      FREELLMAPI_API_KEY: ${FREELLMAPI_API_KEY:?FREELLMAPI_API_KEY must be set in .env}
+      FREELLMAPI_API_BASE: ${FREELLMAPI_API_BASE:?FREELLMAPI_API_BASE must be set in .env}
     depends_on:
       - sanjabai_tunnel
     networks: [sanjabai_net]
@@ -54,6 +59,13 @@ services:
       context: ./infra
       dockerfile: Dockerfile.tunnel
     restart: unless-stopped
+    environment:
+      # The SSH jump host used to be a literal IP baked into Dockerfile.tunnel,
+      # published in this PUBLIC repo. It is env-only now; fail fast rather
+      # than build a tunnel to nowhere.
+      TUNNEL_SSH_HOST: ${TUNNEL_SSH_HOST:?TUNNEL_SSH_HOST must be set in .env}
+      TUNNEL_SSH_PORT: ${TUNNEL_SSH_PORT:-22022}
+      TUNNEL_SSH_USER: ${TUNNEL_SSH_USER:-root}
     networks: [sanjabai_net]
 
   sanjabai_api:

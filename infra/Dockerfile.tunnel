@@ -7,13 +7,28 @@ RUN chmod 600 /root/.ssh/id_ed25519
 COPY proxy.py /app/proxy.py
 EXPOSE 9090 9091
 # SSH dynamic SOCKS on 9090 + HTTP CONNECT bridge on 9091 for LiteLLM/httpx
+#
+# The jump host is never baked into this image (it is public). It must be
+# supplied at container runtime via TUNNEL_SSH_HOST (see
+# docker-compose.sanjabai.yml / .env.example). TUNNEL_SSH_PORT and
+# TUNNEL_SSH_USER have safe, non-secret defaults but can be overridden the
+# same way.
+ARG TUNNEL_SSH_PORT=22022
+ARG TUNNEL_SSH_USER=root
+ENV TUNNEL_SSH_HOST="" \
+    TUNNEL_SSH_PORT=${TUNNEL_SSH_PORT} \
+    TUNNEL_SSH_USER=${TUNNEL_SSH_USER}
 CMD ["sh", "-c", "\
+  if [ -z \"$TUNNEL_SSH_HOST\" ]; then \
+    echo 'FATAL: TUNNEL_SSH_HOST is not set. Set TUNNEL_SSH_HOST (and optionally TUNNEL_SSH_PORT / TUNNEL_SSH_USER) in the environment -- see .env.example.' >&2; \
+    exit 1; \
+  fi; \
   (while true; do \
-     ssh -i /root/.ssh/id_ed25519 -p 22022 \
+     ssh -i /root/.ssh/id_ed25519 -p \"$TUNNEL_SSH_PORT\" \
        -o StrictHostKeyChecking=no \
        -o ServerAliveInterval=30 \
        -o ServerAliveCountMax=3 \
-       -N -D 0.0.0.0:9090 root@89.169.55.129; \
+       -N -D 0.0.0.0:9090 \"$TUNNEL_SSH_USER@$TUNNEL_SSH_HOST\"; \
      echo 'socks tunnel down, retrying in 5s'; sleep 5; \
    done) & \
   sleep 2; \

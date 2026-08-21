@@ -315,9 +315,14 @@ async def api_exchange_rate() -> JSONResponse:
         rate_irr = None
         try:
             import re, urllib.request as _ur
-            proxy_url = os.getenv("HTTP_PROXY", "http://10.10.11.2:8888")
-            _proxy = _ur.ProxyHandler({"http": proxy_url, "https": proxy_url})
-            _opener = _ur.build_opener(_proxy)
+            # No hard-coded backhaul-proxy IP here — this repo is public.
+            # HTTP(S)_PROXY is the same env var the Bynara traffic path uses
+            # (see chat.py); when unset we just go direct.
+            proxy_url = os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY")
+            if proxy_url:
+                _opener = _ur.build_opener(_ur.ProxyHandler({"http": proxy_url, "https": proxy_url}))
+            else:
+                _opener = _ur.build_opener()
             _resp = _opener.open("https://www.tgju.org/profile/price_dollar_rl", timeout=15)
             _text = _resp.read().decode()
             _m = re.search(r'class="price"[^>]*>([\d,]+)<', _text)

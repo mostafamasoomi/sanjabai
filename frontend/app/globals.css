@@ -588,8 +588,12 @@ img, svg, video, canvas {
 .model-picker-header:hover { border-color: var(--border-strong); }
 .model-picker-overlay { position: fixed; inset: 0; z-index: 40; }
 .model-picker-dropdown { position: absolute; top: calc(100% + 0.4rem); inset-inline-start: 0; width: min(360px, 90vw); max-height: 60vh; display: flex; flex-direction: column; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); z-index: 41; overflow: hidden; }
-.model-picker-search { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); }
-.model-picker-search input { flex: 1; background: transparent; border: none; outline: none; color: var(--text-primary); font-size: 0.85rem; }
+/* `.model-picker-search` sits on the <input> itself (ModelPicker.tsx:298); the
+   flex container is `.model-picker-search-wrapper` below. The old rule styled a
+   container and left the input with no background, so it fell back to the UA
+   default — a white box in both themes. Style the input directly. */
+.model-picker-search { flex: 1; background: transparent; border: none; outline: none; color: var(--text-primary); font-size: 0.85rem; }
+.model-picker-search::placeholder { color: var(--text-dim); }
 .model-picker-search-clear { background: none; border: none; cursor: pointer; color: var(--text-dim); display: flex; }
 .model-picker-list, .model-picker-cards { overflow-y: auto; padding: 0.4rem; flex: 1; }
 .model-picker-provider-group { margin-bottom: 0.4rem; }

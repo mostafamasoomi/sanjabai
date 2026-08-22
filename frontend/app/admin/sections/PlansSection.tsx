@@ -22,30 +22,36 @@ import { SectionHeader, Field } from './shared'
                                             for subscriptions exists in admin.py)
 
    ── Live schema drift found while building this (verified with a read-only
-      `\\d plans` / `SELECT *` against the production DB, not guessed) ──
-   The `plans` table carries columns from THREE overlapping migrations
-   (0004_financial_core_part2, 0005_pricing_system, 0023_schema_drift_fix)
-   that were never reconciled:
-     - BOTH `token_quota_monthly` (original, migration 0004) AND
-       `monthly_token_quota` (the one this endpoint's admin_create_plan
-       actually reads/writes) exist as separate bigint columns holding the
-       same number today. Editing a plan here updates ONLY
-       `monthly_token_quota` -- `token_quota_monthly` is legacy and frozen
-       from here on. Both are surfaced below so this is visible, not hidden.
-     - `name` (NOT NULL, no default) exists alongside `name_fa`/`name_en`;
-       admin_create_plan's UPDATE branch never touches `name`, and its INSERT
-       branch never sets it either -- see the create-plan warning below.
+      `\\d plans` / `SELECT *` against the production DB, not guessed), FIXED
+      in admin_create_plan since ──
+   The `plans` table carries columns from overlapping migrations
+   (0004_financial_core_part2 plus undocumented drift never captured by any
+   migration file -- see admin.py::admin_create_plan's docstring) that were
+   never reconciled at the schema level. admin_create_plan now papers over
+   the drift so the two entry points into this table can't disagree:
+     - `token_quota_monthly` (legacy, NOT NULL) and `monthly_token_quota`
+       (the one this form edits) are now ALWAYS written together from the
+       single quota value submitted here, on both create and update -- they
+       can no longer diverge. Both are still surfaced below (`token_quota_monthly`
+       shown next to it) so a value seeded before this fix landed is still
+       visible if the two ever disagree from old data.
+     - `name` (NOT NULL, no default), `price_yearly` (NOT NULL, no default)
+       and `token_quota_monthly` (NOT NULL, no default) used to make every
+       "create new plan" request 500 with an IntegrityError -- proven on a
+       throwaway Postgres migrated via the real migrate.py chain, not
+       guessed. All three are now set by the backend (`name` falls back to
+       name_fa/name_en/the id; `price_yearly` defaults to
+       `price_monthly * 12` since this form has no yearly-price field yet).
+     - `features`/`models_allowed` binding into the jsonb columns (both
+       INSERT and UPDATE) was proven broken (asyncpg `DataError` on a raw
+       Python list) and is now fixed on the backend -- also proven on the
+       same throwaway DB.
 
-   `features` and `models_allowed` (both JSONB array columns) are shown
-   READ-ONLY, not editable, here. Reason: admin_create_plan's INSERT branch
-   JSON-encodes `features` (`json.dumps(...)`) before writing it, but its
-   UPDATE branch binds `payload['features']` straight into `sqlalchemy.text()`
-   with no encoding -- a Python list bound directly as a raw SQL param against
-   a jsonb column with no `::jsonb` cast. Whether asyncpg/SQLAlchemy adapts
-   that correctly was not verified (this task does not permit test writes
-   against the production plans table), so editing arrays here was left out
-   rather than risk corrupting a live plan a real user is subscribed to.
-   Flagged in the handoff report, not fixed.
+   `features` and `models_allowed` (both JSONB array columns) are still
+   shown READ-ONLY, not editable, here -- that's a UI scope decision now,
+   not a backend-safety one: the jsonb-bind bug that used to make editing
+   them risky is fixed and verified, but no editable array control has been
+   built for this form yet.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 interface PlanRow {
@@ -207,7 +213,7 @@ export default function PlansSection({ api }: PlansSectionProps) {
       setShowCreate(false)
       await loadPlans()
     } catch {
-      toast('ایجاد پلن ناموفق بود — طبق بررسی کد ممکن است به دلیل ستون‌های الزامی مقداردهی‌نشده در بک‌اند باشد', 'error')
+      toast('ایجاد پلن ناموفق بود', 'error')
     } finally {
       setCreating(false)
     }
@@ -325,7 +331,7 @@ export default function PlansSection({ api }: PlansSectionProps) {
                             <div className="text-xs text-secondary space-y-1">
                               <p>توضیحات: {p.description || '—'}</p>
                               <p>قیمت سالانه (price_yearly): {p.price_yearly != null ? faPrice(p.price_yearly) : '—'}</p>
-                              <p>ستون قدیمی token_quota_monthly: {faNum(p.token_quota_monthly)} — این فرم فقط monthly_token_quota را ذخیره می‌کند.</p>
+                              <p>ستون قدیمی token_quota_monthly: {faNum(p.token_quota_monthly)} — اکنون همیشه هم‌زمان با monthly_token_quota ذخیره می‌شود و نباید از آن واگرا شود.</p>
                               <p>امکانات (features، فقط نمایش): {p.features && p.features.length > 0 ? p.features.join('، ') : '—'}</p>
                               <p>مدل‌های مجاز (models_allowed، فقط نمایش): {p.models_allowed && p.models_allowed.length > 0 ? p.models_allowed.join('، ') : 'بدون محدودیت'}</p>
                               <p>ایجاد: {faDate(p.created_at)} — به‌روزرسانی: {faDate(p.updated_at)}</p>
@@ -347,12 +353,10 @@ export default function PlansSection({ api }: PlansSectionProps) {
           </button>
           {showCreate && (
             <div className="mt-3 space-y-3">
-              <p className="text-xs flex items-center gap-1" style={{ color: 'var(--warning, #f59e0b)' }}>
-                <Icon name="warning" size={12} /> آزمایش‌نشده روی تولید: طبق بررسی کد بک‌اند (admin.py، مسیر INSERT)، ستون‌های الزامی
-                <code dir="ltr" style={{ margin: '0 4px' }}>name</code>،
-                <code dir="ltr" style={{ margin: '0 4px' }}>price_yearly</code> و
+              <p className="text-xs text-muted">
+                ستون‌های الزامی <code dir="ltr">name</code>، <code dir="ltr">price_yearly</code> و
                 <code dir="ltr" style={{ margin: '0 4px' }}>token_quota_monthly</code>
-                مقداردهی نمی‌شوند و ممکن است ایجاد پلن جدید با خطای پایگاه‌داده شکست بخورد.
+                توسط بک‌اند به‌صورت خودکار مقداردهی می‌شوند (قیمت سالانه پیش‌فرض = ۱۲ برابر قیمت ماهانه، مگر جای دیگری تعیین شود).
               </p>
               <div className="flex flex-wrap gap-3">
                 <Field label="شناسه (id)"><input className="input" dir="ltr" value={newPlan.id} onChange={(e) => setNewPlan({ ...newPlan, id: e.target.value })} style={{ maxWidth: 140 }} /></Field>

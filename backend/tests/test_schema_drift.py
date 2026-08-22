@@ -1,5 +1,5 @@
-"""Schema-drift guard for Feature, Discount, AboutContent, Assistant
-(backend/models.py).
+"""Schema-drift guard for Feature, Discount, AboutContent, Assistant, Plan
+and CreditPackage (backend/models.py).
 
 Before migration 0035, four ORM models drifted from the live database:
 
@@ -41,7 +41,7 @@ from __future__ import annotations
 import pathlib
 import re
 
-from models import AboutContent, Assistant, Discount, Feature
+from models import AboutContent, Assistant, CreditPackage, Discount, Feature, Plan
 
 MIGRATIONS_DIR = pathlib.Path(__file__).resolve().parent.parent / 'migrations'
 BASELINE_FILE = MIGRATIONS_DIR / '0001_baseline.sql'
@@ -109,9 +109,25 @@ def _actual_sql_columns(table: str) -> set[str]:
     """
     columns: set[str] = set()
     dropped: set[str] = set()
+    created = False
     for path in sorted(MIGRATIONS_DIR.glob('*.sql')):
         text = path.read_text(encoding='utf-8')
-        columns |= _parse_create_table_columns(text, table)
+        # FIRST CREATE WINS. Every CREATE in this repo is `CREATE TABLE IF
+        # NOT EXISTS`, so once an earlier migration has created the table, a
+        # later one declaring the same table is a silent NO-OP at runtime --
+        # Postgres does not add its columns. Counting those columns anyway
+        # was a false negative that hid real drift: 0023_schema_drift_fix.sql
+        # re-declares both `plans` and `credit_packages` with column sets
+        # that production does not have (its `plans` even has a `price_irt`
+        # that has never existed), and 0004 already created both tables. The
+        # static guard used to "see" those columns and pass, while a freshly
+        # migrated database did not have them at all -- confirmed by
+        # applying the real chain through migrate.py to a throwaway database
+        # and diffing it against production.
+        create_cols = _parse_create_table_columns(text, table)
+        if create_cols and not created:
+            columns |= create_cols
+            created = True
         columns |= _parse_add_columns(text, table)
         dropped |= _parse_drop_columns(text, table)
     return columns - dropped
@@ -136,6 +152,35 @@ def test_feature_orm_matches_sql_schema():
 
 def test_discount_orm_matches_sql_schema():
     _assert_orm_matches_sql(Discount, 'discounts')
+
+
+# ── plans / credit_packages: the same drift, third occurrence ──────────────
+#
+# Found 2026-08-22 while fixing admin_create_plan. Seven columns on `plans`
+# and six on `credit_packages` that the ORM declares and the running code
+# queries every day appear in ZERO migration files -- they exist on
+# production only because someone added them by hand through psql. Proven by
+# applying the real chain through migrate.py to a throwaway database and
+# diffing against production - without 0037 the fresh build was missing all
+# thirteen, and `SELECT id, name_fa, monthly_token_quota FROM plans` (what
+# pricing.py runs) died with `column "name_fa" does not exist`.
+#
+# 0023_schema_drift_fix.sql looks like it covers these tables and does not.
+# Its `CREATE TABLE IF NOT EXISTS plans` describes a different table entirely
+# and is a silent no-op because 0004 already created it. That near-miss is
+# exactly why these two tables need their own pinned test rather than trusting
+# a reading of the migration files.
+#
+# migrations/0037_plans_packages_schema_drift.sql is the repair; these two
+# tests are what stop a fourth occurrence.
+
+
+def test_plan_orm_matches_sql_schema():
+    _assert_orm_matches_sql(Plan, 'plans')
+
+
+def test_credit_package_orm_matches_sql_schema():
+    _assert_orm_matches_sql(CreditPackage, 'credit_packages')
 
 
 def test_about_content_orm_matches_sql_schema():

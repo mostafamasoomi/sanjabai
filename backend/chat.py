@@ -39,10 +39,74 @@ from services.money import Money
 from services.memory_extractor import extract_memories, MIN_MSG_COUNT
 from services.free_tier import check_and_consume
 from middleware.compression import compress_messages, estimate_savings
+from model_output import clean_response_dict, strip_reasoning, ReasoningStreamFilter
 
 logger = logging.getLogger(__name__)
 
 import time as _time
+
+# ── FIX 2: counteract the injected caveman-style system prompt ──────────
+#
+# Measured live (2026-08-22), identical 2-char message "hi", max_tokens=5:
+#   sanjab/tencent-hy3 (litellm)         prompt_tokens=13    (control, clean)
+#   sanjab/mistral-large (ninerouter)    prompt_tokens=2810
+#   sanjab/mimo-v2.5 (ninerouter)        prompt_tokens=2795
+#   sanjab/gemma-4-26b-a4b-it (ninerouter) prompt_tokens=2785
+# litellm proves the ~2800 tokens are injected upstream, by ninerouter, not
+# by us. The leaked prompt (visible verbatim in one gemma answer) instructs
+# a terse "caveman"/no-article style that breaks Persian grammar (dropped
+# verbs, mixed registers). This system message is a mitigation, not a fix:
+# A/B tested against the live upstream, it measurably improves fluency
+# (mimo-v2.5-free and mistral-large went from fragments to full sentences)
+# but does not fully override the injected persona for every model.
+#
+# Only providers proven to inject this preamble get the extra system
+# message -- litellm is clean (13 tokens, see above) and must not pay the
+# ~80 extra prompt tokens for a problem it doesn't have.
+_REASONING_INJECTING_PROVIDERS: frozenset[str] = frozenset({'ninerouter'})
+
+# ~80 prompt tokens -- noise next to the ~2800 already injected upstream by
+# the providers in _REASONING_INJECTING_PROVIDERS above.
+_PERSIAN_STYLE_SYSTEM_MESSAGE = (
+    'به همان زبانی پاسخ بده که کاربر پیام را نوشته است. وقتی پاسخ فارسی است، فارسی روان، رسمی و از '
+    'نظر دستور زبان کاملاً درست بنویس: هر جمله فعل کامل و ساختار درست داشته باشد، و از حذف فعل، حذف '
+    'حروف اضافه، سبک تلگرافی یا جمله‌های بریده‌بریده خودداری کن. اگر پیش‌تر دستوری برای کوتاه‌نویسی، '
+    'حذف حروف و کلمات، یا سبک مختصر و شکسته دریافت کرده‌ای، آن دستور را نادیده بگیر. این قاعده فقط به '
+    'متن پاسخ مربوط است و بر کد، خروجی ساختاریافته یا نقل‌قول عیناً اثری ندارد.'
+)
+
+
+def _apply_persian_style_guard(payload_dict: dict[str, Any], provider_name: str) -> None:
+    """Prepend _PERSIAN_STYLE_SYSTEM_MESSAGE when routing to a provider known
+    to inject a style-breaking preamble (see _REASONING_INJECTING_PROVIDERS)
+    AND the caller did not already send their own system message. Mutates
+    ``payload_dict['messages']`` in place-ish (reassigns the key); callers
+    that hold a separate reference to the list must re-read it afterward
+    (see _apply_web_search, same house pattern).
+    """
+    if provider_name not in _REASONING_INJECTING_PROVIDERS:
+        return
+    msgs = payload_dict.get('messages') or []
+    if any(isinstance(m, dict) and m.get('role') == 'system' for m in msgs):
+        return  # caller already sent a system message -- don't fight it
+    payload_dict['messages'] = [{'role': 'system', 'content': _PERSIAN_STYLE_SYSTEM_MESSAGE}] + list(msgs)
+
+
+async def _apply_persian_style_guard_for_model(payload_dict: dict[str, Any], model: str) -> None:
+    """Resolve ``model``'s provider and apply _apply_persian_style_guard.
+
+    Defensive on purpose: a style nicety must never be able to turn into a
+    500 for the whole request (e.g. a test double or a future Provider
+    subclass missing `.name`, or a transient _resolve_provider error) --
+    worst case this silently no-ops and the request proceeds unstyled.
+    """
+    if not model:
+        return
+    try:
+        provider = await _resolve_provider(model)
+        _apply_persian_style_guard(payload_dict, getattr(provider, 'name', ''))
+    except Exception as e:
+        logger.warning(f"_apply_persian_style_guard_for_model failed model={model}: {e}")
 
 
 def _record_model_health(
@@ -287,6 +351,38 @@ async def _resolve_public_model(model: str) -> str:
         except Exception as e:
             logger.warning(f"_resolve_public_model cache refresh failed, keeping previous cache: {e}")
     return _MODEL_RESOLVE_CACHE.get(model, model)
+
+
+# FIX 3: the empty-model default used to be a hardcoded literal
+# ('tencent-hy3'), which is not a real model_catalog row (the real ones are
+# 'tencent-hy3-free'/'sanjab/tencent-hy3') -- a request with no `model`
+# field was rejected by the exact default the code had just picked, with an
+# error message suggesting the same broken literal. tasks.py's
+# _default_model() (added this session for the identical class of bug in
+# scheduled tasks) fixes it the right way: ask the catalog for the cheapest
+# currently-available model with a public_id, never bake in a name that can
+# rot. Reused here via a LAZY import (inside the function body, not at
+# module load time) rather than duplicating the query, because tasks.py
+# does `import chat as chat_mod` at its own module load time -- importing
+# tasks.py back at chat.py's module load time would be circular. A lazy
+# import has no such problem: by the time a request handler actually runs,
+# both modules are already fully loaded.
+async def _safe_default_model() -> str:
+    """Resolve a real default model id when the client sends none at all.
+
+    Returns '' (never a hardcoded literal) when the catalog is empty or
+    unreachable -- callers must treat that as "no usable default" and
+    reject the request rather than send an empty/garbage model string
+    upstream (see the FINANCIAL RULE on _resolve_public_model above: an
+    unresolved id misses the billing price lookup and bills the fallback
+    ceiling rate).
+    """
+    try:
+        from tasks import _default_model as _catalog_default_model
+        return await _catalog_default_model()
+    except Exception as e:
+        logger.warning(f"_safe_default_model: catalog lookup failed: {e}")
+        return ''
 
 
 async def _resolve_provider(model_id: str):
@@ -1170,6 +1266,16 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
         chunk_count = 0
         client_gone = False
         drain_after_disconnect = 0
+        # FIX 1: strip leaked <thought>/<think> reasoning blocks from the
+        # visible stream. A tag can be split across arbitrary SSE chunk
+        # boundaries, so per-chunk string checks don't work -- see
+        # ReasoningStreamFilter's docstring in model_output.py.
+        reasoning_filter = ReasoningStreamFilter()
+        # Shallow template (id/object/created/model) from the most recent
+        # real chunk, reused so a trailing flush() chunk (emitted below,
+        # after the loop ends) looks like a normal SSE chunk to the client
+        # instead of a bare, unidentified one.
+        last_chunk_template: dict[str, Any] | None = None
         # Root-cause note (loss-path audit, 2026-08-21 incident): a live
         # probe of this exact upstream/model combination showed the usage
         # block arrives as its OWN trailing SSE chunk, one line AFTER the
@@ -1224,13 +1330,55 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
                                     usage_data = chunk['usage']
                                     if client_gone:
                                         break  # got what we needed; stop draining
-                                # L1: accumulate visible assistant text so a
-                                # missing/zero usage block still has
-                                # something to estimate output tokens from.
+                                if chunk.get('choices'):
+                                    last_chunk_template = {
+                                        k: chunk[k] for k in ('id', 'object', 'created', 'model') if k in chunk
+                                    }
+                                # FIX 1 + L1: run every visible text piece
+                                # through the reasoning filter BEFORE it is
+                                # forwarded or accumulated -- accum_text
+                                # (used below for the L1 output-token
+                                # estimate) must reflect what was actually
+                                # SERVED to the user, not the raw upstream
+                                # text (which can still contain a leaked
+                                # <thought> block). Only rewrite the SSE
+                                # line when the filter actually changed
+                                # something, so the untouched common case
+                                # (no tags at all) forwards byte-identical.
+                                chunk_changed = False
                                 for _c in chunk.get('choices') or []:
-                                    _piece = ((_c or {}).get('delta') or {}).get('content')
+                                    _delta = (_c or {}).get('delta') or {}
+                                    _piece = _delta.get('content')
                                     if isinstance(_piece, str):
+                                        _clean_piece = reasoning_filter.feed(_piece)
+                                        # Deliberately the RAW piece, not the
+                                        # cleaned one. accum_text feeds the L1
+                                        # output-token ESTIMATE, which only runs
+                                        # when the upstream sent no usage block
+                                        # at all, and which is already
+                                        # documented as a known lower bound.
+                                        # Estimating from the cleaned text would
+                                        # make stripping a reasoning block also
+                                        # shrink the bill -- a model that
+                                        # answers with nothing but a thought
+                                        # block (observed: gemma-4-26b returned
+                                        # exactly '<thought>*   </thought>' and
+                                        # nothing else) would then estimate zero
+                                        # output tokens for work the upstream
+                                        # actually did. Whether we pay that
+                                        # upstream per token is not knowable
+                                        # from here, so the product rule that no
+                                        # request may be loss-making decides it:
+                                        # estimate from raw. This also keeps the
+                                        # change provably billing-neutral --
+                                        # cleaning affects only what the user
+                                        # sees, never an amount.
                                         accum_text.append(_piece)
+                                        if _clean_piece != _piece:
+                                            _delta['content'] = _clean_piece
+                                            chunk_changed = True
+                                if chunk_changed:
+                                    line = f'data: {json.dumps(chunk)}'
                             except (json.JSONDecodeError, ValueError):
                                 pass
                         if not client_gone:
@@ -1240,6 +1388,27 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
             if not client_gone:
                 yield f'data: {json.dumps({"error": "سرویس موقتاً در دسترس نیست", "code": "gateway_error"})}\n\n'
         finally:
+            # FIX 1: flush any text the filter was still holding back to
+            # disambiguate a possible tag (e.g. the stream ended right after
+            # a bare '<') -- see ReasoningStreamFilter.flush()'s docstring.
+            # Must run before the billing text below is assembled so a
+            # trailing served-but-buffered fragment is still counted.
+            _leftover = reasoning_filter.flush()
+            if _leftover:
+                # NOT appended to accum_text: that list now holds the RAW
+                # pieces (see the comment at the feed() call above), and the
+                # leftover is a fragment of raw text the filter was merely
+                # holding back -- it is already in accum_text. Appending it
+                # here would double-count it in the billing estimate.
+                if not client_gone:
+                    _flush_chunk = {
+                        'id': (last_chunk_template or {}).get('id', ''),
+                        'object': (last_chunk_template or {}).get('object', 'chat.completion.chunk'),
+                        'created': (last_chunk_template or {}).get('created', 0),
+                        'model': (last_chunk_template or {}).get('model', payload.get('model', '')),
+                        'choices': [{'index': 0, 'delta': {'content': _leftover}, 'finish_reason': None}],
+                    }
+                    yield f'data: {json.dumps(_flush_chunk)}\n\n'
             # L1: bill even when usage_data is None, as long as something
             # was actually served (real usage chunk OR accumulated text) --
             # previously `usage_data` being falsy skipped billing entirely,
@@ -1283,19 +1452,35 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
 
     payload_dict = payload.model_dump(exclude_none=True)
 
-    # Canonicalize a public_id (or any legacy id) to provider_model_id FIRST,
-    # before the free-tier gate/reservation/validation/upstream call below --
-    # see _resolve_public_model's docstring for why this must happen exactly
-    # once, this early.
+    # Canonicalize a public_id (or any legacy id) to provider_model_id, or
+    # resolve a live catalog default when the client sent none at all --
+    # BOTH must happen here, before the free-tier gate/reservation/
+    # validation/upstream call below (see _resolve_public_model's and
+    # _safe_default_model's docstrings), so every gate from this point on
+    # sees the exact same final model id used for routing and billing.
+    # Previously the empty-model case fell through to a hardcoded
+    # 'tencent-hy3' literal much further down (right before the whitelist
+    # check), which is why the free-tier/reservation calls below used their
+    # own separate `or 'tencent-hy3'` fallbacks -- three independent copies
+    # of a literal that rotted out of the catalog together (FIX 3).
     if payload_dict.get('model'):
         payload_dict['model'] = await _resolve_public_model(payload_dict['model'])
+    else:
+        payload_dict['model'] = await _safe_default_model()
+
+    # FIX 2: counteract the injected caveman-style system prompt some
+    # upstream routes prepend server-side -- see
+    # _REASONING_INJECTING_PROVIDERS/_apply_persian_style_guard above. Must
+    # run on the client's ORIGINAL messages, before the assistant/memory/
+    # web-search system-message injections below, so "the client sent a
+    # system message" means what it says.
+    await _apply_persian_style_guard_for_model(payload_dict, payload_dict.get('model', ''))
 
     # Free-tier throttle gate — must run before any reservation is opened
     # (see services/free_tier.py: rejecting pre-reserve means there is never
     # a reservation to unwind, and reserve() call sites below are wrapped in
     # a broad except that would otherwise swallow anything raised here).
-    _ft_model = payload_dict.get('model', '') or 'tencent-hy3'
-    _ft_gate = await check_and_consume(uid, [_ft_model])
+    _ft_gate = await check_and_consume(uid, [payload_dict['model']]) if payload_dict.get('model') else None
     if _ft_gate is not None:
         return _free_tier_response(_ft_gate)
 
@@ -1306,8 +1491,8 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
         async with async_session() as _bill_session:
             _repo = SqlBillingRepo(_bill_session)
             _bill_svc = BillingService(_repo)
-            _model = payload_dict.get('model', '') or 'tencent-hy3'
-            _est_cost = 1000 if await is_working_model(_model) else 5000
+            _model = payload_dict.get('model', '')
+            _est_cost = 1000 if (_model and await is_working_model(_model)) else 5000
             reservation = await _bill_svc.reserve(
                 uid, Money(_est_cost),
                 idempotency_key=f"chat:{secrets.token_hex(8)}",
@@ -1326,17 +1511,23 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
         if quota_err is not None:
             return quota_err
 
-    # Default model if empty (S2: mimo disabled, use tencent-hy3)
-    if not payload_dict.get('model'):
-        payload_dict['model'] = 'tencent-hy3'
-
     # --- Model whitelist validation ---
     model_to_check = payload_dict.get('model', '')
-    if model_to_check and not await _is_model_allowed(model_to_check):
+    if not model_to_check:
+        # _safe_default_model() couldn't find anything in the catalog
+        # either -- never send an empty/garbage model string upstream (an
+        # unresolved id misses the billing price lookup and bills the
+        # fallback ceiling rate, see _resolve_public_model's docstring).
+        await _release_reservation(reservation, uid, 'no_model_available')
+        return JSONResponse(
+            {'error': {'message': 'در حال حاضر مدلی برای انتخاب پیش‌فرض در دسترس نیست. لطفاً یک مدل را به‌صورت دستی انتخاب کنید.', 'type': 'invalid_request', 'code': 'model_not_available'}},
+            status_code=400,
+        )
+    if not await _is_model_allowed(model_to_check):
         logger.info(f"chat blocked: model={model_to_check} uid={uid} not allowed")
         await _release_reservation(reservation, uid, 'model_reject')
         return JSONResponse(
-            {'error': {'message': f'مدل {model_to_check} در دسترس نیست | مدل پیشفرض tencent-hy3 را انتخاب کنید', 'type': 'invalid_request', 'code': 'model_not_available'}},
+            {'error': {'message': f'مدل {model_to_check} در دسترس نیست', 'type': 'invalid_request', 'code': 'model_not_available'}},
             status_code=400,
         )
 
@@ -1398,8 +1589,13 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
             error=None if r.status_code == 200 else f'http_{r.status_code}',
         )
         if r.status_code == 200:
-            cost_info = await _track_usage(request, payload_dict, r.json())
             resp_data = r.json()
+            # Bill on the RAW upstream response (unchanged) -- see FIX 1 in
+            # model_output.py's module docstring: cleaning must not affect
+            # billing amounts. Only the copy returned to the client is
+            # scrubbed of leaked <thought>/<think> reasoning blocks.
+            cost_info = await _track_usage(request, payload_dict, resp_data)
+            resp_data = clean_response_dict(resp_data)
             if cost_info and cost_info.get('cost', 0) > 0:
                 resp_data['billing'] = {
                     'cost': cost_info.get('cost', 0),
@@ -1434,20 +1630,25 @@ async def chat_with_file(
     model: str = Form(''),
     messages: str = Form('[]'),
     stream: bool = Form(False),
+    web_search: bool = Form(False),
 ):
     """Chat with an attached file."""
     uid = await _get_user_id(request)
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
 
-    # Canonicalize a public_id (or any legacy id) to provider_model_id FIRST
-    # -- see _resolve_public_model's docstring in this file.
+    # Canonicalize a public_id (or any legacy id) to provider_model_id, or
+    # resolve a live catalog default when the client sent none -- see
+    # _resolve_public_model's and _safe_default_model's docstrings (FIX 3:
+    # previously the empty case fell through to a hardcoded 'tencent-hy3'
+    # literal that is not a real catalog row).
     if model:
         model = await _resolve_public_model(model)
+    else:
+        model = await _safe_default_model()
 
     # Free-tier throttle gate — before any reservation is opened.
-    _ft_model = model or 'tencent-hy3'
-    _ft_gate = await check_and_consume(uid, [_ft_model])
+    _ft_gate = await check_and_consume(uid, [model]) if model else None
     if _ft_gate is not None:
         return _free_tier_response(_ft_gate)
 
@@ -1458,11 +1659,11 @@ async def chat_with_file(
         async with async_session() as _bill_session:
             _repo = SqlBillingRepo(_bill_session)
             _bill_svc = BillingService(_repo)
-            _est_cost = 1000 if await is_working_model(model or 'tencent-hy3') else 5000
+            _est_cost = 1000 if (model and await is_working_model(model)) else 5000
             reservation = await _bill_svc.reserve(
                 uid, Money(_est_cost),
                 idempotency_key=f"file:{secrets.token_hex(8)}",
-                model=model or 'tencent-hy3',
+                model=model,
             )
             await _bill_session.commit()
     except InsufficientBalanceError:
@@ -1483,6 +1684,20 @@ async def chat_with_file(
         msgs = []
     if not isinstance(msgs, list):
         msgs = []
+    # Web search injection (shared helper -- see _apply_web_search), run
+    # BEFORE the file's extracted text is appended below so the search query
+    # is the user's actual question, not the file content. Applied the same
+    # way /v1/chat/completions and /v1/smart-chat do so all three chat entry
+    # points behave identically instead of silently drifting.
+    # FIX 2: counteract the injected caveman-style system prompt -- see
+    # chat()'s comment / _REASONING_INJECTING_PROVIDERS docstring. Applied
+    # to the client's original messages, before web search adds its own
+    # system message, via the same "_ws_payload" container so both share
+    # the house pattern (_apply_web_search) of mutate-then-reread.
+    _ws_payload = {'messages': msgs, 'web_search': web_search}
+    await _apply_persian_style_guard_for_model(_ws_payload, model)
+    await _apply_web_search(_ws_payload, handler='chat.with-file')
+    msgs = _ws_payload['messages']
     text, err = await _extract_file_text(file)
     if err:
         await _release_reservation(reservation, uid, 'file_error')
@@ -1490,14 +1705,21 @@ async def chat_with_file(
     if text.strip():
         file_block = f'[Attached file: {file.filename}]\n\n{text[:50000]}'
         msgs.append({'role': 'user', 'content': file_block})
-    # S2 fix: mimo-v2.5 disabled, use tencent-hy3 as default
-    selected_model = model or 'tencent-hy3'
+    selected_model = model
     # Whitelist validation
+    if not selected_model:
+        # _safe_default_model() couldn't find anything in the catalog
+        # either -- see the identical check/comment in chat().
+        await _release_reservation(reservation, uid, 'no_model_available')
+        return JSONResponse(
+            {'error': {'message': 'در حال حاضر مدلی برای انتخاب پیش‌فرض در دسترس نیست. لطفاً یک مدل را به‌صورت دستی انتخاب کنید.', 'type': 'invalid_request', 'code': 'model_not_available'}},
+            status_code=400,
+        )
     if not await _is_model_allowed(selected_model):
         logger.info(f"chat_with_file blocked model={selected_model} uid={uid}")
         await _release_reservation(reservation, uid, 'model_reject')
         return JSONResponse(
-            {'error': {'message': f'مدل {selected_model} در دسترس نیست | مدل tencent-hy3', 'type': 'invalid_request', 'code': 'model_not_available'}},
+            {'error': {'message': f'مدل {selected_model} در دسترس نیست', 'type': 'invalid_request', 'code': 'model_not_available'}},
             status_code=400,
         )
     payload = {'model': selected_model, 'messages': msgs, 'stream': stream}
@@ -1519,8 +1741,11 @@ async def chat_with_file(
             headers={**_provider.headers(), 'Accept': 'application/json'},
         )
         if r.status_code == 200:
-            cost_info = await _track_usage(request, payload, r.json())
             resp_data = r.json()
+            # Bill on the RAW upstream response -- see the identical
+            # comment in chat() above.
+            cost_info = await _track_usage(request, payload, resp_data)
+            resp_data = clean_response_dict(resp_data)
             if cost_info and cost_info.get('cost', 0) > 0:
                 resp_data['billing'] = {
                     'cost': cost_info.get('cost', 0),
@@ -1592,7 +1817,10 @@ async def _call_model_once(
         elapsed = round(time.monotonic() - start, 3)
         if r.status_code == 200:
             resp_data = r.json()
+            # Bill on the RAW upstream response -- see the identical
+            # comment in chat() above.
             cost_info = await _track_usage(request, payload, resp_data)
+            resp_data = clean_response_dict(resp_data)
             usage = resp_data.get('usage', {})
             content = ''
             choices = resp_data.get('choices', [])
@@ -1952,6 +2180,15 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
         selected_model, selected_provider = await _select_smart_model_safe(category, balance, plan)
         smart_model_label = selected_model
 
+    # FIX 2: counteract the injected caveman-style system prompt -- see
+    # chat()'s comment / _REASONING_INJECTING_PROVIDERS docstring. Runs on
+    # `messages` (the client's original list, untouched so far) before the
+    # memory/web-search injections below; `messages` is kept in sync with
+    # payload_dict['messages'] afterward since later code still reads the
+    # local variable.
+    await _apply_persian_style_guard_for_model(payload_dict, selected_model)
+    messages = payload_dict.get('messages', messages)
+
     # Free-tier throttle gate — before any reservation is opened.
     _ft_gate = await check_and_consume(uid, [selected_model])
     if _ft_gate is not None:
@@ -2031,8 +2268,11 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
             headers={**_provider.headers(), 'Accept': 'application/json'},
         )
         if r.status_code == 200:
-            cost_info = await _track_usage(request, payload_dict, r.json())
             resp_data = r.json()
+            # Bill on the RAW upstream response -- see the identical
+            # comment in chat() above.
+            cost_info = await _track_usage(request, payload_dict, resp_data)
+            resp_data = clean_response_dict(resp_data)
             if cost_info and cost_info.get('cost', 0) > 0:
                 resp_data['billing'] = {
                     'cost': cost_info.get('cost', 0),
@@ -2123,6 +2363,9 @@ async def _smart_chat_stream(
         chunk_count = 0
         client_gone = False
         drain_after_disconnect = 0
+        # FIX 1: see _chat_stream for the full rationale/docstring pointer.
+        reasoning_filter = ReasoningStreamFilter()
+        last_chunk_template: dict[str, Any] | None = None
         # See _chat_stream for the root-cause rationale: usage arrives as
         # its own trailing SSE chunk, after finish_reason -- a client that
         # stops reading right after finish_reason otherwise causes us to
@@ -2167,12 +2410,47 @@ async def _smart_chat_stream(
                                     usage_data = chunk['usage']
                                     if client_gone:
                                         break
-                                # L1: accumulate visible assistant text (see
-                                # _chat_stream for the rationale).
+                                if chunk.get('choices'):
+                                    last_chunk_template = {
+                                        k: chunk[k] for k in ('id', 'object', 'created', 'model') if k in chunk
+                                    }
+                                # FIX 1 + L1: clean before accumulating/
+                                # forwarding (see _chat_stream for the
+                                # rationale).
+                                chunk_changed = False
                                 for _c in chunk.get('choices') or []:
-                                    _piece = ((_c or {}).get('delta') or {}).get('content')
+                                    _delta = (_c or {}).get('delta') or {}
+                                    _piece = _delta.get('content')
                                     if isinstance(_piece, str):
+                                        _clean_piece = reasoning_filter.feed(_piece)
+                                        # Deliberately the RAW piece, not the
+                                        # cleaned one. accum_text feeds the L1
+                                        # output-token ESTIMATE, which only runs
+                                        # when the upstream sent no usage block
+                                        # at all, and which is already
+                                        # documented as a known lower bound.
+                                        # Estimating from the cleaned text would
+                                        # make stripping a reasoning block also
+                                        # shrink the bill -- a model that
+                                        # answers with nothing but a thought
+                                        # block (observed: gemma-4-26b returned
+                                        # exactly '<thought>*   </thought>' and
+                                        # nothing else) would then estimate zero
+                                        # output tokens for work the upstream
+                                        # actually did. Whether we pay that
+                                        # upstream per token is not knowable
+                                        # from here, so the product rule that no
+                                        # request may be loss-making decides it:
+                                        # estimate from raw. This also keeps the
+                                        # change provably billing-neutral --
+                                        # cleaning affects only what the user
+                                        # sees, never an amount.
                                         accum_text.append(_piece)
+                                        if _clean_piece != _piece:
+                                            _delta['content'] = _clean_piece
+                                            chunk_changed = True
+                                if chunk_changed:
+                                    line = f'data: {json.dumps(chunk)}'
                             except (json.JSONDecodeError, ValueError):
                                 pass
                         if not client_gone:
@@ -2182,6 +2460,24 @@ async def _smart_chat_stream(
             if not client_gone:
                 yield f'data: {json.dumps({"error": f"upstream unavailable: {e}"})}\n\n'
         finally:
+            # FIX 1: flush any held-back text -- see _chat_stream for the
+            # rationale/docstring pointer.
+            _leftover = reasoning_filter.flush()
+            if _leftover:
+                # NOT appended to accum_text: that list now holds the RAW
+                # pieces (see the comment at the feed() call above), and the
+                # leftover is a fragment of raw text the filter was merely
+                # holding back -- it is already in accum_text. Appending it
+                # here would double-count it in the billing estimate.
+                if not client_gone:
+                    _flush_chunk = {
+                        'id': (last_chunk_template or {}).get('id', ''),
+                        'object': (last_chunk_template or {}).get('object', 'chat.completion.chunk'),
+                        'created': (last_chunk_template or {}).get('created', 0),
+                        'model': (last_chunk_template or {}).get('model', selected_model),
+                        'choices': [{'index': 0, 'delta': {'content': _leftover}, 'finish_reason': None}],
+                    }
+                    yield f'data: {json.dumps(_flush_chunk)}\n\n'
             # L1: bill even when usage_data is None, as long as something
             # was actually served -- see _chat_stream for the rationale.
             if uid and async_session is not None and not usage_data and not accum_text:

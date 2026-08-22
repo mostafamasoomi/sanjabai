@@ -378,17 +378,41 @@ async def _get_user_pinned_context(uid: int) -> str:
 
 
 # ── Email ───────────────────────────────────────────────────────
+#
+# Outbound SMTP is permanently dead on this host, not merely unconfigured:
+# Hetzner blocks every outbound SMTP port from this server. Measured
+# directly on production (2026-08-22):
+#   port 25    BLOCKED
+#   port 465   BLOCKED
+#   port 587   BLOCKED
+#   port 2525  BLOCKED
+# `send_email` below talks smtplib over exactly those ports, so no amount
+# of SMTP_* credential configuration will ever make this branch connect.
+# A future session should not spend time debugging SMTP creds here -- the
+# real fix is an HTTPS-API email sender (Resend / Brevo / Mailgun, which
+# go out over 443) and is separate, not-yet-built work.
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 SMTP_HOST = os.getenv('SMTP_HOST', '')
 SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
 SMTP_USER = os.getenv('SMTP_USER', '')
 SMTP_PASS = os.getenv('SMTP_PASS', '')
-SMTP_FROM = os.getenv('SMTP_FROM', 'noreply@sanjabai.ir')
+# sanjabai.ir was retired in favor of sanjabai.com in commit 1ab7e4b, which
+# missed this default (it only touched 8 other files) -- fixed here.
+SMTP_FROM = os.getenv('SMTP_FROM', 'noreply@sanjabai.com')
 
 
 async def send_email(to: str, subject: str, body: str) -> bool:
     if not SMTP_HOST:
-        print(f'[EMAIL] Would send to {to}: {subject}')
+        logger.warning(
+            '[EMAIL] SMTP_HOST not set -- nothing sent to %s (subject=%r). '
+            'Outbound SMTP is blocked at the host level on this server; '
+            'see the module comment above.',
+            to, subject,
+        )
         return False
     from email.mime.text import MIMEText
     msg = MIMEText(body, 'html', 'utf-8')
@@ -405,7 +429,7 @@ async def send_email(to: str, subject: str, body: str) -> bool:
         await asyncio.to_thread(_send_sync)
         return True
     except Exception as e:
-        print(f'[EMAIL] Failed: {e}')
+        logger.error('[EMAIL] Failed to send to %s: %s', to, e)
         return False
 
 

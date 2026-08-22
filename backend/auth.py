@@ -656,4 +656,18 @@ async def send_welcome_email(request: Request) -> JSONResponse:
             return JSONResponse({'detail': 'ایمیلی ثبت نشده است'}, status_code=400)
     body = f'<div dir="rtl" style="font-family:Tahoma;max-width:600px;margin:auto;padding:20px;"><h1 style="color:#6c5cf5;">به Sanjabai خوش آمدید! 🎉</h1><p>سلام {user.email}،</p><p>حساب شما با موفقیت ساخته شد.</p><p><a href="{BASE_URL}/chat" style="background:#6c5cf5;color:white;padding:10px 20px;text-decoration:none;border-radius:8px;">شروع چت</a></p></div>'
     ok = await send_email(user.email, 'به Sanjabai خوش آمدید!', body)
-    return JSONResponse({'status': 'sent' if ok else 'queued'})
+    # 'queued' used to be returned on failure too, implying a background
+    # queue would retry and deliver it later. There is no such queue --
+    # send_email either sent synchronously or did nothing at all (and, on
+    # this host, outbound SMTP is blocked entirely -- see dependencies.py's
+    # send_email for the measured port results -- so `ok` is always False
+    # here in production today). Report honestly instead: a caller must be
+    # able to tell "sent" from "not sent" from `status` alone, and the
+    # user-facing `message` must never claim an email is on its way when
+    # none was sent and none can be.
+    if ok:
+        return JSONResponse({'status': 'sent', 'message': 'ایمیل خوش‌آمدگویی ارسال شد.'})
+    return JSONResponse({
+        'status': 'not_sent',
+        'message': 'در حال حاضر امکان ارسال ایمیل وجود ندارد؛ حساب شما همچنان فعال و قابل استفاده است.',
+    })

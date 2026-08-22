@@ -130,9 +130,19 @@ async def payment_callback(request: Request) -> JSONResponse:
         result = await handle_payment_callback(repo, authority=authority or "", status=status, **callback_kwargs)
 
     if not result.ok:
+        # Targets must be pages that actually exist in the frontend.
+        # frontend/app/plans and frontend/app/credits were never built --
+        # `/plans` and `/credits` 404 -- so a failed payment used to strand
+        # the user on a dead page with no explanation. Subscription status
+        # lives on /dashboard (see the matching success redirect below,
+        # `/dashboard?subscription=active`) and credit packages are sold
+        # from /wallet (see the matching success redirect,
+        # `/wallet?payment=success`) -- point the failure path at the same
+        # pages the success path already uses. hermes_order already pointed
+        # at the real order form (/hermes/order, 200) and is unchanged.
         fail_redirect = {
-            'subscription': f'{BASE_URL}/plans?payment=failed',
-            'credit_package': f'{BASE_URL}/credits?payment=failed',
+            'subscription': f'{BASE_URL}/dashboard?payment=failed',
+            'credit_package': f'{BASE_URL}/wallet?payment=failed',
             'hermes_order': f'{BASE_URL}/hermes/order?payment=failed',
         }.get(payment_type, f'{BASE_URL}/wallet?payment=failed')
         return JSONResponse({'detail': result.detail, 'redirect': fail_redirect}, status_code=result.code)
@@ -204,7 +214,14 @@ async def payment_callback(request: Request) -> JSONResponse:
         if hermes_offering and hermes_offering.included_credit > 0:
             extra_data['included_credit'] = hermes_offering.included_credit
         extra_data['order_id'] = hermes_order.id
-        redirect_path = f'/hermes/orders/{hermes_order.id}?payment=success'
+        # frontend/app/hermes/orders/[id] does not exist -- only the list
+        # page frontend/app/hermes/orders/page.tsx does (verified: any
+        # per-order URL like /hermes/orders/1 404s on production even
+        # though the list page itself is 200). This was silently sending
+        # every successful Hermes order purchase to a 404. order_id is
+        # still returned in the JSON body above for any caller that wants
+        # it; the redirect just has to land on a page that exists.
+        redirect_path = '/hermes/orders?payment=success'
 
     return JSONResponse({
         'status': 'ok', 'ref_id': result.ref_id, 'amount': result.amount,

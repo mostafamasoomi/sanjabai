@@ -18,6 +18,7 @@ import SecuritySection from './sections/SecuritySection'
 
 const MonitoringTab = dynamic(() => import('./components/MonitoringTab'), { ssr: false })
 const MarkupSection = dynamic(() => import('./sections/MarkupSection'), { ssr: false })
+const ExchangeRateSection = dynamic(() => import('./sections/ExchangeRateSection'), { ssr: false })
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Sanjabai Admin Panel — Aurora Design System
@@ -26,7 +27,7 @@ const MarkupSection = dynamic(() => import('./sections/MarkupSection'), { ssr: f
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Page = 'dashboard' | 'pricing' | 'markup' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'users' | 'security' | 'monitoring'
+type Page = 'dashboard' | 'pricing' | 'markup' | 'exchange-rate' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'users' | 'security' | 'monitoring'
 
 export interface Analytics {
   user_count: number
@@ -149,6 +150,7 @@ const NAV_ITEMS: { key: Page; label: string; icon: IconName }[] = [
   { key: 'users', label: 'کاربران', icon: 'profile' },
   { key: 'pricing', label: 'تعرفه‌ها', icon: 'pricing' },
   { key: 'markup', label: 'درصد سود', icon: 'chart' },
+  { key: 'exchange-rate', label: 'نرخ ارز', icon: 'globe' },
   { key: 'features', label: 'امکانات', icon: 'models' },
   { key: 'discounts', label: 'تخفیف‌ها', icon: 'wallet' },
   { key: 'about', label: 'درباره ما', icon: 'notification' },
@@ -953,6 +955,7 @@ export default function AdminPage() {
             />
           )}
           {page === 'markup' && <MarkupSection api={api} />}
+          {page === 'exchange-rate' && <ExchangeRateSection api={api} />}
           {page === 'monitoring' && <MonitoringTab api={api} />}
         </main>
       </div>

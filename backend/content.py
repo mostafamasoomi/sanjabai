@@ -576,14 +576,14 @@ async def _fetch_tgju_rate() -> float | None:
     return None
 
 
-async def _compute_exchange_rate() -> tuple[float, int]:
-    """Return the live USD→IRT (Toman) rate and markup percentage.
+async def _compute_exchange_rate() -> tuple[float, int, str]:
+    """Return the live USD→IRT (Toman) rate, markup percentage, and provenance.
 
-    Order of resolution:
-      1. A manual DB override (exchange_rate_overrides) if present.
-      2. Live tgju.org market rate (authoritative for IRT).
-      3. Fallback to open.er-api.com.
-      4. Hardcoded fallback constant.
+    Order of resolution (the returned `source` records which tier won):
+      1. A manual DB override (exchange_rate_overrides) if present -> 'db_override'.
+      2. Live tgju.org market rate (authoritative for IRT) -> 'tgju'.
+      3. Fallback to open.er-api.com -> 'er_api'.
+      4. Hardcoded fallback constant -> 'hardcoded_fallback'.
     """
     markup_pct = await get_global_markup_pct()
     rate_irr = None
@@ -600,15 +600,17 @@ async def _compute_exchange_rate() -> tuple[float, int]:
                 row = res.fetchone()
                 if row:
                     # stored value is already IRT (Toman)
-                    return float(row.rate), markup_pct
+                    return float(row.rate), markup_pct, 'db_override'
     except Exception:
         pass
 
     # 2. Live tgju.org
     rate_irr = await _fetch_tgju_rate()
+    source = 'tgju'
 
     # 3. Fallback to open.er-api.com
     if rate_irr is None:
+        source = 'er_api'
         try:
             resp2 = await _http.get('https://open.er-api.com/v6/latest/USD', follow_redirects=True, timeout=10)
             resp2.raise_for_status()
@@ -618,10 +620,11 @@ async def _compute_exchange_rate() -> tuple[float, int]:
 
     # 4. Hardcoded fallback
     if rate_irr is None:
+        source = 'hardcoded_fallback'
         rate_irr = 1_264_884
 
     rate_irt = rate_irr / 10  # IRR → IRT (Toman)
-    return rate_irt, markup_pct
+    return rate_irt, markup_pct, source
 
 
 async def _get_exchange_rate() -> tuple[float, int]:
@@ -642,14 +645,19 @@ async def _get_exchange_rate() -> tuple[float, int]:
     except Exception as e:
         logger.warning("exchange rate cache read failed: %s", e)
 
-    rate_irt, markup_pct = await _compute_exchange_rate()
+    rate_irt, markup_pct, source = await _compute_exchange_rate()
 
     try:
         ttl = EXCHANGE_RATE_CACHE_TTL if rate_irt else EXCHANGE_RATE_NEGATIVE_TTL
         await rds.setex(
             EXCHANGE_RATE_CACHE_KEY,
             ttl,
-            json.dumps({"rate_irt": rate_irt, "markup_pct": markup_pct}),
+            json.dumps({
+                "rate_irt": rate_irt,
+                "markup_pct": markup_pct,
+                "source": source,
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+            }),
         )
     except Exception as e:
         logger.warning("exchange rate cache write failed: %s", e)
@@ -657,6 +665,38 @@ async def _get_exchange_rate() -> tuple[float, int]:
     # Redis holds the bare market rate; the margin is added on the way out so a
     # markup change takes effect on the next call instead of waiting out the TTL.
     return rate_irt + USD_IRT_FLAT_MARKUP, markup_pct
+
+
+async def get_exchange_rate_meta() -> dict:
+    """Rate + provenance for the admin panel. Reuses `_get_exchange_rate()`'s
+    resolution/cache-fill (no extra network call), then re-reads the raw cache
+    entry for `source`/`fetched_at` -- missing on an old pre-deploy cache
+    entry, reported as 'unknown'/None rather than raised."""
+    rate_irt_effective, markup_pct = await _get_exchange_rate()
+    bare = rate_irt_effective - USD_IRT_FLAT_MARKUP
+    source, fetched_at, ttl_remaining = 'unknown', None, None
+    try:
+        cached = await rds.get(EXCHANGE_RATE_CACHE_KEY)
+        if cached:
+            payload = json.loads(cached)
+            bare = float(payload.get("rate_irt", bare))
+            source = payload.get("source") or 'unknown'
+            fetched_at = payload.get("fetched_at")
+        ttl_remaining = await rds.ttl(EXCHANGE_RATE_CACHE_KEY)
+        if not isinstance(ttl_remaining, int) or ttl_remaining < 0:
+            ttl_remaining = None
+    except Exception as e:
+        logger.warning("exchange rate meta cache read failed: %s", e)
+
+    return {
+        "rate_irt_bare": bare,
+        "flat_markup_irt": USD_IRT_FLAT_MARKUP,
+        "rate_irt_effective": bare + USD_IRT_FLAT_MARKUP,
+        "markup_pct": markup_pct,
+        "source": source,
+        "fetched_at": fetched_at,
+        "cache_ttl_remaining_s": ttl_remaining,
+    }
 
 
 async def _fetch_tgju_eur_rate() -> float | None:
@@ -746,6 +786,15 @@ async def _get_cached_eur_to_irt() -> float:
 
 @router.get('/pricing-table')
 @router.get('/api/pricing')
+# `/pricing` exists so that `/api/pricing` is reachable from the browser. The
+# Next proxy (frontend/app/api/[...path]/route.ts) forwards `/api/X` to the
+# backend as `/X` -- it strips the prefix -- so the `/api/pricing` route above
+# is only ever hit by a caller talking to the backend directly, and the public
+# URL https://sanjabai.com/api/pricing was answering 404. `/api/exchange-rate`
+# below has the same shape and works only because it also registers a bare
+# `/exchange-rate`; this mirrors that. Any future `/api/...` route needs the
+# bare twin too.
+@router.get('/pricing')
 async def api_pricing(request: Request) -> JSONResponse:
     """Return all active model pricing in Toman.
 

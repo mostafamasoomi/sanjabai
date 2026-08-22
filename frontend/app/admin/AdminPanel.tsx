@@ -6,6 +6,7 @@ import { faNum } from '@/lib/format'
 import { toast } from '@/components/ui'
 import dynamic from 'next/dynamic'
 import { Field } from './sections/shared'
+import { errorDetail } from './apiError'
 import DashboardSection from './sections/DashboardSection'
 import UsersSection from './sections/UsersSection'
 import PricingSection from './sections/PricingSection'
@@ -206,9 +207,12 @@ export async function api(path: string, opts: RequestInit = {}) {
   const res = await fetch(path, { ...opts, headers })
   if (res.status === 401) {
     TOKEN = ''
+    // Kept as the literal sentinel `unauthorized`: callers branch on this
+    // exact string to tell "log back in" apart from a real error message
+    // worth showing (see sections/UserDetailDrawer.tsx's errMessage).
     throw new Error('unauthorized')
   }
-  if (!res.ok) throw new Error(`خطای سرور (${res.status})`)
+  if (!res.ok) throw new Error(await errorDetail(res))
   return res
 }
 

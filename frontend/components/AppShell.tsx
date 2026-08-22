@@ -10,6 +10,7 @@ import { LanguageToggle } from '@/components/LanguageToggle'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { useCommandPalette } from '@/components/CommandPalette'
 import { isOnboarded } from '@/lib/onboarding'
+import { getPanelPreference, isNavItemVisibleForPanel } from '@/lib/panel'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Sanjabai Aurora — AppShell v2
@@ -103,6 +104,22 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { CommandPalette, setOpen: openPalette } = useCommandPalette()
+
+  // Consumer/developer panel preference (lib/panel.ts). This is a UI
+  // preference only -- it decides which nav *links* are rendered, not which
+  // routes are reachable. /developer, /api-keys and /hermes stay reachable
+  // by direct URL for every authenticated user regardless of this value; it
+  // is not a permission check and must never be treated as one.
+  //
+  // No wrong-nav flash while `loading` is true or `user` is null -- but the
+  // reason is the default, not the render gating (the mobile bottom nav and
+  // drawer are behind `user &&`; the desktop sidebar is not). With no user,
+  // `user?.preferences` is undefined and getPanelPreference falls back to
+  // 'developer', which hides nothing -- byte-identical to the nav this app
+  // rendered before this preference existed. So the pre-auth frame shows the
+  // full nav, exactly as it always did, and only narrows once a user who was
+  // actually moved to 'consumer' has loaded.
+  const panel = getPanelPreference(user?.preferences)
 
   // Routes that bring their own chrome: the landing page and the auth screens
   // carry the marketing header/footer, so the product sidebar would be a
@@ -224,7 +241,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           {sections.map((section) => (
             <div key={section.key} className="mb-4">
               <div className="sidebar-section-label">{section.label}</div>
-              {NAV.filter((n) => n.section === section.key && (!n.admin || user?.is_admin)).map((item) => (
+              {NAV.filter((n) => n.section === section.key && (!n.admin || user?.is_admin) && isNavItemVisibleForPanel(n.href, panel)).map((item) => (
                 <NavItemLink key={item.href} item={item} />
               ))}
             </div>
@@ -354,7 +371,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
         {/* Mobile bottom nav — hidden when not logged in */}
         {user && (
         <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[var(--bg-surface)]/95 backdrop-blur border-t border-[var(--border)] flex justify-around py-2 z-20 safe-bottom">
-          {NAV.filter((n) => n.section === 'main').slice(0, 4).map((item) => (
+          {NAV.filter((n) => n.section === 'main' && isNavItemVisibleForPanel(n.href, panel)).slice(0, 4).map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -395,7 +412,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               </button>
           </div>
           <nav className="p-2">
-            {NAV.filter((n) => !n.admin || user?.is_admin).map((item) => (
+            {NAV.filter((n) => (!n.admin || user?.is_admin) && isNavItemVisibleForPanel(n.href, panel)).map((item) => (
               <Link
                 key={item.href}
                 href={item.href}

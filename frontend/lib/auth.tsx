@@ -53,6 +53,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // Both /api/auth/login and /api/auth/signup return only
+  // `{token, user: {id, email}}` (backend/auth.py) -- no `preferences`,
+  // `display_name`, etc. If we stopped at `setUser(data.user)`, anything
+  // that reads those fields (e.g. lib/panel.ts's consumer/developer nav
+  // preference) would silently use the default until the next full page
+  // reload. Fetch the full profile once right after and use that instead.
+  // This is best-effort: on failure we keep the minimal {id, email} user
+  // rather than throwing, since the login/signup itself already succeeded --
+  // the session-restore effect below will fill in the rest on next mount.
+  const hydrateFullUser = useCallback(async (tok: string, fallback: User) => {
+    try {
+      const r = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${tok}` } })
+      if (r.ok) {
+        const full = await r.json()
+        setUser(full)
+        return
+      }
+    } catch {
+      /* network/parse failure — fall through to the minimal user below */
+    }
+    setUser(fallback)
+  }, [])
+
   const login = useCallback(async (email: string, password: string, captchaToken?: string, captchaAnswer?: string) => {
     const body: any = { email, password }
     if (captchaToken && captchaAnswer) { body.captcha_token = captchaToken; body.captcha_answer = captchaAnswer }
@@ -65,7 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('sanjabai_auth_token', data.token)
     setToken(data.token)
     setUser(data.user)
-  }, [])
+    await hydrateFullUser(data.token, data.user)
+  }, [hydrateFullUser])
 
   const signup = useCallback(async (email: string, password: string, captchaToken?: string, captchaAnswer?: string) => {
     const body: any = { email, password }
@@ -79,7 +103,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('sanjabai_auth_token', data.token)
     setToken(data.token)
     setUser(data.user)
-  }, [])
+    await hydrateFullUser(data.token, data.user)
+  }, [hydrateFullUser])
 
   const logout = useCallback(() => {
     if (token) apiFetch('/api/auth/logout', { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {})

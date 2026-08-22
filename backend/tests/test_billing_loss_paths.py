@@ -535,8 +535,9 @@ class TestQuotaSelfHealingUpsert:
 
 class TestDailyLimitGateStructurallyUnreachableOnHealthyPath:
     def test_check_quota_pre_only_called_inside_reserve_except_blocks(self):
+        import importlib
         import inspect
-        src = inspect.getsource(chat_mod)
+
         # Every call site must be preceded (within a small window) by the
         # BillingService.reserve() fallback comment/except pattern this
         # audit found -- a crude but effective regression guard: if a
@@ -545,12 +546,45 @@ class TestDailyLimitGateStructurallyUnreachableOnHealthyPath:
         # text will no longer match this fallback-only shape and this
         # assertion will need updating (that would be a real behavior
         # change worth reviewing, not a false failure to silence).
-        call_sites = [
-            src[max(0, i - 400):i]
-            for i in range(len(src))
-            if src.startswith('quota_err = await _check_quota_pre(uid)', i)
+        #
+        # The scan spans chat.py AND its chat_*.py siblings. It used to read
+        # chat.py alone, when all four endpoints lived there; the 2,500-line
+        # file was later split, moving /v1/compare and /v1/smart-chat into
+        # their own modules and taking two of the four call sites with them.
+        # That was a pure relocation -- the try/except shape at each site is
+        # unchanged -- so the property below still holds and it is the
+        # single-file mechanism that had to follow the code. Reading the
+        # whole module family also means the next split cannot quietly
+        # shrink this test's coverage without tripping the count.
+        # Both spellings count. A module that does not define
+        # _check_quota_pre itself must reach it late-bound through the chat
+        # namespace (`chat._check_quota_pre`) so the tests' monkeypatching
+        # keeps working -- that is the split's own contract, not a second
+        # code path.
+        forms = (
+            'quota_err = await _check_quota_pre(uid)',
+            'quota_err = await chat._check_quota_pre(uid)',
+        )
+        modules = [chat_mod] + [
+            importlib.import_module(name)
+            for name in ('chat_models', 'chat_web', 'chat_billing',
+                         'chat_compare', 'chat_smart', 'chat_stream')
         ]
-        assert len(call_sites) == 4, "expected exactly 4 _check_quota_pre call sites"
+        call_sites = []
+        for mod in modules:
+            src = inspect.getsource(mod)
+            call_sites += [
+                src[max(0, i - 400):i]
+                for i in range(len(src))
+                if any(src.startswith(f, i) for f in forms)
+                # `chat._check_quota_pre(` also starts a match for the bare
+                # form five characters later; count each site once.
+                and not src.startswith('_check_quota_pre(uid)', i - 5)
+            ]
+        assert len(call_sites) == 4, (
+            f"expected exactly 4 _check_quota_pre call sites across the chat "
+            f"modules, found {len(call_sites)}"
+        )
         for window in call_sites:
             assert 'except Exception' in window
             assert 'reserve' in window.lower()

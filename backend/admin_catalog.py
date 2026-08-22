@@ -12,6 +12,7 @@ toggling 1,100+ rows one at a time.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 import sqlalchemy
@@ -291,3 +292,104 @@ async def set_model_markup(request: Request, model_id: str, payload: dict[str, A
     if rds:
         await rds.delete('cache:catalog:models', 'cache:catalog:pricing', 'cache:api:pricing')
     return JSONResponse({'status': 'ok', 'model': model_id, 'markup_pct': pct})
+
+
+# ── Image (media) pricing ────────────────────────────────────────
+#
+# Migration 0032 added model_catalog.image_price_per_unit (numeric, NULL for
+# every row). backend/images.py's POST /v1/images/generations hard-refuses
+# any request for a model whose image_price_per_unit is NULL (its gate 2,
+# "no request may ever be loss-making") -- so until an admin sets a price
+# here, image generation cannot serve anything. Unlike markup_pct (a
+# percentage, float is fine), image_price_per_unit is a base Toman amount:
+# the DB column is `numeric` with no scale constraint, so THIS endpoint is
+# the only thing standing between an admin typing "10.5" and a fractional
+# Toman quietly entering the pricing pipeline -- floats are rejected here,
+# not just non-negative values.
+
+def _parse_image_price(raw: Any) -> tuple[int | None, str | None]:
+    """Validate an image_price_per_unit payload value.
+
+    Returns (value, error_detail). ``None`` (explicit null) clears the
+    price back to "not set, cannot be served". Anything else must be an
+    integer Toman amount >= 0. Floats are rejected outright -- including a
+    JSON float that happens to be integral (``10.0``) and a bool (a
+    subclass of ``int`` in Python, so ``isinstance(True, int)`` is True and
+    ``True`` would otherwise silently parse as ``1``) -- so the only way to
+    set a price is a JSON integer or a plain-digit string.
+    """
+    if raw is None:
+        return None, None
+    if isinstance(raw, bool) or isinstance(raw, float):
+        return None, 'قیمت باید عدد صحیح تومان باشد (اعشار مجاز نیست)'
+    if isinstance(raw, int):
+        price = raw
+    elif isinstance(raw, str) and re.fullmatch(r'-?\d+', raw.strip()):
+        price = int(raw.strip())
+    else:
+        return None, 'قیمت باید عدد صحیح تومان باشد (اعشار مجاز نیست)'
+    if price < 0:
+        return None, 'قیمت نمی‌تواند منفی باشد'
+    return price, None
+
+
+@router.get('/admin/catalog/media-models')
+async def list_media_models(request: Request) -> JSONResponse:
+    """Media (image-output) rows from model_catalog with their current
+    image_price_per_unit, for the admin image-pricing table.
+
+    Identifies media rows the same way migration 0031 populated them: a
+    model whose `modalities.output` array contains "image" (JSONB
+    containment, `@>`), regardless of whether it also handles other output
+    modalities alongside images (see migrations/0031_model_modalities.sql).
+    """
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+    async with async_session() as session:
+        res = await session.execute(sqlalchemy.text(
+            "SELECT id, provider_model_id, display_name, availability, "
+            "image_price_per_unit, markup_pct "
+            "FROM model_catalog WHERE modalities->'output' @> '\"image\"'::jsonb "
+            "ORDER BY display_name, id"
+        ))
+        rows = [dict(r._mapping) for r in res.fetchall()]
+    return JSONResponse(jsonable_encoder(rows))
+
+
+@router.post('/admin/catalog/models/{model_id:path}/image-price')
+async def set_model_image_price(request: Request, model_id: str, payload: dict[str, Any]) -> JSONResponse:
+    """Set (or clear, with image_price_per_unit: null) one model's base
+    per-image Toman price.
+
+    Uses a `:path` converter for the same reason as set_model_upstream and
+    set_model_markup above -- most model_catalog ids contain a `/`. Must
+    stay registered after any literal (non-`:path`) sibling route under
+    `/admin/catalog/models/...` for the same reason bulk_set_model_markup
+    must precede set_model_markup: a bare `{model_id:path}` converter
+    greedily matches any remaining path segment, including a literal one
+    that looks like it should be its own route.
+    """
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+
+    price, err = _parse_image_price(payload.get('image_price_per_unit'))
+    if err:
+        return JSONResponse({'detail': err}, status_code=400)
+
+    async with async_session() as session:
+        res = await session.execute(sqlalchemy.text(
+            'UPDATE model_catalog SET image_price_per_unit = :p, updated_at = now() WHERE id = :id'
+        ), {'p': price, 'id': model_id})
+        if res.rowcount == 0:
+            return JSONResponse({'detail': 'مدل در کاتالوگ یافت نشد'}, status_code=404)
+        await session.commit()
+
+    await _write_audit_log('admin.catalog.set_image_price', target_type='model_catalog', target_id=model_id,
+                            details={'image_price_per_unit': price}, request=request)
+    if rds:
+        await rds.delete('cache:catalog:models', 'cache:catalog:pricing', 'cache:api:pricing')
+    return JSONResponse({'status': 'ok', 'model': model_id, 'image_price_per_unit': price})

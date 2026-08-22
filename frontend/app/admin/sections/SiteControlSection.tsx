@@ -151,7 +151,16 @@ export default function SiteControlSection({ api }: SiteControlSectionProps) {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard icon="settings" label="مجموع سوییچ‌ها" value={loading ? '—' : faNum(flags.length)} color="var(--accent)" />
         <StatCard icon="check" label="فعال" value={loading ? '—' : faNum(onCount)} color="#22c55e" />
-        <StatCard icon="warning" label="هنوز وصل‌نشده" value={loading ? '—' : faNum(unwiredCount)} color="var(--warning, #f59e0b)" />
+        {/* Green while zero, amber the moment a switch controls nothing.
+            A count of unwired switches is only worth an alarm colour when
+            it is non-zero -- a permanently amber "0" trains the admin to
+            ignore the one card that matters. */}
+        <StatCard
+          icon={unwiredCount > 0 ? 'warning' : 'check'}
+          label="هنوز وصل‌نشده"
+          value={loading ? '—' : faNum(unwiredCount)}
+          color={unwiredCount > 0 ? 'var(--warning, #f59e0b)' : '#22c55e'}
+        />
       </div>
 
       <div className="admin-card">
@@ -190,8 +199,20 @@ export default function SiteControlSection({ api }: SiteControlSectionProps) {
                       )}
                     </div>
                     <p className="text-xs text-muted mt-1">{flag.description_fa}</p>
-                    {!flag.wired && flag.wire_note && (
-                      <p className="text-xs mt-1" style={{ color: 'var(--warning, #f59e0b)' }}>{flag.wire_note}</p>
+                    {/* wire_note used to render only for unwired flags, as a
+                        warning. Now that every flag is wired it is the more
+                        useful half -- it says exactly where the switch is read
+                        and what turning it off does (which routes, which
+                        status code, how long until it takes effect). Shown
+                        always: amber while a flag is still unwired, muted once
+                        it is real. */}
+                    {flag.wire_note && (
+                      <p
+                        className="text-xs mt-1"
+                        style={{ color: flag.wired ? 'var(--text-muted)' : 'var(--warning, #f59e0b)' }}
+                      >
+                        {flag.wire_note}
+                      </p>
                     )}
                   </div>
                 </div>

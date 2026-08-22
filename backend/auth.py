@@ -19,6 +19,7 @@ from pydantic import BaseModel
 
 from database import async_session, rds, BASE_URL
 from models import User, Quota
+from site_settings import get_site_flag
 from dependencies import (
     SESSION_TTL, SESSION_COOKIE_NAME, _hash_password, _verify_password, _gen_token,
     _create_session, _get_session, _get_session_user_id, _set_session_cookie,
@@ -134,6 +135,13 @@ async def admin_logout(request: Request) -> JSONResponse:
 
 @router.post('/auth/signup')
 async def signup(payload: AuthSignup) -> JSONResponse:
+    # signups_enabled gate (site_settings.py) -- must run before the captcha
+    # check so a closed signup window never consumes a captcha token.
+    if not await get_site_flag('signups_enabled'):
+        return JSONResponse(
+            {'detail': 'ثبت‌نام کاربران جدید موقتاً غیرفعال است. لطفاً بعداً دوباره تلاش کنید.'},
+            status_code=403,
+        )
     from security import validate_email, validate_password
     # Verify captcha
     if not payload.captcha_token or not payload.captcha_answer:

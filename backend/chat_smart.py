@@ -191,6 +191,9 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
     uid = await chat._get_user_id(request)
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    _disabled = await chat._chat_disabled_response()
+    if _disabled is not None:
+        return _disabled
 
     payload_dict = payload.model_dump(exclude_none=True)
 

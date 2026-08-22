@@ -55,6 +55,7 @@ from chat import _resolve_public_model, _resolve_provider, _release_reservation
 from content import apply_markup, get_effective_markup_pct
 from services.billing import SqlBillingRepo, BillingService, InsufficientBalanceError
 from services.money import Money
+from site_settings import get_site_flag
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +139,11 @@ async def images_generations(request: Request, payload: ImageGenerationRequest) 
     uid = await _get_user_id(request)
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    if not await get_site_flag('image_generation_enabled'):
+        return _error(
+            'تولید تصویر موقتاً در دسترس نیست', code='image_generation_disabled',
+            status=503, err_type='service_unavailable',
+        )
 
     model_in = (payload.model or '').strip()
     if not model_in:

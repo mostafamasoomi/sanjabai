@@ -261,23 +261,87 @@ async def scheduler_tick() -> int:
     return len(rows)
 
 
+async def _db_scheduler_flag() -> bool:
+    """Best-effort read of the ``task_scheduler_enabled`` DB flag.
+
+    ``site_settings.get_site_flag`` already fails open to its registered
+    default (``False`` for this flag) on any Redis/DB error and never
+    raises -- but this wrapper still catches everything around the call
+    (e.g. the import itself failing) so a problem here can never do
+    anything worse than "behave as if the DB flag were off", i.e. fall
+    back to env-var-only behaviour, per the brief.
+    """
+    try:
+        from site_settings import get_site_flag
+        return await get_site_flag('task_scheduler_enabled')
+    except Exception as e:
+        logger.warning(f"task_scheduler: DB flag read failed, falling back to env-only: {e}")
+        return False
+
+
+async def _effective_scheduler_enabled() -> bool:
+    """Env var OR DB flag -- either one being on turns the scheduler on.
+
+    Short-circuits on the env var so the common "env already on" case never
+    needs a DB round-trip, and so an env-off deployment can still be turned
+    on purely from the admin panel.
+    """
+    if TASK_SCHEDULER_ENABLED:
+        return True
+    return await _db_scheduler_flag()
+
+
 async def scheduler_loop() -> None:
     """Background loop -- see app.py's lifespan for the
     `asyncio.create_task(scheduler_loop())` hook (added by the coordinator,
-    not this module). Gated behind TASK_SCHEDULER_ENABLED, defaulting to
-    OFF: see the 🔴 note in the module docstring.
+    not this module).
+
+    Gated behind ``TASK_SCHEDULER_ENABLED`` (env var) OR the
+    ``task_scheduler_enabled`` DB flag (see :func:`_effective_scheduler_enabled`),
+    defaulting to OFF: see the 🔴 note in the module docstring.
+
+    This loop is long-lived (one instance for the life of the process), so
+    the effective enabled state is re-evaluated on *every* tick rather than
+    once at entry -- a one-shot check at startup would mean an admin
+    flipping the DB flag in the panel only takes effect after a container
+    restart, which is exactly the problem these flags exist to solve. When
+    disabled, the loop still ticks (sleeping the same interval) purely to
+    re-check the flag -- it does not claim or run any tasks. A single log
+    line is emitted only when the effective state actually *changes*
+    (on/off or off/on), not on every tick, to avoid spamming the log with a
+    line every `TASK_SCHEDULER_TICK_SECONDS` forever.
     """
-    if not TASK_SCHEDULER_ENABLED:
-        logger.info('task_scheduler: TASK_SCHEDULER_ENABLED is off; scheduler loop not running')
-        return
     logger.info(f"task_scheduler: loop starting, tick={TASK_SCHEDULER_TICK_SECONDS}s")
+    last_state: bool | None = None
     while True:
         try:
-            claimed = await scheduler_tick()
-            if claimed:
-                logger.info(f"task_scheduler: executed {claimed} due task(s)")
+            enabled = await _effective_scheduler_enabled()
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            logger.error(f"task_scheduler: tick failed: {e}")
+            # Should be unreachable (_effective_scheduler_enabled already
+            # catches everything internally), but per the same fail-open
+            # contract as the rest of this module: never let a flag-read
+            # problem crash the loop or silently spend money -- treat it as
+            # "off" for this tick and try again next tick.
+            logger.error(f"task_scheduler: effective-enabled check failed unexpectedly: {e}")
+            enabled = False
+
+        if enabled != last_state:
+            logger.info(
+                f"task_scheduler: effective enabled state changed -> "
+                f"{'ON' if enabled else 'OFF'} (env={TASK_SCHEDULER_ENABLED})"
+            )
+            last_state = enabled
+
+        if enabled:
+            try:
+                claimed = await scheduler_tick()
+                if claimed:
+                    logger.info(f"task_scheduler: executed {claimed} due task(s)")
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error(f"task_scheduler: tick failed: {e}")
+
         await asyncio.sleep(TASK_SCHEDULER_TICK_SECONDS)

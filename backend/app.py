@@ -60,6 +60,7 @@ from dependencies import (
 
 # ── Security middleware ─────────────────────────────────────────
 from security import RateLimitMiddleware, SecurityHeadersMiddleware, CsrfMiddleware
+from middleware.maintenance import MaintenanceModeMiddleware
 
 
 # ── Inline security-headers middleware (defense-in-depth) ─────────
@@ -260,6 +261,21 @@ app = FastAPI(
 )
 
 # ── Middleware ───────────────────────────────────────────────────
+#
+# ORDER MATTERS AND IS COUNTER-INTUITIVE: Starlette applies add_middleware in
+# REVERSE order, so the LAST one added is the OUTERMOST layer (first to see a
+# request, last to see a response). Today that means a request travels
+# RateLimit -> Csrf -> CSP -> SecurityHeaders -> GZip -> CORS -> route.
+#
+# MaintenanceModeMiddleware is added FIRST on purpose, which makes it the
+# INNERMOST layer, sitting immediately in front of the routes. That is the
+# position that matters: its 503 still travels back out through CORS,
+# SecurityHeaders and CSP, so a maintenance response carries the same CORS and
+# security headers as any other. Registered outermost instead, the 503 would
+# be produced before CORSMiddleware ran and a cross-origin caller
+# (api.sanjabai.com) would see an opaque CORS failure rather than the Persian
+# "site is in maintenance" body it is supposed to read.
+app.add_middleware(MaintenanceModeMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=os.getenv('CORS_ORIGINS', 'https://sanjabai.ir,http://localhost:3003').split(','),

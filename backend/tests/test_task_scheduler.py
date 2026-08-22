@@ -252,9 +252,71 @@ class TestSchedulerLoopGatedByDefault:
         assert sched_mod.TASK_SCHEDULER_ENABLED is False
 
     @pytest.mark.asyncio
-    async def test_loop_returns_immediately_when_disabled(self, monkeypatch):
-        """The loop must not hang/spin when the flag is off -- it returns
-        without ever sleeping or ticking."""
-        monkeypatch.setattr(sched_mod, 'TASK_SCHEDULER_ENABLED', False)
+    async def test_loop_does_no_work_while_disabled(self, monkeypatch):
+        """While disabled the loop must never claim or run a task.
+
+        DELIBERATE CONTRACT CHANGE -- read before "fixing" this test back.
+        This assertion used to be `scheduler_loop()` *returns* within one
+        second when the flag is off, which was correct while the only
+        source of truth was the `TASK_SCHEDULER_ENABLED` env var: an env
+        var cannot change without a process restart, so a one-shot check
+        at entry lost nothing.
+
+        The gate is now `env var OR the task_scheduler_enabled DB flag`,
+        and the whole point of that DB flag is that an admin can flip it
+        from the panel without an SSH session and a container restart. A
+        loop that returned at startup could never observe the flip, so the
+        panel switch would silently do nothing -- exactly the class of
+        fake control this project is trying to eliminate. The loop
+        therefore keeps ticking while disabled, purely to re-read the
+        flag.
+
+        What actually matters -- and what this test now pins -- is the
+        real invariant behind the original assertion: while disabled, no
+        work happens and no money is spent. `scheduler_tick` is what
+        claims and runs due tasks, so "never called" is the honest
+        version of "the loop is off". The companion proof that a mid-run
+        flip is picked up lives in
+        tests/test_env_flag_db_override.py::test_flag_flip_mid_run_takes_effect_within_one_tick.
+        """
         import asyncio
-        await asyncio.wait_for(sched_mod.scheduler_loop(), timeout=1)
+
+        monkeypatch.setattr(sched_mod, 'TASK_SCHEDULER_ENABLED', False)
+        # DB flag off too, so the effective state is off.
+        async def _db_off():
+            return False
+        monkeypatch.setattr(sched_mod, '_db_scheduler_flag', _db_off)
+
+        tick_calls = []
+
+        async def _spy_tick():
+            tick_calls.append(1)
+            return 0
+        monkeypatch.setattr(sched_mod, 'scheduler_tick', _spy_tick)
+
+        # Collapse the sleep so several ticks elapse in negligible time --
+        # otherwise this test would have to wait TASK_SCHEDULER_TICK_SECONDS
+        # (60s) to see even one iteration.
+        #
+        # `sched_mod.asyncio` IS the global asyncio module object, so this
+        # patch is process-wide for the duration of the test: the real
+        # sleep has to be captured up front, or the yield below re-enters
+        # this same fake and records a bogus 0-second entry.
+        real_sleep = asyncio.sleep
+        sleeps = []
+
+        async def _fast_sleep(seconds):
+            sleeps.append(seconds)
+            if len(sleeps) >= 5:
+                raise asyncio.CancelledError
+            await real_sleep(0)
+        monkeypatch.setattr(sched_mod.asyncio, 'sleep', _fast_sleep)
+
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(sched_mod.scheduler_loop(), timeout=5)
+
+        assert tick_calls == [], 'scheduler_tick ran while the scheduler was disabled'
+        # It really did keep looping (rather than returning early), which is
+        # what makes a later flag flip observable at all.
+        assert len(sleeps) >= 5
+        assert all(s == sched_mod.TASK_SCHEDULER_TICK_SECONDS for s in sleeps)

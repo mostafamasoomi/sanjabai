@@ -5,11 +5,20 @@ turn a section of the site off without an SSH session and a container
 restart (every existing kill switch -- ``TASK_SCHEDULER_ENABLED``,
 ``OPENROUTER_ENABLED`` -- is an environment variable). This module is the
 store and the API for a small set of boolean flags an admin can flip from
-the panel; it does NOT wire those flags into chat/images/signup/etc, and it
-does not touch the env-var switches it mirrors -- see the module-level
-``FLAGS`` registry below and the migration
-(``migrations/0036_site_settings.sql``) for exactly what is and is not live
-yet.
+the panel.
+
+All six flags are now wired to real behaviour; the per-flag ``wire_note``
+in the ``FLAGS`` registry below says exactly where each one is read, and
+the admin panel renders that note. Keep those notes true: a flag whose
+``wired`` bit says ``True`` while nothing reads it is precisely the "button
+that confirms success and does nothing" failure this whole section exists
+to remove.
+
+The two env-var switches this store mirrors (``TASK_SCHEDULER_ENABLED``,
+``OPENROUTER_ENABLED``) are ORed with their DB flag rather than replaced --
+either source saying "on" is on. That way turning a flag on from the panel
+never requires an SSH session, and nothing that works today via the
+environment stops working.
 
 ── Storage: app_setting, not a new table ───────────────────────────────────
 ``app_setting`` (``key TEXT PRIMARY KEY, value JSONB NOT NULL, updated_at``)
@@ -92,67 +101,112 @@ FLAGS: dict[str, FlagMeta] = {
     'maintenance_mode': FlagMeta(
         key='maintenance_mode',
         label_fa='حالت تعمیر و نگهداری',
-        description_fa='کل سایت را برای کاربران عادی غیرفعال می‌کند (ادمین همچنان دسترسی دارد).',
+        description_fa=(
+            'همهٔ درخواست‌های کاربر عادی به API را با خطای ۵۰۳ رد می‌کند؛ ادمین همچنان '
+            'دسترسی کامل دارد. مسیرهای /health و /admin و ورود و /status باز می‌مانند تا '
+            'سایت در همان حالت هم قابل بازیابی و پایش باشد.'
+        ),
         default=False,
-        wired=False,
-        wire_note='هنوز به هیچ‌جا وصل نشده -- باید در میان‌افزار یا صفحات کاربر بررسی شود.',
+        wired=True,
+        wire_note=(
+            'وصل است: middleware/maintenance.py، ثبت‌شده در app.py به‌عنوان داخلی‌ترین لایه. '
+            'توجه: صفحات Next.js همچنان رندر می‌شوند ولی داده‌شان ۵۰۳ می‌گیرد -- یعنی کاربر '
+            'صفحهٔ خطادار می‌بیند، نه یک صفحهٔ «در حال تعمیر» اختصاصی.'
+        ),
     ),
     'signups_enabled': FlagMeta(
         key='signups_enabled',
         label_fa='ثبت‌نام کاربر جدید',
         description_fa='امکان ساخت حساب کاربری جدید را باز/بسته می‌کند.',
         default=True,
-        wired=False,
-        wire_note='باید در backend/auth.py، ابتدای تابع signup() بررسی شود.',
+        wired=True,
+        wire_note='وصل است: backend/auth.py، اولین دستور signup() -- قبل از چک کپچا، پس کپچا مصرف نمی‌شود. خاموش = ۴۰۳.',
     ),
     'chat_enabled': FlagMeta(
         key='chat_enabled',
         label_fa='گفتگو (چت)',
         description_fa='مسیر اصلی گفتگو با مدل‌ها را برای همهٔ کاربران باز/بسته می‌کند.',
         default=True,
-        wired=False,
-        wire_note='باید در backend/chat.py، ابتدای هندلر /v1/chat/completions بررسی شود.',
+        wired=True,
+        wire_note=(
+            'وصل است: هر چهار مسیر گفتگو -- /v1/chat/completions، /v1/chat/with-file، '
+            '/v1/smart-chat و /v1/compare -- از راه chat._chat_disabled_response(). '
+            'گیت بعد از چک ۴۰۱ و قبل از هر رزرو کیف پول است، پس خاموش‌بودن هیچ پولی بلوکه نمی‌کند. خاموش = ۵۰۳.'
+        ),
     ),
     'image_generation_enabled': FlagMeta(
         key='image_generation_enabled',
         label_fa='تولید تصویر',
         description_fa='مسیر تولید تصویر را برای همهٔ کاربران باز/بسته می‌کند (مستقل از در دسترس بودن هر مدل).',
         default=True,
-        wired=False,
-        wire_note='باید در backend/images.py، ابتدای هندلر /v1/images/generations بررسی شود.',
+        wired=True,
+        wire_note='وصل است: backend/images.py، ابتدای /v1/images/generations، قبل از رزرو. خاموش = ۵۰۳.',
     ),
     'task_scheduler_enabled': FlagMeta(
         key='task_scheduler_enabled',
         label_fa='زمان‌بند وظایف (Task Scheduler)',
         description_fa=(
-            'اجرای حلقهٔ پس‌زمینهٔ وظایف زمان‌بندی‌شده را کنترل می‌کند. هم‌اکنون این مقدار '
-            'فقط در پایگاه داده ذخیره می‌شود -- رفتار واقعی همچنان از متغیر محیطی '
-            'TASK_SCHEDULER_ENABLED می‌آید.'
+            'اجرای حلقهٔ پس‌زمینهٔ وظایف زمان‌بندی‌شده را کنترل می‌کند. روشن‌کردن این کلید '
+            'زمان‌بند را بدون ری‌استارت کانتینر فعال می‌کند (حداکثر تا یک تیک، ۶۰ ثانیه).'
         ),
         default=False,
-        wired=False,
+        wired=True,
         wire_note=(
-            'مقدار زندهٔ فعلی از env var می‌آید (services/task_scheduler.py:60، '
-            'TASK_SCHEDULER_ENABLED). این کلید فقط داده را نگه می‌دارد، تا وصل شدن '
-            'واقعی در یک تغییر جداگانه.'
+            'وصل است: services/task_scheduler.py، به‌صورت «env var یا فلگ DB» -- یعنی '
+            'روشن‌بودن هرکدام کافی است و متغیر محیطی TASK_SCHEDULER_ENABLED هرگز نادیده '
+            'گرفته نمی‌شود. حلقه در هر تیک دوباره فلگ را می‌خواند، پس تغییر شما حداکثر '
+            'تا ۶۰ ثانیه اثر می‌کند. تا وقتی خاموش است هیچ تسکی claim یا اجرا نمی‌شود.'
         ),
     ),
     'openrouter_enabled': FlagMeta(
         key='openrouter_enabled',
         label_fa='OpenRouter (تأمین‌کننده)',
         description_fa=(
-            'مسیر تأمین OpenRouter را کنترل می‌کند. هم‌اکنون این مقدار فقط در پایگاه داده '
-            'ذخیره می‌شود -- رفتار واقعی همچنان از متغیر محیطی OPENROUTER_ENABLED می‌آید.'
+            'مسیر تأمین OpenRouter را کنترل می‌کند. ⚠️ روشن‌کردن این کلید به‌تنهایی کافی '
+            'نیست -- کلید OPENROUTER_API_KEY هم باید ست باشد، وگرنه پروایدر بی‌صدا نادیده '
+            'گرفته می‌شود.'
         ),
         default=False,
-        wired=False,
-        wire_note='مقدار زندهٔ فعلی از env var می‌آید (backend/providers.py:139).',
+        wired=True,
+        wire_note=(
+            'وصل است: backend/providers.py، به‌صورت «env var یا فلگ DB»؛ شرط داشتن کلید API '
+            'دست‌نخورده باقی مانده. چون configured_providers() همگام است، خواندن فلگ از یک '
+            'کش کوتاه (۵ ثانیه) با تازه‌سازی پس‌زمینه می‌آید -- پس تغییر شما با چند ثانیه '
+            'تأخیر اثر می‌کند، نه فوری.'
+        ),
     ),
 }
 
 
 def _cache_key(flag_key: str) -> str:
     return f'{_CACHE_PREFIX}{flag_key}'
+
+
+def _coerce_flag(raw: Any, meta: FlagMeta, source: str) -> bool:
+    """A stored value becomes a flag only if it is genuinely a boolean.
+
+    Every write path in this module stores ``json.dumps(bool)``, and the
+    live database was checked directly: all six rows come back from asyncpg
+    as real Python ``bool``. So a value that is anything else is corrupt or
+    hand-edited, not a flag, and it falls back to the registered default.
+
+    This is deliberately stricter than the ``bool(raw)`` it replaces, which
+    was wrong in the one direction that matters most. ``bool()`` maps the
+    STRING ``'false'`` to ``True`` and the integer ``1`` to ``True`` -- so a
+    single mistyped row (``'false'`` instead of ``false``) would have read
+    as "maintenance mode ON" and taken the whole site down, with the panel
+    showing the same wrong answer back to the admin. Falling back to the
+    default instead means a malformed value can only ever produce today's
+    known-good behaviour, never a surprise site-wide switch.
+    """
+    if isinstance(raw, bool):
+        return raw
+    logger.warning(
+        'site_settings: %s value for %r is %r (%s), not a boolean -- '
+        'falling back to the registered default %r; this row needs fixing',
+        source, meta.key, raw, type(raw).__name__, meta.default,
+    )
+    return meta.default
 
 
 async def get_site_flag(key: str) -> bool:
@@ -170,7 +224,7 @@ async def get_site_flag(key: str) -> bool:
     try:
         cached = await rds.get(_cache_key(key))
         if cached is not None:
-            return bool(json.loads(cached))
+            return _coerce_flag(json.loads(cached), meta, 'cached')
     except Exception as e:
         logger.warning('site_settings cache read failed for %s: %s', key, e)
 
@@ -182,7 +236,10 @@ async def get_site_flag(key: str) -> bool:
                 sqlalchemy.text('SELECT value FROM app_setting WHERE key = :k'), {'k': key}
             )
             row = res.fetchone()
-            value = meta.default if row is None or row.value is None else bool(row.value)
+            value = (
+                meta.default if row is None or row.value is None
+                else _coerce_flag(row.value, meta, 'database')
+            )
     except Exception as e:
         logger.warning('site_settings DB read failed for %s: %s', key, e)
         return meta.default
@@ -229,7 +286,7 @@ async def get_site_settings(request: Request) -> JSONResponse:
     flags = []
     for meta in FLAGS.values():
         raw = db_values.get(meta.key)
-        value = meta.default if raw is None else bool(raw)
+        value = meta.default if raw is None else _coerce_flag(raw, meta, 'database')
         flags.append({
             'key': meta.key,
             'value': value,

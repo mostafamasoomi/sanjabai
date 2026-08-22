@@ -280,6 +280,9 @@ async def chat_with_file(
     uid = await chat._get_user_id(request)
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    _disabled = await chat._chat_disabled_response()
+    if _disabled is not None:
+        return _disabled
 
     # Canonicalize a public_id (or any legacy id) to provider_model_id, or
     # resolve a live catalog default when the client sent none -- see

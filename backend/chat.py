@@ -47,6 +47,7 @@ from pydantic import BaseModel
 from database import async_session, _http
 from models import Assistant
 from dependencies import _get_user_id, _to_fa
+from site_settings import get_site_flag
 from services.context_injection import get_injection_messages, inject_messages
 from services.billing import SqlBillingRepo, BillingService, InsufficientBalanceError
 from services.money import Money
@@ -271,6 +272,12 @@ def _as_naive_utc(dt: datetime | None) -> datetime | None:
     return dt
 
 
+async def _chat_disabled_response() -> JSONResponse | None:
+    """503 when chat_enabled is off; None otherwise. Shared via `chat.<name>`."""
+    if await get_site_flag('chat_enabled'):
+        return None
+    return JSONResponse({'error': {'message': 'گفتگو موقتاً در دسترس نیست', 'type': 'service_unavailable', 'code': 'chat_disabled'}}, status_code=503)
+
 # ── File text extraction / web search / /v1/chat/with-file (chat_web.py) ──
 from chat_web import _apply_web_search, _web_search, _release_reservation  # noqa: E402 -- also registers /v1/chat/with-file
 
@@ -304,6 +311,9 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
     uid = await _get_user_id(request)
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    _disabled = await _chat_disabled_response()
+    if _disabled is not None:
+        return _disabled
 
     payload_dict = payload.model_dump(exclude_none=True)
 

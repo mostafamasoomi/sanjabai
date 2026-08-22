@@ -170,6 +170,9 @@ async def compare_models(request: Request, payload: CompareRequest) -> Response:
     uid = await chat._get_user_id(request)
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    _disabled = await chat._chat_disabled_response()
+    if _disabled is not None:
+        return _disabled
 
     model_a = payload.model_a
     model_b = payload.model_b

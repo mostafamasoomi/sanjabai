@@ -70,6 +70,79 @@ class Provider:
         return h
 
 
+# ── openrouter_enabled DB flag: sync/async bridge ────────────────────────
+#
+# configured_providers() below is a plain synchronous function called from
+# both sync and async call sites throughout the codebase (see the comment
+# at its OpenRouter branch). site_settings.get_site_flag() is async. Inside
+# a running event loop there is no safe way to just `await` it from sync
+# code, and blocking with asyncio.run()/run_until_complete() is worse than
+# unsafe here -- configured_providers() is typically called FROM a
+# coroutine already executing on the one running loop (a FastAPI request
+# handler), so run_until_complete() would raise ("this event loop is
+# already running") or, on a version that permitted nesting, would stall
+# every other coroutine on that loop for the DB round-trip. Silently
+# skipping the DB check instead would defeat the point of this feature.
+#
+# Instead: a tiny process-local cache with a short TTL, refreshed
+# fire-and-forget by scheduling a background task on the running loop (if
+# one exists) whenever it goes stale. Each call to
+# _openrouter_db_flag_enabled() returns the CURRENT cached value
+# immediately (never blocks) and may schedule a refresh for next time.
+# Starts at False (fail-safe -- matches get_site_flag's own default for
+# this flag) so a cold cache never enables OpenRouter on an unconfirmed
+# read; a refresh failure leaves the last known-good value in place, i.e.
+# falls back to whatever env-var-only behaviour already had it at.
+_OPENROUTER_FLAG_CACHE_TTL_SECONDS = 5.0
+
+_openrouter_flag_cache: dict[str, Any] = {
+    'value': False,
+    'checked_at': 0.0,
+    'refreshing': False,
+}
+
+
+async def _refresh_openrouter_db_flag() -> None:
+    """Populate ``_openrouter_flag_cache`` from the DB. Never raises."""
+    try:
+        from site_settings import get_site_flag
+        value = await get_site_flag('openrouter_enabled')
+        _openrouter_flag_cache['value'] = value
+        _openrouter_flag_cache['checked_at'] = time.monotonic()
+    except Exception as e:
+        logger.warning(
+            f"providers: openrouter_enabled DB flag refresh failed, "
+            f"keeping last known value ({_openrouter_flag_cache['value']}): {e}"
+        )
+        # Still bump checked_at so a persistently-failing DB doesn't retry
+        # on literally every single call to configured_providers().
+        _openrouter_flag_cache['checked_at'] = time.monotonic()
+    finally:
+        _openrouter_flag_cache['refreshing'] = False
+
+
+def _openrouter_db_flag_enabled() -> bool:
+    """Non-blocking, best-effort read of the ``openrouter_enabled`` DB flag.
+
+    Returns the last cached value immediately. If the cache is stale and a
+    refresh isn't already in flight, schedules one on the currently running
+    event loop (if any) for next time -- never awaits it here, never blocks.
+    """
+    now = time.monotonic()
+    stale = (now - _openrouter_flag_cache['checked_at']) > _OPENROUTER_FLAG_CACHE_TTL_SECONDS
+    if stale and not _openrouter_flag_cache['refreshing']:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop is not None:
+            _openrouter_flag_cache['refreshing'] = True
+            loop.create_task(_refresh_openrouter_db_flag())
+        # else: no running loop (e.g. import time, a plain sync script) --
+        # nothing safe to do; keep serving the last cached value.
+    return bool(_openrouter_flag_cache['value'])
+
+
 def configured_providers() -> list[Provider]:
     """Every upstream that is enabled in the environment.
 
@@ -136,7 +209,17 @@ def configured_providers() -> list[Provider]:
     # required in addition to the key, mirroring the opt-in pattern already
     # used for 9Router/OmniRoute above. A key with the flag off — or the flag
     # on with no key — is skipped quietly rather than erroring.
-    if _env_flag('OPENROUTER_ENABLED'):
+    #
+    # The switch itself is now env var OR the `openrouter_enabled` DB flag
+    # (site_settings.py) -- see _openrouter_db_flag_enabled() below for why
+    # that needs its own small cache rather than a plain `await`: this
+    # function is synchronous and called from both sync and async call
+    # sites (admin_monitoring.py, model_health_api.py, admin_catalog.py,
+    # provider_catalog.py, model_discovery.py, model_health.py). Whatever
+    # the DB read does, the API key requirement above is untouched -- the
+    # flag only ever adds a second way to say "on", never a way to skip the
+    # key check.
+    if _env_flag('OPENROUTER_ENABLED') or _openrouter_db_flag_enabled():
         openrouter_key = os.getenv('OPENROUTER_API_KEY', '').strip()
         if openrouter_key:
             providers.append(

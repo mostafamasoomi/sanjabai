@@ -71,8 +71,17 @@ class TestProviderConfiguration:
         return importlib.reload(providers)
 
     def test_ninerouter_absent_by_default(self, monkeypatch):
-        monkeypatch.delenv('NINEROUTER_URL', raising=False)
-        monkeypatch.delenv('NINEROUTER_ENABLED', raising=False)
+        # Hermetic: clear every env var that can add a non-litellm provider,
+        # not just the NINEROUTER_* ones -- a real .env (e.g. this
+        # deployment's, which also sets OMNIROUTER_URL/OMNIROUTER_ENABLED)
+        # must not leak an extra provider into this "absent by default"
+        # assertion. See providers.configured_providers() for the full set.
+        for var in (
+            'NINEROUTER_URL', 'NINEROUTER_ENABLED', 'NINEROUTER_API_KEY',
+            'OMNIROUTER_URL', 'OMNIROUTER_ENABLED', 'OMNIROUTER_API_KEY',
+            'OPENROUTER_ENABLED', 'OPENROUTER_API_KEY', 'OPENROUTER_BASE_URL',
+        ):
+            monkeypatch.delenv(var, raising=False)
         providers = self._reload()
         names = [p.name for p in providers.configured_providers()]
         assert names == ['litellm']

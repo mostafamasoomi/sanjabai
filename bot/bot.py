@@ -45,6 +45,57 @@ async def get_user_token(telegram_id: int) -> str | None:
     return None
 
 
+# ── Default chat model ──────────────────────────────────────
+#
+# A previous version hardcoded 'gpt-4o' here. The catalog has never offered a
+# chat 'gpt-4o': the only rows matching that name are *-transcribe (audio)
+# models, and all of them are in `maintenance` -- so every /chat command and
+# every plain message sent to the bot got a 400 'model_not_available' from
+# /v1/chat/completions and never reached the AI at all.
+#
+# Resolving the cheapest currently-'sanjab/*' model straight from the same
+# /v1/models the bot's own /models command already calls means: (a) it is
+# always a public id the catalog actually knows about right now, so a future
+# catalog change can't silently re-break every message the same way, and
+# (b) the model string billing prices against (`provider_model_id`) is never
+# missed -- an unresolved/unknown model string would otherwise fall back to
+# the CEILING rate and overcharge the user.
+_DEFAULT_MODEL_CACHE: str | None = None
+_DEFAULT_MODEL_CACHE_AT: float = 0.0
+_DEFAULT_MODEL_CACHE_TTL_SECONDS = 300
+
+
+async def get_default_model() -> str | None:
+    """Cheapest 'sanjab/*' model currently listed in /v1/models, cached for
+    a few minutes. Returns None (never a stale/guessed id) if the API is
+    unreachable and nothing has ever been cached."""
+    global _DEFAULT_MODEL_CACHE, _DEFAULT_MODEL_CACHE_AT
+    now = time.monotonic()
+    if _DEFAULT_MODEL_CACHE and now - _DEFAULT_MODEL_CACHE_AT < _DEFAULT_MODEL_CACHE_TTL_SECONDS:
+        return _DEFAULT_MODEL_CACHE
+    try:
+        r = await api_request('GET', '/v1/models')
+        if r['status'] == 200:
+            candidates = [
+                m for m in r['data'].get('data', [])
+                if isinstance(m.get('id'), str) and m['id'].startswith('sanjab/') and m.get('pricing')
+            ]
+            if candidates:
+                cheapest = min(
+                    candidates,
+                    key=lambda m: (
+                        (m['pricing'].get('inputPerMillion') or 0)
+                        + (m['pricing'].get('outputPerMillion') or 0)
+                    ),
+                )
+                _DEFAULT_MODEL_CACHE = cheapest['id']
+                _DEFAULT_MODEL_CACHE_AT = now
+                return _DEFAULT_MODEL_CACHE
+    except Exception as e:
+        print(f'⚠️  get_default_model: /v1/models lookup failed: {e}')
+    return _DEFAULT_MODEL_CACHE
+
+
 # ── Command handlers ───────────────────────────────────────
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -138,8 +189,13 @@ async def _do_chat(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str
     """Send message to AI and return response"""
     msg = await update.message.reply_text('⏳ در حال پردازش...')
 
+    model = await get_default_model()
+    if not model:
+        await msg.edit_text('❌ در حال حاضر هیچ مدلی در دسترس نیست. کمی دیگر دوباره امتحان کنید.')
+        return
+
     payload = {
-        'model': 'gpt-4o',
+        'model': model,
         'messages': [{'role': 'user', 'content': text}],
     }
 

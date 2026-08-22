@@ -398,7 +398,27 @@ async def set_org_default_model(request: Request, payload: dict[str, Any]) -> JS
 
 @router.get('/admin/users')
 async def admin_users(request: Request) -> JSONResponse:
-    """List all users (admin only)"""
+    """List all users (admin only).
+
+    ── Why `balance` now comes from `wallet`, and `ledger_sum` beside it ──
+    This query used to derive balance as SUM(ledger.amount). That is a
+    *reconstruction*, not the authoritative number: `wallet.balance` is what
+    every billing decision actually reads (BillingService.reserve gates on
+    `balance - reserved`), and the reconstruction cannot see `reserved` at
+    all, so an admin looking at this list could not tell spendable money
+    from money already held against an in-flight request.
+
+    Both are returned deliberately. `balance == ledger_sum` is the
+    append-only ledger invariant holding end to end; a divergence between
+    them means a wallet write landed without a matching ledger row (or vice
+    versa) and is a billing-integrity bug the admin needs to SEE, not one
+    that should be hidden by only ever showing one of the two numbers. The
+    admin user list renders them side by side and flags a mismatch.
+
+    `banned` is returned because the list renders a status badge and a ban
+    button; before this it was absent from the response entirely, so the
+    badge rendered `undefined` for every user and always read "inactive".
+    """
     if not await admin_required(request):
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     if async_session is None:
@@ -414,10 +434,13 @@ async def admin_users(request: Request) -> JSONResponse:
         res = await session.execute(
             sqlalchemy.text('''
                 SELECT u.id, u.email, u.phone, u.telegram_id, u.referral_code,
-                       u.referred_by, u.created_at,
-                       COALESCE(l.balance, 0) as balance,
+                       u.referred_by, u.created_at, u.banned,
+                       COALESCE(w.balance, 0) as balance,
+                       COALESCE(w.reserved, 0) as reserved,
+                       COALESCE(l.balance, 0) as ledger_sum,
                        COALESCE(q.used_today, 0) as used_today
                 FROM users u
+                LEFT JOIN wallet w ON w.user_id = u.id
                 LEFT JOIN (SELECT user_id, SUM(amount) as balance FROM ledger GROUP BY user_id) l ON l.user_id = u.id
                 LEFT JOIN quota q ON q.user_id = u.id
                 ORDER BY u.created_at DESC
@@ -748,8 +771,63 @@ async def admin_analytics(request: Request) -> JSONResponse:
     async with async_session() as session:
         r = await session.execute(sqlalchemy.text('SELECT COUNT(*) as c FROM users'))
         user_count = r.fetchone().c
-        r = await session.execute(sqlalchemy.text("SELECT COALESCE(SUM(amount), 0) as total FROM ledger WHERE amount > 0"))
+        # ── Revenue must mean money that actually arrived through the ──
+        # ── payment gateway, never "any positive ledger row".          ──
+        #
+        # The old query here was `SELECT COALESCE(SUM(amount), 0) FROM ledger
+        # WHERE amount > 0`. That is not revenue -- it is "every ledger row
+        # with a plus sign", and the ledger's sign alone cannot tell a
+        # gateway payment apart from an admin-seeded credit, a refund, or a
+        # released reservation. Measured on production on 2026-08-22:
+        #   payments completed = 0, payment_orders completed = 0
+        #   ledger: one 'topup' row = +10,000,000 (admin-seeded by hand,
+        #     reason='initial_credit'), 52 'usage' rows summing to -53,514
+        #   old query -> total_revenue = 10,000,000 for a business that has
+        #   taken ZERO gateway payments.
+        #
+        # Fix: resolve revenue directly from the payment tables, never from
+        # the ledger. This follows the exact precedent already established
+        # by services/free_tier.py::_HAS_PAID_SQL, whose docstring explains
+        # why: "the ledger writes txn_type='credit' for gateway payments,
+        # referral bonuses AND the signup gift alike, so it cannot tell a
+        # real payment apart from free money" -- that module resolves
+        # "has ever paid" from `payments`/`payment_orders` for the same
+        # reason we resolve revenue from them here.
+        #
+        # Units: `payments.amount` is integer TOMAN -- proven from code, not
+        # from live data, because both `payments` and `payment_orders` are
+        # currently EMPTY in production (0 rows each), so there is nothing
+        # to sample. The proof: payment.py's create_payment() takes
+        # `amount: int  # in Tomans`, and handle_payment_callback() wraps
+        # `payment["amount"]` in `Money(...)` (services/money.py -- an
+        # integer-toman value object) before crediting the wallet. The
+        # legacy `payment_orders.amount_irr` column is integer RIAL (the
+        # name says so; it predates the Money/toman refactor and has no
+        # active writer left in this codebase -- grepped), so it is
+        # converted to toman (/10) before being added. If this assumption
+        # is ever wrong, it would show up as revenue being off by exactly
+        # 10x -- see test_admin_revenue_truth.py's assertion against that.
+        #
+        # `total_admin_credit` is reported separately so the owner can see
+        # real money vs. seeded money side by side. It sums positive ledger
+        # rows whose txn_type is NOT 'credit' -- 'credit' is the txn_type
+        # `services/billing.py::credit_wallet` defaults to, and the ONLY
+        # caller that relies on that default is payment.py's real gateway
+        # credit path (payment.py L199-205, no txn_type passed). Every
+        # non-gateway credit path in the current codebase passes an explicit
+        # non-'credit' txn_type (admin_user_ops.py uses 'admin_credit'; the
+        # one production 'topup'/'initial_credit' row was seeded directly).
+        # Do NOT "simplify" this back to SUM(amount) WHERE amount > 0.
+        r = await session.execute(sqlalchemy.text(
+            "SELECT COALESCE((SELECT SUM(amount) FROM payments WHERE status = 'completed'), 0) "
+            "+ COALESCE((SELECT SUM(amount_irr) FROM payment_orders WHERE status = 'completed'), 0) / 10 "
+            "AS total"
+        ))
         total_revenue = r.fetchone().total
+        r = await session.execute(sqlalchemy.text(
+            "SELECT COALESCE(SUM(amount), 0) AS total FROM ledger WHERE amount > 0 AND txn_type <> 'credit'"
+        ))
+        total_admin_credit = r.fetchone().total
         r = await session.execute(sqlalchemy.text('SELECT COALESCE(SUM(used_today), 0) as total FROM quota'))
         total_tokens = r.fetchone().total
         r = await session.execute(sqlalchemy.text('SELECT COUNT(*) as c FROM conversations'))
@@ -760,7 +838,8 @@ async def admin_analytics(request: Request) -> JSONResponse:
         recent = [{'id': row.id, 'user_id': row.user_id, 'amount': row.amount, 'balance_after': row.balance_after, 'reason': row.reason, 'created_at': row.created_at} for row in r.fetchall()]
     return JSONResponse(jsonable_encoder({
         'user_count': user_count, 'active_users': active_users,
-        'total_revenue': total_revenue, 'total_tokens': total_tokens,
+        'total_revenue': total_revenue, 'total_admin_credit': total_admin_credit,
+        'total_tokens': total_tokens,
         'conv_count': conv_count, 'recent_ledger': recent,
     }))
 
@@ -781,8 +860,23 @@ async def admin_stats(request: Request) -> JSONResponse:
         total_conversations = r.fetchone().c
         r = await session.execute(sqlalchemy.text('SELECT COUNT(*) as c FROM api_keys'))
         total_api_keys = r.fetchone().c
-        r = await session.execute(sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as t FROM ledger WHERE amount > 0'))
-        total_revenue = float(r.scalar() or 0)
+        # Revenue = completed gateway payments only, never a raw ledger sum.
+        # See the long comment in admin_analytics() above for the full
+        # rationale, the production evidence (10,000,000 toman of fake
+        # "revenue" from a single admin-seeded ledger row), the toman-unit
+        # proof, and why total_admin_credit is reported separately. Also
+        # switched float(...) -> int(...): money in this codebase is always
+        # integer toman, never a float (services/money.py).
+        r = await session.execute(sqlalchemy.text(
+            "SELECT COALESCE((SELECT SUM(amount) FROM payments WHERE status = 'completed'), 0) "
+            "+ COALESCE((SELECT SUM(amount_irr) FROM payment_orders WHERE status = 'completed'), 0) / 10 "
+            "AS total"
+        ))
+        total_revenue = int(r.scalar() or 0)
+        r = await session.execute(sqlalchemy.text(
+            "SELECT COALESCE(SUM(amount), 0) AS total FROM ledger WHERE amount > 0 AND txn_type <> 'credit'"
+        ))
+        total_admin_credit = int(r.scalar() or 0)
         r = await session.execute(sqlalchemy.text('SELECT COUNT(*) as c FROM usage_events'))
         total_usage_events = r.fetchone().c
         r = await session.execute(sqlalchemy.text("SELECT COUNT(*) as c FROM model_catalog WHERE availability = 'available'"))
@@ -790,7 +884,8 @@ async def admin_stats(request: Request) -> JSONResponse:
     return JSONResponse({
         'total_users': total_users, 'active_users': active_users,
         'total_conversations': total_conversations, 'total_api_keys': total_api_keys,
-        'total_revenue': total_revenue, 'total_usage_events': total_usage_events,
+        'total_revenue': total_revenue, 'total_admin_credit': total_admin_credit,
+        'total_usage_events': total_usage_events,
         'total_models': total_models,
     })
 

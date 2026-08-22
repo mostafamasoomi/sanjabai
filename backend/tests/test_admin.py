@@ -93,9 +93,23 @@ class TestAdminDiscounts:
 class TestAdminAnalytics:
     def test_analytics(self, client, mock_async_session, admin_headers):
         # Return different results for each execute call
+        #
+        # This assertion previously read `total_revenue == 5000000` against
+        # the OLD (wrong) query `SUM(amount) WHERE amount > 0 FROM ledger`
+        # -- i.e. it treated the second execute() call's canned row as "any
+        # positive ledger sum". Revenue is now resolved from the payment
+        # tables (see admin.py::admin_analytics's comment for the full
+        # rationale + production evidence), which added one extra execute()
+        # call (a separate total_admin_credit query straight after it) --
+        # so this list grew from 6 entries to 7 and the two revenue-shaped
+        # entries were relabeled to match what they now represent: real
+        # gateway revenue vs. non-gateway ("admin credit") ledger money.
+        # See test_admin_revenue_truth.py for the dedicated regression test
+        # that actually distinguishes the two.
         results = [
             make_result(fetchone=make_row(c=100)),   # user count
-            make_result(fetchone=make_row(total=5000000)),  # revenue
+            make_result(fetchone=make_row(total=5000000)),  # total_revenue (payments/payment_orders)
+            make_result(fetchone=make_row(total=1000000)),  # total_admin_credit (non-gateway ledger)
             make_result(fetchone=make_row(total=15000000)),  # tokens
             make_result(fetchone=make_row(c=250)),  # conv count
             make_result(fetchone=make_row(c=45)),   # active users
@@ -118,6 +132,7 @@ class TestAdminAnalytics:
         data = response.json()
         assert data['user_count'] == 100
         assert data['total_revenue'] == 5000000
+        assert data['total_admin_credit'] == 1000000
         assert data['total_tokens'] == 15000000
         assert data['conv_count'] == 250
         assert data['active_users'] == 45

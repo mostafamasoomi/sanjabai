@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiFetch'
 import { useCatalog, priceBand, PRICE_BAND_LABEL } from '@/lib/useCatalog'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
@@ -43,7 +44,7 @@ export default function CreateAssistantPage() {
 
     setSubmitting(true)
     try {
-      const res = await fetch('/api/assistants', {
+      const res = await apiFetch('/api/assistants', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

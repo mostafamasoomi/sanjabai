@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiFetch'
 import { faNum } from '@/lib/format'
 
 type DocType = 'pptx' | 'docx' | 'mdx'
@@ -81,7 +82,7 @@ export default function DocumentsPage() {
     setResult(null)
 
     try {
-      const res = await fetch('/v1/documents/generate', {
+      const res = await apiFetch('/v1/documents/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -114,7 +115,7 @@ export default function DocumentsPage() {
   const handleDelete = async (docId: string) => {
     if (!token) return
     try {
-      await fetch(`/v1/documents/${docId}`, {
+      await apiFetch(`/v1/documents/${docId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })

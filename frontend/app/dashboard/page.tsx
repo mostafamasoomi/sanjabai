@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { Num, faNum, faPercent, faDate, faTime } from '@/lib/format'
@@ -352,7 +353,7 @@ export default function DashboardPage() {
     if (!token || !billingSettings) return
     setPaygLoading(true)
     try {
-      const res = await fetch('/api/billing/settings', {
+      const res = await apiFetch('/api/billing/settings', {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ payg_enabled: !billingSettings.payg_enabled }),
@@ -380,7 +381,7 @@ export default function DashboardPage() {
     }
     setHardLimitLoading(true)
     try {
-      const res = await fetch('/api/billing/settings', {
+      const res = await apiFetch('/api/billing/settings', {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ payg_hard_limit: parsed }),

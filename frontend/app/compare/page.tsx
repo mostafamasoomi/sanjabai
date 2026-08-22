@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiFetch'
 import { useCatalog, priceBand, PRICE_BAND_LABEL } from '@/lib/useCatalog'
 import { type ModelCatalogItem } from '@/types/catalog'
 import { Icon } from '@/components/ui/Icon'
@@ -97,7 +98,7 @@ export default function ComparePage() {
     if (token) headers['Authorization'] = `Bearer ${token}`
 
     try {
-      const res = await fetch('/api/v1/compare', {
+      const res = await apiFetch('/api/v1/compare', {
         method: 'POST',
         headers,
         body: JSON.stringify({

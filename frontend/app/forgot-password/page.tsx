@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { toast } from '@/components/ui'
+import { apiFetch } from '@/lib/apiFetch'
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
@@ -14,7 +15,7 @@ export default function ForgotPasswordPage() {
     if (!email.trim()) return toast('ایمیل خود را وارد کنید', 'error')
     setBusy(true)
     try {
-      const res = await fetch('/api/auth/forgot-password', {
+      const res = await apiFetch('/api/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim() }),

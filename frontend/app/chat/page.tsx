@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiFetch'
 import { useCatalog } from '@/lib/useCatalog'
 import { type ModelCatalogItem } from '@/types/catalog'
 import { Icon, type IconName } from '@/components/ui/Icon'
@@ -378,7 +379,7 @@ export default function ChatPage() {
     if (!token) return null
     const title = firstUserMsg.slice(0, 50) + (firstUserMsg.length > 50 ? '...' : '')
     try {
-      const res = await fetch('/api/conversations', {
+      const res = await apiFetch('/api/conversations', {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({ title, model: model?.providerModelId || model?.id || '' }),
@@ -402,7 +403,7 @@ export default function ChatPage() {
     if (!token) return
     const payload = msgs.filter(m => m.id !== 'welcome').map(m => ({ role: m.role, content: m.content }))
     try {
-      await fetch(`/api/conversations/${convId}`, {
+      await apiFetch(`/api/conversations/${convId}`, {
         method: 'PUT',
         headers: authHeaders(),
         body: JSON.stringify({ messages: payload }),
@@ -414,7 +415,7 @@ export default function ChatPage() {
     if (!token) return
     setDeletingId(id)
     try {
-      const res = await fetch(`/api/conversations/${id}`, {
+      const res = await apiFetch(`/api/conversations/${id}`, {
         method: 'DELETE',
         headers: authHeaders(),
       })
@@ -622,10 +623,10 @@ export default function ChatPage() {
         fd.append('stream', 'true')
         const fh: Record<string, string> = {}
         if (token) fh['Authorization'] = `Bearer ${token}`
-        res = await fetch('/api/v1/chat/with-file', { method: 'POST', headers: fh, body: fd, signal: controller.signal })
+        res = await apiFetch('/api/v1/chat/with-file', { method: 'POST', headers: fh, body: fd, signal: controller.signal })
         setAttachedFile(null)
       } else {
-        res = await fetch(chatUrl, {
+        res = await apiFetch(chatUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

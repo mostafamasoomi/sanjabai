@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiFetch'
 import { Icon } from '@/components/ui/Icon'
 import { Spinner, toast } from '@/components/ui'
 import { faPrice, faNum } from '@/lib/format'
@@ -105,7 +106,7 @@ export default function HermesOrderPage() {
     if (!offering) return
     setSubmitting(true)
     try {
-      const res = await fetch('/api/hermes/orders', {
+      const res = await apiFetch('/api/hermes/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ offering_id: offering.id, config: { skills: selected } }),

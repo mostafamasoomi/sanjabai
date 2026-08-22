@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
 import { faNum, faPrice } from '@/lib/format'
@@ -169,7 +170,7 @@ export default function ProfilePage() {
     setSaving(true)
     try {
       const t = token || localStorage.getItem('sanjabai_auth_token')
-      const r = await fetch('/api/auth/profile', {
+      const r = await apiFetch('/api/auth/profile', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -257,7 +258,7 @@ export default function ProfilePage() {
       reader.onload = async () => {
         const base64 = (reader.result as string).split(',')[1]
         const t = token || localStorage.getItem('sanjabai_auth_token')
-        const r = await fetch('/api/auth/avatar', {
+        const r = await apiFetch('/api/auth/avatar', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -293,7 +294,7 @@ export default function ProfilePage() {
     setChangingPassword(true)
     try {
       const t = token || localStorage.getItem('sanjabai_auth_token')
-      const r = await fetch('/api/auth/change-password', {
+      const r = await apiFetch('/api/auth/change-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -325,7 +326,7 @@ export default function ProfilePage() {
     setLinkingTelegram(true)
     try {
       const t = token || localStorage.getItem('sanjabai_auth_token')
-      const r = await fetch('/api/auth/telegram-link', {
+      const r = await apiFetch('/api/auth/telegram-link', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

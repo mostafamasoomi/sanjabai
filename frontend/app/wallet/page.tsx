@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { faNum, faPrice, toFaDigits } from '@/lib/format'
@@ -255,7 +256,7 @@ export default function WalletPage() {
       // there is no synchronous "credit applied" branch: the wallet is only
       // credited later, atomically, when the gateway calls back
       // (backend/payment_endpoints.py:26-57, :211).
-      const res = await fetch('/api/payment/request', {
+      const res = await apiFetch('/api/payment/request', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: effectiveAmount, description: 'شارژ کیف پول' }),
@@ -289,7 +290,7 @@ export default function WalletPage() {
     if (!token || purchasingPkgId) return
     setPurchasingPkgId(pkgId)
     try {
-      const res = await fetch('/api/credit-package/checkout', {
+      const res = await apiFetch('/api/credit-package/checkout', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ package_id: pkgId }),

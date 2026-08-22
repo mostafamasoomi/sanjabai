@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiFetch'
 import { Icon } from '@/components/ui/Icon'
 import { Spinner, Modal, toast } from '@/components/ui'
 import { faPrice, faDate, faNum } from '@/lib/format'
@@ -84,7 +85,7 @@ export default function HermesServerDetailPage() {
   const removeSkill = async (skillId: string) => {
     if (!token || !server) return
     try {
-      const res = await fetch(`/api/hermes/servers/${server.id}/skills/${skillId}`, {
+      const res = await apiFetch(`/api/hermes/servers/${server.id}/skills/${skillId}`, {
         method: 'DELETE', headers: { Authorization: `Bearer ${token}` },
       })
       if (!res.ok) {
@@ -102,7 +103,7 @@ export default function HermesServerDetailPage() {
   const toggleSkill = async (skillId: string, enabled: boolean) => {
     if (!token || !server) return
     try {
-      const res = await fetch(`/api/hermes/servers/${server.id}/skills/${skillId}`, {
+      const res = await apiFetch(`/api/hermes/servers/${server.id}/skills/${skillId}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ enabled }),
       })
@@ -224,7 +225,7 @@ function AddSkillModal({
     if (!token || !skillId) return
     setSubmitting(true)
     try {
-      const res = await fetch(`/api/hermes/servers/${serverId}/skills`, {
+      const res = await apiFetch(`/api/hermes/servers/${serverId}/skills`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ skill_id: skillId, options: {} }),
       })

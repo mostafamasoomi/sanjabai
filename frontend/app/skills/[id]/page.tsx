@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
 import { faNum } from '@/lib/format'
@@ -171,7 +172,7 @@ export default function SkillDetailPage() {
     if (!skill || !token) return
     setExecuting(true)
     try {
-      const res = await fetch(`/api/skills/${skill.id}/use`, {
+      const res = await apiFetch(`/api/skills/${skill.id}/use`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ variables, model }),
@@ -192,7 +193,7 @@ export default function SkillDetailPage() {
   const handleRate = async (rating: number) => {
     if (!skill || !token) return
     try {
-      const res = await fetch(`/api/skills/${skill.id}/rate`, {
+      const res = await apiFetch(`/api/skills/${skill.id}/rate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ rating }),

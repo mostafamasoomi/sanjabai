@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiFetch'
 import { toast, Modal, EmptyState, Skeleton, Tabs } from '@/components/ui'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { faNum, faPrice, toFaDigits } from '@/lib/format'
@@ -177,7 +178,7 @@ export default function TasksPage() {
     try {
       const url = editingTask ? `/api/tasks/${editingTask.id}` : '/api/tasks'
       const method = editingTask ? 'PUT' : 'POST'
-      const r = await fetch(url, {
+      const r = await apiFetch(url, {
         method,
         headers: headers(),
         body: JSON.stringify(form),
@@ -199,7 +200,7 @@ export default function TasksPage() {
 
   const toggleTask = async (task: Task) => {
     try {
-      const r = await fetch(`/api/tasks/${task.id}/toggle`, {
+      const r = await apiFetch(`/api/tasks/${task.id}/toggle`, {
         method: 'POST', headers: headers(),
       })
       if (r.ok) {
@@ -214,7 +215,7 @@ export default function TasksPage() {
   const runTask = async (task: Task) => {
     setRunningTaskId(task.id)
     try {
-      const r = await fetch(`/api/tasks/${task.id}/run`, {
+      const r = await apiFetch(`/api/tasks/${task.id}/run`, {
         method: 'POST', headers: headers(),
       })
       if (r.ok) {
@@ -234,7 +235,7 @@ export default function TasksPage() {
     if (!confirm(`آیا از حذف «${task.title}» مطمئن هستید؟`)) return
     setDeletingId(task.id)
     try {
-      const r = await fetch(`/api/tasks/${task.id}`, {
+      const r = await apiFetch(`/api/tasks/${task.id}`, {
         method: 'DELETE', headers: headers(),
       })
       if (r.ok) {

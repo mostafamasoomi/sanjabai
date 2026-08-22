@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
 
@@ -121,7 +122,7 @@ export default function MemoryPage() {
     setSaving(true)
     try {
       const token = localStorage.getItem('sanjabai_auth_token')
-      const r = await fetch('/api/memories', {
+      const r = await apiFetch('/api/memories', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -163,7 +164,7 @@ export default function MemoryPage() {
     if (editingId === null) return
     try {
       const token = localStorage.getItem('sanjabai_auth_token')
-      const r = await fetch(`/api/memories/${editingId}`, {
+      const r = await apiFetch(`/api/memories/${editingId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -193,7 +194,7 @@ export default function MemoryPage() {
   const deleteMemory = async (id: number) => {
     try {
       const token = localStorage.getItem('sanjabai_auth_token')
-      const r = await fetch(`/api/memories/${id}`, {
+      const r = await apiFetch(`/api/memories/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })

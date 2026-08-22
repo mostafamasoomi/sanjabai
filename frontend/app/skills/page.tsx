@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { faNum } from '@/lib/format'
@@ -267,7 +268,7 @@ function UseSkillModal({
     if (!skill || !token) return
     setLoading(true)
     try {
-      const res = await fetch(`/api/skills/${skill.id}/use`, {
+      const res = await apiFetch(`/api/skills/${skill.id}/use`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ variables, model }),
@@ -288,7 +289,7 @@ function UseSkillModal({
   const handleRate = async (rating: number) => {
     if (!skill || !token) return
     try {
-      const res = await fetch(`/api/skills/${skill.id}/rate`, {
+      const res = await apiFetch(`/api/skills/${skill.id}/rate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ rating }),
@@ -565,7 +566,7 @@ function CreateSkillModal({
           .filter(Boolean),
       }
 
-      const res = await fetch('/api/skills', {
+      const res = await apiFetch('/api/skills', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(body),

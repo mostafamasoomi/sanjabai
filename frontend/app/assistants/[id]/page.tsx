@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiFetch'
 import { useCatalog, priceBand, PRICE_BAND_LABEL } from '@/lib/useCatalog'
 import { toast } from '@/components/ui'
 import { Icon, type IconName } from '@/components/ui/Icon'
@@ -116,7 +117,7 @@ export default function AssistantDetailPage() {
 
     setSubmitting(true)
     try {
-      const res = await fetch(`/api/assistants/${assistant.id}`, {
+      const res = await apiFetch(`/api/assistants/${assistant.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -156,7 +157,7 @@ export default function AssistantDetailPage() {
 
     setDeleting(true)
     try {
-      const res = await fetch(`/api/assistants/${assistant.id}`, {
+      const res = await apiFetch(`/api/assistants/${assistant.id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })

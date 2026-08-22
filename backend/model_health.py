@@ -24,65 +24,45 @@ common case costs nothing and the long tail still gets covered.
 Status is derived over a rolling window rather than from the last sample, so a
 single blip does not take a model out of the picker and a model that fails
 every other call does not look healthy.
+
+This is now three files. This one owns recording samples, the rollup, and the
+probe loop (all DB-touching). model_health_policy.py holds the pure decision
+functions (`_derive_status` and friends) — no database, directly unit-
+testable. model_health_api.py is the read side: `health_map`,
+`healthy_model_ids`, and the `/models/health` endpoint. `router` and
+`health_map` are re-exported below so existing imports of them from this
+module (app.py, admin_monitoring.py, content.py) keep working unchanged.
 """
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 import sqlalchemy
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
 
 from database import async_session, rds
-from providers import (
-    Provider,
-    configured_providers,
-    list_models,
-    probe_model,
-    upstream_alive,
+# _derive_status: unused directly below, but this re-exports it so
+# tests/test_model_health.py's `from model_health import _derive_status` keeps working.
+from model_health_policy import (
+    PROBE_CONCURRENCY, PROBE_INTERVAL_S, PROVIDER_FAULT_REASONS, RETENTION, WINDOW,
+    _SUMMARY_CACHE_KEY, _build_mirror_target, _derive_status, _is_quarantine_recheck_sweep,
+    _plan_catalog_mirror,
 )
+# router/health_map: unused directly below, re-exported so app.py's
+# `from model_health import router` and admin_monitoring.py's/content.py's
+# `from model_health import health_map` keep working unchanged.
+from model_health_api import health_map, router
+from providers import Provider, configured_providers, list_models, probe_model, upstream_alive
 
 logger = logging.getLogger('model_health')
 
-router = APIRouter()
+_CATALOG_CACHE_KEYS = ('cache:catalog:models', 'cache:catalog:pricing', 'cache:api:pricing')
 
-Status = Literal['healthy', 'degraded', 'down', 'unknown']
-
-# ── Tuning ──────────────────────────────────────────────────────────────────
-
-#: How far back a sample still counts toward the current rollup.
-WINDOW = timedelta(minutes=int(os.getenv('MODEL_HEALTH_WINDOW_MIN', '30')))
-
-#: Gap between probe sweeps. Deliberately long: a sweep costs one token per
-#: model, and real traffic covers the models that matter in between.
-PROBE_INTERVAL_S = int(os.getenv('MODEL_HEALTH_PROBE_INTERVAL', '600'))
-
-#: Probes run a few at a time so a sweep does not open 23 upstream sockets at
-#: once and look like an attack.
-PROBE_CONCURRENCY = int(os.getenv('MODEL_HEALTH_PROBE_CONCURRENCY', '4'))
-
-#: Below this success rate in the window a model is degraded; below the second
-#: it is down.
-DEGRADED_BELOW = float(os.getenv('MODEL_HEALTH_DEGRADED_BELOW', '0.85'))
-DOWN_BELOW = float(os.getenv('MODEL_HEALTH_DOWN_BELOW', '0.4'))
-
-#: Consecutive failures that mark a model down regardless of rate — catches a
-#: model that just broke without waiting for the window average to sag.
-DOWN_AFTER_CONSECUTIVE = int(os.getenv('MODEL_HEALTH_DOWN_AFTER', '3'))
-
-#: A model answering this slowly is usable but not healthy.
-DEGRADED_LATENCY_MS = int(os.getenv('MODEL_HEALTH_SLOW_MS', '15000'))
-
-#: Samples older than this are deleted; the status page only shows the window.
-RETENTION = timedelta(days=int(os.getenv('MODEL_HEALTH_RETENTION_DAYS', '7')))
-
-_SUMMARY_CACHE_KEY = 'cache:model_health:summary'
-_SUMMARY_CACHE_TTL = 20
+#: Sweep counter for the quarantine slow lane. Module-level, not Redis: one
+#: background task in one process — losing it on restart costs one extra cycle.
+_sweep_count = 0
 
 
 # ── Recording ───────────────────────────────────────────────────────────────
@@ -135,41 +115,10 @@ async def record_traffic(
     await record(model_id, ok=ok, source='traffic', latency_ms=latency_ms, error=error)
 
 
-# ── Rollup ──────────────────────────────────────────────────────────────────
-
-
-def _derive_status(
-    sample_count: int,
-    success_rate: float | None,
-    consecutive_failures: int,
-    latency_p50: int | None,
-) -> Status:
-    """Turn window statistics into a status.
-
-    Order matters: a model with three straight failures is down even if the
-    window average still looks acceptable, because the average is describing a
-    past that no longer applies.
-    """
-    if sample_count == 0 or success_rate is None:
-        return 'unknown'
-    if consecutive_failures >= DOWN_AFTER_CONSECUTIVE:
-        return 'down'
-    if success_rate < DOWN_BELOW:
-        return 'down'
-    if success_rate < DEGRADED_BELOW:
-        return 'degraded'
-    if latency_p50 is not None and latency_p50 > DEGRADED_LATENCY_MS:
-        return 'degraded'
-    return 'healthy'
-
-
+# ── Rollup (DB-touching; pure decisions live in model_health_policy.py) ───
 async def recompute_states() -> int:
-    """Recompute `model_health_state` from the event window.
-
-    One pass in SQL rather than a query per model: with 23 models and a probe
-    every ten minutes this is trivial either way, but it keeps the loop O(1) in
-    round-trips as the catalog grows.
-    """
+    """Recompute `model_health_state` from the event window and mirror it
+    onto the catalog. Returns the number of model_health_state rows upserted."""
     if async_session is None:
         return 0
 
@@ -178,19 +127,15 @@ async def recompute_states() -> int:
         res = await session.execute(
             sqlalchemy.text(
                 """
-                SELECT model_id,
-                       MAX(provider)                                  AS provider,
-                       COUNT(*)                                       AS sample_count,
-                       AVG(CASE WHEN ok THEN 1.0 ELSE 0.0 END)        AS success_rate,
+                SELECT model_id, MAX(provider) AS provider, COUNT(*) AS sample_count,
+                       AVG(CASE WHEN ok THEN 1.0 ELSE 0.0 END) AS success_rate,
                        PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY latency_ms)
-                           FILTER (WHERE ok AND latency_ms IS NOT NULL)  AS p50,
+                           FILTER (WHERE ok AND latency_ms IS NOT NULL) AS p50,
                        PERCENTILE_DISC(0.95) WITHIN GROUP (ORDER BY latency_ms)
-                           FILTER (WHERE ok AND latency_ms IS NOT NULL)  AS p95,
-                       MAX(created_at) FILTER (WHERE ok)              AS last_ok_at,
-                       MAX(created_at) FILTER (WHERE NOT ok)          AS last_error_at
-                  FROM model_health_event
-                 WHERE created_at >= :cutoff
-                 GROUP BY model_id
+                           FILTER (WHERE ok AND latency_ms IS NOT NULL) AS p95,
+                       MAX(created_at) FILTER (WHERE ok) AS last_ok_at,
+                       MAX(created_at) FILTER (WHERE NOT ok) AS last_error_at
+                  FROM model_health_event WHERE created_at >= :cutoff GROUP BY model_id
                 """
             ),
             {'cutoff': cutoff},
@@ -198,11 +143,13 @@ async def recompute_states() -> int:
         rows = [dict(r._mapping) for r in res.fetchall()]
 
         updated = 0
+        # Keyed by health-event model_id (== catalog id or provider_model_id);
+        # only models with samples this window, i.e. that can change status.
+        mirror_targets: dict[str, dict[str, Any]] = {}
         for row in rows:
             model_id = row['model_id']
 
-            # Consecutive trailing failures, newest first. Cheap because the
-            # index is (model_id, created_at DESC) and we stop at the first ok.
+            # Consecutive trailing failures, newest first; stop at first ok.
             streak_res = await session.execute(
                 sqlalchemy.text(
                     'SELECT ok FROM model_health_event WHERE model_id = :m '
@@ -216,63 +163,65 @@ async def recompute_states() -> int:
                     break
                 consecutive += 1
 
-            last_err_res = await session.execute(
+            # Last failing reason + provider-fault classification (how many
+            # failures were our account/quota/gateway, not the model) in one
+            # query, for the catalog mirror below.
+            fault_res = await session.execute(
                 sqlalchemy.text(
-                    'SELECT error FROM model_health_event '
-                    'WHERE model_id = :m AND NOT ok AND error IS NOT NULL '
-                    'ORDER BY created_at DESC LIMIT 1'
-                ),
-                {'m': model_id},
+                    "SELECT COUNT(*) FILTER (WHERE NOT ok) AS failures, "
+                    "COUNT(*) FILTER (WHERE NOT ok AND error IN :reasons) "
+                    "    AS provider_fault_failures, "
+                    "(ARRAY_AGG(error ORDER BY created_at DESC) "
+                    "    FILTER (WHERE NOT ok AND error IS NOT NULL))[1] AS last_error "
+                    "FROM model_health_event WHERE model_id = :m AND created_at >= :cutoff"
+                ).bindparams(sqlalchemy.bindparam('reasons', expanding=True)),
+                {'m': model_id, 'cutoff': cutoff, 'reasons': tuple(PROVIDER_FAULT_REASONS)},
             )
-            last_error_row = last_err_res.fetchone()
+            fault_row = fault_res.fetchone()
+            last_error = fault_row.last_error if fault_row else None
 
             success_rate = float(row['success_rate']) if row['success_rate'] is not None else None
             p50 = int(row['p50']) if row['p50'] is not None else None
-            status = _derive_status(int(row['sample_count']), success_rate, consecutive, p50)
+            mirror_targets[model_id] = _build_mirror_target(
+                int(row['sample_count']), success_rate, consecutive, p50,
+                int(fault_row.failures or 0) if fault_row else 0,
+                int(fault_row.provider_fault_failures or 0) if fault_row else 0,
+                last_error,
+            )
+            status = mirror_targets[model_id]['status']
 
             await session.execute(
                 sqlalchemy.text(
                     """
-                    INSERT INTO model_health_state
-                        (model_id, provider, status, success_rate, latency_p50_ms,
-                         latency_p95_ms, sample_count, consecutive_failures,
-                         last_ok_at, last_error, last_error_at, checked_at, updated_at)
-                    VALUES
-                        (:m, :prov, :status, :rate, :p50, :p95, :n, :consec,
-                         :last_ok, :last_error, :last_error_at, now(), now())
+                    INSERT INTO model_health_state (model_id, provider, status,
+                        success_rate, latency_p50_ms, latency_p95_ms, sample_count,
+                        consecutive_failures, last_ok_at, last_error, last_error_at,
+                        checked_at, updated_at)
+                    VALUES (:m, :prov, :status, :rate, :p50, :p95, :n, :consec,
+                        :last_ok, :last_error, :last_error_at, now(), now())
                     ON CONFLICT (model_id) DO UPDATE SET
-                        provider             = EXCLUDED.provider,
-                        status               = EXCLUDED.status,
-                        success_rate         = EXCLUDED.success_rate,
-                        latency_p50_ms       = EXCLUDED.latency_p50_ms,
-                        latency_p95_ms       = EXCLUDED.latency_p95_ms,
-                        sample_count         = EXCLUDED.sample_count,
+                        provider = EXCLUDED.provider, status = EXCLUDED.status,
+                        success_rate = EXCLUDED.success_rate,
+                        latency_p50_ms = EXCLUDED.latency_p50_ms,
+                        latency_p95_ms = EXCLUDED.latency_p95_ms,
+                        sample_count = EXCLUDED.sample_count,
                         consecutive_failures = EXCLUDED.consecutive_failures,
-                        last_ok_at           = EXCLUDED.last_ok_at,
-                        last_error           = EXCLUDED.last_error,
-                        last_error_at        = EXCLUDED.last_error_at,
-                        checked_at           = now(),
-                        updated_at           = now()
+                        last_ok_at = EXCLUDED.last_ok_at, last_error = EXCLUDED.last_error,
+                        last_error_at = EXCLUDED.last_error_at,
+                        checked_at = now(), updated_at = now()
                     """
                 ),
                 {
-                    'm': model_id,
-                    'prov': row.get('provider') or 'unknown',
-                    'status': status,
-                    'rate': success_rate,
-                    'p50': p50,
+                    'm': model_id, 'prov': row.get('provider') or 'unknown', 'status': status,
+                    'rate': success_rate, 'p50': p50, 'consec': consecutive,
                     'p95': int(row['p95']) if row['p95'] is not None else None,
-                    'n': int(row['sample_count']),
-                    'consec': consecutive,
-                    'last_ok': row['last_ok_at'],
-                    'last_error': last_error_row[0] if last_error_row else None,
-                    'last_error_at': row['last_error_at'],
+                    'n': int(row['sample_count']), 'last_ok': row['last_ok_at'],
+                    'last_error': last_error, 'last_error_at': row['last_error_at'],
                 },
             )
             updated += 1
 
-        # Models with no samples in the window fall back to unknown rather than
-        # keeping a stale "healthy" from an hour ago.
+        # No samples this window falls back to unknown, not a stale status.
         await session.execute(
             sqlalchemy.text(
                 "UPDATE model_health_state SET status = 'unknown', updated_at = now() "
@@ -281,41 +230,85 @@ async def recompute_states() -> int:
             {'cutoff': cutoff, 'unknown': 'unknown'},
         )
 
-        # Mirror onto the catalog so existing availability-based queries and the
-        # admin UI agree with the status page.
-        await session.execute(
+        # Mirror onto the catalog. EXISTS, not a bare provenance filter: of
+        # 1126 non-admin-approved rows only ~58 ever have a health-state
+        # entry; the rest can never appear in mirror_targets, so fetching
+        # all 1126 every sweep was wasted work.
+        catalog_res = await session.execute(
             sqlalchemy.text(
-                """
-                UPDATE model_catalog c SET availability = CASE s.status
-                        WHEN 'healthy'  THEN
-                            -- Reachability alone must not put a model in front of
-                            -- users. `maintenance` is a deliberate parking state --
-                            -- discovery lands new models there and an admin hides
-                            -- models there -- so a health probe may never undo it.
-                            -- An unpriced model would bill nothing, so it stays
-                            -- parked until someone prices it.
-                            CASE
-                                WHEN c.availability = 'maintenance' THEN 'maintenance'
-                                WHEN COALESCE(c.input_per_million, 0) <= 0 THEN 'maintenance'
-                                ELSE 'available'
-                            END
-                        WHEN 'degraded' THEN 'degraded'
-                        WHEN 'down'     THEN 'disabled'
-                        ELSE c.availability
-                    END,
-                    last_verified_at = s.checked_at
-                  FROM model_health_state s
-                 WHERE (c.id = s.model_id OR c.provider_model_id = s.model_id)
-                   AND c.provenance <> 'admin-approved'
-                """
+                "SELECT id, provider_model_id, availability, provenance, "
+                "input_per_million, health_quarantine_reason "
+                "FROM model_catalog c WHERE provenance <> 'admin-approved' "
+                "AND EXISTS (SELECT 1 FROM model_health_state s "
+                "            WHERE c.id = s.model_id OR c.provider_model_id = s.model_id)"
             )
         )
+        catalog_rows = [dict(r._mapping) for r in catalog_res.fetchall()]
+
+        # The decision (what changes, to what, and why) is pure and lives in
+        # _plan_catalog_mirror; this loop only executes and logs it.
+        plan = _plan_catalog_mirror(catalog_rows, mirror_targets)
+        any_changed = any(p['changed'] for p in plan)
+        for p in plan:
+            if p['changed']:
+                logger.info(
+                    'catalog availability %s: %s -> %s (health=%s, reason=%s)',
+                    p['id'], p['from_a'], p['avail'], p['hstatus'], p['reason_log'],
+                )
+                # UPDATE + audit row share a CTE: recorded only if it happens.
+                await session.execute(
+                    sqlalchemy.text(
+                        """
+                        WITH upd AS (
+                            UPDATE model_catalog SET availability = :avail,
+                                health_quarantine_reason = :reason,
+                                health_quarantined_at = CASE WHEN :reason IS NOT NULL THEN now() END,
+                                last_verified_at = now(), updated_at = now()
+                            WHERE id = :id RETURNING id
+                        )
+                        INSERT INTO model_availability_change (model_id, from_availability,
+                            to_availability, reason, health_status, success_rate, sample_count)
+                        SELECT :id, :from_a, :avail, :reason_log, :hstatus, :rate, :n FROM upd
+                        """
+                    ),
+                    p,
+                )
+            else:
+                # No transition: refresh timestamps only, no audit row.
+                await session.execute(
+                    sqlalchemy.text(
+                        'UPDATE model_catalog SET health_quarantine_reason = :reason, '
+                        'health_quarantined_at = CASE WHEN :reason IS NOT NULL THEN now() '
+                        'ELSE health_quarantined_at END, last_verified_at = now() WHERE id = :id'
+                    ),
+                    p,
+                )
+
+        # `available` with no public_id is silently invisible to the public.
+        no_public_id_res = await session.execute(
+            sqlalchemy.text(
+                "SELECT id FROM model_catalog WHERE availability = 'available' "
+                'AND public_id IS NULL'
+            )
+        )
+        orphaned = [r[0] for r in no_public_id_res.fetchall()]
+        if orphaned:
+            logger.warning(
+                "available with no public_id (invisible to the public catalog): %s",
+                orphaned,
+            )
+
         await session.commit()
 
     try:
         await rds.delete(_SUMMARY_CACHE_KEY)
     except Exception:
         pass
+    if any_changed:
+        try:
+            await rds.delete(*_CATALOG_CACHE_KEYS)
+        except Exception:
+            pass
     return updated
 
 
@@ -336,11 +329,14 @@ async def prune_events() -> int:
 # ── Probing ─────────────────────────────────────────────────────────────────
 
 
-async def _probe_targets() -> list[tuple[str, str]]:
+async def _probe_targets(recheck_quarantine: bool = False) -> list[tuple[str, str]]:
     """(model_id, provider) pairs worth probing.
 
     Sourced from the catalog so the loop probes what we actually offer, not
-    everything an upstream happens to expose.
+    everything an upstream happens to expose. `maintenance` rows are normally
+    excluded entirely too — an admin's/discovery's parking must never be
+    undone by a probe — except a row THIS mechanism quarantined, which is
+    probed anyway, but only on a recheck sweep (see QUARANTINE_RECHECK_EVERY).
     """
     if async_session is None:
         return []
@@ -349,8 +345,10 @@ async def _probe_targets() -> list[tuple[str, str]]:
             sqlalchemy.text(
                 "SELECT provider_model_id, COALESCE(upstream, provider) AS up "
                 'FROM model_catalog '
-                "WHERE availability <> 'maintenance'"
-            )
+                "WHERE availability <> 'maintenance' "
+                '   OR (health_quarantine_reason IS NOT NULL AND :recheck)'
+            ),
+            {'recheck': recheck_quarantine},
         )
         return [(str(r.provider_model_id), str(r.up or 'unknown')) for r in res.fetchall()]
 
@@ -362,15 +360,23 @@ async def probe_sweep() -> dict[str, Any]:
     with `upstream_down` rather than each being probed and timing out, which
     keeps a dead gateway from costing 23 timeouts per sweep.
     """
+    global _sweep_count
+    _sweep_count += 1
+    recheck_quarantine = _is_quarantine_recheck_sweep(_sweep_count)
+
     providers = {p.name: p for p in configured_providers()}
     alive: dict[str, bool] = {}
     for name, p in providers.items():
-        result = await upstream_alive(p)
+        # timeout=15.0, not the 5s default (same reasoning as models_health's
+        # gather in model_health_api.py): a false "down" here now mass-parks
+        # every model behind this upstream into 'maintenance' via
+        # PROVIDER_FAULT_REASONS, not just one bad probe.
+        result = await upstream_alive(p, timeout=15.0)
         alive[name] = result.ok
         if not result.ok:
             logger.warning('upstream %s unreachable: %s', name, result.error)
 
-    targets = await _probe_targets()
+    targets = await _probe_targets(recheck_quarantine)
     if not targets:
         return {'probed': 0, 'upstreams': alive}
 
@@ -383,22 +389,13 @@ async def probe_sweep() -> dict[str, Any]:
         if p is None:
             return
         if not alive.get(p.name, False):
-            await record(
-                model_id, ok=False, source='probe',
-                error='upstream_down', provider=p.name,
-            )
+            await record(model_id, ok=False, source='probe', error='upstream_down', provider=p.name)
             probed += 1
             return
         async with sem:
             result = await probe_model(p, model_id)
-        await record(
-            model_id,
-            ok=result.ok,
-            source='probe',
-            latency_ms=result.latency_ms,
-            error=result.error,
-            provider=p.name,
-        )
+        await record(model_id, ok=result.ok, source='probe', latency_ms=result.latency_ms,
+                     error=result.error, provider=p.name)
         probed += 1
 
     await asyncio.gather(*(one(m, prov) for m, prov in targets), return_exceptions=True)
@@ -423,149 +420,3 @@ async def health_loop() -> None:
             pass
         await asyncio.sleep(PROBE_INTERVAL_S)
 
-
-# ── Read API ────────────────────────────────────────────────────────────────
-
-
-async def health_map() -> dict[str, dict[str, Any]]:
-    """Current state keyed by model id, for joining onto the catalog."""
-    if async_session is None:
-        return {}
-    try:
-        async with async_session() as session:
-            res = await session.execute(
-                sqlalchemy.text(
-                    'SELECT model_id, provider, status, success_rate, latency_p50_ms, '
-                    'latency_p95_ms, sample_count, last_ok_at, last_error, checked_at '
-                    'FROM model_health_state'
-                )
-            )
-            out: dict[str, dict[str, Any]] = {}
-            for r in res.fetchall():
-                d = dict(r._mapping)
-                out[str(d['model_id'])] = {
-                    'status': d['status'],
-                    'successRate': float(d['success_rate']) if d['success_rate'] is not None else None,
-                    'latencyP50Ms': d['latency_p50_ms'],
-                    'latencyP95Ms': d['latency_p95_ms'],
-                    'sampleCount': d['sample_count'],
-                    'lastOkAt': d['last_ok_at'],
-                    'lastError': d['last_error'],
-                    'checkedAt': d['checked_at'],
-                }
-            return out
-    except Exception as e:
-        logger.warning('health_map failed: %s', e)
-        return {}
-
-
-async def healthy_model_ids() -> set[str]:
-    """Ids considered usable right now.
-
-    `unknown` counts as usable: a model nobody has exercised yet must not be
-    hidden, or a fresh deployment would show an empty model picker.
-    """
-    if async_session is None:
-        return set()
-    try:
-        async with async_session() as session:
-            res = await session.execute(
-                sqlalchemy.text(
-                    'SELECT model_id FROM model_health_state '
-                    "WHERE status IN ('healthy', 'degraded', 'unknown')"
-                )
-            )
-            return {str(r.model_id) for r in res.fetchall()}
-    except Exception:
-        return set()
-
-
-@router.get('/models/health')
-async def models_health(request: Request) -> JSONResponse:
-    """Public health summary. Backs the /status page."""
-    cached = await rds.get(_SUMMARY_CACHE_KEY)
-    if cached:
-        return JSONResponse(json.loads(cached))
-
-    states = await health_map()
-
-    # Join display names on so the status page does not need the catalog too.
-    names: dict[str, str] = {}
-    if async_session is not None:
-        try:
-            async with async_session() as session:
-                res = await session.execute(
-                    sqlalchemy.text(
-                        'SELECT id, provider_model_id, display_name, provider '
-                        'FROM model_catalog'
-                    )
-                )
-                for r in res.fetchall():
-                    d = dict(r._mapping)
-                    names[str(d['provider_model_id'])] = d['display_name']
-                    names[str(d['id'])] = d['display_name']
-        except Exception:
-            pass
-
-    models = []
-    for model_id, state in sorted(states.items()):
-        models.append({
-            'id': model_id,
-            'displayName': names.get(model_id, model_id),
-            **state,
-        })
-
-    counts = {'healthy': 0, 'degraded': 0, 'down': 0, 'unknown': 0}
-    for m in models:
-        counts[m['status']] = counts.get(m['status'], 0) + 1
-
-    # Run concurrently, not sequentially: 9Router legitimately takes up to
-    # ~11s to answer, and upstream_alive's default timeout is only 5s. A
-    # sequential loop over N providers at up to 15s each turned one slow-but-
-    # alive upstream into a multi-provider pileup and got the tunnel wrongly
-    # declared dead. timeout=15.0 gives 9Router room; gather runs every
-    # provider's check in parallel so total latency is bounded by the
-    # slowest single provider, not the sum of all of them.
-    providers_list = configured_providers()
-    alive_results = await asyncio.gather(
-        *(upstream_alive(p, timeout=15.0) for p in providers_list),
-        return_exceptions=True,
-    )
-    upstreams = []
-    for p, r in zip(providers_list, alive_results):
-        if isinstance(r, BaseException):
-            upstreams.append({
-                'name': p.name, 'ok': False, 'latencyMs': None,
-                'error': type(r).__name__,
-            })
-            continue
-        upstreams.append({
-            'name': p.name,
-            'ok': r.ok,
-            'latencyMs': r.latency_ms,
-            'error': r.error,
-        })
-
-    # Overall reads as the worst thing a user would actually notice.
-    if counts['healthy'] == 0 and (counts['down'] or counts['degraded']):
-        overall = 'down'
-    elif counts['down'] or counts['degraded']:
-        overall = 'degraded'
-    else:
-        overall = 'operational'
-
-    from fastapi.encoders import jsonable_encoder
-
-    payload = jsonable_encoder({
-        'overall': overall,
-        'counts': counts,
-        'upstreams': upstreams,
-        'models': models,
-        'windowMinutes': int(WINDOW.total_seconds() // 60),
-        'generatedAt': datetime.now(timezone.utc),
-    })
-    try:
-        await rds.setex(_SUMMARY_CACHE_KEY, _SUMMARY_CACHE_TTL, json.dumps(payload))
-    except Exception:
-        pass
-    return JSONResponse(payload)

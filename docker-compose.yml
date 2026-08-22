@@ -53,6 +53,12 @@ services:
     env_file: .env
     environment:
       - ADMIN_TOKEN=${ADMIN_TOKEN:?ADMIN_TOKEN must be set in .env}
+      # Serve neutral `sanjab/*` public model ids (migrations/0028) instead of
+      # the raw ids, which carry the upstream route. Not a secret, so it lives
+      # here rather than in .env. Set to false and recreate this container to
+      # roll back: the resolver stays live either way, so a client that already
+      # adopted a sanjab/* id keeps working after a rollback.
+      - PUBLIC_MODEL_IDS_ENABLED=true
     ports:
       - "0.0.0.0:8001:8000"
     networks: [sanjabai_net]

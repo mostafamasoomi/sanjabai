@@ -7,6 +7,7 @@ import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { faNum, faPrice, toFaDigits } from '@/lib/format'
+import EntitlementPanel from './components/EntitlementPanel'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 type LedgerEntry = {
@@ -489,6 +490,8 @@ export default function WalletPage() {
           </button>
         </div>
       </div>
+
+      <EntitlementPanel />
 
       {/* ── Credit Packages Section ────────────────────────────────── */}
       <div className="card" style={{ marginBottom: 24 }}>

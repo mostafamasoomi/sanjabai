@@ -21,6 +21,10 @@ const MarkupSection = dynamic(() => import('./sections/MarkupSection'), { ssr: f
 const ExchangeRateSection = dynamic(() => import('./sections/ExchangeRateSection'), { ssr: false })
 const ImagePricingSection = dynamic(() => import('./sections/ImagePricingSection'), { ssr: false })
 const PackagesSection = dynamic(() => import('./sections/PackagesSection'), { ssr: false })
+const AnalyticsSection = dynamic(() => import('./sections/AnalyticsSection'), { ssr: false })
+const ModelOpsSection = dynamic(() => import('./sections/ModelOpsSection'), { ssr: false })
+const PlansSection = dynamic(() => import('./sections/PlansSection'), { ssr: false })
+const SiteControlSection = dynamic(() => import('./sections/SiteControlSection'), { ssr: false })
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Sanjabai Admin Panel — Aurora Design System
@@ -29,7 +33,7 @@ const PackagesSection = dynamic(() => import('./sections/PackagesSection'), { ss
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Page = 'dashboard' | 'pricing' | 'markup' | 'exchange-rate' | 'image-pricing' | 'packages' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'users' | 'security' | 'monitoring'
+type Page = 'dashboard' | 'analytics' | 'site-control' | 'pricing' | 'markup' | 'exchange-rate' | 'image-pricing' | 'packages' | 'plans' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'model-ops' | 'users' | 'security' | 'monitoring'
 
 export interface Analytics {
   user_count: number
@@ -117,13 +121,37 @@ export interface AuditLog {
   created_at: string
 }
 
+// Mirrors exactly what GET /admin/users returns, verified against the live
+// endpoint rather than assumed.
+//
+// This type previously declared `username`, `is_active`, `plan` and
+// `wallet_balance` -- four fields the server has never sent. TypeScript was
+// satisfied because the rows arrive as untyped JSON and get asserted into
+// this shape, so the mismatch could not surface at compile time; those
+// columns simply rendered blank in production, and the status badge read
+// "inactive" for every user because `is_active` was always undefined.
+//
+// There is no `role` column on `users` either -- the only role signal is
+// `preferences.panel` (consumer/developer), which the user detail drawer
+// reads. And there is no editable `plan` on a user row; a plan is expressed
+// through the `subscriptions` table, not a column here.
+//
+// `balance` is the authoritative wallet balance; `ledger_sum` is the same
+// figure reconstructed from the append-only ledger. They must be equal --
+// a divergence is a billing-integrity bug, which is why both are shown.
 export interface UserRow {
   id: number
   email: string
-  username: string
-  is_active: boolean
-  plan: string
-  wallet_balance: number
+  phone: string | null
+  telegram_id: number | null
+  referral_code: string | null
+  referred_by: number | null
+  created_at: string
+  banned: boolean
+  balance: number
+  reserved: number
+  ledger_sum: number
+  used_today: number
 }
 
 export interface UserDetail {
@@ -149,17 +177,21 @@ export type UserDetailTab = 'overview' | 'conversations' | 'usage' | 'ledger' | 
 
 const NAV_ITEMS: { key: Page; label: string; icon: IconName }[] = [
   { key: 'dashboard', label: 'داشبورد', icon: 'dashboard' },
+  { key: 'analytics', label: 'تحلیل و درآمد', icon: 'chart' },
+  { key: 'site-control', label: 'کنترل سایت', icon: 'settings' },
   { key: 'users', label: 'کاربران', icon: 'profile' },
   { key: 'pricing', label: 'تعرفه‌ها', icon: 'pricing' },
   { key: 'markup', label: 'درصد سود', icon: 'chart' },
   { key: 'exchange-rate', label: 'نرخ ارز', icon: 'globe' },
   { key: 'image-pricing', label: 'قیمت‌گذاری تصویر', icon: 'camera' },
   { key: 'packages', label: 'بسته‌ها', icon: 'wallet' },
+  { key: 'plans', label: 'پلن و اشتراک', icon: 'wallet' },
   { key: 'features', label: 'امکانات', icon: 'models' },
   { key: 'discounts', label: 'تخفیف‌ها', icon: 'wallet' },
   { key: 'about', label: 'درباره ما', icon: 'notification' },
   { key: 'proxy', label: 'پروکسی', icon: 'security' },
   { key: 'models', label: 'مدل‌ها', icon: 'code' },
+  { key: 'model-ops', label: 'عملیات کاتالوگ', icon: 'code' },
   { key: 'security', label: 'امنیت', icon: 'lock' },
   { key: 'monitoring', label: 'پایش', icon: 'chart' },
 ]
@@ -962,6 +994,10 @@ export default function AdminPage() {
           {page === 'exchange-rate' && <ExchangeRateSection api={api} />}
           {page === 'image-pricing' && <ImagePricingSection api={api} />}
           {page === 'packages' && <PackagesSection api={api} />}
+          {page === 'analytics' && <AnalyticsSection api={api} />}
+          {page === 'site-control' && <SiteControlSection api={api} />}
+          {page === 'plans' && <PlansSection api={api} />}
+          {page === 'model-ops' && <ModelOpsSection api={api} />}
           {page === 'monitoring' && <MonitoringTab api={api} />}
         </main>
       </div>

@@ -1,0 +1,432 @@
+'use client'
+
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { Icon } from '@/components/ui/Icon'
+import { toast } from '@/components/ui'
+import { faNum, faPrice, faDate } from '@/lib/format'
+import { SectionHeader, StatCard } from './shared'
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ModelOps — catalog-wide availability operations. Distinct from the
+   existing ./ModelsSection.tsx (the org default-model picker + <ModelsTab />,
+   which lists only the *working* models an end user can pick) and from
+   ./MarkupSection.tsx (profit percentage only). This section is the only
+   frontend consumer of the admin_catalog.py endpoints that operate on the
+   FULL model_catalog (1,100+ rows, most `maintenance`/never probed) rather
+   than the small working-models subset.
+
+   Self-contained (fetches its own data via the `api` prop), same pattern as
+   ./MarkupSection.tsx and ./PackagesSection.tsx.
+
+   Server contract:
+     GET  /api/admin/catalog/models                        (admin_catalog.py)
+       -> [{ id, provider_model_id, provider, upstream, display_name,
+              availability, provenance, context_window, currency,
+              input_per_million, output_per_million,
+              usd_input_per_million, usd_output_per_million,
+              last_verified_at, markup_pct }]
+       No query params -- the backend returns the entire catalog in one
+       response. Pagination below is client-side over this single fetch;
+       the table only ever *renders* one page of rows at a time.
+     POST /api/admin/models/bulk-availability               (admin_catalog.py)
+       <- { ids: string[], availability: 'available'|'degraded'|'maintenance'|'disabled' }
+       -> { status, updated, availability }
+     POST /api/admin/models/{model_id:path}/set-upstream     (admin_catalog.py)
+       <- { upstream: string }  -> { status, model, upstream }
+       Validated server-side against providers.configured_providers(); there
+       is no endpoint that lists those names, so the datalist below only
+       suggests upstream values already seen in the loaded catalog rows.
+     POST /api/admin/models/{model_id:path}/toggle           (admin.py)
+       -> { status, model, availability }  (flips available <-> disabled)
+     POST /api/admin/models/{model_id:path}/test             (admin.py)
+       -> { model, upstream, ok, latency_ms, error, status_code }
+       No client-side timeout is applied (the shared `api()` helper in
+       AdminPanel.tsx uses a plain `fetch` with no AbortController) --
+       intentional, since a probe can legitimately take up to ~11s on a slow
+       upstream router and has been observed at 103s for image generation.
+
+   Product rule reminder (docs/NEXT-SESSION.md, CLAUDE.md): a model may only
+   be served to real users after a successful *live* probe. Bulk-availability
+   does not probe anything itself -- it is a raw availability flip -- so this
+   UI never lets "available" be applied without a visible warning.
+
+   Model ids: encodeURIComponent(id) is used for every :path route below.
+   admin_catalog.py's own docstring says a `%2F` "never reaches Starlette's
+   router as an encoded character" -- ASGI decodes percent-escapes into
+   scope['path'] before routing, so a caller sending raw "/" or encoded
+   "%2F" produces the identical scope['path'] and both match the `:path`
+   converter the same way. encodeURIComponent is therefore both safe (it
+   also correctly escapes any other reserved character an id might contain)
+   and consistent with how AdminPanel.tsx already calls the sibling
+   toggle/test routes.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+interface CatalogModelRow {
+  id: string
+  provider_model_id: string | null
+  provider: string | null
+  upstream: string | null
+  display_name: string | null
+  availability: string
+  provenance: string | null
+  context_window: number | null
+  currency: string | null
+  input_per_million: number | null
+  output_per_million: number | null
+  usd_input_per_million: number | null
+  usd_output_per_million: number | null
+  last_verified_at: string | null
+  markup_pct: number | null
+}
+
+interface TestResult {
+  ok: boolean
+  latency_ms: number | null
+  error: string | null
+  status_code: number | null
+}
+
+interface ModelOpsSectionProps {
+  api: (path: string, opts?: RequestInit) => Promise<Response>
+}
+
+const AVAILABILITY_OPTIONS = ['available', 'degraded', 'maintenance', 'disabled'] as const
+type Availability = (typeof AVAILABILITY_OPTIONS)[number]
+
+const AVAILABILITY_LABEL: Record<Availability, string> = {
+  available: 'در دسترس', degraded: 'کاهش‌یافته', maintenance: 'در تعمیر', disabled: 'غیرفعال',
+}
+const AVAILABILITY_COLOR: Record<Availability, string> = {
+  available: 'var(--success, #22c55e)', degraded: 'var(--warning, #f59e0b)',
+  maintenance: 'var(--muted, #8b8b8b)', disabled: 'var(--danger, #ef4444)',
+}
+
+const PAGE_SIZE = 50
+
+export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [rows, setRows] = useState<CatalogModelRow[]>([])
+
+  const [search, setSearch] = useState('')
+  const [availFilter, setAvailFilter] = useState<'all' | Availability>('all')
+  const [page, setPage] = useState(1)
+
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkTarget, setBulkTarget] = useState<Availability>('available')
+  const [bulkConfirming, setBulkConfirming] = useState(false)
+  const [bulkSubmitting, setBulkSubmitting] = useState(false)
+
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [testingId, setTestingId] = useState<string | null>(null)
+  const [testResults, setTestResults] = useState<Record<string, TestResult>>({})
+
+  const [upstreamEditId, setUpstreamEditId] = useState<string | null>(null)
+  const [upstreamDraft, setUpstreamDraft] = useState('')
+  const [upstreamSaving, setUpstreamSaving] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setLoadError(false)
+    try {
+      const res = await api('/api/admin/catalog/models')
+      const data: CatalogModelRow[] = await res.json()
+      setRows(Array.isArray(data) ? data : [])
+    } catch {
+      setLoadError(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [api])
+
+  useEffect(() => { load() }, [load])
+  useEffect(() => { setPage(1) }, [search, availFilter])
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { available: 0, degraded: 0, maintenance: 0, disabled: 0 }
+    for (const r of rows) c[r.availability] = (c[r.availability] || 0) + 1
+    return c
+  }, [rows])
+
+  const upstreamSuggestions = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.upstream).filter((u): u is string => !!u))),
+    [rows],
+  )
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return rows.filter((r) => {
+      if (availFilter !== 'all' && r.availability !== availFilter) return false
+      if (!q) return true
+      return (
+        r.id.toLowerCase().includes(q) ||
+        (r.display_name || '').toLowerCase().includes(q) ||
+        (r.provider_model_id || '').toLowerCase().includes(q) ||
+        (r.provider || '').toLowerCase().includes(q) ||
+        (r.upstream || '').toLowerCase().includes(q)
+      )
+    })
+  }, [rows, search, availFilter])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const pageAllSelected = pageRows.length > 0 && pageRows.every((r) => selected.has(r.id))
+
+  const toggleSelect = (id: string) => setSelected((prev) => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+  const togglePageAll = () => setSelected((prev) => {
+    const next = new Set(prev)
+    if (pageAllSelected) { for (const r of pageRows) next.delete(r.id) } else { for (const r of pageRows) next.add(r.id) }
+    return next
+  })
+  const selectAllFiltered = () => setSelected(new Set(filtered.map((r) => r.id)))
+  const clearSelection = () => setSelected(new Set())
+
+  const openBulkConfirm = () => {
+    if (selected.size === 0) { toast('ابتدا حداقل یک مدل را انتخاب کنید', 'error'); return }
+    setBulkConfirming(true)
+  }
+
+  const applyBulk = async () => {
+    setBulkSubmitting(true)
+    try {
+      const res = await api('/api/admin/models/bulk-availability', {
+        method: 'POST',
+        body: JSON.stringify({ ids: Array.from(selected), availability: bulkTarget }),
+      })
+      const body = await res.json()
+      toast(`وضعیت ${faNum(body.updated ?? selected.size)} مدل به «${AVAILABILITY_LABEL[bulkTarget]}» تغییر کرد`, 'success')
+      setBulkConfirming(false)
+      clearSelection()
+      await load()
+    } catch {
+      toast('اعمال گروهی ناموفق بود', 'error')
+    } finally {
+      setBulkSubmitting(false)
+    }
+  }
+
+  const toggleOne = async (id: string) => {
+    setBusyId(id)
+    try {
+      await api(`/api/admin/models/${encodeURIComponent(id)}/toggle`, { method: 'POST' })
+      toast('وضعیت مدل تغییر کرد', 'success')
+      await load()
+    } catch {
+      toast('تغییر وضعیت ناموفق بود', 'error')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const testOne = async (id: string) => {
+    setTestingId(id)
+    try {
+      const res = await api(`/api/admin/models/${encodeURIComponent(id)}/test`, { method: 'POST' })
+      const body = await res.json()
+      setTestResults((prev) => ({ ...prev, [id]: { ok: !!body.ok, latency_ms: body.latency_ms ?? null, error: body.error ?? null, status_code: body.status_code ?? null } }))
+      toast(body.ok ? `تست موفق — تأخیر ${faNum(body.latency_ms)} میلی‌ثانیه` : `تست ناموفق: ${body.error || 'خطای نامشخص'}`, body.ok ? 'success' : 'error')
+    } catch {
+      toast('اجرای تست انجام نشد (خطای شبکه یا سرور)', 'error')
+    } finally {
+      setTestingId(null)
+    }
+  }
+
+  const openUpstreamEdit = (row: CatalogModelRow) => { setUpstreamEditId(row.id); setUpstreamDraft(row.upstream || '') }
+  const saveUpstream = async (id: string) => {
+    const upstream = upstreamDraft.trim()
+    if (!upstream) { toast('نام upstream نمی‌تواند خالی باشد', 'error'); return }
+    setUpstreamSaving(true)
+    try {
+      await api(`/api/admin/models/${encodeURIComponent(id)}/set-upstream`, { method: 'POST', body: JSON.stringify({ upstream }) })
+      toast('upstream این مدل تغییر کرد', 'success')
+      setUpstreamEditId(null)
+      await load()
+    } catch {
+      toast('تغییر upstream ناموفق بود — نام باید یکی از تأمین‌کننده‌های پیکربندی‌شده باشد', 'error')
+    } finally {
+      setUpstreamSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6" dir="rtl">
+      <SectionHeader
+        title="عملیات کاتالوگ مدل‌ها"
+        subtitle={`${faNum(rows.length)} ردیف کاتالوگ — تنها ${faNum(counts.available || 0)} مورد «در دسترس»`}
+      />
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <StatCard icon="chart" label="در دسترس" value={faNum(counts.available || 0)} color={AVAILABILITY_COLOR.available} />
+        <StatCard icon="warning" label="کاهش‌یافته" value={faNum(counts.degraded || 0)} color={AVAILABILITY_COLOR.degraded} />
+        <StatCard icon="clock" label="در تعمیر" value={faNum(counts.maintenance || 0)} color={AVAILABILITY_COLOR.maintenance} />
+        <StatCard icon="close" label="غیرفعال" value={faNum(counts.disabled || 0)} color={AVAILABILITY_COLOR.disabled} />
+      </div>
+
+      <div className="admin-card" style={{ borderRight: '3px solid var(--warning, #f59e0b)' }}>
+        <p className="text-xs" style={{ color: 'var(--warning, #f59e0b)' }}>
+          <Icon name="warning" size={12} /> طبق قاعدهٔ محصول، مدلی که هویتش با «تست زنده» موفق تأیید نشده نباید به کاربر عادی ارائه شود.
+          این صفحه فقط وضعیت را در دیتابیس تغییر می‌دهد و خودش تستی اجرا نمی‌کند — پیش از «در دسترس» کردن مدل‌های جدید، دکمهٔ «تست زنده» را برای هرکدام بزنید.
+        </p>
+      </div>
+
+      <div className="admin-card flex flex-wrap items-center gap-3">
+        <input className="input" placeholder="جستجو در نام، شناسه، تأمین‌کننده…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ minWidth: 220 }} />
+        <select className="input" value={availFilter} onChange={(e) => setAvailFilter(e.target.value as 'all' | Availability)} style={{ maxWidth: 170 }}>
+          <option value="all">همهٔ وضعیت‌ها</option>
+          {AVAILABILITY_OPTIONS.map((a) => <option key={a} value={a}>{AVAILABILITY_LABEL[a]}</option>)}
+        </select>
+        <button className="btn btn-sm" onClick={load} disabled={loading}>
+          <Icon name="refresh" size={14} /> بازخوانی
+        </button>
+        <span className="text-xs text-muted">{faNum(filtered.length)} از {faNum(rows.length)} مدل مطابق فیلتر</span>
+      </div>
+
+      <div className="admin-card flex flex-wrap items-center gap-3">
+        <span className="text-sm font-medium text-primary">{faNum(selected.size)} مدل انتخاب شده</span>
+        <button className="btn btn-sm" onClick={selectAllFiltered}>انتخاب همهٔ {faNum(filtered.length)} مورد فیلترشده</button>
+        <button className="btn btn-sm" onClick={togglePageAll}>{pageAllSelected ? 'لغو انتخاب این صفحه' : 'انتخاب این صفحه'}</button>
+        <button className="btn btn-sm" onClick={clearSelection} disabled={selected.size === 0}>پاک کردن انتخاب</button>
+        <span className="text-xs text-muted">تغییر گروهی وضعیت به:</span>
+        <select className="input" value={bulkTarget} onChange={(e) => setBulkTarget(e.target.value as Availability)} style={{ maxWidth: 160 }}>
+          {AVAILABILITY_OPTIONS.map((a) => <option key={a} value={a}>{AVAILABILITY_LABEL[a]}</option>)}
+        </select>
+        <button className="btn btn-sm" onClick={openBulkConfirm} disabled={selected.size === 0}>
+          <Icon name="check" size={14} /> اعمال گروهی
+        </button>
+      </div>
+
+      <div className="admin-card">
+        <div className="overflow-x-auto">
+          <table className="admin-table w-full text-sm">
+            <thead>
+              <tr>
+                <th className="p-3"><input type="checkbox" checked={pageAllSelected} onChange={togglePageAll} /></th>
+                <th className="text-right p-3">مدل</th>
+                <th className="text-right p-3">وضعیت</th>
+                <th className="text-right p-3">تأمین‌کننده / upstream</th>
+                <th className="text-right p-3">پنجرهٔ متن</th>
+                <th className="text-right p-3">قیمت (ورودی / خروجی هر میلیون)</th>
+                <th className="text-right p-3">آخرین تأیید زنده</th>
+                <th className="text-right p-3">عملیات</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">در حال بارگذاری…</td></tr>
+              ) : loadError ? (
+                <tr>
+                  <td colSpan={8} className="p-6 text-center text-sm" style={{ color: 'var(--danger, #ef4444)' }}>
+                    خطا در دریافت فهرست کاتالوگ — اتصال یا سرور مشکل دارد.{' '}
+                    <button className="underline" onClick={load}>تلاش دوباره</button>
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">مدلی با این فیلتر یافت نشد</td></tr>
+              ) : (
+                pageRows.map((r) => {
+                  const avail = (AVAILABILITY_OPTIONS as readonly string[]).includes(r.availability) ? (r.availability as Availability) : 'maintenance'
+                  const tr = testResults[r.id]
+                  return (
+                    <tr key={r.id}>
+                      <td className="p-3"><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSelect(r.id)} /></td>
+                      <td className="p-3">
+                        <div className="font-medium text-primary">{r.display_name || r.id}</div>
+                        <div className="text-xs font-mono text-muted" dir="ltr">{r.id}</div>
+                      </td>
+                      <td className="p-3">
+                        <span className="text-xs px-2 py-1 rounded-full" style={{ background: `${AVAILABILITY_COLOR[avail]}15`, color: AVAILABILITY_COLOR[avail] }}>
+                          {AVAILABILITY_LABEL[avail]}
+                        </span>
+                        <button className="btn btn-sm mt-1" style={{ display: 'block' }} onClick={() => toggleOne(r.id)} disabled={busyId === r.id}>
+                          {busyId === r.id ? '...' : (avail === 'available' ? 'غیرفعال کن' : 'در دسترس کن')}
+                        </button>
+                      </td>
+                      <td className="p-3">
+                        <div className="text-xs text-muted" dir="ltr">{r.provider || '—'}</div>
+                        {upstreamEditId === r.id ? (
+                          <div className="flex items-center gap-1 mt-1">
+                            <input
+                              className="input" style={{ maxWidth: 150 }} dir="ltr" list="model-ops-upstream-suggestions"
+                              value={upstreamDraft} onChange={(e) => setUpstreamDraft(e.target.value)}
+                            />
+                            <button className="btn btn-sm" onClick={() => saveUpstream(r.id)} disabled={upstreamSaving}><Icon name="check" size={12} /></button>
+                            <button className="btn btn-sm" onClick={() => setUpstreamEditId(null)} disabled={upstreamSaving}><Icon name="close" size={12} /></button>
+                          </div>
+                        ) : (
+                          <button className="text-xs underline mt-1" dir="ltr" onClick={() => openUpstreamEdit(r)} title="تغییر upstream">
+                            {r.upstream || '—'}
+                          </button>
+                        )}
+                      </td>
+                      <td className="p-3 text-xs">{r.context_window ? faNum(r.context_window) : '—'}</td>
+                      <td className="p-3 text-xs">
+                        <div>{faPrice(r.input_per_million)}</div>
+                        <div className="text-muted">{faPrice(r.output_per_million)}</div>
+                      </td>
+                      <td className="p-3 text-xs">{r.last_verified_at ? faDate(r.last_verified_at) : 'هرگز'}</td>
+                      <td className="p-3">
+                        <button className="btn btn-sm" onClick={() => testOne(r.id)} disabled={testingId === r.id}>
+                          {testingId === r.id ? (
+                            <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
+                          ) : 'تست زنده'}
+                        </button>
+                        {tr && (
+                          <div className="text-xs mt-1" style={{ color: tr.ok ? AVAILABILITY_COLOR.available : AVAILABILITY_COLOR.disabled }}>
+                            {tr.ok ? `سالم — ${faNum(tr.latency_ms)}ms` : (tr.error || 'خطا')}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <datalist id="model-ops-upstream-suggestions">
+          {upstreamSuggestions.map((u) => <option key={u} value={u} />)}
+        </datalist>
+
+        {!loading && !loadError && filtered.length > 0 && (
+          <div className="flex items-center justify-between mt-3 text-xs text-muted">
+            <span>صفحهٔ {faNum(page)} از {faNum(totalPages)}</span>
+            <div className="flex gap-2">
+              <button className="btn btn-sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>قبلی</button>
+              <button className="btn btn-sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>بعدی</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {bulkConfirming && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => !bulkSubmitting && setBulkConfirming(false)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="card relative w-full max-w-md" dir="rtl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-primary">تأیید تغییر گروهی وضعیت</h3>
+              <button className="btn btn-icon btn-sm" onClick={() => setBulkConfirming(false)} disabled={bulkSubmitting}><Icon name="close" size={16} /></button>
+            </div>
+            <p className="text-sm">
+              وضعیت <span className="font-bold">{faNum(selected.size)}</span> مدل به «<span className="font-bold">{AVAILABILITY_LABEL[bulkTarget]}</span>» تغییر می‌کند.
+            </p>
+            {bulkTarget === 'available' && (
+              <p className="text-xs mt-2 flex items-center gap-1" style={{ color: 'var(--warning, #f59e0b)' }}>
+                <Icon name="warning" size={12} /> این عملیات تست زنده انجام نمی‌دهد — قبل از تأیید مطمئن شوید مدل‌های انتخابی از قبل با «تست زنده» تأیید شده‌اند.
+              </p>
+            )}
+            <div className="flex gap-2 mt-5">
+              <button className="btn flex-1" onClick={applyBulk} disabled={bulkSubmitting}>{bulkSubmitting ? 'در حال اعمال...' : 'تأیید و اعمال'}</button>
+              <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={() => setBulkConfirming(false)} disabled={bulkSubmitting}>انصراف</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

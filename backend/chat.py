@@ -47,10 +47,10 @@ from pydantic import BaseModel
 from database import async_session, _http
 from models import Assistant
 from dependencies import _get_user_id, _to_fa
-from site_settings import get_site_flag
 from services.context_injection import get_injection_messages, inject_messages
 from services.billing import SqlBillingRepo, BillingService, InsufficientBalanceError
 from services.money import Money
+from services.entitlement_gate import covering_entitlement
 from services.memory_extractor import extract_memories, MIN_MSG_COUNT
 from services.free_tier import check_and_consume
 from middleware.compression import compress_messages, estimate_savings
@@ -272,14 +272,8 @@ def _as_naive_utc(dt: datetime | None) -> datetime | None:
     return dt
 
 
-async def _chat_disabled_response() -> JSONResponse | None:
-    """503 when chat_enabled is off; None otherwise. Shared via `chat.<name>`."""
-    if await get_site_flag('chat_enabled'):
-        return None
-    return JSONResponse({'error': {'message': 'گفتگو موقتاً در دسترس نیست', 'type': 'service_unavailable', 'code': 'chat_disabled'}}, status_code=503)
-
 # ── File text extraction / web search / /v1/chat/with-file (chat_web.py) ──
-from chat_web import _apply_web_search, _web_search, _release_reservation  # noqa: E402 -- also registers /v1/chat/with-file
+from chat_web import _apply_web_search, _web_search, _release_reservation, _chat_disabled_response  # noqa: E402 -- also registers /v1/chat/with-file
 
 
 # ── Usage estimation / billing (chat_billing.py) ──────────────────────
@@ -358,7 +352,7 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
             _bill_svc = BillingService(_repo)
             _model = payload_dict.get('model', '')
             _est_cost = 1000 if (_model and await is_working_model(_model)) else 5000
-            reservation = await _bill_svc.reserve(
+            reservation = None if (await covering_entitlement(uid, _est_cost)) is not None else await _bill_svc.reserve(
                 uid, Money(_est_cost),
                 idempotency_key=f"chat:{secrets.token_hex(8)}",
                 model=_model,

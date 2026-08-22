@@ -4,6 +4,7 @@ Payment gateway endpoints: /payment/request, /payment/callback, /payment/history
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -21,6 +22,7 @@ from services.billing import SqlBillingRepo
 from services.money import Money
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post('/payment/request')
@@ -193,6 +195,33 @@ async def payment_callback(request: Request) -> JSONResponse:
         extra_data['credits_added'] = credit_pkg.total_credits
         extra_data['package'] = credit_pkg.name_fa
         redirect_path = '/wallet?payment=success'
+
+        # Package quota entitlement (services/entitlements.py), a clean
+        # no-op for the vast majority of packages that have none configured.
+        # Non-fatal by construction: the user already paid and the wallet
+        # was already credited above, so a quota-row failure here must never
+        # fail this callback or change the redirect -- grant_for_payment()
+        # itself never raises (see services/entitlement_gate.py), and this
+        # try/except is defence in depth against that contract. authority_str
+        # is this payment's stable identity across a replayed Zarinpal
+        # callback (same Authority query param both times); it is what
+        # grant_entitlement()'s (package_id, source_payment_id) unique index
+        # dedupes on, so a replay grants the quota at most once.
+        try:
+            from services.entitlement_gate import grant_for_payment
+            _grant_uid = p.user_id if pay_row else 0
+            entitlement = await grant_for_payment(_grant_uid, credit_pkg.id, authority_str)
+            if entitlement is not None:
+                extra_data['entitlement'] = {
+                    'requests_remaining': entitlement.get('requests_remaining'),
+                    'tokens_remaining': entitlement.get('tokens_remaining'),
+                    'expires_at': entitlement['expires_at'].isoformat() if entitlement.get('expires_at') else None,
+                }
+        except Exception as e:
+            logger.error(
+                f"payment_callback: entitlement grant threw uid={p.user_id if pay_row else 0} "
+                f"package={credit_pkg.id} authority={authority_str}: {e}"
+            )
 
     elif payment_type == 'hermes_order' and hermes_order is not None:
         # The wallet effect (crediting only included_credit, never the full

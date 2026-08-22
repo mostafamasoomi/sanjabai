@@ -34,13 +34,37 @@ from dependencies import _to_fa
 from services.context_injection import inject_messages
 from services.billing import SqlBillingRepo, BillingService, InsufficientBalanceError
 from services.money import Money
+from services.entitlement_gate import covering_entitlement
 from model_output import clean_response_dict
 
 import chat
+from site_settings import get_site_flag
 
 logger = logging.getLogger('chat')  # keep all chat_*.py logs under the pre-split 'chat' logger name
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB hard cap
+
+
+async def _chat_disabled_response() -> JSONResponse | None:
+    """503 while the ``chat_enabled`` site flag is off; None otherwise.
+
+    The single implementation behind all FOUR chat entry points --
+    /v1/chat/completions, /v1/chat/with-file, /v1/smart-chat and
+    /v1/compare -- which reach it as ``chat._chat_disabled_response``
+    (chat.py re-exports it). Gating only one route would make the admin's
+    switch a lie, since the other three would keep serving.
+
+    Lives here rather than in chat.py for the same reason
+    _release_reservation below does: to keep chat.py under the house
+    500-line cap.
+    """
+    if await get_site_flag('chat_enabled'):
+        return None
+    return JSONResponse(
+        {'error': {'message': 'گفتگو موقتاً در دسترس نیست',
+                   'type': 'service_unavailable', 'code': 'chat_disabled'}},
+        status_code=503,
+    )
 
 
 async def _release_reservation(reservation: dict | None, uid: int, label: str = '') -> None:
@@ -307,11 +331,17 @@ async def chat_with_file(
             _repo = SqlBillingRepo(_bill_session)
             _bill_svc = chat.BillingService(_repo)
             _est_cost = 1000 if (model and await chat.is_working_model(model)) else 5000
-            reservation = await _bill_svc.reserve(
-                uid, Money(_est_cost),
-                idempotency_key=f"file:{secrets.token_hex(8)}",
-                model=model,
-            )
+            # Package quota covers this request -> skip the wallet reservation
+            # (reservation stays None; the release/settle code below already
+            # treats None as a no-op). See services/entitlement_gate.py.
+            if await covering_entitlement(uid, _est_cost) is not None:
+                reservation = None
+            else:
+                reservation = await _bill_svc.reserve(
+                    uid, Money(_est_cost),
+                    idempotency_key=f"file:{secrets.token_hex(8)}",
+                    model=model,
+                )
             await _bill_session.commit()
     except InsufficientBalanceError:
         return JSONResponse(

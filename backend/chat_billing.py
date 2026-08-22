@@ -361,6 +361,24 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
         )
     cost = max(1, int((input_tokens * inp_rate + output_tokens * out_rate + 500_000) // 1_000_000))
 
+    # Entitlement gate: real (not estimated) cost may be covered by a
+    # package quota, consumed atomically before the wallet is touched --
+    # fail-safe fallback to the wallet path lives in entitlement_gate.py.
+    from services.entitlement_gate import consume_for_usage, record_entitlement_usage
+    entitlement = await consume_for_usage(uid, cost, total_tokens)
+    if entitlement is not None:
+        # Paid by quota: no Wallet.balance change, no Ledger row (would
+        # muddy balance == ledger_sum); balance_after is the real balance.
+        from services.billing import SqlBillingRepo
+        wallet = await SqlBillingRepo(session).ensure_wallet(uid)
+        result['cost'] = 0
+        result['balance_after'] = wallet['balance']
+        await record_entitlement_usage(
+            session, uid, model, entitlement['id'], cost,
+            input_tokens, output_tokens, reasoning_tokens, estimated,
+        )
+        return result
+
     # Charge against Wallet.balance itself (the source of truth that
     # BillingService.reserve() gates future requests against), not just the
     # ledger's running SUM. Previously this only ever appended a Ledger row

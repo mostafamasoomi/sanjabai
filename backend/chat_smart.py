@@ -35,6 +35,7 @@ from models import Subscription
 from services.context_injection import inject_messages
 from services.billing import SqlBillingRepo, InsufficientBalanceError
 from services.money import Money
+from services.entitlement_gate import covering_entitlement
 from middleware.compression import compress_messages, estimate_savings
 from model_output import clean_response_dict
 
@@ -266,11 +267,17 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
             _repo = SqlBillingRepo(_bill_session)
             _bill_svc = chat.BillingService(_repo)
             _est_cost = 1000 if await chat.is_working_model(selected_model) else 5000
-            reservation = await _bill_svc.reserve(
-                uid, Money(_est_cost),
-                idempotency_key=f"smart:{secrets.token_hex(8)}",
-                model=selected_model,
-            )
+            # Package quota covers this request -> skip the wallet reservation
+            # (reservation stays None; the release/settle code below already
+            # treats None as a no-op). See services/entitlement_gate.py.
+            if await covering_entitlement(uid, _est_cost) is not None:
+                reservation = None
+            else:
+                reservation = await _bill_svc.reserve(
+                    uid, Money(_est_cost),
+                    idempotency_key=f"smart:{secrets.token_hex(8)}",
+                    model=selected_model,
+                )
             await _bill_session.commit()
     except InsufficientBalanceError:
         return JSONResponse(

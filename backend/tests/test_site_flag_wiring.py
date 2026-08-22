@@ -28,6 +28,7 @@ import pytest
 
 import auth as auth_mod
 import chat as chat_mod
+import chat_web as chat_web_mod
 import images as images_mod
 import site_settings
 import database as _db
@@ -153,7 +154,7 @@ def _chat_off(mock_async_session):
     no reservation is ever attempted while the gate refuses."""
     billing_cls, billing_instance = _billing_mock()
     with patch.object(chat_mod, '_get_user_id', AsyncMock(return_value=42)), \
-         patch.object(chat_mod, 'get_site_flag', AsyncMock(return_value=False)), \
+         patch.object(chat_web_mod, 'get_site_flag', AsyncMock(return_value=False)), \
          patch.object(chat_mod, 'BillingService', billing_cls):
         yield billing_instance
 
@@ -169,7 +170,7 @@ _REFUSAL = {
 
 class TestChatEnabledFlagCompletions:
     def test_on_proceeds_past_gate(self, client, _chat_bypass):
-        with patch.object(chat_mod, 'get_site_flag', AsyncMock(return_value=True)):
+        with patch.object(chat_web_mod, 'get_site_flag', AsyncMock(return_value=True)):
             resp = client.post(
                 '/v1/chat/completions',
                 json={'model': 'tencent-hy3', 'messages': [{'role': 'user', 'content': 'سلام'}]},
@@ -200,7 +201,7 @@ class TestChatEnabledFlagCompletions:
 
 class TestChatEnabledFlagWithFile:
     def test_on_proceeds_past_gate(self, client, _chat_bypass):
-        with patch.object(chat_mod, 'get_site_flag', AsyncMock(return_value=True)):
+        with patch.object(chat_web_mod, 'get_site_flag', AsyncMock(return_value=True)):
             resp = client.post(
                 '/v1/chat/with-file',
                 data={'model': 'tencent-hy3', 'messages': '[]'},
@@ -234,7 +235,7 @@ class TestChatEnabledFlagWithFile:
 
 class TestChatEnabledFlagSmartChat:
     def test_on_proceeds_past_gate(self, client, _chat_bypass):
-        with patch.object(chat_mod, 'get_site_flag', AsyncMock(return_value=True)):
+        with patch.object(chat_web_mod, 'get_site_flag', AsyncMock(return_value=True)):
             resp = client.post(
                 '/v1/smart-chat',
                 json={'messages': [{'role': 'user', 'content': 'سلام'}], 'stream': False},
@@ -265,7 +266,7 @@ class TestChatEnabledFlagSmartChat:
 
 class TestChatEnabledFlagCompare:
     def test_on_proceeds_past_gate(self, client, _chat_bypass):
-        with patch.object(chat_mod, 'get_site_flag', AsyncMock(return_value=True)):
+        with patch.object(chat_web_mod, 'get_site_flag', AsyncMock(return_value=True)):
             resp = client.post(
                 '/v1/compare',
                 json={

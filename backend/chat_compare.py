@@ -31,6 +31,7 @@ from models import Quota
 from services.context_injection import get_injection_messages, inject_messages
 from services.billing import SqlBillingRepo, InsufficientBalanceError
 from services.money import Money
+from services.entitlement_gate import covering_entitlement
 from middleware.compression import compress_messages
 from model_output import clean_response_dict
 
@@ -221,12 +222,21 @@ async def compare_models(request: Request, payload: CompareRequest) -> Response:
         async with chat.async_session() as _bill_session:
             _repo = SqlBillingRepo(_bill_session)
             _bill_svc = chat.BillingService(_repo)
-            reservation_a = await _bill_svc.reserve(
+            # Each model is billed independently at its own eventual charge
+            # point (_call_model_once -> _record_usage, once per model), so
+            # each reservation is pre-authorized against the entitlement
+            # independently too -- this is a read-only check (it consumes
+            # nothing), so both calls seeing the same entitlement is correct:
+            # the real spend happens later, atomically, per model, in
+            # consume_for_usage. If the entitlement only has one request left,
+            # the first actual consume wins and the second falls through to
+            # the wallet on its own, same as any other race on consume.
+            reservation_a = None if await covering_entitlement(uid, 1000) is not None else await _bill_svc.reserve(
                 uid, Money(1000),
                 idempotency_key=f"cmp:{secrets.token_hex(8)}",
                 model=model_a,
             )
-            reservation_b = await _bill_svc.reserve(
+            reservation_b = None if await covering_entitlement(uid, 1000) is not None else await _bill_svc.reserve(
                 uid, Money(1000),
                 idempotency_key=f"cmp:{secrets.token_hex(8)}",
                 model=model_b,

@@ -34,6 +34,7 @@ export function useCommandPalette() {
     { id: 'pricing', label: 'تعرفه‌ها', icon: 'pricing', href: '/pricing', category: 'navigation' },
     { id: 'playground', label: 'Playground', icon: 'playground', href: '/playground', category: 'navigation' },
     { id: 'compare', label: 'مقایسه مدل‌ها', icon: 'compare', href: '/compare', category: 'navigation' },
+    { id: 'images', label: 'تولید تصویر', icon: 'camera', href: '/images', category: 'navigation' },
     { id: 'profile', label: 'پروفایل', icon: 'profile', href: '/profile', category: 'navigation' },
     { id: 'api-keys', label: 'کلیدهای API', icon: 'key', href: '/api-keys', category: 'navigation' },
     { id: 'admin', label: 'پنل مدیریت', icon: 'settings', href: '/admin', category: 'navigation' },

@@ -45,6 +45,12 @@ const NAV: NavItem[] = [
   { href: '/memory', label: 'حافظه', icon: 'clock', section: 'tools' },
   { href: '/tasks', label: 'تسک\u200cها', icon: 'calendar', section: 'tools' },
   { href: '/documents', label: 'سندساز', icon: 'file', section: 'tools' },
+  /* '/images' is listed even though no image model is servable yet: every
+     media row is in maintenance with no price, so the page shows an honest
+     "no image model is active" empty state rather than a fake list. Listing
+     it means the feature appears the moment an upstream key and a price
+     exist, instead of needing a frontend change to become visible. */
+  { href: '/images', label: 'تولید تصویر', icon: 'camera', section: 'tools' },
   { href: '/developer', label: 'توسعه\u200cدهندگان', icon: 'code', section: 'tools' },
   { href: '/profile', label: 'پروفایل', icon: 'profile', section: 'account' },
   { href: '/referral', label: 'دعوت', icon: 'referral', section: 'account' },

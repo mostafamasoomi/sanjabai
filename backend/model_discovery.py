@@ -18,6 +18,7 @@ what it finds. Two rules keep it safe to run unattended:
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Any
@@ -25,6 +26,7 @@ from typing import Any
 import sqlalchemy
 
 from database import async_session
+from model_modalities import derive_modalities
 from provider_catalog import cached_provider_models
 from providers import Provider, configured_providers
 
@@ -90,12 +92,49 @@ def _context_window(raw: dict[str, Any]) -> int:
 
     The column is NOT NULL with a positive check, so a default is required;
     8k is low enough that it will look obviously provisional in the admin UI.
+
+    Checks top-level keys first (omniroute's shape: `context_length`,
+    `max_input_tokens`, ...), then falls back to 9router's shape, which
+    nests the real value at `capabilities.contextWindow` instead -- e.g.
+    `gemini-api/models/gemini-3.6-flash` reports nothing at the top level
+    but `capabilities: {"contextWindow": 1048576, ...}`. Before this
+    fallback existed, every such row silently fell through to the 8192
+    default despite the upstream actually reporting a real number; three
+    gemini-api rows were confirmed already being served that wrong value.
+    See migrations/0031_model_modalities.sql for the one-time backfill of
+    rows this bug already wrote.
     """
     for key in ('context_window', 'context_length', 'max_context_tokens', 'max_input_tokens'):
         value = raw.get(key)
         if isinstance(value, int) and value > 0:
             return value
+    caps = raw.get('capabilities')
+    if isinstance(caps, dict):
+        value = caps.get('contextWindow')
+        if isinstance(value, int) and value > 0:
+            return value
     return 8192
+
+
+def _max_output_tokens(raw: dict[str, Any]) -> int | None:
+    """Max output tokens if the upstream reports one, else None.
+
+    The column is nullable (unlike context_window there is no safe
+    non-null default to fall back to), so returning None here is an honest
+    "unknown", not a bug -- only a value the upstream actually reports is
+    ever returned. Same two shapes as `_context_window`: omniroute's
+    top-level `max_output_tokens`, 9router's nested
+    `capabilities.maxOutput`.
+    """
+    value = raw.get('max_output_tokens')
+    if isinstance(value, int) and value > 0:
+        return value
+    caps = raw.get('capabilities')
+    if isinstance(caps, dict):
+        value = caps.get('maxOutput')
+        if isinstance(value, int) and value > 0:
+            return value
+    return None
 
 
 async def sync_provider(p: Provider) -> dict[str, Any]:
@@ -124,18 +163,53 @@ async def sync_provider(p: Provider) -> dict[str, Any]:
             if 'embedding' in model_id.lower() or 'rerank' in model_id.lower():
                 continue
 
+            # NOTE on the ON CONFLICT branches below: `model_catalog.provenance
+            # <> 'admin-approved'` guards the whole clause, so a curated row is
+            # never touched by any of these three columns either. On top of
+            # that, each column has its own narrower guard so a value someone
+            # (an admin, or a previous discovery sweep that already saw a
+            # better upstream payload) has since set is never clobbered by a
+            # rediscovery that only has a worse or unknown value this time:
+            #   * modalities -- only overwritten when the stored value is
+            #     still the plain text/text default, OR the newly derived
+            #     value is itself non-default (never replace a real
+            #     classification with the default).
+            #   * context_window -- only overwritten when it is still sitting
+            #     at the 8192 fallback AND discovery this time found a real
+            #     number (never replace a known value with 8192).
+            #   * max_output_tokens -- only filled in when it is still NULL
+            #     (never replace a known value with a different one from a
+            #     later, possibly less complete, upstream response).
             result = await session.execute(
                 sqlalchemy.text(
                     """
                     INSERT INTO model_catalog
                         (id, provider_model_id, provider, display_name, context_window,
-                         availability, provenance, upstream, last_verified_at)
+                         max_output_tokens, availability, provenance, upstream, modalities,
+                         last_verified_at)
                     VALUES
                         (:id, :pmid, :prov, :name, :ctx,
-                         'maintenance', 'provider', :upstream, now())
+                         :max_out, 'maintenance', 'provider', :upstream, :modalities,
+                         now())
                     ON CONFLICT (id) DO UPDATE SET
                         upstream         = EXCLUDED.upstream,
-                        last_verified_at = now()
+                        last_verified_at = now(),
+                        modalities = CASE
+                            WHEN model_catalog.modalities = '{"input": ["text"], "output": ["text"]}'::jsonb
+                              OR EXCLUDED.modalities <> '{"input": ["text"], "output": ["text"]}'::jsonb
+                            THEN EXCLUDED.modalities
+                            ELSE model_catalog.modalities
+                        END,
+                        context_window = CASE
+                            WHEN model_catalog.context_window = 8192 AND EXCLUDED.context_window <> 8192
+                            THEN EXCLUDED.context_window
+                            ELSE model_catalog.context_window
+                        END,
+                        max_output_tokens = CASE
+                            WHEN model_catalog.max_output_tokens IS NULL AND EXCLUDED.max_output_tokens IS NOT NULL
+                            THEN EXCLUDED.max_output_tokens
+                            ELSE model_catalog.max_output_tokens
+                        END
                       WHERE model_catalog.provenance <> 'admin-approved'
                     """
                 ),
@@ -145,7 +219,9 @@ async def sync_provider(p: Provider) -> dict[str, Any]:
                     'prov': _guess_provider(model_id),
                     'name': _display_name(model_id),
                     'ctx': _context_window(raw),
+                    'max_out': _max_output_tokens(raw),
                     'upstream': p.name,
+                    'modalities': json.dumps(derive_modalities(model_id, raw)),
                 },
             )
             if result.rowcount:

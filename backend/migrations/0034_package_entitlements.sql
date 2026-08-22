@@ -86,6 +86,37 @@ CREATE INDEX IF NOT EXISTS idx_package_entitlement_user_active
 CREATE INDEX IF NOT EXISTS idx_package_entitlement_expires
     ON package_entitlement(expires_at);
 
+-- One payment may grant a package's quota exactly once, enforced by the
+-- database rather than by the caller's care. handle_payment_callback()
+-- already locks the payment row and rejects a replayed Zarinpal callback
+-- before any grant would be reached, so this index is defence in depth --
+-- but it is the same defence payment_endpoints.py already applies to the
+-- Hermes order branch, which re-checks the order status even though the
+-- callback lock makes that "unnecessary". Money paths in this codebase do
+-- not rely on a single guard, because the caller that grants an
+-- entitlement has not been written yet and cannot be reviewed today.
+-- Without this, one replayed callback grants a second full quota for one
+-- payment -- an uncompensated giveaway, and the loss the ceiling column
+-- exists to prevent, arriving through the grant side instead.
+--
+-- Partial, because source_payment_id is NULL for an admin-issued grant and
+-- Postgres treats NULLs in a unique index as distinct anyway. Being
+-- explicit says the intent out loud: admin grants are deliberately NOT
+-- deduplicated (an admin may hand the same user the same package twice on
+-- purpose), payment-backed grants always are.
+--
+-- Keyed on (package_id, source_payment_id) rather than source_payment_id
+-- alone so that a future bundle payment could still grant two DIFFERENT
+-- packages, while the failure that actually threatens us -- the same
+-- package granted twice for one payment -- stays blocked.
+--
+-- CREATE UNIQUE INDEX IF NOT EXISTS is idempotent on its own, so the
+-- DROP-then-ADD dance that a named constraint needs (0030, 0032) is not
+-- required here.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_package_entitlement_payment
+    ON package_entitlement(package_id, source_payment_id)
+    WHERE source_payment_id IS NOT NULL;
+
 -- No data backfill: every existing credit_packages row (starter-credits,
 -- pro-credits, business-credits) keeps all four new columns NULL, so this
 -- migration is a strict no-op on current purchase/credit behaviour --

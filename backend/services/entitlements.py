@@ -174,8 +174,22 @@ _INSERT_ENTITLEMENT_SQL = sqlalchemy.text(
     "max_cost_per_request_toman, expires_at, active, source_payment_id) "
     "VALUES (:user_id, :package_id, :requests_remaining, :tokens_remaining, "
     ":max_cost_per_request_toman, :expires_at, true, :source_payment_id) "
+    "ON CONFLICT DO NOTHING "
     "RETURNING id, user_id, package_id, requests_remaining, tokens_remaining, "
     "max_cost_per_request_toman, expires_at, active, source_payment_id, created_at"
+)
+
+# Read back the row that won the race (or that a replayed callback had
+# already created), so a duplicate grant returns the FIRST entitlement
+# instead of None. Returning None would read as "this package grants no
+# quota" -- the same answer grant_entitlement() gives for an unconfigured
+# package -- and a caller could reasonably retry or report failure for a
+# payment that was in fact honoured.
+_EXISTING_ENTITLEMENT_SQL = sqlalchemy.text(
+    "SELECT id, user_id, package_id, requests_remaining, tokens_remaining, "
+    "max_cost_per_request_toman, expires_at, active, source_payment_id, created_at "
+    "FROM package_entitlement "
+    "WHERE package_id = :package_id AND source_payment_id = :source_payment_id"
 )
 
 
@@ -228,6 +242,24 @@ async def grant_entitlement(uid: int, package_id: str, *, source_payment_id: Opt
         }
         res = await session.execute(_INSERT_ENTITLEMENT_SQL, params)
         row = res.fetchone()
+        if row is None and source_payment_id is not None:
+            # ON CONFLICT DO NOTHING swallowed the insert -- this payment
+            # already granted this package's quota. Replaying a gateway
+            # callback must not hand out a second quota for one payment,
+            # so report the grant that already exists rather than making a
+            # new one. handle_payment_callback() locks the payment row and
+            # should reject a replay long before this point; this is the
+            # second lock, not the first.
+            res = await session.execute(
+                _EXISTING_ENTITLEMENT_SQL,
+                {'package_id': package_id, 'source_payment_id': source_payment_id},
+            )
+            row = res.fetchone()
+            if row is not None:
+                logger.warning(
+                    'entitlements.grant duplicate suppressed uid=%s package=%s payment=%s existing_id=%s',
+                    uid, package_id, source_payment_id, row._mapping['id'],
+                )
         await session.commit()
         if row is None:
             return None

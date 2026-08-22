@@ -478,12 +478,21 @@ async def admin_edit_user(request: Request, uid: int, payload: AdminUserEdit) ->
         if 'email' in data:
             await session.execute(User.__table__.update().where(User.id == uid), {'email': data['email']})
         if 'balance' in data:
-            await session.execute(
-                Ledger.__table__.insert().values(
-                    user_id=uid, amount=int(data['balance']),
-                    balance_after=int(data['balance']),
-                    reason='admin.adjustment',
-                )
+            # Direct balance editing is disabled here on purpose: this used to
+            # insert a Ledger row with amount == balance_after == <new balance>,
+            # no txn_type, no idempotency key, and never touched the `wallet`
+            # table at all -- violating the balance_after == previous_balance +
+            # amount invariant enforced everywhere else and permanently
+            # desyncing the ledger from the wallet. Refuse rather than silently
+            # drop the field (a quietly-ignored field is worse than a
+            # rejection); the caller must use the dedicated, audited,
+            # idempotent endpoint instead. This also means any other fields in
+            # the same request (daily_limit/phone/email) are NOT applied when
+            # `balance` is present -- nothing is committed before this return,
+            # so re-submit without `balance` to apply the rest.
+            return JSONResponse(
+                {'detail': 'ویرایش مستقیم موجودی کیف پول از این مسیر غیرفعال شده است. از POST /admin/users/{uid}/wallet-adjust با ذکر دلیل استفاده کنید.'},
+                status_code=400,
             )
         await session.commit()
     await _write_audit_log('admin.user.edit', target_type='user', target_id=uid, details=data)

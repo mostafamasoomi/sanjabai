@@ -3,6 +3,7 @@
 import { Icon } from '@/components/ui/Icon'
 import { faNum } from '@/lib/format'
 import { StatCard, SectionHeader, Field } from './shared'
+import UserWalletOps from './UserWalletOps'
 import type { UserRow, UserDetail, UserDetailTab } from '../AdminPanel'
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -149,9 +150,12 @@ export default function UsersSection({
                     <option value="enterprise">Enterprise</option>
                   </select>
                 </Field>
-                <Field label="موجودی کیف پول">
-                  <input className="input w-full" type="number" value={editingUser.wallet_balance || 0} onChange={(e) => setEditingUser({ ...editingUser, wallet_balance: +e.target.value })} />
-                </Field>
+                {/* Direct wallet-balance editing was removed from this modal: the
+                    backend now refuses `balance` on PUT /admin/users/{uid}
+                    outright (it used to insert an unaudited, non-idempotent
+                    ledger row that never touched the wallet table at all --
+                    see backend/admin.py). Use the "شارژ / کسر کیف پول" panel
+                    in the user detail view instead (UserWalletOps.tsx). */}
               </div>
               <div className="flex gap-2 mt-5">
                 <button className="btn flex-1" onClick={saveUserEdit}>ذخیره</button>
@@ -213,6 +217,14 @@ export default function UsersSection({
               </div>
             )}
           </div>
+
+          {/* Wallet credit/debit + consumer/developer panel move */}
+          <UserWalletOps
+            uid={selectedUserId}
+            balance={userDetail.wallet.balance}
+            panel={String(userDetail.user.preferences?.panel || '')}
+            onChanged={() => openUserDetail(selectedUserId)}
+          />
 
           {/* Tabs */}
           <div className="flex gap-1 border-b" style={{ borderColor: 'var(--border)' }}>

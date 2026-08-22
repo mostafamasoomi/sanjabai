@@ -261,8 +261,10 @@ async def recompute_states() -> int:
                         """
                         WITH upd AS (
                             UPDATE model_catalog SET availability = :avail,
-                                health_quarantine_reason = :reason,
-                                health_quarantined_at = CASE WHEN :reason IS NOT NULL THEN now() END,
+                                health_quarantine_reason = CAST(:reason AS text),
+                                health_quarantined_at = CASE
+                                    WHEN CAST(:reason AS text) IS NOT NULL
+                                    THEN now() END,
                                 last_verified_at = now(), updated_at = now()
                             WHERE id = :id RETURNING id
                         )
@@ -277,9 +279,17 @@ async def recompute_states() -> int:
                 # No transition: refresh timestamps only, no audit row.
                 await session.execute(
                     sqlalchemy.text(
-                        'UPDATE model_catalog SET health_quarantine_reason = :reason, '
-                        'health_quarantined_at = CASE WHEN :reason IS NOT NULL THEN now() '
-                        'ELSE health_quarantined_at END, last_verified_at = now() WHERE id = :id'
+                        # CAST is required, not decorative: asyncpg infers a
+                        # parameter's type from where it is used, and a bare
+                        # placeholder tested only with IS NOT NULL gives it
+                        # nothing to go on -- it fails the whole sweep with
+                        # AmbiguousParameterError. Seen in production.
+                        'UPDATE model_catalog SET '
+                        'health_quarantine_reason = CAST(:reason AS text), '
+                        'health_quarantined_at = CASE '
+                        '  WHEN CAST(:reason AS text) IS NOT NULL THEN now() '
+                        '  ELSE health_quarantined_at END, '
+                        'last_verified_at = now() WHERE id = :id'
                     ),
                     p,
                 )

@@ -4,8 +4,19 @@
 -- window looks bad: leave it alone, or write `availability = 'disabled'`.
 -- That conflated two very different situations -- "this model is broken" and
 -- "our account/quota currently can't reach it" (kr/* out of credit,
--- openrouter/*:free upstream quota exhausted, a gateway that is briefly
--- down) -- under one label that reads to an operator as "broken".
+-- openrouter free-tier variants with their upstream quota exhausted, a
+-- gateway that is briefly down) -- under one label that reads to an
+-- operator as "broken".
+--
+-- NB: never write a colon immediately followed by a word anywhere in a
+-- migration, comments included. migrate.py hands each split statement to
+-- SQLAlchemy text(), which treats that pattern as a bind parameter and
+-- refuses the statement with "A value is required for bind parameter".
+-- Comments are not stripped before that happens, so a colon in prose is
+-- enough. This file originally wrote openrouter's free-tier route that way
+-- and died on its first statement. psql does not reproduce it, so applying
+-- the SQL by hand passes while the real migration path fails --
+-- tests/test_migration_bind_params.py guards this now.
 --
 -- `health_quarantine_reason` distinguishes the two: NULL means this row was
 -- never parked by the health mechanism (it may still be in `maintenance` for

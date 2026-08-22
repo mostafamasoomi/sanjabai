@@ -20,6 +20,7 @@ const MonitoringTab = dynamic(() => import('./components/MonitoringTab'), { ssr:
 const MarkupSection = dynamic(() => import('./sections/MarkupSection'), { ssr: false })
 const ExchangeRateSection = dynamic(() => import('./sections/ExchangeRateSection'), { ssr: false })
 const ImagePricingSection = dynamic(() => import('./sections/ImagePricingSection'), { ssr: false })
+const PackagesSection = dynamic(() => import('./sections/PackagesSection'), { ssr: false })
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Sanjabai Admin Panel — Aurora Design System
@@ -28,7 +29,7 @@ const ImagePricingSection = dynamic(() => import('./sections/ImagePricingSection
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Page = 'dashboard' | 'pricing' | 'markup' | 'exchange-rate' | 'image-pricing' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'users' | 'security' | 'monitoring'
+type Page = 'dashboard' | 'pricing' | 'markup' | 'exchange-rate' | 'image-pricing' | 'packages' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'users' | 'security' | 'monitoring'
 
 export interface Analytics {
   user_count: number
@@ -153,6 +154,7 @@ const NAV_ITEMS: { key: Page; label: string; icon: IconName }[] = [
   { key: 'markup', label: 'درصد سود', icon: 'chart' },
   { key: 'exchange-rate', label: 'نرخ ارز', icon: 'globe' },
   { key: 'image-pricing', label: 'قیمت‌گذاری تصویر', icon: 'camera' },
+  { key: 'packages', label: 'بسته‌ها', icon: 'wallet' },
   { key: 'features', label: 'امکانات', icon: 'models' },
   { key: 'discounts', label: 'تخفیف‌ها', icon: 'wallet' },
   { key: 'about', label: 'درباره ما', icon: 'notification' },
@@ -959,6 +961,7 @@ export default function AdminPage() {
           {page === 'markup' && <MarkupSection api={api} />}
           {page === 'exchange-rate' && <ExchangeRateSection api={api} />}
           {page === 'image-pricing' && <ImagePricingSection api={api} />}
+          {page === 'packages' && <PackagesSection api={api} />}
           {page === 'monitoring' && <MonitoringTab api={api} />}
         </main>
       </div>

@@ -314,6 +314,7 @@ from entitlements_endpoints import router as entitlements_router
 from admin import router as admin_router
 from admin_catalog import router as admin_catalog_router
 from admin_packages import router as admin_packages_router
+from admin_logical import router as admin_logical_router
 from site_settings import router as site_settings_router
 from exchange_rate_admin import router as exchange_rate_admin_router
 from images import router as images_router
@@ -347,6 +348,10 @@ app.include_router(entitlements_router)
 app.include_router(admin_router)
 app.include_router(admin_catalog_router)
 app.include_router(admin_packages_router)
+# Phase C admin surface: approve/reject/pin the 1054 candidate rows the
+# clusterer left in `proposed`. Read-only for users -- every logical model
+# is still availability='maintenance' and nothing routes through them yet.
+app.include_router(admin_logical_router)
 app.include_router(site_settings_router)
 app.include_router(exchange_rate_admin_router)
 app.include_router(images_router)

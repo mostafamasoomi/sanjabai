@@ -26,6 +26,7 @@ const AnalyticsSection = dynamic(() => import('./sections/AnalyticsSection'), { 
 const ModelOpsSection = dynamic(() => import('./sections/ModelOpsSection'), { ssr: false })
 const PlansSection = dynamic(() => import('./sections/PlansSection'), { ssr: false })
 const SiteControlSection = dynamic(() => import('./sections/SiteControlSection'), { ssr: false })
+const LogicalModelsSection = dynamic(() => import('./sections/LogicalModelsSection'), { ssr: false })
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Sanjabai Admin Panel — Aurora Design System
@@ -34,7 +35,7 @@ const SiteControlSection = dynamic(() => import('./sections/SiteControlSection')
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Page = 'dashboard' | 'analytics' | 'site-control' | 'pricing' | 'markup' | 'exchange-rate' | 'image-pricing' | 'packages' | 'plans' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'model-ops' | 'users' | 'security' | 'monitoring'
+type Page = 'dashboard' | 'analytics' | 'site-control' | 'logical-models' | 'pricing' | 'markup' | 'exchange-rate' | 'image-pricing' | 'packages' | 'plans' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'model-ops' | 'users' | 'security' | 'monitoring'
 
 export interface Analytics {
   user_count: number
@@ -180,6 +181,7 @@ const NAV_ITEMS: { key: Page; label: string; icon: IconName }[] = [
   { key: 'dashboard', label: 'داشبورد', icon: 'dashboard' },
   { key: 'analytics', label: 'تحلیل و درآمد', icon: 'chart' },
   { key: 'site-control', label: 'کنترل سایت', icon: 'settings' },
+  { key: 'logical-models', label: 'مدل‌های منطقی', icon: 'code' },
   { key: 'users', label: 'کاربران', icon: 'profile' },
   { key: 'pricing', label: 'تعرفه‌ها', icon: 'pricing' },
   { key: 'markup', label: 'درصد سود', icon: 'chart' },
@@ -1000,6 +1002,7 @@ export default function AdminPage() {
           {page === 'packages' && <PackagesSection api={api} />}
           {page === 'analytics' && <AnalyticsSection api={api} />}
           {page === 'site-control' && <SiteControlSection api={api} />}
+          {page === 'logical-models' && <LogicalModelsSection api={api} />}
           {page === 'plans' && <PlansSection api={api} />}
           {page === 'model-ops' && <ModelOpsSection api={api} />}
           {page === 'monitoring' && <MonitoringTab api={api} />}

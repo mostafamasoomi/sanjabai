@@ -61,13 +61,124 @@ def _public_ids_enabled() -> bool:
 
 # Flat margin added to the USD->IRT rate, in Toman. Applied centrally in
 # _get_exchange_rate so every price consumer derives the same effective
-# rate; a per-model markup would make margin wildly uneven across tiers.
+# rate.
+#
+# 2026-08-22: this comment used to say a per-model markup was rejected
+# because it "would make margin wildly uneven across tiers." The owner has
+# now explicitly asked for exactly that -- a profit percentage settable
+# per model or globally (see get_global_markup_pct / resolve_markup_pct /
+# apply_markup below, and migrations/0030_markup_pct.sql) -- so that
+# decision is reversed here; the owner's decision wins over the old
+# rationale. USD_IRT_FLAT_MARKUP and the percentage markup are two
+# SEPARATE things that COMPOSE, not alternatives to each other: the
+# exchange rate is `market_rate + USD_IRT_FLAT_MARKUP` (a flat Toman
+# amount, applied once to the USD->IRT rate), and each model's served
+# price is `base_price * (1 + effective_markup_pct / 100)` (a
+# proportional amount, applied per model on top of that rate). Do not fold
+# one into the other.
 USD_IRT_FLAT_MARKUP = float(os.getenv('USD_IRT_FLAT_MARKUP', '2000'))
+
+
+# ── Markup (profit percentage) ─────────────────────────────────
+#
+# Two levels, resolved the same way everywhere a price is produced: a
+# per-model override (model_catalog.markup_pct) wins when it is set (not
+# NULL); a model with no override inherits the global percentage stored in
+# app_setting under GLOBAL_MARKUP_SETTING_KEY (migrations/0030_markup_pct.sql,
+# seeded at 0 so applying that migration is a strict no-op on prices).
+#
+# Every price consumer -- the catalog/pricing endpoints below AND chat.py's
+# billing path (_record_usage) -- MUST resolve the effective percentage via
+# get_effective_markup_pct()/resolve_markup_pct() and turn it into a served
+# number via apply_markup(), rather than reimplementing the arithmetic, so
+# the price a user is shown and the price they are charged are always
+# literally the same computation. See NEXT-SESSION.md section 12.
+
+GLOBAL_MARKUP_SETTING_KEY = 'global_markup_pct'
+MARKUP_CACHE_KEY = 'cache:markup:global_pct'
+MARKUP_CACHE_TTL = 300  # admin writes also delete this key immediately (admin_catalog.py)
+
+
+async def get_global_markup_pct() -> float:
+    """Redis-cached global markup percentage from app_setting.
+
+    Degrades to 0 -- never to some other default -- on any cache-read
+    failure, missing row, or DB error: failing open to a nonzero markup
+    would silently overcharge every model that has no per-model override.
+    """
+    try:
+        cached = await rds.get(MARKUP_CACHE_KEY)
+        if cached is not None:
+            return float(json.loads(cached))
+    except Exception as e:
+        # Mirrors _get_exchange_rate's idiom: log and fall through to the DB
+        # rather than assume any particular value -- a cache outage alone is
+        # not a reason to serve 0% when the DB still has the real setting.
+        logger.warning("global markup cache read failed: %s", e)
+
+    pct = 0.0
+    try:
+        if async_session is not None:
+            async with async_session() as session:
+                res = await session.execute(sqlalchemy.text(
+                    'SELECT value FROM app_setting WHERE key = :k'
+                ), {'k': GLOBAL_MARKUP_SETTING_KEY})
+                row = res.fetchone()
+                if row is not None and row.value is not None:
+                    val = row.value
+                    pct = float(val.get('pct', 0) or 0) if isinstance(val, dict) else float(val)
+    except Exception as e:
+        logger.warning("global markup DB read failed: %s", e)
+        return 0.0
+
+    try:
+        await rds.setex(MARKUP_CACHE_KEY, MARKUP_CACHE_TTL, json.dumps(pct))
+    except Exception as e:
+        logger.warning("global markup cache write failed: %s", e)
+
+    return pct
+
+
+def resolve_markup_pct(model_markup_pct: Any, global_pct: float) -> float:
+    """Per-model override wins; NULL/None means "inherit the global"."""
+    if model_markup_pct is None:
+        return global_pct
+    try:
+        return float(model_markup_pct)
+    except (TypeError, ValueError):
+        return global_pct
+
+
+async def get_effective_markup_pct(model_markup_pct: Any = None) -> float:
+    """Effective percentage for one model: its own override if set, else the
+    (cached) global. The single entry point a caller with only one model to
+    price should use (e.g. chat.py's billing path); catalog listings that
+    render many rows should fetch the global once via get_global_markup_pct()
+    and call resolve_markup_pct() per row instead, to avoid a Redis round
+    trip per row."""
+    return resolve_markup_pct(model_markup_pct, await get_global_markup_pct())
+
+
+def apply_markup(base_per_million: Any, pct: float) -> int:
+    """Apply a profit percentage to a per-million rate, rounded to the
+    nearest whole Toman.
+
+    This is the ONE function that turns (base price, effective pct) into a
+    served number. content.py's catalog/pricing endpoints and chat.py's
+    billing path (_record_usage) both call this -- never reimplement the
+    multiplication -- so the displayed price and the billed price for the
+    same model are always the identical integer.
+    """
+    try:
+        base = float(base_per_million or 0)
+    except (TypeError, ValueError):
+        base = 0.0
+    return round(base * (1 + (pct or 0) / 100))
 
 
 # ── Catalog helpers ─────────────────────────────────────────────
 
-def _catalog_row_to_item(m: dict[str, Any], rate_irt: float = 126488, markup_pct: int = 0) -> dict[str, Any]:
+def _catalog_row_to_item(m: dict[str, Any], rate_irt: float = 126488, global_markup_pct: float = 0) -> dict[str, Any]:
     """Map a model_catalog DB row to the camelCase catalog contract.
 
     When PUBLIC_MODEL_IDS_ENABLED is on, serves `public_id` (never `id`,
@@ -77,8 +188,15 @@ def _catalog_row_to_item(m: dict[str, Any], rate_irt: float = 126488, markup_pct
     present here when the flag is on; the `or m['id']` fallback only matters
     for callers that pass a row _load_catalog_rows wouldn't have (defensive,
     not expected to trigger in the flag-on path).
+
+    ``global_markup_pct`` is the caller's already-fetched (cached) global
+    markup percentage (see get_global_markup_pct); this function resolves
+    the effective per-model percentage (row override wins) and applies it
+    to every price field via apply_markup -- the same function chat.py's
+    billing path must call, so the displayed and billed price agree.
     """
     served_id = (m.get('public_id') or m['id']) if _public_ids_enabled() else m['id']
+    effective_pct = resolve_markup_pct(m.get('markup_pct'), global_markup_pct)
     return {
         'id': served_id,
         # 'providerModelId' / 'provider' (internal routing id, e.g. "bynara")
@@ -94,10 +212,10 @@ def _catalog_row_to_item(m: dict[str, Any], rate_irt: float = 126488, markup_pct
         'maxOutputTokens': m.get('max_output_tokens'),
         'pricing': {
             'currency': m.get('currency') or 'IRT',
-            'inputPerMillion': float(m.get('input_per_million') or 0),
-            'outputPerMillion': float(m.get('output_per_million') or 0),
-            'cachedInputPerMillion': float(m['cached_input_per_million']) if m.get('cached_input_per_million') is not None else None,
-            'reasoningPerMillion': float(m['reasoning_per_million']) if m.get('reasoning_per_million') is not None else None,
+            'inputPerMillion': apply_markup(m.get('input_per_million'), effective_pct),
+            'outputPerMillion': apply_markup(m.get('output_per_million'), effective_pct),
+            'cachedInputPerMillion': apply_markup(m['cached_input_per_million'], effective_pct) if m.get('cached_input_per_million') is not None else None,
+            'reasoningPerMillion': apply_markup(m['reasoning_per_million'], effective_pct) if m.get('reasoning_per_million') is not None else None,
             'priceVersion': m.get('price_version') or 'v1',
             'effectiveFrom': m.get('effective_from'),
             'usd': {
@@ -134,7 +252,7 @@ async def _load_catalog_rows() -> list[dict[str, Any]]:
                 'currency, input_per_million, output_per_million, cached_input_per_million, '
                 'reasoning_per_million, price_version, effective_from, availability, audience, '
                 'rate_limit, deprecated_at, last_verified_at, provenance, '
-                'usd_input_per_million, usd_output_per_million, public_id '
+                'usd_input_per_million, usd_output_per_million, public_id, markup_pct '
                 "FROM model_catalog WHERE availability = 'available' AND NOT (audience @> '[\"admin\"]')"
                 f"{public_filter} ORDER BY provider, id"
             ))
@@ -196,7 +314,7 @@ async def list_models(request: Request) -> dict[str, Any]:
     models = []
     if async_session is not None:
         try:
-            rate_irt, markup_pct = await _get_exchange_rate()
+            global_markup_pct = await get_global_markup_pct()
             async with async_session() as session:
                 public_only = _public_ids_enabled()
                 public_filter = " AND public_id IS NOT NULL" if public_only else ""
@@ -204,7 +322,7 @@ async def list_models(request: Request) -> dict[str, Any]:
                     sqlalchemy.text(
                         "SELECT id, provider_model_id, public_id, display_name, context_window, availability, "
                         "input_per_million, output_per_million, currency, "
-                        "usd_input_per_million, usd_output_per_million "
+                        "usd_input_per_million, usd_output_per_million, markup_pct "
                         "FROM model_catalog WHERE availability = 'available' AND NOT (audience @> '[\"admin\"]')"
                         f"{public_filter} ORDER BY id"
                     )
@@ -212,6 +330,7 @@ async def list_models(request: Request) -> dict[str, Any]:
                 for row in res.fetchall():
                     usd_in = float(row.usd_input_per_million or 0)
                     usd_out = float(row.usd_output_per_million or 0)
+                    effective_pct = resolve_markup_pct(row.markup_pct, global_markup_pct)
                     # public_id when the flag is on (never provider_model_id,
                     # which leaks the upstream route -- see migrations/
                     # 0028_public_model_ids.sql); provider_model_id unchanged
@@ -223,8 +342,8 @@ async def list_models(request: Request) -> dict[str, Any]:
                         'context_window': row.context_window,
                         'pricing': {
                             'currency': row.currency or 'IRT',
-                            'inputPerMillion': float(row.input_per_million or 0),
-                            'outputPerMillion': float(row.output_per_million or 0),
+                            'inputPerMillion': apply_markup(row.input_per_million, effective_pct),
+                            'outputPerMillion': apply_markup(row.output_per_million, effective_pct),
                             'usd': {
                                 'inputPerMillion': usd_in,
                                 'outputPerMillion': usd_out,
@@ -250,10 +369,16 @@ async def catalog_models(request: Request) -> JSONResponse:
     cached = await rds.get('cache:catalog:models')
     if cached:
         return JSONResponse(json.loads(cached))
-    rate_irt, markup_pct = await _get_exchange_rate()
+    rate_irt, _stale_markup_pct = await _get_exchange_rate()
+    # Markup is resolved fresh here (5-minute cache), not from the exchange
+    # rate's hour-long cache (_stale_markup_pct, discarded) -- otherwise an
+    # admin's markup change could take up to an hour to reach this endpoint
+    # while chat.py's billing path (which also calls get_global_markup_pct)
+    # already sees it, breaking the display/billed-price agreement.
+    global_markup_pct = await get_global_markup_pct()
     rows = await _load_catalog_rows()
     if rows:
-        data = [_catalog_row_to_item(r, rate_irt, markup_pct) for r in rows]
+        data = [_catalog_row_to_item(r, rate_irt, global_markup_pct) for r in rows]
         # Health-lookup keys taken from the source DB rows (server-side only,
         # never serialized to the client) — NOT from the public dicts above,
         # which no longer carry providerModelId.
@@ -301,17 +426,19 @@ async def catalog_pricing(request: Request) -> JSONResponse:
     if cached:
         return JSONResponse(json.loads(cached))
     rows = await _load_catalog_rows()
+    global_markup_pct = await get_global_markup_pct()
     pricing = []
     for m in rows:
         # Same public_id substitution as _catalog_row_to_item -- see there.
         served_id = (m.get('public_id') or m['id']) if _public_ids_enabled() else m['id']
+        effective_pct = resolve_markup_pct(m.get('markup_pct'), global_markup_pct)
         pricing.append({
             'id': served_id,
             'currency': m.get('currency') or 'IRT',
-            'inputPerMillion': float(m.get('input_per_million') or 0),
-            'outputPerMillion': float(m.get('output_per_million') or 0),
-            'cachedInputPerMillion': float(m['cached_input_per_million']) if m.get('cached_input_per_million') is not None else None,
-            'reasoningPerMillion': float(m['reasoning_per_million']) if m.get('reasoning_per_million') is not None else None,
+            'inputPerMillion': apply_markup(m.get('input_per_million'), effective_pct),
+            'outputPerMillion': apply_markup(m.get('output_per_million'), effective_pct),
+            'cachedInputPerMillion': apply_markup(m['cached_input_per_million'], effective_pct) if m.get('cached_input_per_million') is not None else None,
+            'reasoningPerMillion': apply_markup(m['reasoning_per_million'], effective_pct) if m.get('reasoning_per_million') is not None else None,
             'priceVersion': m.get('price_version') or 'v1',
             'effectiveFrom': m.get('effective_from'),
         })
@@ -357,7 +484,7 @@ async def api_exchange_rate() -> JSONResponse:
     # 1. Check DB override first (market rate)
     rate_irt = None
     source = 'fallback'
-    markup_pct = 0
+    markup_pct = await get_global_markup_pct()
     try:
         if async_session is not None:
             async with async_session() as session:
@@ -458,7 +585,7 @@ async def _compute_exchange_rate() -> tuple[float, int]:
       3. Fallback to open.er-api.com.
       4. Hardcoded fallback constant.
     """
-    markup_pct = 0
+    markup_pct = await get_global_markup_pct()
     rate_irr = None
 
     # 1. Manual DB override (highest priority)
@@ -563,7 +690,7 @@ async def _get_eur_exchange_rate() -> tuple[float, int]:
       3. Fallback to open.er-api.com.
       4. Hardcoded fallback constant.
     """
-    markup_pct = 0
+    markup_pct = await get_global_markup_pct()
     rate_irr = None
 
     # 1. Manual DB override (highest priority)
@@ -782,7 +909,16 @@ async def refresh_pricing() -> dict[str, Any]:
     # 1. Fetch fresh exchange rate (now live from tgju)
     await rds.delete('exchange_rate:usd_irt')  # force refresh
     rate_irt, markup_pct = await _get_exchange_rate()
-    multiplier = rate_irt * (1 + markup_pct / 100)
+    # NOTE: the percentage markup is deliberately NOT folded into this
+    # multiplier. model_catalog.input_per_million/output_per_million store
+    # the BASE Toman price (USD * rate_irt only); the effective markup
+    # (global or per-model override) is applied on top, at read time, by
+    # apply_markup() in every price-serving endpoint below and in chat.py's
+    # billing path -- see the "Markup (profit percentage)" section above.
+    # Baking it in here too would double-apply it for every model this loop
+    # touches, and would also skip models without a live OpenRouter price
+    # (left untouched below), so the two paths could disagree.
+    multiplier = rate_irt
 
     # 2. Live USD prices from OpenRouter
     or_prices = await _fetch_openrouter_prices()

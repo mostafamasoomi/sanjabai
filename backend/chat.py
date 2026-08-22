@@ -978,7 +978,8 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
     try:
         price_res = await session.execute(
             sqlalchemy.text(
-                'SELECT input_per_million, output_per_million FROM model_catalog '
+                'SELECT input_per_million, output_per_million, markup_pct '
+                'FROM model_catalog '
                 'WHERE provider_model_id = :mid AND availability = :avail LIMIT 1'
             ),
             {'mid': model, 'avail': 'available'},
@@ -988,8 +989,23 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
         logger.warning(f"_record_usage price lookup failed model={model} uid={uid}: {e}")
 
     if price_row and (price_row.input_per_million or price_row.output_per_million):
-        inp_rate = int(price_row.input_per_million or 0)
-        out_rate = int(price_row.output_per_million or 0)
+        # The profit percentage is applied HERE, at read time, through the
+        # same apply_markup() the catalog endpoints use -- not baked into the
+        # stored price. That identity is the whole point: if billing computed
+        # the markup its own way, we would show the user one number and
+        # charge another. model_catalog stores the BASE Toman price; the
+        # effective percentage is the model's own markup_pct override, or the
+        # global setting when that column is NULL.
+        from content import apply_markup, get_effective_markup_pct
+
+        # getattr, not attribute access: `markup_pct` arrives from migration
+        # 0030, and a price row produced by an older code path or a test
+        # double may not carry it. Missing => None => inherit the global.
+        effective_pct = await get_effective_markup_pct(
+            getattr(price_row, 'markup_pct', None)
+        )
+        inp_rate = apply_markup(price_row.input_per_million, effective_pct)
+        out_rate = apply_markup(price_row.output_per_million, effective_pct)
     else:
         # L2: no price row for a model we just served -- a catalog data bug,
         # not a billing decision. Bill at the configurable ceiling rate

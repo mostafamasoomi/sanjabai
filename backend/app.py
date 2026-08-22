@@ -288,6 +288,8 @@ from assistants import router as assistants_router
 from wallet import router as wallet_router
 from admin import router as admin_router
 from admin_catalog import router as admin_catalog_router
+from exchange_rate_admin import router as exchange_rate_admin_router
+from images import router as images_router
 from api_keys import router as api_keys_router
 from pricing import router as pricing_router
 from payment_endpoints import router as payment_router
@@ -315,6 +317,8 @@ app.include_router(assistants_router)
 app.include_router(wallet_router)
 app.include_router(admin_router)
 app.include_router(admin_catalog_router)
+app.include_router(exchange_rate_admin_router)
+app.include_router(images_router)
 app.include_router(api_keys_router)
 app.include_router(pricing_router)
 app.include_router(payment_router)

@@ -1,10 +1,17 @@
 """Free-tier per-model message throttle.
 
-Applies ONLY to users who have never made a real gateway payment (see
-:func:`has_paid`). Free-mode messages are still charged against the wallet
-as normal by BillingService.reserve() — this is an *additional* UX gate
-whose purpose is to stop a signup gift being burned on a single model, and
-to nudge new users into trying several models.
+Applies ONLY to users who have neither made a real gateway payment (see
+:func:`has_paid`) nor hold any wallet credit (see :func:`has_balance`).
+Free-mode messages are still charged against the wallet as normal by
+BillingService.reserve() — this is an *additional* UX gate that nudges a
+user with no credit into trying several models rather than burning their
+first impression on one.
+
+It originally existed to stop the signup gift being spent on a single
+model. That gift has since been removed (wallet credit now comes only from
+the gateway or an admin), which is exactly why the balance check was added:
+without it, a paying user who hit the cap was told their credit had run out
+while holding millions of toman.
 
 Storage: Redis only, no DB migration involved. Key
 ``freetier:msg:{uid}:{model}`` is a fixed 5-hour bucket anchored at the
@@ -66,6 +73,48 @@ def _models_key(uid: int) -> str:
     return f'freetier:models:{uid}'
 
 
+_HAS_BALANCE_SQL = sqlalchemy.text(
+    "SELECT 1 FROM wallet WHERE user_id = :uid AND balance > 0 LIMIT 1"
+)
+
+
+async def has_balance(uid: int) -> bool:
+    """True if the user currently holds any wallet credit at all.
+
+    A user with money must never be throttled by the free tier. This was a
+    real, reported bug: an account holding 9,954,787 toman was refused with
+    "your credit has run out" and sent to the top-up page, because the gate
+    consulted only the payment tables and the balance had been seeded
+    directly rather than through the gateway.
+
+    Reading the balance is now a *sound* signal, which it deliberately was
+    not before. The module docstring's warning still holds for the ledger --
+    txn_type cannot distinguish a gateway payment from free money -- but the
+    wallet balance can only be raised by the gateway or by an admin now that
+    the signup gift and referral bonus are gone and
+    tests/test_credit_paths.py enforces that allowlist. So a positive
+    balance is proof that someone either paid or was deliberately granted
+    credit, and either way the free-tier nudge does not apply.
+
+    Not cached: a top-up must lift the throttle immediately, and a user
+    watching a "you are out of credit" message after paying is exactly the
+    failure this fixes. It is one indexed primary-key lookup.
+
+    Fails CLOSED to False on any error, matching has_paid -- an unreadable
+    balance falls back to the free-tier gate rather than silently granting
+    unlimited access.
+    """
+    try:
+        if async_session is None:
+            return False
+        async with async_session() as session:
+            res = await session.execute(_HAS_BALANCE_SQL, {'uid': uid})
+            return res.fetchone() is not None
+    except Exception as e:
+        logger.warning(f"free_tier.has_balance check failed uid={uid}: {e}")
+        return False
+
+
 async def has_paid(uid: int) -> bool:
     """Return True iff the user has ever completed a real gateway payment.
 
@@ -122,6 +171,11 @@ async def check_and_consume(uid: int, models: list[str]) -> Optional[dict]:
     """
     try:
         if await has_paid(uid):
+            return None
+        # A user holding credit is not a free-tier user, however that credit
+        # arrived. See has_balance() for why the balance is a sound signal
+        # now that the gateway and an admin are the only ways to obtain it.
+        if await has_balance(uid):
             return None
 
         # Phase 1 — peek every model's counter without mutating anything.

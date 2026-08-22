@@ -648,7 +648,15 @@ export default function ChatPage() {
         let errorBody: { error?: { code?: string; message?: string }; code?: string; detail?: string } | null = null
         try { errorBody = await res.json() } catch {}
         const code = errorBody?.error?.code || errorBody?.code || ''
-        if (code === 'balance' || res.status === 429) {
+        // Only a real balance failure gets the "your credit has run out" card.
+        // This used to fire on ANY 429, so a user with ~10,000,000 toman who
+        // merely hit the five-free-messages-per-model window was told their
+        // credit was finished and sent to the top-up page -- false, and it
+        // pushed people to pay for something they had already paid for.
+        // Every other error now shows the server's own Persian message, which
+        // is already specific (the free-tier one names the model and counts
+        // down to the reset).
+        if (code === 'balance') {
           throw new Error('INSUFFICIENT_BALANCE')
         }
         throw new Error(errorBody?.error?.message || errorBody?.detail || `خطای سرور: ${res.status}`)

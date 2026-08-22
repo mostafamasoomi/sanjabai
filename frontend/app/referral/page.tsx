@@ -52,7 +52,7 @@ export default function ReferralPage() {
         </div>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>دعوت از دوستان</h1>
-          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>دوستان خود را دعوت کنید و پاداش بگیرید</p>
+          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>دوستان خود را با لینک اختصاصی خود به Sanjabai دعوت کنید</p>
         </div>
       </div>
 
@@ -91,8 +91,7 @@ export default function ReferralPage() {
         <div className="flex flex-col gap-3">
           {[
             { step: '۱', text: 'لینک دعوت خود را با دوستان به اشتراک بگذارید' },
-            { step: '۲', text: 'دوست شما ثبت‌نام و اولین شارژ را انجام می‌دهد' },
-            { step: '۳', text: 'هر دوی شما پاداش اعتباری دریافت می‌کنید' },
+            { step: '۲', text: 'دوست شما با این لینک در Sanjabai ثبت‌نام می‌کند' },
           ].map((item) => (
             <div key={item.step} className="flex items-center gap-3">
               <div

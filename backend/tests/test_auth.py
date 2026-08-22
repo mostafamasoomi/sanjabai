@@ -70,8 +70,12 @@ class TestSignup:
         response = client.post('/auth/signup', json={})
         assert response.status_code == 422
 
-    def test_signup_credits_gift_and_includes_it_in_response(self, client, mock_async_session):
-        # No existing user, no existing wallet/ledger row for the new id.
+    def test_signup_grants_no_gift_and_starts_at_zero_balance(self, client, mock_async_session):
+        # The owner removed the signup gift: a wallet may be credited only
+        # by the payment gateway or an admin (see tests/test_credit_paths.py).
+        # A new user now starts at a zero balance -- the on-ramp is the
+        # existing free-tier allowance (services/free_tier.py), not a wallet
+        # credit. No 'gift' key in the response, and no Ledger row added.
         from models import Ledger
         mock_async_session._execute_result = make_result(fetchone=None)
         with patch('app.rds.setex', new_callable=AsyncMock), \
@@ -80,17 +84,13 @@ class TestSignup:
                 'email': 'gift@example.com', 'password': 'securepass123', **CAPTCHA,
             })
             assert response.status_code == 200
-            assert response.json()['gift'] == {'amount': 10000}
+            assert 'gift' not in response.json()
 
-        # The ledger row added for the gift carries txn_type='signup_bonus',
-        # distinct from a real payment ('topup').
         ledger_adds = [
             call.args[0] for call in mock_async_session.add.call_args_list
             if isinstance(call.args[0], Ledger)
         ]
-        assert len(ledger_adds) == 1
-        assert ledger_adds[0].txn_type == 'signup_bonus'
-        assert ledger_adds[0].amount == 10000
+        assert ledger_adds == []
 
 
 class TestLogin:

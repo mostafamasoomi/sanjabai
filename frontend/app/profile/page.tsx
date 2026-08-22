@@ -894,9 +894,13 @@ export default function ProfilePage() {
           </h2>
         </div>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
+          {/* No monetary promise here any more: the referral bonus was removed
+              when wallet credit was restricted to the payment gateway and admin
+              only. The link still records who invited whom, so the attribution
+              is real -- the reward is not, and must not be advertised. */}
           {isFa
-            ? 'با دعوت دوستان به Sanjabai، به ازای هر ثبت‌نام موفق اعتبار هدیه دریافت کنید.'
-            : 'Invite friends to Sanjabai and earn bonus credits for each successful signup.'}
+            ? 'لینک دعوت خود را با دوستانتان به اشتراک بگذارید تا با نام شما در Sanjabai ثبت‌نام کنند.'
+            : 'Share your invite link so friends sign up to Sanjabai through you.'}
         </p>
         {user?.referral_code && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

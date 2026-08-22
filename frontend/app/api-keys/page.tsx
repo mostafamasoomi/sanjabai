@@ -3,9 +3,16 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
 import { faNum } from '@/lib/format'
+import { ApiKeyRevealModal } from '@/components/ApiKeyRevealModal'
+
+// Shared Persian message for the (expected-rare) CSRF-rejection path — the
+// backend returns 403 with "هدر X-Requested-With ارسال نشده" if a mutating
+// request ever reaches it without the header apiFetch adds automatically.
+const FORBIDDEN_MESSAGE = 'درخواست شما رد شد (خطای امنیتی). لطفاً صفحه را تازه‌سازی کرده و دوباره تلاش کنید.'
 
 type ApiKeyInfo = {
   id: number
@@ -21,11 +28,13 @@ export default function ApiKeysPage() {
   const { user, token } = useAuth()
   const router = useRouter()
   const [keys, setKeys] = useState<ApiKeyInfo[]>([])
-  const [newKey, setNewKey] = useState<string | null>(null)
   const [name, setName] = useState('Default')
   const [loading, setLoading] = useState(false)
-  const [revealedKeys, setRevealedKeys] = useState<Set<number>>(new Set())
-  const [copiedId, setCopiedId] = useState<number | null>(null)
+  const [rotatingId, setRotatingId] = useState<number | null>(null)
+
+  // The one moment the raw key exists in this UI at all: right after a
+  // create or rotate response. Never derived from the key list.
+  const [reveal, setReveal] = useState<{ key: string; isRotation: boolean } | null>(null)
 
   useEffect(() => {
     if (user && token) fetchKeys()
@@ -42,7 +51,7 @@ export default function ApiKeysPage() {
   const generateKey = async () => {
     setLoading(true)
     try {
-      const r = await fetch('/api/api-keys', {
+      const r = await apiFetch('/api/api-keys', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -51,9 +60,10 @@ export default function ApiKeysPage() {
         body: JSON.stringify({ name }),
       })
       if (r.status === 401) { router.push('/login'); return }
+      if (r.status === 403) { toast(FORBIDDEN_MESSAGE, 'error'); return }
       const data = await r.json()
       if (r.ok) {
-        setNewKey(data.key)
+        setReveal({ key: data.key, isRotation: false })
         fetchKeys()
       } else {
         toast(data.detail || 'خطا', 'error')
@@ -65,13 +75,38 @@ export default function ApiKeysPage() {
     }
   }
 
+  const rotateKey = async (id: number) => {
+    if (!confirm('با چرخاندن این کلید، کلید فعلی بلافاصله از کار می‌افتد و باید کلید جدید را در همه جا جایگزین کنید. ادامه می‌دهید؟')) return
+    setRotatingId(id)
+    try {
+      const r = await apiFetch(`/api/api-keys/${id}/rotate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (r.status === 401) { router.push('/login'); return }
+      if (r.status === 403) { toast(FORBIDDEN_MESSAGE, 'error'); return }
+      const data = await r.json()
+      if (r.ok) {
+        setReveal({ key: data.key, isRotation: true })
+        fetchKeys()
+      } else {
+        toast(data.detail || 'خطا', 'error')
+      }
+    } catch {
+      toast('خطا در ارتباط', 'error')
+    } finally {
+      setRotatingId(null)
+    }
+  }
+
   const revokeKey = async (id: number) => {
     try {
-      const r = await fetch(`/api/api-keys/${id}`, {
+      const r = await apiFetch(`/api/api-keys/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })
       if (r.status === 401) { router.push('/login'); return }
+      if (r.status === 403) { toast(FORBIDDEN_MESSAGE, 'error'); return }
       if (r.ok) {
         toast('کلید غیرفعال شد', 'success')
         fetchKeys()
@@ -80,26 +115,6 @@ export default function ApiKeysPage() {
       toast('خطا', 'error')
     }
   }
-
-  const copyKey = (key: string, id?: number) => {
-    navigator.clipboard.writeText(key)
-    if (id !== undefined) {
-      setCopiedId(id)
-      setTimeout(() => setCopiedId(null), 2000)
-    }
-    toast('کلید کپی شد', 'success')
-  }
-
-  const toggleReveal = (id: number) => {
-    setRevealedKeys((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  const maskKey = (prefix: string, id: number) => `${prefix}${'•'.repeat(24)}${id}`
 
   const formatDate = (s: string | null) => {
     if (!s) return '—'
@@ -143,30 +158,6 @@ export default function ApiKeysPage() {
         </div>
       </div>
 
-      {/* New key display */}
-      {newKey && (
-        <div className="card apikeys-newkey-card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <div className="apikeys-success-icon">
-              <Icon name="check" size={16} className="text-positive" />
-            </div>
-            <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--positive)' }}>کلید جدید ساخته شد</h2>
-          </div>
-          <p style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 12, paddingRight: 28 }}>
-            ⚠️ این کلید فقط یک بار نمایش داده می‌شود. همین حالا کپی کنید.
-          </p>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <code className="apikeys-code-block flex-1">
-              {newKey}
-            </code>
-            <button onClick={() => copyKey(newKey)} className="btn btn-secondary btn-sm apikeys-copy-btn" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <Icon name="copy" size={14} />
-              کپی
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Existing keys */}
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -190,8 +181,7 @@ export default function ApiKeysPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {keys.map((k) => {
-              const isRevealed = revealedKeys.has(k.id)
-              const isCopied = copiedId === k.id
+              const isRotating = rotatingId === k.id
               return (
                 <div key={k.id} className={`apikeys-key-card ${!k.active ? 'apikeys-key-disabled' : ''}`}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
@@ -206,27 +196,13 @@ export default function ApiKeysPage() {
                         )}
                       </div>
 
-                      {/* Key value with mask/reveal */}
+                      {/* Truthful key identifier — only the real stored prefix, never a
+                          fabricated "full key". There is no reveal/copy control here on
+                          purpose: the full key only ever exists once, in the reveal modal. */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                         <code className="apikeys-key-value">
-                          {isRevealed ? `${k.prefix}...${k.id}` : maskKey(k.prefix, k.id)}
+                          {k.prefix}{'•'.repeat(24)}
                         </code>
-                        <button
-                          onClick={() => toggleReveal(k.id)}
-                          className="btn btn-ghost btn-sm apikeys-eye-btn"
-                          title={isRevealed ? 'مخفی کردن' : 'نمایش'}
-                          style={{ padding: '4px 6px' }}
-                        >
-                          <Icon name={isRevealed ? 'eyeOff' : 'eye'} size={14} />
-                        </button>
-                        <button
-                          onClick={() => copyKey(`${k.prefix}...${k.id}`, k.id)}
-                          className={`btn btn-ghost btn-sm apikeys-copy-btn ${isCopied ? 'apikeys-copied' : ''}`}
-                          title="کپی"
-                          style={{ padding: '4px 6px' }}
-                        >
-                          <Icon name={isCopied ? 'check' : 'copy'} size={14} />
-                        </button>
                       </div>
 
                       {/* Meta info */}
@@ -254,13 +230,23 @@ export default function ApiKeysPage() {
 
                     {/* Actions */}
                     {k.active && (
-                      <button
-                        onClick={() => revokeKey(k.id)}
-                        className="btn btn-ghost btn-sm apikeys-revoke-btn"
-                        title="غیرفعال کردن"
-                      >
-                        <Icon name="trash" size={14} />
-                      </button>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button
+                          onClick={() => rotateKey(k.id)}
+                          disabled={isRotating}
+                          className="btn btn-ghost btn-sm"
+                          title="چرخاندن کلید (ساخت رمز جدید)"
+                        >
+                          {isRotating ? <span className="apikeys-spinner" /> : <Icon name="refresh" size={14} />}
+                        </button>
+                        <button
+                          onClick={() => revokeKey(k.id)}
+                          className="btn btn-ghost btn-sm apikeys-revoke-btn"
+                          title="غیرفعال کردن"
+                        >
+                          <Icon name="trash" size={14} />
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -311,6 +297,13 @@ export default function ApiKeysPage() {
           </div>
         </div>
       </div>
+
+      <ApiKeyRevealModal
+        open={reveal !== null}
+        rawKey={reveal?.key ?? null}
+        isRotation={reveal?.isRotation ?? false}
+        onAcknowledge={() => setReveal(null)}
+      />
     </div>
   )
 }

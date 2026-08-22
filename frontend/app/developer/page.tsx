@@ -2,8 +2,15 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/lib/auth'
+import { apiFetch } from '@/lib/apiFetch'
 import { toast, EmptyState, Skeleton, Tabs } from '@/components/ui'
 import { Icon, type IconName } from '@/components/ui/Icon'
+import { ApiKeyRevealModal } from '@/components/ApiKeyRevealModal'
+
+// Shared Persian message for the (expected-rare) CSRF-rejection path — the
+// backend returns 403 with "هدر X-Requested-With ارسال نشده" if a mutating
+// request ever reaches it without the header apiFetch adds automatically.
+const FORBIDDEN_MESSAGE = 'درخواست شما رد شد (خطای امنیتی). لطفاً صفحه را تازه‌سازی کرده و دوباره تلاش کنید.'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Developer API Page
@@ -112,11 +119,12 @@ export default function DeveloperPage() {
   const { token, user, loading: authLoading } = useAuth()
   const [keys, setKeys] = useState<ApiKeyInfo[]>([])
   const [newKeyName, setNewKeyName] = useState('')
-  const [newKey, setNewKey] = useState<string | null>(null)
   const [keyLoading, setKeyLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('python')
-  const [copiedKey, setCopiedKey] = useState<number | null>(null)
   const [revokingId, setRevokingId] = useState<number | null>(null)
+  const [rotatingId, setRotatingId] = useState<number | null>(null)
+  // Full raw key only ever lives here, right after create/rotate — never derived from the key list.
+  const [reveal, setReveal] = useState<{ key: string; isRotation: boolean } | null>(null)
 
   const headers = useCallback(() => ({
     'Content-Type': 'application/json',
@@ -146,17 +154,17 @@ export default function DeveloperPage() {
     }
     setKeyLoading(true)
     try {
-      const r = await fetch('/api/api-keys', {
+      const r = await apiFetch('/api/api-keys', {
         method: 'POST',
         headers: headers(),
         body: JSON.stringify({ name: newKeyName }),
       })
+      if (r.status === 403) { toast(FORBIDDEN_MESSAGE, 'error'); return }
       const data = await r.json()
       if (r.ok) {
-        setNewKey(data.key)
+        setReveal({ key: data.key, isRotation: false })
         setNewKeyName('')
         fetchKeys()
-        toast('کلید جدید ساخته شد', 'success')
       } else {
         toast(data.detail || 'خطا', 'error')
       }
@@ -167,13 +175,36 @@ export default function DeveloperPage() {
     }
   }
 
+  const rotateKey = async (id: number) => {
+    if (!confirm('با چرخاندن این کلید، کلید فعلی بلافاصله از کار می‌افتد و باید کلید جدید را در همه جا جایگزین کنید. ادامه می‌دهید؟')) return
+    setRotatingId(id)
+    try {
+      const r = await apiFetch(`/api/api-keys/${id}/rotate`, {
+        method: 'POST', headers: headers(),
+      })
+      if (r.status === 403) { toast(FORBIDDEN_MESSAGE, 'error'); return }
+      const data = await r.json()
+      if (r.ok) {
+        setReveal({ key: data.key, isRotation: true })
+        fetchKeys()
+      } else {
+        toast(data.detail || 'خطا', 'error')
+      }
+    } catch {
+      toast('خطا در ارتباط', 'error')
+    } finally {
+      setRotatingId(null)
+    }
+  }
+
   const revokeKey = async (id: number) => {
     if (!confirm('آیا از غیرفعال کردن این کلید مطمئن هستید؟')) return
     setRevokingId(id)
     try {
-      const r = await fetch(`/api/api-keys/${id}`, {
+      const r = await apiFetch(`/api/api-keys/${id}`, {
         method: 'DELETE', headers: headers(),
       })
+      if (r.status === 403) { toast(FORBIDDEN_MESSAGE, 'error'); return }
       if (r.ok) {
         toast('کلید غیرفعال شد', 'success')
         fetchKeys()
@@ -309,41 +340,6 @@ export default function DeveloperPage() {
             </button>
           </div>
 
-          {/* New key display */}
-          {newKey && (
-            <div style={{
-              padding: '14px 18px', borderRadius: 10, marginBottom: 16,
-              background: 'rgba(16, 185, 129, 0.08)',
-              border: '1px solid rgba(16, 185, 129, 0.2)',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                <Icon name="check" size={14} className="text-positive" />
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--positive)' }}>کلید ساخته شد</span>
-              </div>
-              <p style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 8 }}>
-                ⚠️ این کلید فقط یک بار نمایش داده می‌شود. همین حالا کپی کنید.
-              </p>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <code style={{
-                  flex: 1, padding: '8px 12px', borderRadius: 8,
-                  background: 'var(--bg-elev)', fontSize: 13,
-                  direction: 'ltr', fontFamily: 'var(--font-mono)',
-                  overflow: 'auto', whiteSpace: 'nowrap',
-                }}>
-                  {newKey}
-                </code>
-                <button
-                  onClick={() => copyText(newKey)}
-                  className="btn btn-ghost btn-sm"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                >
-                  <Icon name="copy" size={13} />
-                  کپی
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Key list */}
           {keys.length === 0 ? (
             <EmptyState icon="key" title="هنوز کلیدی نساخته‌اید" description="اولین کلید API خود را بسازید." />
@@ -370,15 +366,20 @@ export default function DeveloperPage() {
                       {k.created_at && <span>{formatDate(k.created_at)}</span>}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button
-                      onClick={() => copyText(`${k.prefix}...key_id`)}
-                      className="btn btn-ghost btn-sm"
-                      title="کپی"
-                    >
-                      <Icon name="copy" size={13} />
-                    </button>
-                    {k.active && (
+                  {k.active && (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        onClick={() => rotateKey(k.id)}
+                        disabled={rotatingId === k.id}
+                        className="btn btn-ghost btn-sm"
+                        title="چرخاندن کلید (ساخت رمز جدید)"
+                      >
+                        {rotatingId === k.id ? (
+                          <span style={{ width: 12, height: 12, border: '2px solid var(--text-muted)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite', display: 'inline-block' }} />
+                        ) : (
+                          <Icon name="refresh" size={13} />
+                        )}
+                      </button>
                       <button
                         onClick={() => revokeKey(k.id)}
                         disabled={revokingId === k.id}
@@ -391,8 +392,8 @@ export default function DeveloperPage() {
                           <Icon name="trash" size={13} />
                         )}
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -514,6 +515,13 @@ export default function DeveloperPage() {
       </div>
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+      <ApiKeyRevealModal
+        open={reveal !== null}
+        rawKey={reveal?.key ?? null}
+        isRotation={reveal?.isRotation ?? false}
+        onAcknowledge={() => setReveal(null)}
+      />
     </div>
   )
 }

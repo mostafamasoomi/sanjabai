@@ -92,6 +92,55 @@ async def list_api_keys(request: Request) -> JSONResponse:
     return JSONResponse(jsonable_encoder(rows))
 
 
+@router.post('/api-keys/{key_id}/rotate')
+async def rotate_api_key(request: Request, key_id: int) -> JSONResponse:
+    """Issue a fresh secret for an existing API key; the old secret stops
+    authenticating the moment this commits. The raw key is returned exactly
+    once, just like creation — reuses the same generation/hashing code path
+    (`secrets.token_urlsafe` + `_hash_api_key`), never a second implementation.
+
+    Rotation semantics: the existing row is updated in place (same id, name,
+    scopes, created_at, usage history) — only key_hash/key_prefix change.
+    This avoids orphaning a row and keeps a single source of truth per named
+    key, at the cost of losing the previous secret's audit trail as a
+    separate row (the audit log entry below preserves that history instead).
+    """
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+
+    async with async_session() as session:
+        res = await session.execute(
+            ApiKey.__table__.select().where(ApiKey.id == key_id, ApiKey.user_id == uid)
+        )
+        row = res.fetchone()
+        if row is None:
+            return JSONResponse({'detail': 'کلید یافت نشد'}, status_code=404)
+        if not row.active:
+            return JSONResponse({'detail': 'کلید غیرفعال است و قابل چرخش نیست'}, status_code=400)
+
+        raw_key = f'sk-{secrets.token_urlsafe(32)}'
+        key_hash = _hash_api_key(raw_key)
+        key_prefix = raw_key[:12]
+
+        await session.execute(
+            ApiKey.__table__.update()
+            .where(ApiKey.id == key_id, ApiKey.user_id == uid),
+            {'key_hash': key_hash, 'key_prefix': key_prefix}
+        )
+        await session.commit()
+
+    await _write_audit_log('api_key.rotate', target_type='api_key', target_id=key_id, details={'user_id': uid, 'prefix': key_prefix})
+    return JSONResponse({
+        'id': key_id, 'name': row.name, 'key': raw_key, 'prefix': key_prefix,
+        'masked': f"{key_prefix}••••••••••••", 'scopes': row.scopes,
+        'expires_at': row.expires_at.isoformat() if row.expires_at else None,
+        'created_at': row.created_at.isoformat() if row.created_at else None,
+    })
+
+
 @router.delete('/api-keys/{key_id}')
 async def revoke_api_key(request: Request, key_id: int) -> JSONResponse:
     """Revoke (deactivate) an API key"""

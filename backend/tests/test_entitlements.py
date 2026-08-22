@@ -15,16 +15,33 @@ selection rules, atomicity, no-op semantics, grant-time copying -- the same
 way a real Postgres row would enforce it. Migration syntax itself is
 covered separately by test_migration_bind_params.py and (against a real
 schema) test_migrations_real.py.
+
+CAUTION -- this file re-implements SQL semantics in Python and that is a
+real hole: an adversarial review proved that the covering-query candidate
+*ordering* used to be a hardcoded Python sort that ignored the real
+``ORDER BY`` clause entirely, so it kept "passing" even when the production
+SQL was rewritten to sort by something else. The ordering half of the fake
+now parses the actual ORDER BY clause out of the SQL text handed to it (see
+``tests/_entitlements_order_by.py``) instead of guessing it in Python --
+see ``TestFindCoveringEntitlement.test_soonest_expiry_is_preferred``. The
+WHERE-clause filtering (active / expiry / exhaustion / ceiling) is still a
+parallel Python re-implementation, not parsed from SQL text; that gap is
+covered instead by direct assertions on the SQL text itself in
+``test_entitlements_sql_contract.py``, which is the strongest check
+achievable without a live Postgres (see that file's module docstring for
+why a real-DB test was not added here).
 """
 from __future__ import annotations
 
 import asyncio
+import functools
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
 
 import services.entitlements as ent_mod
+from tests._entitlements_order_by import compare_by_terms, parse_order_by
 
 
 def _utcnow() -> datetime:
@@ -144,7 +161,16 @@ class _FakeSession:
                 and r['max_cost_per_request_toman'] is not None
                 and r['max_cost_per_request_toman'] >= est
             ]
-            candidates.sort(key=lambda r: (r['expires_at'] is None, r['expires_at'] or datetime.max, r['id']))
+            # Selection order is parsed out of the REAL ORDER BY clause in
+            # `sql` (see tests/_entitlements_order_by.py) rather than a
+            # hardcoded Python sort -- a hardcoded sort here would keep
+            # "passing" even if production's ORDER BY silently regressed,
+            # which is exactly what an adversarial review proved happens
+            # with the old `key=lambda r: (...)` version of this line.
+            order_terms = parse_order_by(sql)
+            candidates.sort(key=functools.cmp_to_key(
+                lambda a, b: compare_by_terms(a, b, order_terms)
+            ))
             if candidates:
                 result.fetchone.return_value = _row(candidates[0])
             return result
@@ -243,21 +269,28 @@ class TestFindCoveringEntitlement:
     @pytest.mark.asyncio
     async def test_soonest_expiry_is_preferred(self, patched):
         now = _utcnow()
+        # IDs are deliberately NOT monotonic with expiry order. With the
+        # old ids (1, 2, 3 assigned in expiry order) a regression to
+        # `ORDER BY id DESC` picks the same row (id=3) as the correct
+        # "soonest expiry" answer by sheer coincidence -- which is exactly
+        # how the hollow version of this test survived that regression.
+        # Scrambling the ids means an id-based ORDER BY (ASC or DESC) picks
+        # a visibly different, wrong row.
         patched.add_entitlement(
-            id=1, user_id=1, requests_remaining=10, max_cost_per_request_toman=1000,
+            id=99, user_id=1, requests_remaining=10, max_cost_per_request_toman=1000,
             expires_at=None,  # never expires -- least urgent
         )
         patched.add_entitlement(
-            id=2, user_id=1, requests_remaining=10, max_cost_per_request_toman=1000,
+            id=5, user_id=1, requests_remaining=10, max_cost_per_request_toman=1000,
             expires_at=now + timedelta(days=10),
         )
         patched.add_entitlement(
-            id=3, user_id=1, requests_remaining=10, max_cost_per_request_toman=1000,
+            id=42, user_id=1, requests_remaining=10, max_cost_per_request_toman=1000,
             expires_at=now + timedelta(days=1),  # soonest -- must win
         )
         found = await ent_mod.find_covering_entitlement(1, 500)
         assert found is not None
-        assert found['id'] == 3
+        assert found['id'] == 42
 
     @pytest.mark.asyncio
     async def test_no_entitlements_returns_none(self, patched):

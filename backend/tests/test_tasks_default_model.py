@@ -21,7 +21,31 @@ import pytest
 import tasks as tasks_mod
 import chat as chat_mod
 import database as _db
+import task_execution as task_execution_mod
 from models import ScheduledTask, TaskExecution
+
+
+def _fake_provider():
+    """A chat._resolve_provider() stand-in -- task_execution.py's upstream
+    call reads `.v1` and calls `.headers()` on whatever it resolves to."""
+    provider = MagicMock()
+    provider.v1 = 'http://fake-upstream/v1'
+    provider.headers = MagicMock(return_value={})
+    return provider
+
+
+def _billing_double(reserve_result=None):
+    """A BillingService stand-in for task_execution.reserve()/release() --
+    same pattern as tests/test_images.py's `_billing_mock()`. These tests
+    are about proving the resolved model reaches the upstream call, not
+    about wallet/reservation mechanics (that is covered exhaustively by
+    tests/test_task_billing.py), so billing itself is a double here."""
+    instance = MagicMock()
+    instance.reserve = AsyncMock(
+        return_value=reserve_result or {'reservation_id': 'resv-1', 'hold_amount': 1000}
+    )
+    instance.release = AsyncMock(return_value=None)
+    return MagicMock(return_value=instance), instance
 
 
 @pytest.fixture(autouse=True)
@@ -186,6 +210,16 @@ class TestRunTaskEndToEnd:
     mocked DB session and a mocked upstream HTTP call, so the resolved
     model is proven to be what actually lands in the request sent to
     LiteLLM -- not just what a helper function returns in isolation.
+
+    run_task() now wraps the upstream call in task_execution._execute_task's
+    billing bracket (reserve -> upstream -> settle -> release -- see
+    task_execution.py's module docstring); BillingService and
+    chat._bill_stream_usage are doubled out here (see `_billing_double` /
+    `_fake_provider` above) so these tests stay focused on their original
+    purpose -- proving the RESOLVED model, never an empty string and never
+    the old hardcoded 'mimo-v2.5' literal, is what reaches the upstream call
+    -- rather than duplicating the wallet/reservation mechanics that
+    tests/test_task_billing.py already covers exhaustively.
     """
 
     @pytest.mark.asyncio
@@ -207,12 +241,18 @@ class TestRunTaskEndToEnd:
 
         fake_http = MagicMock()
         fake_http.post = fake_post
+        billing_cls, _billing_instance = _billing_double()
 
         with _install_session(session), \
              patch.object(_db, '_real_http', fake_http), \
              patch.object(tasks_mod, '_get_user_id', AsyncMock(return_value=1)), \
              patch.object(tasks_mod, '_default_model', AsyncMock(return_value='bynara/mimo-v2.5-free')), \
-             patch.object(chat_mod, '_resolve_public_model', AsyncMock(side_effect=lambda m: m)):
+             patch.object(chat_mod, '_resolve_public_model', AsyncMock(side_effect=lambda m: m)), \
+             patch.object(chat_mod, 'is_working_model', AsyncMock(return_value=True)), \
+             patch.object(chat_mod, '_resolve_provider', AsyncMock(return_value=_fake_provider())), \
+             patch.object(chat_mod, '_bill_stream_usage', AsyncMock(return_value={'cost': 10})), \
+             patch.object(task_execution_mod, 'check_and_consume', AsyncMock(return_value=None)), \
+             patch.object(task_execution_mod, 'BillingService', billing_cls):
             resp = await tasks_mod.run_task(MagicMock(), 1)
 
         body = json.loads(resp.body)
@@ -240,11 +280,17 @@ class TestRunTaskEndToEnd:
 
         fake_http = MagicMock()
         fake_http.post = fake_post
+        billing_cls, _billing_instance = _billing_double()
 
         with _install_session(session), \
              patch.object(_db, '_real_http', fake_http), \
              patch.object(tasks_mod, '_get_user_id', AsyncMock(return_value=1)), \
-             patch.object(chat_mod, '_resolve_public_model', AsyncMock(return_value='bynara/mimo-v2.5-free')) as resolve_mock:
+             patch.object(chat_mod, '_resolve_public_model', AsyncMock(return_value='bynara/mimo-v2.5-free')) as resolve_mock, \
+             patch.object(chat_mod, 'is_working_model', AsyncMock(return_value=True)), \
+             patch.object(chat_mod, '_resolve_provider', AsyncMock(return_value=_fake_provider())), \
+             patch.object(chat_mod, '_bill_stream_usage', AsyncMock(return_value={'cost': 10})), \
+             patch.object(task_execution_mod, 'check_and_consume', AsyncMock(return_value=None)), \
+             patch.object(task_execution_mod, 'BillingService', billing_cls):
             resp = await tasks_mod.run_task(MagicMock(), 1)
 
         body = json.loads(resp.body)

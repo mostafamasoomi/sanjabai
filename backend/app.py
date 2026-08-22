@@ -224,11 +224,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     _health_task = asyncio.create_task(_health_loop())
     _provider_catalog_task = asyncio.create_task(_provider_catalog_loop())
 
+    # Scheduled-task runner. Gated by TASK_SCHEDULER_ENABLED and OFF by
+    # default: this is the first path in the product that spends a user's
+    # money with no human on the trigger, so it stays dark until a manual
+    # task run has been seen to produce a correct ledger row on live.
+    from services.task_scheduler import scheduler_loop
+    _task_scheduler_task = asyncio.create_task(scheduler_loop())
+
     yield
 
     _health_task.cancel()
     _discovery_task.cancel()
     _provider_catalog_task.cancel()
+    _task_scheduler_task.cancel()
     _pricing_task.cancel()
     _hermes_renewal_task.cancel()
     if _db._real_http:
@@ -290,6 +298,7 @@ from admin import router as admin_router
 from admin_catalog import router as admin_catalog_router
 from exchange_rate_admin import router as exchange_rate_admin_router
 from images import router as images_router
+from admin_user_ops import router as admin_user_ops_router
 from api_keys import router as api_keys_router
 from pricing import router as pricing_router
 from payment_endpoints import router as payment_router
@@ -319,6 +328,7 @@ app.include_router(admin_router)
 app.include_router(admin_catalog_router)
 app.include_router(exchange_rate_admin_router)
 app.include_router(images_router)
+app.include_router(admin_user_ops_router)
 app.include_router(api_keys_router)
 app.include_router(pricing_router)
 app.include_router(payment_router)

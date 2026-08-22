@@ -11,10 +11,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import select, text
 
-from database import async_session, _http, LITELLM_HOST
+from database import async_session
 from models import ScheduledTask, TaskExecution
 from dependencies import _get_user_id
+from services.task_scheduler import compute_next_run
 import chat as chat_mod
+import task_execution
 
 router = APIRouter()
 
@@ -143,6 +145,15 @@ async def create_task(request: Request, payload: ScheduledTaskCreate) -> JSONRes
             prompt=payload.prompt, model=payload.model,
             cron_expression=payload.cron_expression, delivery_channel=payload.delivery_channel,
         )
+        # So next_run_at stops being decorative -- see
+        # services/task_scheduler.py's module docstring. A task created
+        # with an invalid cron expression fails loudly here (400) rather
+        # than silently sitting with next_run_at=NULL forever, never picked
+        # up by the scheduler.
+        try:
+            task.next_run_at = compute_next_run(payload.cron_expression, datetime.now(timezone.utc))
+        except ValueError as e:
+            return JSONResponse({'detail': f'عبارت زمان‌بندی نامعتبر است: {e}'}, status_code=400)
         session.add(task)
         await session.commit()
         await session.refresh(task)
@@ -151,6 +162,7 @@ async def create_task(request: Request, payload: ScheduledTaskCreate) -> JSONRes
             'prompt': task.prompt, 'model': task.model, 'cron_expression': task.cron_expression,
             'is_active': task.is_active, 'run_count': task.run_count,
             'delivery_channel': task.delivery_channel,
+            'next_run_at': task.next_run_at.isoformat() if task.next_run_at else None,
             'created_at': task.created_at.isoformat() if task.created_at else None,
         })
 
@@ -170,6 +182,18 @@ async def update_task(request: Request, task_id: int, payload: ScheduledTaskUpda
         update_data = payload.model_dump(exclude_unset=True)
         for key, val in update_data.items():
             setattr(task, key, val)
+        # Recompute next_run_at whenever the cron expression or the
+        # active flag could have changed what it should be -- otherwise a
+        # user editing a task's schedule (or re-enabling a paused one)
+        # would never actually change when the scheduler picks it up. A
+        # paused task's next_run_at is cleared so it can't be claimed.
+        if task.is_active:
+            try:
+                task.next_run_at = compute_next_run(task.cron_expression, datetime.now(timezone.utc))
+            except ValueError as e:
+                return JSONResponse({'detail': f'عبارت زمان‌بندی نامعتبر است: {e}'}, status_code=400)
+        else:
+            task.next_run_at = None
         task.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await session.commit()
         await session.refresh(task)
@@ -178,6 +202,7 @@ async def update_task(request: Request, task_id: int, payload: ScheduledTaskUpda
             'prompt': task.prompt, 'model': task.model, 'cron_expression': task.cron_expression,
             'is_active': task.is_active, 'run_count': task.run_count,
             'delivery_channel': task.delivery_channel,
+            'next_run_at': task.next_run_at.isoformat() if task.next_run_at else None,
         })
 
 
@@ -211,13 +236,31 @@ async def toggle_task(request: Request, task_id: int) -> JSONResponse:
         if not task:
             return JSONResponse({'detail': 'task not found | وظیفه یافت نشد'}, status_code=404)
         task.is_active = not task.is_active
+        if task.is_active:
+            try:
+                task.next_run_at = compute_next_run(task.cron_expression, datetime.now(timezone.utc))
+            except ValueError:
+                task.next_run_at = None
+        else:
+            task.next_run_at = None
         task.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await session.commit()
-        return JSONResponse({'id': task.id, 'is_active': task.is_active})
+        return JSONResponse({
+            'id': task.id, 'is_active': task.is_active,
+            'next_run_at': task.next_run_at.isoformat() if task.next_run_at else None,
+        })
 
 
 @router.post('/tasks/{task_id}/run')
 async def run_task(request: Request, task_id: int) -> JSONResponse:
+    """Fetch the caller's task and hand it to task_execution._execute_task
+    -- the billed execution core (reserve -> upstream -> settle -> release;
+    see task_execution.py's module docstring for the mandatory order). This
+    endpoint used to contain that whole flow inline with NO billing at all
+    (a straight revenue-loss path); it is now just auth + fetch + delegate,
+    the same shape services/task_scheduler.py's background loop uses for a
+    claimed task.
+    """
     uid = await _get_user_id(request)
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
@@ -229,62 +272,13 @@ async def run_task(request: Request, task_id: int) -> JSONResponse:
         if not task:
             return JSONResponse({'detail': 'task not found | وظیفه یافت نشد'}, status_code=404)
 
-        execution = TaskExecution(
-            task_id=task.id, user_id=uid, status='running',
-            started_at=datetime.now(timezone.utc).replace(tzinfo=None),
-        )
-        session.add(execution)
-        await session.commit()
-        await session.refresh(execution)
-
-    result_text = None
-    error_text = None
-    tokens_used = 0
-    status = 'completed'
-    try:
-        model_to_call = await _resolve_task_model(task.model)
-        if not model_to_call:
-            raise RuntimeError('no available model in catalog')
-        chat_payload = {
-            'model': model_to_call,
-            'messages': [{'role': 'user', 'content': task.prompt}],
-            'stream': False,
-        }
-        r = await _http.post(f"{LITELLM_HOST}/v1/chat/completions", json=chat_payload, headers={'Accept': 'application/json'})
-        if r.status_code == 200:
-            data = r.json()
-            result_text = data.get('choices', [{}])[0].get('message', {}).get('content', '')
-            tokens_used = data.get('usage', {}).get('total_tokens', 0)
-        else:
-            status = 'failed'
-            error_text = f"HTTP {r.status_code}: {r.text[:500]}"
-    except Exception as e:
-        status = 'failed'
-        error_text = str(e)[:500]
-
-    completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
-    async with async_session() as session:
-        res = await session.execute(select(TaskExecution).where(TaskExecution.id == execution.id))
-        exec_rec = res.scalar_one()
-        exec_rec.status = status
-        exec_rec.result = result_text
-        exec_rec.error = error_text
-        exec_rec.tokens_used = tokens_used
-        exec_rec.completed_at = completed_at
-        await session.commit()
-
-        res2 = await session.execute(select(ScheduledTask).where(ScheduledTask.id == task_id))
-        task_rec = res2.scalar_one()
-        task_rec.last_run_at = completed_at
-        task_rec.run_count += 1
-        task_rec.last_result = result_text
-        task_rec.updated_at = completed_at
-        await session.commit()
-
+    result = await task_execution._execute_task(task, uid)
+    status_code = 429 if result.get('error_code') == 'insufficient_balance' else 200
     return JSONResponse({
-        'execution_id': execution.id, 'status': status, 'result': result_text,
-        'error': error_text, 'tokens_used': tokens_used,
-    })
+        'execution_id': result['execution_id'], 'status': result['status'],
+        'result': result['result'], 'error': result['error'],
+        'tokens_used': result['tokens_used'], 'cost_toman': result['cost_toman'],
+    }, status_code=status_code)
 
 
 @router.get('/tasks/{task_id}/executions')

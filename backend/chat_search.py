@@ -37,8 +37,14 @@ logger = logging.getLogger('chat')  # keep all chat_*.py logs under the pre-spli
 async def _web_search(query: str, max_results: int = 5) -> str:
     """Web search used to ground chat answers.
 
-    Source order (both measured reachable from this server; see
-    NEXT-SESSION for the live probe log this was built from):
+    Source order (all measured reachable from this server; see NEXT-SESSION
+    for the live probe log this was built from):
+      0. A keyed commercial index -- Brave, Tavily or Serper -- via
+         services/search_providers.py, when one is configured. This is the
+         only source here that is a real web index; sources 1 and 2 are
+         encyclopedic and cannot answer anything time-sensitive. Skipped
+         with zero network cost when no key is set, which is why the
+         keyless sources below remain load-bearing rather than vestigial.
       1. DuckDuckGo Instant Answer API (api.duckduckgo.com/?format=json) --
          a *different* DDG endpoint from the HTML scraper this replaces.
          html.duckduckgo.com/html/ came back HTTP 202 ("anomaly" bot
@@ -73,7 +79,7 @@ async def _web_search(query: str, max_results: int = 5) -> str:
     import html as _html
     import os as _os
     import httpx
-    from urllib.parse import quote
+    from urllib.parse import quote, urlparse as _urlparse
 
     # Only honor a proxy when the operator explicitly set one. The dead
     # hardcoded backhaul default is removed; we still try the env proxy
@@ -101,6 +107,35 @@ async def _web_search(query: str, max_results: int = 5) -> str:
     _q = ' '.join((query or '').split())  # collapse internal whitespace
     if not _q:
         return ''
+
+    # ── 0) Keyed provider (Brave / Tavily / Serper) ───────────────────────
+    # A real web index, tried FIRST because the two keyless sources below
+    # are encyclopedic: they answer "what is X" and cannot answer "what
+    # happened this week". services.search_providers.search() returns []
+    # immediately -- with no network call -- when no key is configured, so
+    # the keyless path costs nothing extra on a deployment without one.
+    try:
+        from services.search_providers import search as _keyed_search
+
+        _hits = await _keyed_search(_q, max_results)
+    except Exception as e:  # import error, or anything the module missed
+        logger.warning(f'_web_search keyed provider unavailable: {type(e).__name__}: {e}')
+        _hits = []
+    if _hits:
+        # Same bullet shape as the sources below. The source tag is the
+        # bare hostname rather than the vendor's name: what the model must
+        # cite is where the claim came from (bbc.com), not which index we
+        # paid to find it. The full URL is on its own line underneath.
+        _lines = []
+        for _h in _hits[:max_results]:
+            try:
+                _host = _urlparse(_h.url).hostname or 'وب'
+            except Exception:
+                _host = 'وب'
+            _snippet = f'\n  {_h.snippet}' if _h.snippet else ''
+            _lines.append(f'• {_h.title} ({_host}){_snippet}\n  {_h.url}')
+        if _lines:
+            return '\n'.join(_lines)
 
     # ── 1) DuckDuckGo Instant Answer API ──────────────────────────────────
     _ddg_data = None

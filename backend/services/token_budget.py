@@ -98,10 +98,36 @@ def apply_history_window(
 
 
 # E2 -- ceiling on output tokens when the client sends no max_tokens.
-# 4096 tokens is a multi-screen Persian answer; the catalog's own
-# max_output_tokens values (64k-131k live) are the model's *capability*, not
-# a sane chat default, so they cannot serve as the ceiling on their own.
-DEFAULT_MAX_OUTPUT_TOKENS = int(os.getenv('DEFAULT_MAX_OUTPUT_TOKENS', '4096') or '4096')
+# The catalog's own max_output_tokens values (64k-131k live) are the model's
+# *capability*, not a sane chat default, so they cannot serve as the ceiling
+# on their own. The chat UI sends no max_tokens at all, so this default IS the
+# ceiling every web user gets.
+#
+# This was 4096, chosen as "a multi-screen Persian answer". That reasoning
+# missed that on reasoning-capable models max_tokens also covers the model's
+# hidden thinking budget, so most of the 4096 went to tokens the user never
+# sees. Measured live on this box, same 10-chapter Persian prompt, only the
+# ceiling varied:
+#
+#   model                       cap    visible  billed ct  finish_reason
+#   sanjab/gemini-3-flash       4096   5039ch      1581    max_tokens  <- cut
+#   sanjab/gemini-3-flash       8192   6891ch      2186    stop
+#   sanjab/gemini-3-flash      16384   8416ch      2597    stop
+#   sanjab/gemini-3.1-pro-low   4096    553ch       162    max_tokens  <- cut
+#   sanjab/gemini-3.1-pro-low   8192   6498ch      1976    stop
+#   sanjab/gemini-3.1-pro-low  16384   7762ch      2368    stop
+#
+# The 553-char row cost the user 10,895 toman for an answer cut mid-sentence,
+# and sanjab/tencent-hy3 at 4096 returned finish_reason=length with
+# completion_tokens=4096 and ZERO characters -- paid in full for nothing.
+#
+# 16384 does NOT multiply per-request cost: billing tracks tokens actually
+# generated, and a model that is done still stops. In the run above
+# gemini-3-flash cost LESS at 16384 (8,450) than at 8192 (12,334). 8192 was
+# the measured floor for finishing; 16384 leaves headroom for the longer
+# requests (a 12-chapter guide measured 5342 visible tokens on its own,
+# before any reasoning overhead).
+DEFAULT_MAX_OUTPUT_TOKENS = int(os.getenv('DEFAULT_MAX_OUTPUT_TOKENS', '16384') or '16384')
 
 # model_catalog.max_output_tokens changes only when an admin edits the
 # catalog, so a long TTL is fine; the point of caching at all is to keep a

@@ -59,3 +59,50 @@
 .chat-bubble-ai .chat-bubble-content .code-block:last-child {
   margin-bottom: 0;
 }
+
+/* ── Length-capped response bar ──────────────────────────────────────────
+   Shown under an assistant bubble whose stream ended with finish_reason
+   "length"/"max_tokens" (app/chat/finishReason.ts). Deliberately calm, not
+   an error-red banner -- this is an expected ceiling, not a failure. The
+   empty-content variant (model billed the user and produced zero
+   characters) uses a slightly stronger tone since that bubble would
+   otherwise sit there blank with no explanation at all. RTL: row order
+   follows the Persian dir="rtl" ambient flow, no manual left/right here. */
+.chat-truncated-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.6rem;
+  padding: 0.55rem 0.85rem;
+  border-radius: 0.6rem;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.chat-truncated-bar-empty {
+  background: rgba(234, 179, 8, 0.1);
+  border-color: rgba(234, 179, 8, 0.35);
+  color: var(--text-primary);
+}
+
+.chat-truncated-btn {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.3rem 0.75rem;
+  border-radius: 0.45rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.chat-truncated-btn:hover {
+  background: var(--bg-elevated);
+  border-color: var(--text-secondary);
+}

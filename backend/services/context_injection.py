@@ -26,6 +26,28 @@ MAX_MEMORIES_INJECTED = 5
 # auto-selected memory facts, so it gets its own, larger budget.
 MAX_PINNED_CONTEXT_CHARS = 6000
 
+# Header for the remembered-facts block.
+#
+# The literal "[User Memories]" prefix must stay EXACTLY as it is: the dedup
+# guards in get_injection_messages() and inject_messages() are substring tests
+# on that string, so any instruction has to be appended after the closing
+# bracket, never written inside it.
+#
+# The instruction itself is the point. `[User Soul` and `[User Pinned Context`
+# have always told the model what to do with their contents; `[User Memories]`
+# was a bare label, and the model read it as context it was expected to
+# acknowledge. Measured live: user 1's single stored memory (a cat named جیگرو,
+# a dog named خرو, lives in Tehran) made sanjab/gemini-3.1-pro-low open a pure
+# Python answer with «سلام! امیدوارم حال خودت، گربه‌ی قشنگت «جیگرو» و سگ
+# باوفایت «خرو» توی تهران حسابی خوب باشه. 🐱🐶», where the same model on the
+# same upstream, called directly without this block, went straight to the code.
+MEMORY_HEADER = (
+    "[User Memories] — چیزهایی که کاربر در گفتگوهای قبلی دربارهٔ خودش گفته است. "
+    "فقط وقتی از این‌ها استفاده کن که به پرسش همین پیام مربوط باشند. "
+    "اگر مربوط نیستند، کاملاً نادیده‌شان بگیر: به آن‌ها اشاره نکن، در سلام و "
+    "مقدمه نیاورشان، و موضوع یا لحن پاسخ را به‌خاطرشان تغییر نده."
+)
+
 def _sanitize_injection(s: str, limit: int) -> str:
     """Strip, truncate, and break injection patterns."""
     if not s:
@@ -91,7 +113,7 @@ async def get_injection_messages(
         if cleaned:
             block = "\n".join(f"- {x}" for x in cleaned)
             injections.append(
-                {"role": "system", "content": f"[User Memories]\n{block}"}
+                {"role": "system", "content": f"{MEMORY_HEADER}\n{block}"}
             )
 
     # --- Soul / ai_personality ---

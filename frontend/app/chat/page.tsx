@@ -14,6 +14,7 @@ import MarkdownRenderer from './components/MarkdownRenderer'
 import ModelPicker from './components/ModelPicker'
 import { isUsableModel } from './components/modelUtils'
 import { StreamAccumulator } from './useStreamAccumulator'
+import { getTruncationStatus } from './finishReason'
 import './chat-stream.css'
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -22,7 +23,17 @@ import './chat-stream.css'
    Sidebar: conversation CRUD, auto-save, mobile drawer, desktop collapse.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-type Message = { role: 'user' | 'assistant' | 'system'; content: string; id: string }
+type Message = {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  id: string
+  // Upstream `finish_reason` from the last SSE chunk of this turn (assistant
+  // messages only; undefined until the stream that produced it completes,
+  // and undefined forever for messages loaded from history/older sessions
+  // where this was never captured -- getTruncationStatus treats that the
+  // same as "stop": no false "ناتمام ماند" banner on old conversations).
+  finishReason?: string | null
+}
 
 type UsageStats = { promptTokens: number; completionTokens: number; totalTokens: number; estimatedCost: number }
 
@@ -143,6 +154,7 @@ type ChatMessageItemProps = {
   copiedId: string | null
   onCopy: (id: string, content: string) => void
   onRetry: (index: number) => void
+  onContinue: (index: number) => void
 }
 
 const ChatMessageItem = memo(function ChatMessageItem({
@@ -154,7 +166,13 @@ const ChatMessageItem = memo(function ChatMessageItem({
   copiedId,
   onCopy,
   onRetry,
+  onContinue,
 }: ChatMessageItemProps) {
+  // finishReason is only populated once this message's own stream finished
+  // (see sendMessage in the parent), so this is naturally false while `msg`
+  // is still the actively-streaming bubble -- no extra `!streaming` guard
+  // needed here.
+  const truncation = msg.role === 'assistant' ? getTruncationStatus(msg.finishReason, msg.content) : { truncated: false as const }
   return (
     <div className={`chat-row ${msg.role === 'user' ? 'chat-row-user' : 'chat-row-assistant'}`}>
       {msg.role === 'assistant' && (
@@ -179,6 +197,23 @@ const ChatMessageItem = memo(function ChatMessageItem({
           </div>
         ) : (
           <div className="chat-bubble-content chat-bubble-plain">{msg.content}</div>
+        )}
+        {msg.role === 'assistant' && truncation.truncated && (
+          truncation.empty ? (
+            <div className="chat-truncated-bar chat-truncated-bar-empty" role="status">
+              <span>مدل بدون تولید متن به محدودیت طول رسید.</span>
+              <button type="button" onClick={() => onRetry(index)} className="chat-truncated-btn">
+                تلاش دوباره
+              </button>
+            </div>
+          ) : (
+            <div className="chat-truncated-bar" role="status">
+              <span>این پاسخ به‌خاطر محدودیت طول ناتمام ماند.</span>
+              <button type="button" onClick={() => onContinue(index)} className="chat-truncated-btn">
+                ادامه بده
+              </button>
+            </div>
+          )
         )}
         {msg.role === 'assistant' && msg.content && !streaming && (
           <div className="chat-actions">
@@ -611,6 +646,15 @@ export default function ChatPage() {
     if (sendMessageRef.current) await sendMessageRef.current(userMsg.content, newMsgs)
   }, [messages, model])
 
+  // "ادامه بده" button on a length-capped reply. Deliberately reuses the
+  // normal sendMessage codepath (no bespoke "continue" request/endpoint):
+  // it appends a plain user turn asking the model to continue, using the
+  // full current transcript -- including the truncated reply itself -- as
+  // context, exactly like any other follow-up message.
+  const handleContinue = useCallback(() => {
+    if (sendMessageRef.current) sendMessageRef.current('ادامه بده')
+  }, [])
+
   const sendMessage = useCallback(async (content: string, existingMsgs?: Message[], forceWebSearch?: boolean) => {
     let currentModel = model;
     if (!currentModel && models.length > 0) {
@@ -718,6 +762,13 @@ export default function ChatPage() {
       })
       streamAccumulator = accumulator
       let usageData: { prompt_tokens?: number; completion_tokens?: number } | null = null
+      // Captured from choices[0].finish_reason on whichever SSE chunk carries
+      // it (null on every delta chunk until the last one; verified live
+      // against the prod API container -- sanjab/gemini-3-flash returns
+      // "length" on max_tokens, not "max_tokens"). Attached to the message
+      // after the stream completes so finishReason.ts can decide whether the
+      // response was cut off by the length ceiling.
+      let capturedFinishReason: string | null = null
       // Carry-over buffer: a `data: {...}` line can split across two
       // reader.read() calls behind the Docker/Caddy proxy. Accumulate, split
       // on \n, keep the last (possibly incomplete) segment for the next read,
@@ -761,6 +812,8 @@ export default function ChatPage() {
         if (delta) {
           accumulator.push(delta)
         }
+        const finishReason = obj.choices?.[0]?.finish_reason
+        if (typeof finishReason === 'string') capturedFinishReason = finishReason
         if (obj.usage) usageData = obj.usage
         if (obj.x_smart_model) setSmartModel(obj.x_smart_model)
         // ── billing event (real IRT cost) ──
@@ -820,6 +873,16 @@ export default function ChatPage() {
         // Mandatory final flush -- the last tokens may postdate the last
         // scheduled throttled flush and must still reach the UI.
         accumulator.flushNow()
+        // Record whatever finish_reason the stream carried (or null if it
+        // never sent one) so ChatMessageItem can show the "ناتمام ماند" /
+        // "بدون تولید متن" bar. Runs after flushNow() so this update merges
+        // onto the message's final content rather than racing it.
+        setMessages(prev => {
+          const copy = [...prev]
+          const idx = copy.findIndex(m => m.id === assistantId)
+          if (idx >= 0) copy[idx] = { ...copy[idx], finishReason: capturedFinishReason }
+          return copy
+        })
       }
 
       // Auto-save after streaming completes
@@ -1249,6 +1312,7 @@ export default function ChatPage() {
                 copiedId={copiedId}
                 onCopy={copyToClipboard}
                 onRetry={retry}
+                onContinue={handleContinue}
               />
             ))}
 

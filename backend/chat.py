@@ -198,7 +198,7 @@ from chat_models import (
     _get_model_upstream,
     _resolve_public_model,
     _safe_default_model,
-    _resolve_provider,
+    _resolve_provider, COMPLETION_TIMEOUT_SECONDS,
     get_working_models,
     is_working_model,
     _is_model_allowed,
@@ -443,7 +443,7 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
     _hc_started = _time.monotonic()
     try:
         _provider = await _resolve_provider(_hc_model)
-        r = await _http.post(f'{_provider.v1}/chat/completions', json=payload_dict, headers={**_provider.headers(), 'Accept': 'application/json'})
+        r = await _http.post(f'{_provider.v1}/chat/completions', json=payload_dict, headers={**_provider.headers(), 'Accept': 'application/json'}, timeout=COMPLETION_TIMEOUT_SECONDS)
         # Passive health sample. Real traffic is the best signal we have about
         # whether a model works, and it costs nothing extra to record.
         _record_model_health(

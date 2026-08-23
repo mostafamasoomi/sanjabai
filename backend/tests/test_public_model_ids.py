@@ -390,7 +390,7 @@ def _upstream_response(body: dict | None = None, status_code: int = 200):
 def _patched_http(capture: dict | None = None, body: dict | None = None):
     fake = MagicMock()
     if capture is not None:
-        async def _post(url, json=None, headers=None):
+        async def _post(url, json=None, headers=None, timeout=None):
             capture['json'] = json
             capture['url'] = url
             return _upstream_response(body)
@@ -454,7 +454,7 @@ class TestChatCanonicalizesBeforeUpstreamCall:
         back to it in the JSON body."""
         posted_models = []
 
-        async def _post(url, json=None, headers=None):
+        async def _post(url, json=None, headers=None, timeout=None):
             posted_models.append(json['model'])
             return _upstream_response({'choices': [{'message': {'content': 'ok'}}], 'usage': {'prompt_tokens': 5, 'completion_tokens': 5}})
 

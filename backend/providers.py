@@ -36,6 +36,24 @@ from typing import Any
 
 from database import _http, LITELLM_HOST
 
+# Ceiling on a single NON-streaming completion, in seconds.
+#
+# The shared client's 90s default (app.py) is the wrong deadline for these: a
+# non-streaming call blocks for the whole generation, and a genuinely long
+# Persian answer runs well past 90s. Measured live on this box, sanjab/gpt-5.6-terra
+# answering a 12-chapter guide took 86.3s (4685 completion tokens) and 98.2s
+# (5342 tokens); both reached the user as `gateway_error` even though the model
+# had produced a complete answer -- we discarded work the wallet had paid to start.
+#
+# This is a policy of OUR gateway, not an attribute of any upstream, so it lives
+# as a module constant rather than on Provider: hanging it off the dataclass
+# broke all 26 tests that stand in a hand-rolled fake provider.
+#
+# Streaming deliberately keeps the 90s value -- there it is a per-chunk read gap,
+# not a total, so raising it would only delay detection of a dead stream.
+COMPLETION_TIMEOUT_SECONDS = float(
+    os.getenv('COMPLETION_TIMEOUT_SECONDS', '180') or '180')
+
 logger = logging.getLogger(__name__)
 
 

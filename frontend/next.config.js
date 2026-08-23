@@ -18,6 +18,23 @@ const nextConfig = {
       },
     ]
   },
+  // Next's rewrite proxy defaults to a 30s ceiling, which is *below* the
+  // backend's own 90s httpx read timeout (app.py: httpx.Timeout(90, connect=10)).
+  // A non-streaming completion that legitimately runs longer than 30s — measured
+  // live: sanjab/claude-sonnet-5 on an 800-word Persian article answers in 55.9s
+  // with a complete 4754-char body — was therefore killed here and surfaced to
+  // the user as a bare "Internal Server Error", even though the API had produced
+  // a perfect response. That hit /compare and /playground (both stream:false)
+  // on every long answer.
+  //
+  // Must stay ABOVE the backend's own non-streaming ceiling
+  // (providers.COMPLETION_TIMEOUT_SECONDS, 180s) so that upstream slowness
+  // always surfaces as the backend's Persian `gateway_error` and never as a
+  // proxy 500 the user cannot act on. Raise the backend value first if this
+  // ever needs to go higher; the two are ordered on purpose.
+  experimental: {
+    proxyTimeout: 200_000,
+  },
   async rewrites() {
     return [
       // Proxy /api/* to backend

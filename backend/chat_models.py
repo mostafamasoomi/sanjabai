@@ -36,6 +36,10 @@ import sqlalchemy
 
 import chat
 
+from providers import COMPLETION_TIMEOUT_SECONDS  # re-export: chat.py is at
+# the 500-line house cap and takes this on its existing chat_models import
+# line rather than adding one. Owned by providers.py.
+
 logger = logging.getLogger('chat')  # keep all chat_*.py logs under the pre-split 'chat' logger name
 
 # Working model set — now DYNAMIC from the model_catalog DB table.

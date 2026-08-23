@@ -52,7 +52,7 @@ class TestWithFileWebSearch:
     def test_with_file_triggers_web_search_when_flag_set(self, client):
         capture = {}
 
-        async def fake_post(url, json=None, headers=None):
+        async def fake_post(url, json=None, headers=None, timeout=None):
             capture['json'] = json
             return _upstream_response()
 
@@ -87,7 +87,7 @@ class TestWithFileWebSearch:
     def test_with_file_never_forwards_raw_web_search_flag_upstream(self, client):
         capture = {}
 
-        async def fake_post(url, json=None, headers=None):
+        async def fake_post(url, json=None, headers=None, timeout=None):
             capture['json'] = json
             return _upstream_response()
 
@@ -117,7 +117,7 @@ class TestWithFileWebSearch:
         behavior to before this change -- no search performed."""
         capture = {}
 
-        async def fake_post(url, json=None, headers=None):
+        async def fake_post(url, json=None, headers=None, timeout=None):
             capture['json'] = json
             return _upstream_response()
 

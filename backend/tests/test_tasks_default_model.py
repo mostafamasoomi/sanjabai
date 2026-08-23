@@ -228,7 +228,7 @@ class TestRunTaskEndToEnd:
         session = _FakeSession(task=task)
         captured = {}
 
-        async def fake_post(url, json=None, headers=None):
+        async def fake_post(url, json=None, headers=None, timeout=None):
             captured['url'] = url
             captured['json'] = json
             resp = MagicMock()
@@ -271,7 +271,7 @@ class TestRunTaskEndToEnd:
         session = _FakeSession(task=task)
         captured = {}
 
-        async def fake_post(url, json=None, headers=None):
+        async def fake_post(url, json=None, headers=None, timeout=None):
             captured['json'] = json
             resp = MagicMock()
             resp.status_code = 200

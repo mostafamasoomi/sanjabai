@@ -37,6 +37,7 @@ from middleware.compression import compress_messages
 from model_output import clean_response_dict
 
 import chat
+from providers import COMPLETION_TIMEOUT_SECONDS
 from chat import CompareRequest
 
 logger = logging.getLogger('chat')  # keep all chat_*.py logs under the pre-split 'chat' logger name
@@ -124,6 +125,7 @@ async def _call_model_once(
             f'{_provider.v1}/chat/completions',
             json=payload,
             headers={**_provider.headers(), 'Accept': 'application/json'},
+            timeout=COMPLETION_TIMEOUT_SECONDS,
         )
         elapsed = round(time.monotonic() - start, 3)
         if r.status_code == 200:

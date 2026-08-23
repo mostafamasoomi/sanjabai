@@ -71,7 +71,7 @@ def _upstream_response(body: dict | None = None, status_code: int = 200):
 def _patched_http(capture: dict | None = None, body: dict | None = None):
     fake = MagicMock()
     if capture is not None:
-        async def _post(url, json=None, headers=None):
+        async def _post(url, json=None, headers=None, timeout=None):
             capture['json'] = json
             capture['url'] = url
             return _upstream_response(body)
@@ -353,7 +353,7 @@ class TestNonStreamingResponseCleaning:
         assert resp.json()['choices'][0]['message']['content'] == 'پاسخ کاملا سالم و روان'
 
     def test_compare_strips_leaked_thought_block_from_both_models(self, client, _bypass_pipeline):
-        async def _post(url, json=None, headers=None):
+        async def _post(url, json=None, headers=None, timeout=None):
             return _upstream_response({
                 'choices': [{'message': {'content': '<think>reasoning</think>پاسخ نهایی'}}],
                 'usage': {'prompt_tokens': 5, 'completion_tokens': 3},

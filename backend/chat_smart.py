@@ -41,6 +41,7 @@ from middleware.compression import compress_messages, estimate_savings
 from model_output import clean_response_dict
 
 import chat
+from providers import COMPLETION_TIMEOUT_SECONDS
 from chat import ChatRequest
 
 logger = logging.getLogger('chat')  # keep all chat_*.py logs under the pre-split 'chat' logger name
@@ -341,6 +342,7 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
             f'{_provider.v1}/chat/completions',
             json=payload_dict,
             headers={**_provider.headers(), 'Accept': 'application/json'},
+            timeout=COMPLETION_TIMEOUT_SECONDS,
         )
         if r.status_code == 200:
             resp_data = r.json()

@@ -24,7 +24,6 @@ from __future__ import annotations
 import io
 import json
 import logging
-import re as _re
 import secrets
 
 from fastapi import Request, UploadFile, File, Form
@@ -41,6 +40,14 @@ import chat
 from site_settings import get_site_flag
 
 logger = logging.getLogger('chat')  # keep all chat_*.py logs under the pre-split 'chat' logger name
+
+# Re-exported so chat.py line 276's `from chat_web import _apply_web_search,
+# _web_search, ...` keeps working after the search code moved to chat_search.py
+# (that move was forced by the 500-line cap, not by any behaviour change).
+# Tests monkeypatch `chat._web_search`; chat_search._apply_web_search reads it
+# off the `chat` module at call time, so patching still reaches it -- see
+# chat_search.py's IMPORT CONTRACT before touching this.
+from chat_search import _web_search, _apply_web_search  # noqa: F401,E402
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB hard cap
 
@@ -119,178 +126,6 @@ async def _extract_file_text(upload: UploadFile) -> tuple[str, str]:
             logger.warning(f"_extract_file_text pdf error {name}: {e}")
             return '', f'pdf extract error: {e}'
     return '', f'unsupported file type: {name or "unknown"}'
-
-
-async def _web_search(query: str, max_results: int = 5) -> str:
-    """Web search used to ground chat answers.
-
-    Strategy (most reliable first, with graceful fallback):
-      1. DuckDuckGo HTML endpoint (works in most environments, no API key).
-      2. Wikipedia open search API — always available, no bot challenges,
-         used as a fallback when DDG returns its anomaly/202 challenge page.
-
-    Returns a formatted bullet list of results, or '' on total failure.
-    Proxies are only used when explicitly configured via env vars; the old
-    hardcoded backhaul/SOCKS defaults are gone because they silently slow
-    every request down when those hosts don't exist.
-    """
-    import os as _os
-    import httpx
-    from urllib.parse import unquote, quote
-
-    # Only honor a proxy when the operator explicitly set one. The dead
-    # hardcoded backhaul default is removed; we still try the env proxy
-    # (HTTPS_PROXY/HTTP_PROXY) as a *fallback* but never as the only path.
-    _env_proxy = _os.getenv('HTTPS_PROXY') or _os.getenv('HTTP_PROXY')
-    _socks_proxy = None
-    if _os.getenv('WEB_SEARCH_SOCKS'):
-        try:
-            import socksio  # noqa: F401
-            _socks_proxy = _os.getenv('WEB_SEARCH_SOCKS')
-        except ImportError:
-            logger.debug('_web_search: socksio not installed, skipping SOCKS proxy')
-
-    # Direct first (bypass any env proxy), then via the configured proxy.
-    # Explicitly passing proxy=None disables httpx's automatic env-proxy
-    # pickup, which would otherwise route everything through a dead host.
-    _attempts: list[dict] = [{'proxy': None}]
-    if _env_proxy:
-        _attempts.append({'proxy': _env_proxy})
-    if _socks_proxy:
-        _attempts.append({'proxy': _socks_proxy})
-
-    _headers = {
-        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Referer': 'https://duckduckgo.com/',
-        'Content-Type': 'application/x-www-form-urlencoded',
-    }
-
-    _q = ' '.join((query or '').split())  # collapse internal whitespace
-    if not _q:
-        return ''
-
-    # ── 1) DuckDuckGo HTML ────────────────────────────────────────────────
-    html = ''
-    for cfg in _attempts:
-        try:
-            # Explicitly set proxy (None = bypass env proxy) so the direct
-            # attempt never inherits a dead HTTPS_PROXY from the environment.
-            kwargs = {'timeout': 15, 'follow_redirects': True, 'proxy': cfg['proxy']}
-            async with httpx.AsyncClient(**kwargs) as _sc:
-                r = await _sc.post(
-                    'https://html.duckduckgo.com/html/',
-                    data={'q': _q},
-                    headers=_headers,
-                )
-            # DDG returns HTTP 202 with an "anomaly" bot-challenge page when it
-            # blocks automation; only a real 200 with result markup counts.
-            if r.status_code == 200 and 'result__a' in r.text:
-                html = r.text
-                break
-        except Exception as e:
-            logger.debug(f"_web_search DDG attempt proxy={cfg['proxy']} failed: {type(e).__name__}")
-            continue
-
-    if html:
-        try:
-            links = _re.findall(r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.+?)</a>', html, _re.DOTALL)
-            snippets = _re.findall(r'class="result__snippet"[^>]*>(.*?)</a>', html, _re.DOTALL)
-            if links:
-                lines = []
-                for i, (href, title) in enumerate(links[:max_results]):
-                    title = _re.sub(r'<[^>]+>', '', title).strip()
-                    snippet = _re.sub(r'<[^>]+>', '', snippets[i]).strip() if i < len(snippets) else ''
-                    actual_url = href
-                    if 'uddg=' in href:
-                        m = _re.search(r'uddg=([^&]+)', href)
-                        if m:
-                            actual_url = unquote(m.group(1))
-                    if title:
-                        lines.append(f'• {title}\n  {snippet}\n  {actual_url}')
-                if lines:
-                    return '\n'.join(lines)
-        except Exception as e:
-            logger.warning(f"_web_search DDG parse failed query={_q[:80]}: {e}")
-
-    # ── 2) Wikipedia fallback (always reachable, no challenge) ────────────
-    # Try direct (bypassing env proxy) first, then via the configured proxy.
-    for _wp_proxy in ([None] + ([_env_proxy] if _env_proxy else [])):
-        try:
-            kwargs = {'timeout': 15, 'follow_redirects': True, 'proxy': _wp_proxy}
-            async with httpx.AsyncClient(**kwargs) as _sc:
-                r = await _sc.get(
-                    'https://en.wikipedia.org/w/api.php',
-                    params={
-                        'action': 'query',
-                        'list': 'search',
-                        'srsearch': _q,
-                        'srlimit': max_results,
-                        'srprop': 'snippet',
-                        'format': 'json',
-                    },
-                    headers={'User-Agent': 'Sanjabai/1.0 (web search fallback)'},
-                )
-            if r.status_code == 200:
-                data = r.json()
-                results = (data.get('query') or {}).get('search') or []
-                lines = []
-                for item in results[:max_results]:
-                    title = item.get('title', '').strip()
-                    snippet = _re.sub(r'<[^>]+>', '', item.get('snippet', '')).strip()
-                    url = 'https://en.wikipedia.org/wiki/' + quote(title.replace(' ', '_'))
-                    if title:
-                        lines.append(f'• {title}\n  {snippet}\n  {url}')
-                if lines:
-                    logger.info(f"_web_search used Wikipedia fallback for query={_q[:80]}")
-                    return '\n'.join(lines)
-        except Exception as e:
-            logger.warning(f"_web_search Wikipedia fallback failed query={_q[:80]}: {e}")
-
-    logger.warning(f"_web_search all sources failed query={_q[:80]}")
-    return ''
-
-
-async def _apply_web_search(payload_dict: dict, *, handler: str) -> None:
-    """Pop ``web_search`` off ``payload_dict`` and, if truthy, inject search
-    results as a system message ahead of the last user question.
-
-    Shared by ``/v1/chat/completions`` and ``/v1/smart-chat`` so the two
-    handlers cannot drift apart again -- this exact bug (smart-chat silently
-    dropping ``web_search`` and forwarding the stray key upstream unread) is
-    what this helper was extracted to fix. Mutates ``payload_dict`` in place.
-    ``handler`` is a short label ('chat.completions' / 'smart-chat') used only
-    for logging, so an incident like the one that motivated this fix is
-    diagnosable from logs instead of silently invisible.
-    """
-    if not payload_dict.pop('web_search', False):
-        return
-    _msgs = payload_dict.get('messages', [])
-    _query = ''
-    for _m in reversed(_msgs):
-        if isinstance(_m, dict) and _m.get('role') == 'user':
-            _query = _m.get('content', '')
-            break
-    _query_log = _query if isinstance(_query, str) else str(_query)
-    if not _query:
-        logger.info(f"web_search requested handler={handler} but no user message found; skipping")
-        return
-    logger.info(f"web_search requested handler={handler} query={_query_log[:80]!r}")
-    _results = await chat._web_search(_query)
-    if _results:
-        logger.info(f"web_search succeeded handler={handler} query={_query_log[:80]!r}")
-        _search_msg = {'role': 'system', 'content': f'[نتایج جستجوی وب برای: {_query_log[:100]}]\n{_results}\n\nمهم: این نتایج جستجوی لحظه‌ای از اینترنت هستند. از آنها مستقیماً برای پاسخ استفاده کن. هرگز نگو "به اینترنت دسترسی ندارم" یا "اطلاعات من قدیمی است" — چون نتایج جستجوی زنده بالا در دسترس تو هستند. پاسخ را بر اساس این نتایج بنویس و منبع خبر را ذکر کن.'}
-        _idx = 0
-        for _i, _m in enumerate(_msgs):
-            if isinstance(_m, dict) and _m.get('role') == 'system':
-                _idx = _i + 1
-        _msgs.insert(_idx, _search_msg)
-        payload_dict['messages'] = _msgs
-    else:
-        logger.info(f"web_search failed/no-results handler={handler} query={_query_log[:80]!r}")
-
-
 @chat.router.post('/v1/chat/with-file')
 async def chat_with_file(
     request: Request,

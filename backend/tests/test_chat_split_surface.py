@@ -181,8 +181,15 @@ def test_moved_functions_physically_live_in_the_expected_submodule():
         'get_working_models': 'chat_models',
         'is_working_model': 'chat_models',
         '_is_model_allowed': 'chat_models',
-        '_apply_web_search': 'chat_web',
-        '_web_search': 'chat_web',
+        # Moved chat_web -> chat_search on 2026-08-23. chat_web.py crossed the
+        # house 500-line cap when the DuckDuckGo Instant Answer parser was
+        # hardened against non-dict JSON, and the cap is fixed by splitting
+        # files, never by compressing code. chat_web.py re-exports both names
+        # so chat.py's `from chat_web import ...` is unchanged -- which is
+        # exactly why this test matters- the facade would still resolve even
+        # if the split had gone wrong, so the DEFINITION site is pinned here.
+        '_apply_web_search': 'chat_search',
+        '_web_search': 'chat_search',
         '_release_reservation': 'chat_web',
         '_check_quota_pre': 'chat_compare',
         '_record_usage': 'chat_billing',

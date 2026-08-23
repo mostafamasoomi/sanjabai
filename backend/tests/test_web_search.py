@@ -28,6 +28,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 import chat as chat_mod
+import chat_web
 import database as _db
 
 
@@ -253,3 +254,176 @@ class TestWebSearchObservability:
         messages = [r.message for r in caplog.records]
         assert any('web_search requested handler=smart-chat' in m and 'اخبار امروز ایران' in m for m in messages)
         assert any('web_search succeeded handler=smart-chat' in m for m in messages)
+
+
+def _fake_response(status_code=200, data=None):
+    """A minimal stand-in for an httpx.Response: sync .json(), no I/O."""
+    resp = MagicMock()
+    resp.status_code = status_code
+    resp.json = MagicMock(return_value=data if data is not None else {})
+    return resp
+
+
+def _fake_async_client(response_fn, captured_urls=None):
+    """Return a class standing in for httpx.AsyncClient. `response_fn(url,
+    params)` decides what each GET gets back; every requested URL is
+    recorded (in call order) into `captured_urls` when given, so tests can
+    assert which sources were (or were NOT) hit, and in what order --
+    that's the whole point of the fa/en language-ordering tests below.
+    """
+    class _FakeAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def get(self, url, params=None, headers=None):
+            if captured_urls is not None:
+                captured_urls.append(url)
+            return response_fn(url, params)
+
+    return _FakeAsyncClient
+
+
+# DDG-IA response with nothing usable, so _web_search always falls through to
+# the Wikipedia fallback -- used by every test below that cares about the
+# Wikipedia language ordering rather than the DDG-IA source itself.
+_EMPTY_DDG = {'AbstractText': '', 'RelatedTopics': []}
+
+
+class TestWebSearchRealImplementation:
+    """Tests against the actual `_web_search` network/parsing logic (not the
+    mocked stand-in used everywhere else in this file). No test makes a real
+    network call -- httpx.AsyncClient is replaced entirely."""
+
+    @pytest.mark.asyncio
+    async def test_persian_query_tries_fa_wikipedia_before_en(self):
+        """Language-aware fallback: a query containing Arabic-script
+        characters must hit fa.wikipedia.org, and must never fall through to
+        en.wikipedia.org once fa has already returned usable results."""
+        captured: list = []
+
+        def _respond(url, params):
+            if 'duckduckgo.com' in url:
+                return _fake_response(200, _EMPTY_DDG)
+            if 'fa.wikipedia.org' in url:
+                return _fake_response(200, {'query': {'pages': {
+                    '1': {'index': 1, 'title': 'پایتخت ایران', 'extract': 'تهران پایتخت ایران است.'},
+                }}})
+            raise AssertionError(f'unexpected URL hit before fa succeeded: {url}')
+
+        with patch('httpx.AsyncClient', _fake_async_client(_respond, captured)):
+            result = await chat_web._web_search('پایتخت ایران کجاست')
+
+        assert 'تهران' in result
+        assert any('fa.wikipedia.org' in u for u in captured)
+        assert not any('en.wikipedia.org' in u for u in captured)
+
+    @pytest.mark.asyncio
+    async def test_latin_query_tries_en_wikipedia_before_fa(self):
+        """The mirror case: a Latin-script query must hit en.wikipedia.org
+        first and never fall through to fa.wikipedia.org once en succeeds."""
+        captured: list = []
+
+        def _respond(url, params):
+            if 'duckduckgo.com' in url:
+                return _fake_response(200, _EMPTY_DDG)
+            if 'en.wikipedia.org' in url:
+                return _fake_response(200, {'query': {'pages': {
+                    '1': {'index': 1, 'title': 'Tehran', 'extract': 'Tehran is the capital of Iran.'},
+                }}})
+            raise AssertionError(f'unexpected URL hit before en succeeded: {url}')
+
+        with patch('httpx.AsyncClient', _fake_async_client(_respond, captured)):
+            result = await chat_web._web_search('What is the capital of Iran')
+
+        assert 'Tehran is the capital of Iran' in result
+        assert any('en.wikipedia.org' in u for u in captured)
+        assert not any('fa.wikipedia.org' in u for u in captured)
+
+    @pytest.mark.asyncio
+    async def test_output_is_html_unescaped(self):
+        """Regression: the old output contained literal `&quot;` etc.
+        straight from upstream JSON. Every title/snippet/extract must be
+        passed through html.unescape() before formatting."""
+        def _respond(url, params):
+            if 'duckduckgo.com' in url:
+                return _fake_response(200, {
+                    'Heading': 'Tehran',
+                    'AbstractText': 'Tehran is the &quot;capital&quot; of Iran &amp; its largest city.',
+                    'AbstractURL': 'https://en.wikipedia.org/wiki/Tehran',
+                    'RelatedTopics': [],
+                })
+            raise AssertionError(f'Wikipedia should not be reached: {url}')
+
+        with patch('httpx.AsyncClient', _fake_async_client(_respond)):
+            result = await chat_web._web_search('Tehran')
+
+        assert '&quot;' not in result
+        assert '&amp;' not in result
+        assert '"capital"' in result
+        assert 'Iran & its largest city' in result
+
+    @pytest.mark.asyncio
+    async def test_ddg_instant_answer_json_is_parsed(self):
+        """DDG-IA's AbstractText/AbstractURL plus RelatedTopics (each with
+        Text + FirstURL) must be parsed into the bullet list, and a
+        successful DDG-IA result must short-circuit the Wikipedia fallback
+        entirely."""
+        def _respond(url, params):
+            if 'duckduckgo.com' in url:
+                assert params['q'] == 'Iran'
+                return _fake_response(200, {
+                    'Heading': 'Iran',
+                    'AbstractText': 'Iran is a country in Western Asia.',
+                    'AbstractURL': 'https://en.wikipedia.org/wiki/Iran',
+                    'RelatedTopics': [
+                        {'Text': 'Tehran - capital of Iran', 'FirstURL': 'https://duckduckgo.com/Tehran'},
+                        {'Name': 'Geography', 'Topics': []},  # nested category group -- must be skipped, no Text/FirstURL
+                    ],
+                })
+            raise AssertionError(f'Wikipedia should not be reached after DDG-IA succeeds: {url}')
+
+        with patch('httpx.AsyncClient', _fake_async_client(_respond)):
+            result = await chat_web._web_search('Iran')
+
+        assert 'Iran is a country in Western Asia.' in result
+        assert 'https://en.wikipedia.org/wiki/Iran' in result
+        assert 'Tehran - capital of Iran' in result
+        assert 'https://duckduckgo.com/Tehran' in result
+
+    @pytest.mark.asyncio
+    async def test_all_sources_fail_returns_empty_string_never_raises(self):
+        def _respond(url, params):
+            return _fake_response(500, {})
+
+        with patch('httpx.AsyncClient', _fake_async_client(_respond)):
+            result = await chat_web._web_search('چیزی که پیدا نمی‌شود')
+
+        assert result == ''
+
+
+class TestHonestyFix:
+    """The system message injected around search results must no longer
+    forbid the model from admitting the search was useless -- see
+    _apply_web_search's docstring/comment for the incident this fixes."""
+
+    @pytest.mark.asyncio
+    async def test_injected_message_drops_banned_phrase_and_allows_saying_nothing_relevant(self):
+        payload = {
+            'messages': [{'role': 'user', 'content': 'پایتخت ایران کجاست'}],
+            'web_search': True,
+        }
+        with patch.object(chat_mod, '_web_search', AsyncMock(
+            return_value='• تهران (ویکی‌پدیا)\n  تهران پایتخت ایران است.\n  https://fa.wikipedia.org/wiki/تهران'
+        )):
+            await chat_web._apply_web_search(payload, handler='test')
+
+        injected = next(m['content'] for m in payload['messages'] if isinstance(m, dict) and m.get('role') == 'system')
+        assert 'هرگز نگو' not in injected
+        assert 'به اینترنت دسترسی ندارم' not in injected
+        assert 'نتیجهٔ مرتبطی پیدا نکرد' in injected

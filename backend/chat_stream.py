@@ -26,6 +26,7 @@ from fastapi import Request
 from fastapi.responses import StreamingResponse
 
 from services.context_injection import get_injection_messages, inject_messages
+from services.token_budget import apply_outbound_budget
 from middleware.compression import compress_messages, estimate_savings
 from model_output import ReasoningStreamFilter
 
@@ -51,7 +52,7 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
 
     if uid:
         try:
-            injs = await get_injection_messages(uid)
+            injs = await get_injection_messages(uid, messages=payload.get('messages'))
             if injs:
                 payload['messages'] = inject_messages(payload.get('messages', []), injs)
         except Exception as e:
@@ -66,6 +67,10 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
             logger.info(f"Headroom stream: {_sav['savings_pct']}% saved ({_sav['saved_chars']} chars)")
     except Exception as e:
         logger.debug(f"Compression skipped: {e}")
+
+    # Phase E ceiling -- idempotent, so the chat.py path that already applied
+    # it before calling here is not penalized twice.
+    await apply_outbound_budget(payload)
 
     async def event_stream():
         usage_data = None
@@ -271,11 +276,14 @@ async def _smart_chat_stream(
     # Dedup guard + helper (previously duplicated)
     if uid:
         try:
-            injs = await get_injection_messages(uid)
+            injs = await get_injection_messages(uid, messages=payload.get('messages'))
             if injs:
                 payload['messages'] = inject_messages(payload.get('messages', []), injs)
         except Exception as e:
             logger.warning(f"_smart_chat_stream injection failed uid={uid}: {e}")
+
+    # Phase E ceiling -- see _chat_stream above.
+    await apply_outbound_budget(payload)
 
     async def event_stream():
         usage_data = None

@@ -2,8 +2,9 @@
 (backend/admin_logical.py).
 
 Style mirrors tests/test_admin_packages.py: a standalone FastAPI app
-carrying just this router (admin_logical is not wired into app.py yet --
-that include_router() line is the coordinator's to add), admin_required
+carrying just this router (it IS wired into the real app -- app.py:355 --
+but a standalone app keeps these tests off the global middleware stack),
+admin_required
 patched per-test, and `mock_async_session` (tests/conftest.py) for the DB
 layer. No live database is used anywhere in this file.
 """

@@ -34,6 +34,7 @@ from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import Quota, Ledger
+from providers import extract_kiro_credits
 
 import chat
 
@@ -513,6 +514,14 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
         # upstream said, not just a number that looks smaller than before.
         meta['prompt_tokens_raw'] = prompt_tokens_raw
         meta['prompt_overhead_discounted'] = prompt_overhead_discounted
+        # F2: the `kr/` routes' credit cost signal, in the UPSTREAM's credit
+        # unit -- not Toman, not a charge, never read back by billing. Kept
+        # only so cost analysis can compare what a request earned against
+        # what it cost us. Absent on every other route, and absent (rather
+        # than null) when a kr/ response did not carry it.
+        kiro_credits = extract_kiro_credits(usage, model=model)
+        if kiro_credits is not None:
+            meta['kiro_credits'] = kiro_credits
         if charged < cost:
             meta['listed_cost'] = cost
             meta['shortfall'] = cost - charged

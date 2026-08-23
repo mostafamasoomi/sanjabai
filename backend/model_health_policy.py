@@ -21,6 +21,8 @@ import os
 from datetime import timedelta
 from typing import Literal
 
+from services.margin import is_paid_upstream
+
 Status = Literal['healthy', 'degraded', 'down', 'unknown']
 
 #: The summary-cache key, shared between model_health.py (which invalidates
@@ -139,6 +141,7 @@ def _target_catalog_state(
     health_quarantine_reason: str | None,
     provider_fault_only: bool,
     fault_reason: str | None,
+    upstream: str | None = None,
 ) -> tuple[str, str | None]:
     """Decide a catalog row's next (availability, health_quarantine_reason).
 
@@ -146,8 +149,21 @@ def _target_catalog_state(
     'maintenance', and only for rows THIS function parked — never a row an
     admin hid or discovery landed (NULL reason while still 'maintenance'),
     which must never be auto-promoted by a probe.
+
+    A row on a PAID upstream is never auto-promoted here. `priced` asks "would
+    this bill the user", which is not the same question as "do we make a
+    margin on it" — a healthy probe plus any positive price was enough to put
+    a model on sale, with no margin check anywhere on this path. That is the
+    one bypass left around services/margin.py's guard (which covers the admin
+    routes), and it is what gates enabling a paid upstream like OpenRouter.
+    Promotion of a paid row belongs to an admin, who goes through the guard.
+    Inert today: every catalog row sits on a free upstream.
     """
     priced = (input_per_million or 0) > 0
+    if is_paid_upstream(upstream):
+        # Never *promote*; parking/disabling a sick paid row still proceeds.
+        if current_availability != 'available':
+            return current_availability, health_quarantine_reason
 
     if status == 'healthy':
         if current_availability == 'maintenance':
@@ -232,6 +248,7 @@ def _plan_catalog_mirror(
             health_quarantine_reason=c['health_quarantine_reason'],
             provider_fault_only=target['provider_fault_only'],
             fault_reason=target['fault_reason'],
+            upstream=c.get('upstream'),
         )
         changed = new_availability != c['availability']
         # Reason recorded on a transition: the parking reason when we park,

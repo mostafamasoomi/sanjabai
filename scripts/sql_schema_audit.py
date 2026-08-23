@@ -10,15 +10,15 @@ admin_logical.py using HAVING on an ungrouped outer query).
 
 EXPLAIN plans a statement without executing it, so this is read-only; every
 statement additionally runs inside BEGIN/ROLLBACK. DDL (CREATE/ALTER/DROP)
-cannot be EXPLAINed and is skipped. f-string SQL (dynamic column lists) is
-listed for manual review, not silently ignored.
+cannot be EXPLAINed and is skipped. Any text() argument that is not a plain
+string literal -- an f-string, a name, a concatenation -- is listed for manual
+review, not silently ignored.
 
 Run from anywhere on the prod box, before every backend deploy:
     python3 scripts/sql_schema_audit.py
 Exit code 0 = all clean; 1 = at least one statement failed to plan.
 """
 import ast
-import json
 import pathlib
 import re
 import subprocess
@@ -32,7 +32,11 @@ DDL = re.compile(r'^\s*(CREATE|ALTER|DROP|COMMENT)\b', re.I)
 
 
 def extract(path):
-    """Yield (lineno, sql, kind) for sqlalchemy.text(<literal>) calls."""
+    """Yield (lineno, sql, kind) for every sqlalchemy.text() call.
+
+    kind is 'const' when the argument is a plain string literal (the only
+    shape we can EXPLAIN) and 'opaque' otherwise -- see the else branch.
+    """
     try:
         tree = ast.parse(path.read_text())
     except SyntaxError:
@@ -40,13 +44,33 @@ def extract(path):
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call) or not node.args:
             continue
-        if getattr(node.func, 'attr', getattr(node.func, 'id', '')) != 'text':
+        # `sqlalchemy.text(...)` or a bare imported `text(...)` -- and NOT
+        # `char_draw.text(...)`, PIL's ImageDraw method in content.py, which a
+        # bare attr=='text' match reports as SQL needing review. The opaque
+        # branch below made that false positive visible; naming the receiver
+        # keeps the manual list worth reading.
+        f = node.func
+        if isinstance(f, ast.Attribute):
+            # Match on the receiver *expression*, not just a Name: embeddings.py
+            # calls `__import__('sqlalchemy').text(...)`, whose receiver is a
+            # Call. An `f.value.id in (...)` test silently dropped both of its
+            # statements from the checked set.
+            recv = ast.unparse(f.value)
+            if f.attr != 'text' or ('sqlalchemy' not in recv and recv != 'sa'):
+                continue
+        elif not (isinstance(f, ast.Name) and f.id == 'text'):
             continue
         a = node.args[0]
         if isinstance(a, ast.Constant) and isinstance(a.value, str):
             yield node.lineno, a.value, 'const'
-        elif isinstance(a, ast.JoinedStr):
-            yield node.lineno, '', 'fstring'
+        else:
+            # Anything not a plain literal -- an f-string, a module-level
+            # constant passed by name, a `.format()`, a concatenation. This
+            # branch used to be `elif JoinedStr` with no else, so every other
+            # shape vanished without a trace: the one failure mode a net is
+            # not allowed to have is a hole it does not report. Reported for
+            # manual review, never counted as checked.
+            yield node.lineno, '', 'opaque'
 
 
 def prep(sql):
@@ -59,14 +83,20 @@ def prep(sql):
 
 def main():
     checked = failed = 0
-    skipped_fstrings, skipped_ddl = [], []
-    for path in sorted(BACKEND.glob('*.py')):
+    opaque, skipped_ddl = [], []
+    # rglob, not glob: services/*.py holds raw SQL in eight modules
+    # (entitlements, free_tier, margin, model_resolver, rag, ...) and a
+    # top-level-only glob silently skipped every one of them -- a hole in the
+    # net this script exists to be. tests/ is excluded below.
+    for path in sorted(BACKEND.rglob('*.py')):
+        if 'tests' in path.parts or 'migrations' in path.parts:
+            continue
         if path.name.startswith('test'):
             continue
         for lineno, sql, kind in extract(path):
-            loc = f'{path.name}:{lineno}'
-            if kind == 'fstring':
-                skipped_fstrings.append(loc)
+            loc = f'{path.relative_to(BACKEND)}:{lineno}'
+            if kind == 'opaque':
+                opaque.append(loc)
                 continue
             s = sql.strip().rstrip(';')
             if not s:
@@ -82,8 +112,9 @@ def main():
                 first_err = next((l for l in r.stderr.splitlines() if 'ERROR' in l), r.stderr[:200])
                 print(f'FAIL {loc}\n     {first_err.strip()}')
     print(f'{checked} statements planned, {failed} failed, '
-          f'{len(skipped_ddl)} DDL skipped, {len(skipped_fstrings)} f-strings need manual review:')
-    for loc in skipped_fstrings:
+          f'{len(skipped_ddl)} DDL skipped, {len(opaque)} not literals '
+          f'(need manual review):')
+    for loc in opaque:
         print(f'  manual: {loc}')
     return 1 if failed else 0
 

@@ -346,3 +346,72 @@ async def probe_model(p: Provider, model_id: str, timeout: float = 20.0) -> Prob
         return ProbeResult(False, int((time.monotonic() - started) * 1000), 'timeout')
     except Exception as e:
         return ProbeResult(False, int((time.monotonic() - started) * 1000), type(e).__name__)
+
+
+# ── kr/ cost signal ─────────────────────────────────────────────────────
+#
+# `kr/` routes report a credit cost alongside the token counts. It is a
+# COST signal in the upstream's own credit unit -- NOT Toman, never a
+# charge, never anything the ledger sees -- recorded on usage_events.meta
+# so cost analysis can compare what a request earned against what it cost.
+#
+# ⚠️ The wire shape is UNVERIFIED: a live probe of the upstream was blocked
+# by this session's permission policy, so the real key and nesting were
+# never observed. Hence several plausible spellings and one nested vendor
+# block, and hence the one-shot shape log below: an unrecognised `kr/`
+# usage block reports its KEYS once per model, which is how the real
+# spelling gets discovered from production without a log line per request.
+# A response without the field is ordinary -- silent, no warning, no
+# billing effect whatsoever.
+_KIRO_ROUTE_PREFIX = 'kr/'
+_KIRO_CREDIT_KEYS = ('kiro_credits', 'kiroCredits', 'credits')
+_KIRO_NESTED_KEYS = ('kiro', 'metadata', 'vendor', 'provider_metadata')
+
+#: model ids whose unrecognised usage shape has already been logged once.
+_kiro_shape_logged: set[str] = set()
+
+
+def _as_credit_count(value: Any) -> float | int | None:
+    """``value`` when it is a real numeric credit reading, else None.
+
+    bool is excluded explicitly: it is an int subclass in Python, so
+    ``True`` would otherwise be stored as 1 credit.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return value
+
+
+def extract_kiro_credits(usage: Any, *, model: str | None) -> float | int | None:
+    """The `kiro_credits` cost reading from a `kr/` usage block, or None.
+
+    Never raises and never bills: the caller records the result as an
+    opaque diagnostic number on usage_events.meta. None means "not a `kr/`
+    route" or "this response did not carry the signal", which are both
+    normal.
+    """
+    if not str(model or '').startswith(_KIRO_ROUTE_PREFIX) or not isinstance(usage, dict) or not usage:
+        return None
+
+    for key in _KIRO_CREDIT_KEYS:
+        found = _as_credit_count(usage.get(key))
+        if found is not None:
+            return found
+
+    for block in _KIRO_NESTED_KEYS:
+        nested = usage.get(block)
+        if isinstance(nested, dict):
+            for key in _KIRO_CREDIT_KEYS:
+                found = _as_credit_count(nested.get(key))
+                if found is not None:
+                    return found
+
+    if model not in _kiro_shape_logged:
+        _kiro_shape_logged.add(model)
+        # INFO, not WARNING: a kr/ response without the field is normal.
+        # Keys only -- never values, which can carry upstream identifiers.
+        logger.info(
+            'kr/ usage block carried no recognised credit field for model=%s; keys=%s',
+            model, sorted(usage.keys()),
+        )
+    return None

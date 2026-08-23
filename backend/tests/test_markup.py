@@ -373,7 +373,13 @@ class TestAdminMarkupModels:
 
     def test_clear_single_model_override_accepts_null(self, client, admin_ok, mock_async_session):
         async def _execute(stmt, params=None, *a, **k):
-            assert params['p'] is None, 'markup_pct: null must clear the override, not reject it'
+            # The endpoint now runs the margin guard's SELECT first (Phase F1,
+            # services/margin.refuse_if_loss_making), so the payload assertion
+            # has to be scoped to the UPDATE instead of every statement --
+            # otherwise the guard's own {'ids': [...]} params KeyError, the
+            # guard fails closed, and this reads as a 400.
+            if 'UPDATE model_catalog' in str(stmt):
+                assert params['p'] is None, 'markup_pct: null must clear the override, not reject it'
             result = make_result(fetchone=None)
             result.rowcount = 1
             return result

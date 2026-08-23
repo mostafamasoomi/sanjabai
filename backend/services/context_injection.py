@@ -5,11 +5,16 @@ Fixes S4: duplicated 5x memory injection with no limits, no sanitization.
 Limits: MAX_SOUL_CHARS=2000, MAX_MEMORY_ENTRY=500, MAX_MEMORIES_INJECTED=5
 Sanitization: breaks "[User" -> "[ User" to prevent prompt injection via memories.
 Dedup guard: checks if "[User Memories]" already in messages to avoid double inject.
+
+Phase E3: the whole block is gated to one turn in N (see the ``messages``
+argument of get_injection_messages and services/token_budget.py).
 """
 from __future__ import annotations
 
 import logging
 from typing import Any
+
+from services.token_budget import should_inject_context
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +41,9 @@ def _sanitize_injection(s: str, limit: int) -> str:
 
 
 async def get_injection_messages(
-    uid: int, skill_ids: list[int] | None = None
+    uid: int,
+    skill_ids: list[int] | None = None,
+    messages: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, str]]:
     """
     Fetch memories (limit 5) + soul (truncated) + pinned context + the
@@ -47,6 +54,12 @@ async def get_injection_messages(
     sites (chat.py, chat_smart.py, chat_web.py, chat_stream.py x2,
     chat_compare.py) keep working untouched, picking up the user's
     activated skills automatically.
+
+    ``messages`` is the outbound payload; when given, a block at or over
+    INJECT_ALWAYS_UNDER_CHARS is gated to one turn in
+    INJECT_CONTEXT_EVERY_N_TURNS (Phase E3, see
+    services/token_budget.py::should_inject_context). A smaller block, and
+    omitting ``messages`` entirely, injects unconditionally as before.
     """
     injections: list[dict[str, str]] = []
     if not uid:
@@ -126,6 +139,18 @@ async def get_injection_messages(
         skill_msgs = []
     if skill_msgs:
         injections.extend(skill_msgs)
+
+    # E3 gate -- runs on the BUILT block because the decision is size-aware
+    # (services/token_budget.py::should_inject_context) and only the built
+    # block knows its size. The four reads above cost ~7ms against an
+    # upstream that takes up to 11s, and they already ran on every request
+    # before Phase E, so deciding after them adds no load; a proxy would
+    # need the same reads and be less accurate. `messages` is optional so a
+    # caller that does not pass the outbound payload stays ungated.
+    if messages is not None and not should_inject_context(
+        messages, sum(len(i.get('content') or '') for i in injections)
+    ):
+        return []
 
     return injections
 

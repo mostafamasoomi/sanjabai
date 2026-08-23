@@ -83,8 +83,28 @@ _AVAILABILITY_VALUES = ('available', 'degraded', 'maintenance', 'disabled')
 _ROUTING_POLICY_VALUES = ('cheapest_healthy', 'priority', 'pinned')
 _CANDIDATE_STATE_VALUES = ('proposed', 'approved', 'rejected')
 
-_UNAUTHORIZED = JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
-_NO_DB = JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+def _unauthorized() -> JSONResponse:
+    """A FRESH 401 per call -- never one shared module-level Response.
+
+    These two used to be module-level `JSONResponse` singletons. A Response is
+    mutated in place as it goes back out through the middleware stack, so the
+    same object accumulated state across requests: GZipMiddleware stamped
+    `content-encoding: gzip` on it on the first unauthenticated hit and then
+    handed the *uncompressed* body to every later one, and `vary` grew an
+    extra `Accept-Encoding` each time. Reproduced live on the running API --
+    four unauthenticated GETs of /admin/logical-models returned one clean 401
+    followed by three `httpx.DecodingError`s, i.e. the client cannot read the
+    401 at all. It was live, not latent: this router is registered in app.py
+    (line 355), not in admin.py, so grepping admin.py for it finds nothing.
+
+    Same defect and same fix as admin_moderation.py::_denied().
+    """
+    return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+
+
+def _no_db() -> JSONResponse:
+    """A fresh 500 per call -- see :func:`_unauthorized`."""
+    return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
 
 
 def _candidate_counts_cte() -> str:
@@ -116,9 +136,9 @@ async def list_logical_models(request: Request) -> JSONResponse:
     (most `proposed` candidates first) rather than an arbitrary key order.
     """
     if not await admin_required(request):
-        return _UNAUTHORIZED
+        return _unauthorized()
     if async_session is None:
-        return _NO_DB
+        return _no_db()
 
     qp = request.query_params
     q = (qp.get('q') or '').strip()
@@ -185,9 +205,9 @@ async def get_logical_model(request: Request, key: str) -> JSONResponse:
     failure mode this endpoint's shape exists to prevent.
     """
     if not await admin_required(request):
-        return _UNAUTHORIZED
+        return _unauthorized()
     if async_session is None:
-        return _NO_DB
+        return _no_db()
 
     async with async_session() as session:
         res = await session.execute(
@@ -273,9 +293,9 @@ async def update_candidate(request: Request, key: str, candidate_id: int, payloa
     changed.
     """
     if not await admin_required(request):
-        return _UNAUTHORIZED
+        return _unauthorized()
     if async_session is None:
-        return _NO_DB
+        return _no_db()
 
     unknown = set(payload) - {'state', 'enabled', 'priority'}
     if unknown:
@@ -353,9 +373,9 @@ async def update_routing(request: Request, key: str, payload: dict[str, Any]) ->
     as meaningless rather than silently accepted.
     """
     if not await admin_required(request):
-        return _UNAUTHORIZED
+        return _unauthorized()
     if async_session is None:
-        return _NO_DB
+        return _no_db()
 
     unknown = set(payload) - {'routing_policy', 'pinned_candidate_id'}
     if unknown:
@@ -436,9 +456,9 @@ async def update_availability(request: Request, key: str, payload: dict[str, Any
     real user's failed request would ever reveal.
     """
     if not await admin_required(request):
-        return _UNAUTHORIZED
+        return _unauthorized()
     if async_session is None:
-        return _NO_DB
+        return _no_db()
 
     unknown = set(payload) - {'availability'}
     if unknown:

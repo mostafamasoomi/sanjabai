@@ -22,8 +22,30 @@ from fastapi.responses import JSONResponse
 
 from database import async_session, rds
 from dependencies import admin_required, _write_audit_log
+from services import margin
 
 router = APIRouter()
+
+# MONKEYPATCH CONTRACT: the margin guard is reached as
+# `margin.refuse_if_loss_making`, never imported by name, so
+# tests/test_margin_guard.py can patch the one symbol on services.margin
+# and have every call site here follow it.
+
+
+async def _refuse_loss_making(session, model_ids, request, **kwargs) -> JSONResponse | None:
+    """400 + audit when the resulting price would be loss-making, else None.
+
+    «هیچ درخواستی نباید ضررده باشد» -- refused outright, never silently
+    auto-corrected to a safe number: an admin who typed the wrong price
+    has to see the numbers and decide.
+    """
+    refusal = await margin.refuse_if_loss_making(session, model_ids, **kwargs)
+    if refusal is None:
+        return None
+    await _write_audit_log('admin.margin.refused', target_type='model_catalog',
+                           target_id=refusal.model_id, details=refusal.audit, request=request)
+    return JSONResponse({'detail': refusal.detail}, status_code=400)
+
 
 _VALID_AVAILABILITY = {'available', 'degraded', 'maintenance', 'disabled'}
 
@@ -87,6 +109,13 @@ async def set_model_upstream(request: Request, model_id: str, payload: dict[str,
         )
 
     async with async_session() as session:
+        # The row's price does not change here, but its upstream COST can:
+        # moving off the owner's own infrastructure onto a paid router turns
+        # a zero cost into a real one, so the existing price has to be
+        # re-judged against the upstream being moved TO.
+        refused = await _refuse_loss_making(session, [model_id], request, upstream=upstream)
+        if refused is not None:
+            return refused
         res = await session.execute(sqlalchemy.text(
             'UPDATE model_catalog SET upstream = :u, updated_at = now() WHERE id = :id'
         ), {'u': upstream, 'id': model_id})
@@ -126,6 +155,14 @@ async def bulk_set_availability(request: Request, payload: dict[str, Any]) -> JS
 
     str_ids = [str(i) for i in ids]
     async with async_session() as session:
+        # Only the transition that puts models ON SALE is a margin decision;
+        # withdrawing them (disabled/maintenance/degraded) never is. The whole
+        # batch is refused rather than partially applied, so the admin never
+        # has to work out which half of a bulk enable actually landed.
+        if availability == 'available':
+            refused = await _refuse_loss_making(session, str_ids, request)
+            if refused is not None:
+                return refused
         res = await session.execute(sqlalchemy.text(
             'UPDATE model_catalog SET availability = :a, updated_at = now() WHERE id = ANY(:ids)'
         ), {'a': availability, 'ids': str_ids})
@@ -248,6 +285,10 @@ async def bulk_set_model_markup(request: Request, payload: dict[str, Any]) -> JS
 
     str_ids = [str(i) for i in ids]
     async with async_session() as session:
+        refused = await _refuse_loss_making(session, str_ids, request,
+                                            markup_pct=pct, markup_pct_provided=True)
+        if refused is not None:
+            return refused
         res = await session.execute(sqlalchemy.text(
             'UPDATE model_catalog SET markup_pct = :p, updated_at = now() WHERE id = ANY(:ids)'
         ), {'p': pct, 'ids': str_ids})
@@ -280,6 +321,10 @@ async def set_model_markup(request: Request, model_id: str, payload: dict[str, A
         return JSONResponse({'detail': err}, status_code=400)
 
     async with async_session() as session:
+        refused = await _refuse_loss_making(session, [model_id], request,
+                                            markup_pct=pct, markup_pct_provided=True)
+        if refused is not None:
+            return refused
         res = await session.execute(sqlalchemy.text(
             'UPDATE model_catalog SET markup_pct = :p, updated_at = now() WHERE id = :id'
         ), {'p': pct, 'id': model_id})

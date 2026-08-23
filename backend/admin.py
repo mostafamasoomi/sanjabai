@@ -66,6 +66,7 @@ from admin_plans import router as _plans_router
 from admin_usage_me import router as _usage_me_router
 from admin_mfa import router as _mfa_router
 from admin_security import router as _security_router
+from admin_moderation import router as _moderation_router
 
 router = APIRouter()
 
@@ -77,3 +78,4 @@ router.include_router(_plans_router)
 router.include_router(_usage_me_router)
 router.include_router(_mfa_router)
 router.include_router(_security_router)
+router.include_router(_moderation_router)

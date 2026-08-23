@@ -22,8 +22,29 @@ from database import async_session, rds
 from models import Pricing
 import admin
 from dependencies import _write_audit_log
+from services import margin
 
 router = APIRouter()
+
+# MONKEYPATCH CONTRACT (second one, see the module docstring for the first):
+# the guard is reached as `margin.refuse_if_loss_making`, never imported by
+# name, so tests/test_margin_guard.py can patch the one symbol on
+# services.margin and have every call site here follow it.
+
+
+async def _refuse_loss_making(session, model_ids, request, **kwargs) -> JSONResponse | None:
+    """400 + audit when the resulting price would be loss-making, else None.
+
+    «هیچ درخواستی نباید ضررده باشد» -- refused outright, never silently
+    auto-corrected to a safe number: an admin who typed the wrong price
+    has to see the numbers and decide.
+    """
+    refusal = await margin.refuse_if_loss_making(session, model_ids, **kwargs)
+    if refusal is None:
+        return None
+    await _write_audit_log('admin.margin.refused', target_type='model_catalog',
+                           target_id=refusal.model_id, details=refusal.audit, request=request)
+    return JSONResponse({'detail': refusal.detail}, status_code=400)
 
 
 # ── Pricing admin ───────────────────────────────────────────────
@@ -84,6 +105,12 @@ async def set_pricing(request: Request, payload: dict[str, Any]) -> JSONResponse
         return JSONResponse({'detail': 'قیمتها باید عدد صحیح باشند'}, status_code=400)
     currency = payload.get('currency', 'IRT')
     async with async_session() as session:
+        refused = await _refuse_loss_making(
+            session, [model], request,
+            input_per_million=input_pm, output_per_million=output_pm,
+        )
+        if refused is not None:
+            return refused
         res = await session.execute(sqlalchemy.text(
             "UPDATE model_catalog SET input_per_million=:inp, output_per_million=:out, "
             "currency=:cur, updated_at=now() WHERE id=:m"
@@ -123,6 +150,12 @@ async def toggle_model(request: Request, model_id: str) -> JSONResponse:
         if row is None:
             return JSONResponse({'detail': 'مدل در کاتالوگ یافت نشد'}, status_code=404)
         new_avail = 'disabled' if row.availability == 'available' else 'available'
+        # Withdrawing a model can never be loss-making; only the flip that
+        # puts it back on sale is a margin decision.
+        if new_avail == 'available':
+            refused = await _refuse_loss_making(session, [model_id], request)
+            if refused is not None:
+                return refused
         await session.execute(sqlalchemy.text(
             'UPDATE model_catalog SET availability = :a, updated_at = now() WHERE id = :id'
         ), {'a': new_avail, 'id': model_id})

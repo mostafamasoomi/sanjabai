@@ -48,6 +48,7 @@ from database import async_session, _http
 from models import Assistant
 from dependencies import _get_user_id, _to_fa
 from services.context_injection import get_injection_messages, inject_messages
+from services.token_budget import apply_outbound_budget
 from services.billing import SqlBillingRepo, BillingService, InsufficientBalanceError
 from services.money import Money
 from services.entitlement_gate import covering_entitlement
@@ -273,7 +274,7 @@ def _as_naive_utc(dt: datetime | None) -> datetime | None:
 
 
 # ── File text extraction / web search / /v1/chat/with-file (chat_web.py) ──
-from chat_web import _apply_web_search, _web_search, _release_reservation, _chat_disabled_response  # noqa: E402 -- also registers /v1/chat/with-file
+from chat_web import _apply_web_search, _web_search, _release_reservation, _chat_disabled_response, _chat_preflight  # noqa: E402 -- also registers /v1/chat/with-file
 
 
 # ── Usage estimation / billing (chat_billing.py) ──────────────────────
@@ -305,7 +306,7 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
     uid = await _get_user_id(request)
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
-    _disabled = await _chat_disabled_response()
+    _disabled = await _chat_preflight(uid, payload.messages)
     if _disabled is not None:
         return _disabled
 
@@ -411,7 +412,7 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
 
     # Memory + soul injection via helper (S2 fix duplication + limits + sanitization)
     try:
-        injs = await get_injection_messages(uid)
+        injs = await get_injection_messages(uid, messages=payload_dict.get('messages'))
         if injs:
             payload_dict['messages'] = inject_messages(payload_dict.get('messages', []), injs)
     except Exception as e:
@@ -429,6 +430,10 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
             logger.info(f"Headroom: {_sav['savings_pct']}%% saved ({_sav['saved_chars']} chars)")
     except Exception as e:
         logger.debug(f"Compression skipped: {e}")
+
+    # Phase E: the only ceiling on outbound payload size / output tokens now
+    # that the upstream-side compression is gone. See services/token_budget.py.
+    await apply_outbound_budget(payload_dict)
 
     stream = payload_dict.get('stream', False)
     if stream:

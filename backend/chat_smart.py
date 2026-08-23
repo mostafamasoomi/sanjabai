@@ -33,6 +33,7 @@ from sqlalchemy import select
 
 from models import Subscription
 from services.context_injection import inject_messages
+from services.token_budget import apply_outbound_budget
 from services.billing import SqlBillingRepo, InsufficientBalanceError
 from services.money import Money
 from services.entitlement_gate import covering_entitlement
@@ -192,7 +193,7 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
     uid = await chat._get_user_id(request)
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
-    _disabled = await chat._chat_disabled_response()
+    _disabled = await chat._chat_preflight(uid, payload.messages)
     if _disabled is not None:
         return _disabled
 
@@ -295,7 +296,7 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
 
     # Use helper for injection (S2 deduplication)
     try:
-        injs = await chat.get_injection_messages(uid)
+        injs = await chat.get_injection_messages(uid, messages=messages)
         if injs:
             messages = inject_messages(messages, injs)
             payload_dict['messages'] = messages
@@ -316,6 +317,9 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
             logger.info(f"Headroom smart: {_sav['savings_pct']}%% saved ({_sav['saved_chars']} chars)")
     except Exception as e:
         logger.debug(f"Compression skipped: {e}")
+
+    # Phase E ceiling -- see services/token_budget.py.
+    await apply_outbound_budget(payload_dict)
 
     stream = payload_dict.get('stream', False)
     if stream:

@@ -31,9 +31,11 @@ from fastapi.responses import JSONResponse, Response
 
 from dependencies import _to_fa
 from services.context_injection import inject_messages
+from services.token_budget import apply_outbound_budget
 from services.billing import SqlBillingRepo, BillingService, InsufficientBalanceError
 from services.money import Money
 from services.entitlement_gate import covering_entitlement
+from services.moderation import moderation_preflight
 from model_output import clean_response_dict
 
 import chat
@@ -57,9 +59,11 @@ async def _chat_disabled_response() -> JSONResponse | None:
 
     The single implementation behind all FOUR chat entry points --
     /v1/chat/completions, /v1/chat/with-file, /v1/smart-chat and
-    /v1/compare -- which reach it as ``chat._chat_disabled_response``
-    (chat.py re-exports it). Gating only one route would make the admin's
-    switch a lie, since the other three would keep serving.
+    /v1/compare -- which now reach it through ``_chat_preflight`` below,
+    itself reached as ``chat._chat_preflight``; ``_chat_preflight`` still
+    calls this one as ``chat._chat_disabled_response`` so the existing
+    monkeypatches keep gating every route. Gating only one route would make
+    the admin's switch a lie, since the other three would keep serving.
 
     Lives here rather than in chat.py for the same reason
     _release_reservation below does: to keep chat.py under the house
@@ -72,6 +76,46 @@ async def _chat_disabled_response() -> JSONResponse | None:
                    'type': 'service_unavailable', 'code': 'chat_disabled'}},
         status_code=503,
     )
+
+
+async def _chat_preflight(uid: int, messages) -> JSONResponse | None:
+    """THE pre-flight gate. Every chat entry point's first act after
+    resolving the user; a non-None return is the response to send.
+
+    ONE CHOKE POINT, NOT SIX. There are four chat HTTP routes --
+    /v1/chat/completions (chat.py), /v1/chat/with-file (this file),
+    /v1/smart-chat (chat_smart.py), /v1/compare (chat_compare.py).
+    chat_stream.py registers no route of its own: `_chat_stream` /
+    `_smart_chat_stream` are helpers those routes call *after* their own
+    gates, so gating the four routes gates streaming too. All four already
+    awaited `_chat_disabled_response()` as their first gate; this function
+    is that same gate plus content screening, so the screen is called from
+    exactly ONE place in the codebase.
+
+    WHY NOT get_injection_messages(). That helper is the one thing all six
+    chat call sites share, and it is where Session 9's skill injection went
+    -- but all six of its call sites run AFTER that route's
+    `BillingService.reserve()`. Screening there would open a wallet
+    reservation on a request we are about to refuse, i.e. spend to protect
+    nothing. This gate runs BEFORE the free-tier gate and BEFORE reserve(),
+    so a blocked request touches neither the wallet nor an upstream.
+
+    `_chat_disabled_response` is reached as `chat._chat_disabled_response`
+    (late-bound through the `chat` facade) rather than as the bare
+    same-module global, so `patch.object(chat_mod, '_chat_disabled_response')`
+    still gates every route -- see this module's MONKEYPATCH CONTRACT.
+
+    `messages` is passed through untouched to services/moderation.py, which
+    accepts both call-site shapes: the list of message dicts the JSON routes
+    carry and the JSON *string* /v1/chat/with-file receives as a Form field.
+    Screening never mutates it -- a clean payload goes upstream byte for
+    byte -- and it never raises: a broken detector allows the request (see
+    services/moderation.py's fail-safe contract).
+    """
+    disabled = await chat._chat_disabled_response()
+    if disabled is not None:
+        return disabled
+    return await moderation_preflight(uid, messages)
 
 
 async def _release_reservation(reservation: dict | None, uid: int, label: str = '') -> None:
@@ -139,7 +183,7 @@ async def chat_with_file(
     uid = await chat._get_user_id(request)
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
-    _disabled = await chat._chat_disabled_response()
+    _disabled = await chat._chat_preflight(uid, messages)
     if _disabled is not None:
         return _disabled
 
@@ -237,12 +281,16 @@ async def chat_with_file(
     payload = {'model': selected_model, 'messages': msgs, 'stream': stream}
     # Use helper for injection (S2)
     try:
-        injs = await chat.get_injection_messages(uid)
+        injs = await chat.get_injection_messages(uid, messages=msgs)
         if injs:
             payload['messages'] = inject_messages(msgs, injs)
             msgs = payload['messages']
     except Exception as e:
         logger.warning(f"chat_with_file injection failed uid={uid}: {e}")
+
+    # Phase E ceiling -- see services/token_budget.py.
+    await apply_outbound_budget(payload)
+    msgs = payload['messages']
     if stream:
         await _release_reservation(reservation, uid, 'before_stream')
         return await chat._chat_stream(payload, request)

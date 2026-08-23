@@ -27,6 +27,7 @@ const ModelOpsSection = dynamic(() => import('./sections/ModelOpsSection'), { ss
 const PlansSection = dynamic(() => import('./sections/PlansSection'), { ssr: false })
 const SiteControlSection = dynamic(() => import('./sections/SiteControlSection'), { ssr: false })
 const LogicalModelsSection = dynamic(() => import('./sections/LogicalModelsSection'), { ssr: false })
+const ModerationSection = dynamic(() => import('./sections/ModerationSection'), { ssr: false })
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Sanjabai Admin Panel — Aurora Design System
@@ -51,7 +52,7 @@ export type {
   UserRow, UserDetail, UserDetailTab,
 } from './types'
 
-type Page = 'dashboard' | 'analytics' | 'site-control' | 'logical-models' | 'pricing' | 'markup' | 'exchange-rate' | 'upstream-overhead' | 'image-pricing' | 'packages' | 'plans' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'model-ops' | 'users' | 'security' | 'monitoring'
+type Page = 'dashboard' | 'analytics' | 'site-control' | 'logical-models' | 'pricing' | 'markup' | 'exchange-rate' | 'upstream-overhead' | 'image-pricing' | 'packages' | 'plans' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'model-ops' | 'users' | 'security' | 'moderation' | 'monitoring'
 
 const NAV_ITEMS: { key: Page; label: string; icon: IconName }[] = [
   { key: 'dashboard', label: 'داشبورد', icon: 'dashboard' },
@@ -73,6 +74,7 @@ const NAV_ITEMS: { key: Page; label: string; icon: IconName }[] = [
   { key: 'models', label: 'مدل‌ها', icon: 'code' },
   { key: 'model-ops', label: 'عملیات کاتالوگ', icon: 'code' },
   { key: 'security', label: 'امنیت', icon: 'lock' },
+  { key: 'moderation', label: 'پالایش محتوا', icon: 'warning' },
   { key: 'monitoring', label: 'پایش', icon: 'chart' },
 ]
 
@@ -271,6 +273,7 @@ export default function AdminPage() {
           {page === 'proxy' && <ProxySection />}
           {page === 'models' && <ModelsSection />}
           {page === 'security' && <SecuritySection />}
+          {page === 'moderation' && <ModerationSection />}
           {page === 'markup' && <MarkupSection api={api} />}
           {page === 'exchange-rate' && <ExchangeRateSection api={api} />}
           {page === 'upstream-overhead' && <UpstreamOverheadSection api={api} />}

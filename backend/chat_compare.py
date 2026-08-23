@@ -29,6 +29,7 @@ from fastapi.responses import JSONResponse, Response
 
 from models import Quota
 from services.context_injection import get_injection_messages, inject_messages
+from services.token_budget import apply_outbound_budget
 from services.billing import SqlBillingRepo, InsufficientBalanceError
 from services.money import Money
 from services.entitlement_gate import covering_entitlement
@@ -100,7 +101,7 @@ async def _call_model_once(
 
     # Memory + soul injection
     try:
-        injs = await get_injection_messages(uid)
+        injs = await get_injection_messages(uid, messages=payload.get('messages'))
         if injs:
             payload['messages'] = inject_messages(payload.get('messages', []), injs)
     except Exception as e:
@@ -112,6 +113,10 @@ async def _call_model_once(
         payload['messages'] = compress_messages(payload.get('messages', []), preserve_last=2)
     except Exception as e:
         logger.debug(f"Compression skipped in compare: {e}")
+
+    # Phase E ceiling -- compare fans one prompt out to two models, so an
+    # unbounded payload/answer is paid twice here.
+    await apply_outbound_budget(payload)
 
     try:
         _provider = await chat._resolve_provider(model)
@@ -171,7 +176,7 @@ async def compare_models(request: Request, payload: CompareRequest) -> Response:
     uid = await chat._get_user_id(request)
     if not uid:
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
-    _disabled = await chat._chat_disabled_response()
+    _disabled = await chat._chat_preflight(uid, payload.messages)
     if _disabled is not None:
         return _disabled
 

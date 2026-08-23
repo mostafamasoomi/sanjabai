@@ -237,7 +237,7 @@ async def recompute_states() -> int:
         catalog_res = await session.execute(
             sqlalchemy.text(
                 "SELECT id, provider_model_id, availability, provenance, "
-                "input_per_million, health_quarantine_reason "
+                "input_per_million, health_quarantine_reason, upstream "
                 "FROM model_catalog c WHERE provenance <> 'admin-approved' "
                 "AND EXISTS (SELECT 1 FROM model_health_state s "
                 "            WHERE c.id = s.model_id OR c.provider_model_id = s.model_id)"

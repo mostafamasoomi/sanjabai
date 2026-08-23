@@ -13,6 +13,8 @@ import { Num, faNum, faDate } from '@/lib/format'
 import MarkdownRenderer from './components/MarkdownRenderer'
 import ModelPicker from './components/ModelPicker'
 import { isUsableModel } from './components/modelUtils'
+import { StreamAccumulator } from './useStreamAccumulator'
+import './chat-stream.css'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Sanjabai Chat — Aurora v2 + Conversation History Sidebar
@@ -167,9 +169,14 @@ const ChatMessageItem = memo(function ChatMessageItem({
           </div>
         )}
         {msg.role === 'assistant' ? (
-          <span className={streaming && isLast ? 'streaming-cursor' : ''}>
+          <div className="chat-bubble-content">
             <MarkdownRenderer content={msg.content} />
-          </span>
+            {streaming && isLast && msg.content && (
+              <div className="stream-cursor-line" aria-hidden="true">
+                <span className="stream-cursor" />
+              </div>
+            )}
+          </div>
         ) : (
           <div className="chat-bubble-content chat-bubble-plain">{msg.content}</div>
         )}
@@ -640,6 +647,9 @@ export default function ChatPage() {
       convId = await createConversation(content)
     }
 
+    // Outside try so the AbortError catch branch can flush pending tokens.
+    let streamAccumulator: StreamAccumulator | null = null
+
     try {
       const chatUrl = (smartMode && !attachedFile) ? '/api/v1/smart-chat' : '/api/v1/chat/completions'
       let res: Response
@@ -695,7 +705,18 @@ export default function ChatPage() {
       const assistantId = generateId()
       setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '' }])
 
-      let acc = ''
+      // Throttles setMessages to ~once/frame instead of once per SSE token
+      // (see useStreamAccumulator.ts). accumulator.getText() replaces the
+      // old plain `acc` string as the source of truth.
+      const accumulator = new StreamAccumulator((text) => {
+        setMessages(prev => {
+          const copy = [...prev]
+          const idx = copy.findIndex(m => m.id === assistantId)
+          if (idx >= 0) copy[idx] = { ...copy[idx], content: text }
+          return copy
+        })
+      })
+      streamAccumulator = accumulator
       let usageData: { prompt_tokens?: number; completion_tokens?: number } | null = null
       // Carry-over buffer: a `data: {...}` line can split across two
       // reader.read() calls behind the Docker/Caddy proxy. Accumulate, split
@@ -724,23 +745,21 @@ export default function ChatPage() {
           // shape and may carry a raw exception, so it never reaches the UI.
           const fromBackend = typeof obj.error?.message === 'string' ? obj.error.message : ''
           const errText = fromBackend || 'دریافت پاسخ از سرویس با خطا مواجه شد. لطفاً دوباره تلاش کنید.'
+          // Cancel any pending throttled flush -- it would otherwise fire
+          // after this and overwrite the error text.
+          accumulator.cancel()
+          const accText = accumulator.getText()
           setMessages(prev => {
             const copy = [...prev]
             const idx = copy.findIndex(m => m.id === assistantId)
-            if (idx >= 0) copy[idx] = { ...copy[idx], content: acc ? `${acc}\n\n${errText}` : errText }
+            if (idx >= 0) copy[idx] = { ...copy[idx], content: accText ? `${accText}\n\n${errText}` : errText }
             return copy
           })
           return true
         }
         const delta = obj.choices?.[0]?.delta?.content
         if (delta) {
-          acc += delta
-          setMessages(prev => {
-            const copy = [...prev]
-            const idx = copy.findIndex(m => m.id === assistantId)
-            if (idx >= 0) copy[idx] = { ...copy[idx], content: acc }
-            return copy
-          })
+          accumulator.push(delta)
         }
         if (obj.usage) usageData = obj.usage
         if (obj.x_smart_model) setSmartModel(obj.x_smart_model)
@@ -791,13 +810,21 @@ export default function ChatPage() {
         if (errored) break
       }
       // Flush a trailing complete line the buffer still holds at stream end.
-      if (!errored && sseBuffer.trim()) processLine(sseBuffer)
+      if (!errored && sseBuffer.trim()) { if (processLine(sseBuffer)) errored = true }
       // On an upstream error, stop reading the (now-defunct) body cleanly.
-      if (errored) { try { await reader!.cancel() } catch { /* already closed */ } }
+      // (The error branch above already set the final bubble content and
+      // cancelled the throttle, so it must not be flushed again here.)
+      if (errored) {
+        try { await reader!.cancel() } catch { /* already closed */ }
+      } else {
+        // Mandatory final flush -- the last tokens may postdate the last
+        // scheduled throttled flush and must still reach the UI.
+        accumulator.flushNow()
+      }
 
       // Auto-save after streaming completes
       if (convId) {
-        const finalMsgs = [...updated, { id: assistantId, role: 'assistant' as const, content: acc }]
+        const finalMsgs = [...updated, { id: assistantId, role: 'assistant' as const, content: accumulator.getText() }]
         saveMessages(convId, finalMsgs)
       }
       // Update token counts from usageData (cost comes from billing events).
@@ -819,6 +846,10 @@ export default function ChatPage() {
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : 'خطا در ارتباط'
       if (err instanceof Error && err.name === 'AbortError') {
+        // Flush pending throttled tokens first, or the check below could
+        // see a stale empty `last.content` and wrongly stamp "تولید متوقف
+        // شد." over a response that had already started arriving.
+        streamAccumulator?.flushNow()
         setMessages(prev => {
           const copy = [...prev]
           const last = copy[copy.length - 1]

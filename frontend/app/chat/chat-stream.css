@@ -1,0 +1,61 @@
+/* ── Chat stream cursor ──────────────────────────────────────────────────
+   Bug fix: the assistant bubble used a `streaming-cursor` class that had
+   NO CSS definition anywhere in the app (verified: only one grep hit, the
+   class assignment itself) -- so the "still generating" cursor was never
+   visible. It also used to be a `<span>` (inline) wrapping the
+   MarkdownRenderer output, which itself renders block-level elements
+   (<p>, <pre>, ...) -- an inline element containing block children is
+   invalid HTML and caused a React hydration mismatch. page.tsx now wraps
+   MarkdownRenderer in a <div className="chat-bubble-content"> (matching
+   the class the user bubble already used, so the AI bubble finally gets
+   the same background/padding from globals.css:679-681) and renders the
+   cursor as a separate sibling element instead of a CSS ::after on the
+   markdown content -- MarkdownRenderer's actual last rendered node can be
+   a <pre> code block (CodeBlock.tsx, out of scope here), and anchoring a
+   pseudo-element onto an opaque, actively-changing subtree we don't own is
+   fragile. A plain sibling line is simpler and cannot break silently.
+
+   RTL note: Persian text flows right-to-left, so the "next character"
+   insertion point sits at the visual LEFT edge of already-generated text,
+   not the right. `text-align: left` is a physical (not logical) property
+   on purpose here -- it pins the cursor to the true left edge regardless
+   of the ambient `dir`, which is exactly "left, never right" as required,
+   rather than a logical `text-align: start` that would flip back to the
+   right under dir="rtl". */
+
+.stream-cursor-line {
+  display: block;
+  text-align: left;
+  line-height: 1;
+  margin-top: 0.15rem;
+}
+
+.stream-cursor {
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  vertical-align: text-bottom;
+  background: currentColor;
+  border-radius: 1px;
+  animation: chat-stream-cursor-blink 1s step-end infinite;
+}
+
+@keyframes chat-stream-cursor-blink {
+  0%, 50% { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+
+/* Guard against the nested-card look breaking when the assistant response
+   is (or ends with) a dark code block: .chat-bubble-content now paints
+   var(--bg-elevated) behind the whole bubble (globals.css:681), and
+   .code-block (globals.css:775) paints its own #0a0b12 card with margin
+   0 0 0.75rem on top of that. That is the same nested-card composition
+   already used for compare/page.tsx and playground/page.tsx (both wrap
+   MarkdownRenderer directly, no compensating CSS there), so no override
+   is applied here by default; this only trims the harmless case of extra
+   empty padding under the bubble's last block (a code block's own
+   margin-bottom: 0.75rem stacking with the bubble's padding-bottom:
+   0.7rem), which cannot make the nested-card look worse. */
+.chat-bubble-ai .chat-bubble-content .code-block:last-child {
+  margin-bottom: 0;
+}

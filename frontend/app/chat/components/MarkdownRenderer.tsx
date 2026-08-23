@@ -12,6 +12,12 @@ import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeSanitize from 'rehype-sanitize'
 import CodeBlock from './CodeBlock'
+// Bug 2: rehypeHighlight tags code with hljs-* classes but no theme CSS was
+// ever loaded (grep for `hljs` under app/ was a zero-hit). Next.js allows a
+// plain (non-module) CSS import from node_modules inside a client component
+// module; scoping it here (rather than the top of globals.css) keeps it out
+// of the file's line-range this task is restricted to.
+import 'highlight.js/styles/github-dark.css'
 
 type MarkdownRendererProps = {
   content: string
@@ -49,7 +55,6 @@ function getDir(text: string): 'rtl' | 'ltr' | undefined {
 }
 
 type CodeComponentProps = {
-  inline?: boolean
   className?: string
   children?: ReactNode
   node?: unknown
@@ -64,19 +69,34 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeSanitize, rehypeHighlight]}
         components={{
+          // Bug 1: react-markdown v10 removed the `inline` prop that `code`
+          // used to receive (confirmed: `grep -c inline node_modules/react-markdown/lib/index.js`
+          // → 0), so it was always undefined and every inline `` `code` ``
+          // span rendered as a full CodeBlock card. v10 always produces
+          // <pre><code>…</code></pre> for a fenced block and never wraps
+          // inline code in <pre> — so detect block vs. inline from the tree
+          // shape instead. `pre`'s `children` here is the *unrendered*
+          // `<code>` React element (its own component function hasn't been
+          // invoked yet), so its `props.className`/`props.children` still
+          // carry rehype-highlight's original `hljs language-xxx` class and
+          // highlighted spans — reach into those directly and hand them to
+          // CodeBlock, bypassing the (always-inline) `code` component below.
           pre: ({ children }: { children?: ReactNode }) => {
-            // Avoid double <pre> nesting — CodeBlock already renders its own <pre>
-            return <>{children}</>
-          },
-          code: ({ inline, className, children, node: _node, ...rest }: CodeComponentProps) => {
-            if (inline) {
-              return (
-                <code className="inline-code" dir="ltr" {...rest}>
-                  {children}
-                </code>
-              )
+            const child = React.Children.toArray(children)[0]
+            if (React.isValidElement<{ className?: string; children?: ReactNode }>(child)) {
+              return <CodeBlock className={child.props.className}>{child.props.children}</CodeBlock>
             }
-            return <CodeBlock className={className}>{children}</CodeBlock>
+            return <pre>{children}</pre>
+          },
+          // Only ever reached for genuine inline code — block-level `code`
+          // nodes are intercepted (and rendered via CodeBlock) by `pre`
+          // above before this component is invoked.
+          code: ({ className: _className, children, node: _node, ...rest }: CodeComponentProps) => {
+            return (
+              <code className="inline-code" dir="ltr" {...rest}>
+                {children}
+              </code>
+            )
           },
           a: (
             props: AnchorHTMLAttributes<HTMLAnchorElement> & { children?: ReactNode; node?: unknown },
@@ -105,8 +125,11 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
             props: TableHTMLAttributes<HTMLTableElement> & { children?: ReactNode; node?: unknown },
           ) => {
             const { children, node: _node, ...rest } = props
+            // Bug 6: dir was hardcoded to "ltr", which reverses column order
+            // for Persian-content tables. Drop it and let it inherit from
+            // the outer .markdown-content container (getDir(content) above).
             return (
-              <div className="table-scroll" dir="ltr">
+              <div className="table-scroll">
                 <table {...rest}>{children}</table>
               </div>
             )

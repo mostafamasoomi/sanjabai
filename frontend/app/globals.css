@@ -779,6 +779,48 @@ img, svg, video, canvas {
 .code-copy-btn:hover { color: var(--text-secondary); background: var(--bg-elevated); }
 .code-block pre { margin: 0; padding: 0.85rem 1rem; overflow-x: auto; }
 .code-block code { font-family: var(--font-mono); font-size: 0.82rem; line-height: 1.6; }
+/* Bug 2: the imported hljs theme (MarkdownRenderer.tsx) sets its own
+   background/padding on .hljs; neutralize both so the card's own
+   background (#0a0b12 above) and .code-block pre's padding show through. */
+.code-block .hljs { background: transparent; padding: 0; }
+
+/* Bug 3: Tailwind preflight resets h1–h6 to font-size/font-weight: inherit
+   and @tailwindcss/typography isn't installed, so headings inside rendered
+   markdown were indistinguishable from paragraphs. Descending scale, with
+   Persian-friendly line-height. */
+.markdown-content h1, .markdown-content h2, .markdown-content h3,
+.markdown-content h4, .markdown-content h5, .markdown-content h6 {
+  color: var(--text-primary); font-weight: 700; line-height: 1.6; margin: 1.1rem 0 0.6rem;
+}
+.markdown-content h1 { font-size: 1.5rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--border); }
+.markdown-content h2 { font-size: 1.3rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--border); }
+.markdown-content h3 { font-size: 1.15rem; }
+.markdown-content h4 { font-size: 1.05rem; }
+.markdown-content h5 { font-size: 0.95rem; }
+.markdown-content h6 { font-size: 0.9rem; font-weight: 600; color: var(--text-secondary); }
+
+/* Bug 4: Tailwind preflight sets list-style: none on ol/ul/menu with no
+   reset anywhere (grep for list-style was a zero-hit), so markdown lists
+   rendered with no bullets/numbers. padding-inline-start above (line 767)
+   is kept as-is for RTL indentation. */
+.markdown-content ul { list-style: disc; }
+.markdown-content ol { list-style: decimal; }
+.markdown-content ul ul, .markdown-content ol ul { list-style: circle; }
+.markdown-content li { margin: 0.2rem 0; }
+.markdown-content li > ul, .markdown-content li > ol { margin: 0.3rem 0 0; }
+
+/* Bug 5: blockquote had no styling at all. border-inline-start (not
+   border-left) so it flips correctly for RTL content. */
+.markdown-content blockquote {
+  border-inline-start: 3px solid var(--border); padding: 0.2rem 1rem;
+  margin: 0 0 0.75rem; color: var(--text-secondary);
+}
+
+/* Bug 7: remaining unstyled elements + trailing-margin cleanup. */
+.markdown-content hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+.markdown-content strong { font-weight: 700; color: var(--text-primary); }
+.markdown-content em { font-style: italic; }
+.markdown-content > *:last-child { margin-bottom: 0; }
 
 /* ── Model picker trigger (chat model bar) ───────────────────────────────── */
 .model-picker-trigger { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.7rem; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer; min-width: 0; }

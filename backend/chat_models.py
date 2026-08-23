@@ -180,7 +180,20 @@ async def _resolve_public_model(model: str) -> str:
     string must still fall through to the existing "not available" path
     instead of crashing) and when the DB is unreachable (fails open onto
     whatever was last cached, same as _get_model_upstream).
+
+    Thin wrapper over :func:`_resolve_public_model_catalog` so that EVERY
+    one of that function's five return paths -- not just the one after a
+    cache refresh -- gets the logical-model fallback. Splitting it this way
+    rather than editing each return in place is deliberate: the earlier
+    shape had four early returns and it would have been easy to wire three
+    of them and ship a flag that worked only on a cold cache.
     """
+    return await _apply_logical_routing(model, await _resolve_public_model_catalog(model))
+
+
+async def _resolve_public_model_catalog(model: str) -> str:
+    """The catalog-only half of :func:`_resolve_public_model`, unchanged in
+    behaviour from before the logical layer existed."""
     if not model:
         return model
     if chat.async_session is None:
@@ -213,6 +226,72 @@ async def _resolve_public_model(model: str) -> str:
         except Exception as e:
             logger.warning(f"_resolve_public_model cache refresh failed, keeping previous cache: {e}")
     return chat._MODEL_RESOLVE_CACHE.get(model, model)
+
+
+# ── Phase C P4: the logical model layer, behind a flag ──────────────────
+#
+# services/model_resolver.py has been complete and tested since the sixth
+# session but was called from NOWHERE in production (re-verified by grep
+# 2026-08-23). This is its one and only call site.
+#
+# It hangs off _resolve_public_model deliberately, because that function is
+# already the single early canonicalization point every chat/compare/
+# smart-chat path funnels through BEFORE the free-tier gate, the wallet
+# reservation, validation and the upstream call. Resolving here means
+# routing, health, free-tier bucketing, reservations and -- the financially
+# load-bearing one -- _record_usage's price lookup all stay keyed on the
+# same provider_model_id they always were. Resolving anywhere later would
+# reintroduce exactly the unresolved-id-bills-the-ceiling-rate hazard the
+# block above this function exists to document.
+#
+# SAFETY, in the order it matters:
+#   1. Only consulted when the catalog matched NOTHING (resolved is model
+#      unchanged). No model that routes today can be rerouted by this.
+#   2. Flag defaults OFF (migration 0042). OFF is byte-for-byte the old
+#      behaviour -- the phase's acceptance criterion.
+#   3. resolve_logical_model() never raises and its None means "fall back",
+#      so the worst case with the flag ON is the behaviour with it OFF.
+#   4. It returns a model_catalog.id, NOT a provider_model_id, so the
+#      result is run back through the same cache to canonicalize it. A
+#      logical row pointing at a catalog id that is not in the cache is
+#      discarded rather than forwarded upstream half-resolved.
+async def _apply_logical_routing(model: str, resolved: str) -> str:
+    """Try the logical layer for a model string the catalog did not know.
+
+    Returns ``resolved`` untouched in every other case, including any
+    failure -- this function never raises and never changes a model that
+    already resolves.
+
+    The "catalog did not know it" test is MEMBERSHIP in the resolve cache,
+    not ``resolved != model``. Those are not the same thing: a caller that
+    passes an already-canonical provider_model_id (``cc/claude-sonnet-5``)
+    gets that same string back, so an equality test would classify a
+    perfectly well-known model as unknown and send it through the logical
+    layer on every request.
+    """
+    if not model or model in chat._MODEL_RESOLVE_CACHE:
+        return resolved
+    try:
+        from site_settings import get_site_flag
+        if not await get_site_flag('logical_routing_enabled'):
+            return resolved
+        from services.model_resolver import resolve_logical_model
+        catalog_id = await resolve_logical_model(model)
+        if not catalog_id:
+            return resolved
+        physical = chat._MODEL_RESOLVE_CACHE.get(str(catalog_id))
+        if not physical:
+            logger.warning(
+                '_apply_logical_routing: logical key %r resolved to catalog id %r '
+                'which is not in the resolve cache, falling back',
+                model, catalog_id,
+            )
+            return resolved
+        logger.info('_apply_logical_routing: %r -> %r -> %r', model, catalog_id, physical)
+        return physical
+    except Exception as e:
+        logger.warning('_apply_logical_routing failed for %r, falling back: %s', model, e)
+        return resolved
 
 
 # FIX 3: the empty-model default used to be a hardcoded literal

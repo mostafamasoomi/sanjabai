@@ -207,14 +207,22 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
     # vice versa) -- either way a served response must never be billed as
     # if it cost zero tokens.
     estimated = False
+    # Tracked separately from `estimated` (which also goes True when only
+    # the OUTPUT side was estimated): the upstream-overhead discount below
+    # must only ever touch a REAL upstream-reported input_tokens value, so
+    # it needs to know specifically whether the INPUT side came from our
+    # own _estimate_input_tokens() rather than the upstream.
+    input_estimated = False
     if input_tokens <= 0 and output_tokens <= 0 and reasoning_tokens <= 0:
         input_tokens = _estimate_input_tokens(payload.get('messages'))
         output_tokens = _estimate_output_tokens(response_text)
         estimated = True
+        input_estimated = True
     else:
         if input_tokens <= 0:
             input_tokens = _estimate_input_tokens(payload.get('messages'))
             estimated = True
+            input_estimated = True
         if output_tokens <= 0 and reasoning_tokens <= 0:
             output_tokens = _estimate_output_tokens(response_text)
             estimated = True
@@ -264,6 +272,77 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
             f"thousands of tokens higher (observed ~2784-5756 on other routes for a "
             f"2-character message) -- do not treat this number as authoritative."
         )
+
+    # ── Upstream prompt-overhead discount (owner decision 2026-08-23) ─────
+    # Some upstream routes (measured: ninerouter's cc/ and ag/ prefixes
+    # worst of all) inject a preamble into the prompt server-side, AFTER
+    # our outgoing payload leaves us, and report the inflated total back as
+    # prompt_tokens -- the user never wrote that text and must not pay for
+    # it. services/upstream_overhead.py holds the measured map (app_setting
+    # key upstream_prompt_overhead, seeded empty/inert by migration 0041
+    # until an admin runs POST /admin/upstream-overhead/measure).
+    #
+    # Only applies when input_tokens is a REAL upstream-reported number:
+    # input_estimated means input_tokens came from our own
+    # _estimate_input_tokens(payload['messages']), which by construction
+    # already excludes anything the upstream might have injected --
+    # discounting an already-preamble-free estimate would undercharge, not
+    # correct anything.
+    #
+    # The floor is mandatory and non-negotiable: our own local estimate of
+    # what the user's messages actually contain. Without it a stale or
+    # over-large overhead entry (a bad measurement, or a route that changed
+    # its preamble size) could let a user send a huge prompt and be billed
+    # for almost nothing -- discounted_input_tokens() enforces
+    # max(raw - overhead, floor, 1) so the billed number can never fall
+    # below what we can independently verify was sent.
+    #
+    # This entire block must never be able to raise past _record_usage's
+    # hard "never raises" contract -- any failure here falls back to
+    # billing the untouched raw upstream number, which is the safe
+    # (never-undercharge) direction.
+    #
+    # Provider is resolved ONCE here (the same chat._resolve_provider(model)
+    # every other module-level call site uses -- see chat.py's
+    # _apply_persian_style_guard_for_model / the non-streaming health-check
+    # call -- never a second resolution path) and reused below both for the
+    # overhead lookup and for the usage_events.provider column, which this
+    # metering call has never actually populated (services/metering.py's
+    # record_usage() has always accepted a `provider` kwarg; nothing calling
+    # it from this function passed one, so every usage_events row has
+    # provider = NULL). Threading it through here is what makes
+    # admin_overhead.py's "per-provider requests / tokens discounted" report
+    # mean anything at all.
+    provider_name = ''
+    try:
+        _provider_obj = await chat._resolve_provider(model)
+        provider_name = getattr(_provider_obj, 'name', '') or ''
+    except Exception as e:
+        logger.warning(
+            f"_record_usage: provider resolution failed model={model!r} uid={uid}: {e}"
+        )
+
+    prompt_tokens_raw = input_tokens
+    prompt_overhead_discounted = 0
+    if not input_estimated and provider_name:
+        try:
+            from services.upstream_overhead import discounted_input_tokens, get_prompt_overhead
+            overhead = await get_prompt_overhead(provider_name, model)
+            if overhead > 0:
+                floor = _estimate_input_tokens(payload.get('messages'))
+                billed = discounted_input_tokens(input_tokens, overhead, floor)
+                if billed < input_tokens:
+                    prompt_overhead_discounted = input_tokens - billed
+                    logger.info(
+                        f"_record_usage: prompt overhead discount applied "
+                        f"provider={provider_name} model={model!r} uid={uid} "
+                        f"raw={input_tokens} overhead={overhead} billed={billed}"
+                    )
+                    input_tokens = billed
+        except Exception as e:
+            logger.warning(
+                f"_record_usage: prompt overhead discount failed model={model!r} uid={uid}: {e}"
+            )
 
     total_tokens = input_tokens + output_tokens
     result['input_tokens'] = input_tokens
@@ -425,6 +504,15 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
         from services.metering import record_usage
         from services.money import Money
         meta: dict[str, Any] = {'estimated': estimated, 'source': 'local_estimate' if estimated else 'upstream'}
+        # Always recorded (merged into `meta`, never overwriting the keys
+        # above or set below) -- prompt_tokens_raw is what the upstream
+        # actually reported before any discount; prompt_overhead_discounted
+        # is 0 when no discount applied (estimated input, no matching
+        # overhead entry, or overhead computed to 0). Together these make
+        # every billed input_tokens value auditable against what the
+        # upstream said, not just a number that looks smaller than before.
+        meta['prompt_tokens_raw'] = prompt_tokens_raw
+        meta['prompt_overhead_discounted'] = prompt_overhead_discounted
         if charged < cost:
             meta['listed_cost'] = cost
             meta['shortfall'] = cost - charged
@@ -433,6 +521,7 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
             request_id=secrets.token_hex(8),
             user_id=uid,
             model=model,
+            provider=provider_name or None,
             charge=Money(charged),
             upstream_status='success',
             input_tokens=input_tokens,

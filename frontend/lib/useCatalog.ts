@@ -50,34 +50,50 @@ function fetchCatalog(): Promise<CatalogResponse> {
    `pricing.inputPerMillion`.
 
    The split is relative to whatever model list is on screen, not a fixed
-   currency threshold, so it stays sensible as prices move. */
-export type PriceBand = 'free' | 'standard' | 'premium'
+   currency threshold, so it stays sensible as prices move.
+
+   PRODUCT RULE: "هیچ مدل رایگانی نداریم" — even free upstream supply is
+   sold (see apply_markup in backend/content.py). A model whose price is
+   <= 0 is not a priced tier, it is dirty data: the DB default for
+   input_per_million is 0, and admin "approve model" is decoupled from
+   admin "set price" (admin_catalog.py vs admin_pricing.py), so an
+   approved-but-unpriced model used to reach this hook and get labeled
+   "رایگان". Fixed at the source: `useCatalog()` below excludes any model
+   without a positive price from the catalog it returns at all, matching
+   the product rule that a model is offered only once it is properly
+   configured (mirrors the same live/probe-gated "not ready = not shown"
+   pattern already used for health). Excluded rather than shown with no
+   badge, because a silently-missing price badge reads as a bug, while a
+   model that just isn't in the list yet reads as "not launched" — which
+   is the truth. Consequence: 'free' no longer exists as a price band. */
+export type PriceBand = 'standard' | 'premium'
 
 export const PRICE_BAND_LABEL: Record<PriceBand, string> = {
-  free: 'رایگان',
   standard: 'استاندارد',
   premium: 'حرفه‌ای',
 }
 
-export const PRICE_BAND_ORDER: PriceBand[] = ['free', 'standard', 'premium']
+export const PRICE_BAND_ORDER: PriceBand[] = ['standard', 'premium']
 
 /**
  * Buckets a model into a coarse price tier relative to `allModels` (usually
- * the currently visible/filtered list). Free (no per-token input cost) is
- * its own band; paid models split at the median paid price into "standard"
- * and "premium".
+ * the currently visible/filtered list): paid models split at the median
+ * paid price into "standard" and "premium". `useCatalog()` never returns an
+ * unpriced model, so the <= 0 case below is unreachable through normal use;
+ * it is kept as a defensive fallback (into "standard", not a fabricated
+ * third band) for any caller that assembles its own model list outside the
+ * hook.
  */
 export function priceBand(
   model: Pick<ModelCatalogItem, 'pricing'>,
   allModels: Pick<ModelCatalogItem, 'pricing'>[],
 ): PriceBand {
   const price = model.pricing?.inputPerMillion ?? 0
-  if (price <= 0) return 'free'
   const paid = allModels
     .map((m) => m.pricing?.inputPerMillion ?? 0)
     .filter((p) => p > 0)
     .sort((a, b) => a - b)
-  if (paid.length === 0) return 'standard'
+  if (price <= 0 || paid.length === 0) return 'standard'
   const median = paid[Math.floor(paid.length / 2)]
   return price <= median ? 'standard' : 'premium'
 }
@@ -114,6 +130,13 @@ export function contextBand(contextWindow: number): ContextBand {
   return 'xlarge'
 }
 
+/** See the PriceBand comment above: a model with no positive input price is
+    dirty data, not a free tier, and must never reach a consumer of this
+    hook as if it were an offered model. */
+function excludeUnpriced(models: ModelCatalogItem[]): ModelCatalogItem[] {
+  return models.filter((m) => (m.pricing?.inputPerMillion ?? 0) > 0)
+}
+
 /**
  * Single source of truth for the model catalog on the client.
  * Fetches from the API with module-level deduplication so multiple
@@ -123,7 +146,7 @@ export function contextBand(contextWindow: number): ContextBand {
  */
 export function useCatalog(): UseCatalogState {
   const [state, setState] = useState<UseCatalogState>({
-    models: cachedData?.data ?? [],
+    models: excludeUnpriced(cachedData?.data ?? []),
     loading: !cachedData,
     error: false,
     source: cachedData?.source ?? 'loading',
@@ -135,7 +158,7 @@ export function useCatalog(): UseCatalogState {
       .then((data: CatalogResponse) => {
         if (cancelled) return
         setState({
-          models: data?.data ?? [],
+          models: excludeUnpriced(data?.data ?? []),
           loading: false,
           error: false,
           source: data?.source ?? 'unknown',

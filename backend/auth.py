@@ -134,7 +134,7 @@ async def admin_logout(request: Request) -> JSONResponse:
 # ── Signup / Login / Logout ─────────────────────────────────────
 
 @router.post('/auth/signup')
-async def signup(payload: AuthSignup) -> JSONResponse:
+async def signup(payload: AuthSignup, request: Request) -> JSONResponse:
     # signups_enabled gate (site_settings.py) -- must run before the captcha
     # check so a closed signup window never consumes a captcha token.
     if not await get_site_flag('signups_enabled'):
@@ -208,6 +208,7 @@ async def signup(payload: AuthSignup) -> JSONResponse:
         session.add(quota)
         await session.commit()
         token = await _create_session(user.id)
+        await track_session(token, user.id, request)
         response = JSONResponse({
             'token': token,
             'user': {'id': user.id, 'email': user.email},
@@ -218,7 +219,7 @@ async def signup(payload: AuthSignup) -> JSONResponse:
 
 
 @router.post('/auth/login')
-async def login(payload: AuthLogin) -> JSONResponse:
+async def login(payload: AuthLogin, request: Request) -> JSONResponse:
     # Verify captcha
     if not payload.captcha_token or not payload.captcha_answer:
         return JSONResponse({"detail": "کپچا الزامی است"}, status_code=400)
@@ -272,9 +273,12 @@ async def login(payload: AuthLogin) -> JSONResponse:
         await clear_lockout(lockout_id)
 
         token = await _create_session(user.id)
-        # Track session with metadata and enforce concurrent limit
-        # Note: request object not available here, so we skip full tracking
-        # Session tracking will be handled by middleware on subsequent requests
+        # Record IP/user-agent and enforce MAX_CONCURRENT_SESSIONS. The claim
+        # that "middleware handles this on subsequent requests" was never true
+        # -- no middleware called track_session, so the concurrent-session
+        # limit was dead code from the day it was written. Login is the right
+        # place: it is the only moment a new session appears.
+        await track_session(token, user.id, request)
         response = JSONResponse({'token': token, 'user': {'id': user.id, 'email': user.email}})
         _set_session_cookie(response, token)
         await _write_audit_log('auth.login', target_type='user', target_id=user.id, details={'email': user.email})
@@ -345,7 +349,9 @@ async def logout(request: Request) -> JSONResponse:
         request.headers.get('Authorization', '').removeprefix('Bearer ')
     if token:
         uid = await _get_session_user_id(token)
-        await rds.delete(f'session:{token}')
+        # session_meta goes with the session: track_session writes it on login
+        # and it outlives the session otherwise (7d TTL vs SESSION_TTL).
+        await rds.delete(f'session:{token}', f'session_meta:{token}')
         if uid:
             await rds.srem(f'sessions:{uid}', token)
             await _write_audit_log('auth.logout', target_type='user', target_id=uid)
@@ -363,7 +369,7 @@ async def logout_all(request: Request) -> JSONResponse:
     raw_members = await rds.smembers(f'sessions:{uid}')
     tokens = list(raw_members or [])
     for tok in tokens:
-        await rds.delete(f'session:{tok}')
+        await rds.delete(f'session:{tok}', f'session_meta:{tok}')
     await rds.delete(f'sessions:{uid}')
     await _write_audit_log('auth.logout_all', target_type='user', target_id=uid, details={'revoked_sessions': len(tokens)})
     response = JSONResponse({'status': 'ok', 'revoked_sessions': len(tokens)})

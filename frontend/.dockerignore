@@ -4,3 +4,7 @@ node_modules
 .env
 *.log
 .gitignore
+
+# Syncthing / macOS artefacts (Obsidian vault syncs this tree)
+*.sync-conflict-*
+.DS_Store

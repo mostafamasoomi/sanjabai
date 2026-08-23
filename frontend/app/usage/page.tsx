@@ -38,8 +38,6 @@ type UsageData = {
   recent_events: UsageEvent[]
 }
 
-type RangeKey = 'week' | 'month' | 'all'
-
 /* ═══════════════════════════════════════════════════════════════════════════
    Helpers
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -54,10 +52,6 @@ const fmtTokens = (n: number) => faCompact(n)
 const fmtDate = (s: string | null) => {
   if (!s) return '—'
   return toFaDigits(new Date(s).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }))
-}
-const fmtDateShort = (s: string | null) => {
-  if (!s) return '—'
-  return toFaDigits(new Date(s).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric' }))
 }
 // `٪` rather than `%`: the Latin sign is an LTR run that gets pushed away
 // from its number in an RTL paragraph.
@@ -203,7 +197,6 @@ export default function UsagePage() {
   const [data, setData] = useState<UsageData | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [range, setRange] = useState<RangeKey>('month')
   const [hoveredLegend, setHoveredLegend] = useState<number | null>(null)
 
   const fetchUsage = useCallback(async (silent = false) => {
@@ -240,23 +233,9 @@ export default function UsagePage() {
     fetchUsage()
   }, [token, fetchUsage])
 
-  /* ── Derived: filter events by selected range ── */
-  const rangedEvents = useMemo(() => {
-    if (!data) return []
-    const now = Date.now()
-    const dayMs = 86_400_000
-    const weekStart = now - 7 * dayMs
-    const monthStart = now - 30 * dayMs
-    return data.recent_events.filter((e) => {
-      if (range === 'all') return true
-      const t = e.created_at ? new Date(e.created_at).getTime() : 0
-      if (range === 'week') return t >= weekStart
-      if (range === 'month') return t >= monthStart
-      return true
-    })
-  }, [data, range])
-
-  /* ── Derived: most expensive call ── */
+  /* ── Derived: most expensive of the recent events ──
+     Scoped to the (server-truncated) recent_events list, so it is labelled
+     "اخیر" in the UI rather than presented as an all-time maximum. */
   const mostExpensive = useMemo(() => {
     if (!data || data.recent_events.length === 0) return null
     return data.recent_events.reduce((m, e) => (e.cost > m.cost ? e : m), data.recent_events[0])
@@ -291,61 +270,35 @@ export default function UsagePage() {
     [modelStats],
   )
 
-  /* ── Derived: 30-day daily sparkline (cost) ── */
-  const sparkline = useMemo(() => {
-    const days = 30
-    const now = Date.now()
-    const dayMs = 86_400_000
-    const buckets: { date: Date; cost: number; calls: number }[] = []
-    const index = new Map<string, number>()
-    for (let i = days - 1; i >= 0; i--) {
-      const d = new Date(now - i * dayMs)
-      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-      index.set(key, buckets.length)
-      buckets.push({ date: d, cost: 0, calls: 0 })
-    }
-    if (data) {
-      for (const e of data.recent_events) {
-        if (!e.created_at) continue
-        const d = new Date(e.created_at)
-        const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
-        const idx = index.get(key)
-        if (idx !== undefined) {
-          buckets[idx].cost += e.cost
-          buckets[idx].calls += 1
-        }
+  /* ── Export CSV ──
+     Pulls the authoritative, complete export from the server
+     (backend/admin_usage_me.py `/me/usage/export`) rather than serialising the
+     20-row recent_events list the page holds — the download must not be a
+     silently truncated slice of the user's history. */
+  const exportCsv = useCallback(async () => {
+    if (!token) return
+    try {
+      const res = await fetch('/api/me/usage/export?format=csv', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        toast('خطا در دریافت فایل CSV', 'error')
+        return
       }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `usage-${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast('فایل CSV دانلود شد', 'success')
+    } catch {
+      toast('خطا در ارتباط با سرور', 'error')
     }
-    const maxCost = Math.max(...buckets.map((b) => b.cost), 0.0001)
-    return { buckets, maxCost }
-  }, [data])
-
-  /* ── Export CSV ── */
-  const exportCsv = useCallback(() => {
-    if (!data) return
-    const headers = ['id', 'model', 'input_tokens', 'output_tokens', 'cost', 'created_at']
-    const rows = rangedEvents.map((e) => [
-      e.id,
-      e.model,
-      e.input_tokens,
-      e.output_tokens,
-      e.cost,
-      e.created_at || '',
-    ])
-    const csv =
-      '﻿' + // BOM for Excel Persian support
-      [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `usage-${range}-${new Date().toISOString().slice(0, 10)}.csv`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-    toast('فایل CSV دانلود شد', 'success')
-  }, [data, rangedEvents, range])
+  }, [token])
 
   if (authLoading) return null
 
@@ -370,12 +323,7 @@ export default function UsagePage() {
   const totalTokens = (data?.total_input_tokens_this_month ?? 0) + (data?.total_output_tokens_this_month ?? 0)
   const maxModelCost = Math.max(...(data?.per_model_breakdown.map(m => m.cost) ?? [1]), 1)
   const hasAnyData = (data?.per_model_breakdown.length ?? 0) > 0 || (data?.recent_events.length ?? 0) > 0
-
-  const rangeLabels: Record<RangeKey, string> = {
-    week: 'این هفته',
-    month: 'این ماه',
-    all: 'همه زمان‌ها',
-  }
+  const recentEvents = data?.recent_events ?? []
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: '32px 20px 64px' }} className="usage-page">
@@ -413,35 +361,14 @@ export default function UsagePage() {
         </div>
       </div>
 
-      {/* Controls: date range */}
+      {/* Scope note. Totals below are the server's authoritative current-month
+          aggregates; the events table shows only the latest events. There is no
+          week/all-time toggle any more — those were computed by bucketing the
+          truncated 20-row recent_events list and were silently wrong for anyone
+          with more history. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
         <Icon name="calendar" size={16} className="text-muted" />
-        <div style={{ display: 'inline-flex', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-full)', padding: 4 }}>
-          {(['week', 'month', 'all'] as RangeKey[]).map((k) => (
-            <button
-              key={k}
-              onClick={() => setRange(k)}
-              className="range-pill"
-              style={{
-                border: 'none',
-                cursor: 'pointer',
-                padding: '6px 16px',
-                borderRadius: 'var(--radius-full)',
-                fontSize: 13,
-                fontWeight: 600,
-                background: range === k ? 'var(--accent)' : 'transparent',
-                color: range === k ? 'var(--text-on-accent)' : 'var(--text-secondary)',
-                transition: 'background 0.2s ease, color 0.2s ease',
-                fontFamily: 'var(--font-sans)',
-              }}
-            >
-              {rangeLabels[k]}
-            </button>
-          ))}
-        </div>
-        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          {faNum(rangedEvents.length)} رویداد در بازه انتخابی
-        </span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>آمار این ماه</span>
       </div>
 
       {loading ? (
@@ -499,10 +426,10 @@ export default function UsagePage() {
             <FadeInCard className="card" delay={60} style={{ padding: 20 }}>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 8 }}>
                 <Icon name="payment" size={12} style={{ display: 'inline', verticalAlign: -1, marginInlineStart: 4 }} />
-                مصرف {rangeLabels[range]}
+                مصرف این ماه
               </div>
-              <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{fmtToman(rangedEvents.reduce((s, e) => s + e.cost, 0))}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>{faNum(rangedEvents.length)} درخواست</div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{fmtToman(data?.total_spent_this_month ?? 0)}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>{faNum(data?.event_count_this_month ?? 0)} درخواست</div>
             </FadeInCard>
 
             {/* Total tokens */}
@@ -511,9 +438,9 @@ export default function UsagePage() {
                 <Icon name="sparkles" size={12} style={{ display: 'inline', verticalAlign: -1, marginInlineStart: 4 }} />
                 کل توکن‌های مصرفی
               </div>
-              <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{fmtTokens(rangedEvents.reduce((s, e) => s + e.input_tokens + e.output_tokens, 0))}</div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{fmtTokens(totalTokens)}</div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
-                ورودی: {fmtTokens(rangedEvents.reduce((s, e) => s + e.input_tokens, 0))} | خروجی: {fmtTokens(rangedEvents.reduce((s, e) => s + e.output_tokens, 0))}
+                ورودی: {fmtTokens(data?.total_input_tokens_this_month ?? 0)} | خروجی: {fmtTokens(data?.total_output_tokens_this_month ?? 0)}
               </div>
             </FadeInCard>
 
@@ -523,8 +450,8 @@ export default function UsagePage() {
                 <Icon name="models" size={12} style={{ display: 'inline', verticalAlign: -1, marginInlineStart: 4 }} />
                 مدل‌های استفاده شده
               </div>
-              <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{new Set(rangedEvents.map((e) => e.model)).size}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>مدل فعال بازه انتخابی</div>
+              <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', fontFeatureSettings: '"tnum"' }}>{faNum(data?.per_model_breakdown.length ?? 0)}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>مدل فعال این ماه</div>
             </FadeInCard>
           </div>
 
@@ -536,7 +463,7 @@ export default function UsagePage() {
                   <Icon name="warning" size={22} style={{ color: 'var(--warning)' }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 160 }}>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 2 }}>گران‌ترین درخواست</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500, marginBottom: 2 }}>گران‌ترین درخواست اخیر</div>
                   <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{modelName(mostExpensive.model)}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{fmtDate(mostExpensive.created_at)}</div>
                 </div>
@@ -550,8 +477,14 @@ export default function UsagePage() {
             </FadeInCard>
           )}
 
-          {/* Charts row: donut + sparkline */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.2fr)', gap: 16, marginBottom: 16 }} className="usage-charts">
+          {/* Model cost distribution (this month, from the server's
+              per_model_breakdown). The 30-day daily sparkline that used to sit
+              beside this was removed: it bucketed the truncated 20-row
+              recent_events list into 30 day-columns, so it under-counted every
+              day for anyone with more than 20 events. The /me/usage endpoint
+              exposes no server-side daily series, so there is nothing accurate
+              to draw here yet. */}
+          <div style={{ marginBottom: 16 }}>
             {/* Donut: model cost distribution */}
             <FadeInCard className="card" delay={260} style={{ padding: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
@@ -593,51 +526,6 @@ export default function UsagePage() {
               ) : (
                 <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>داده‌ای برای نمایش نمودار وجود ندارد</div>
               )}
-            </FadeInCard>
-
-            {/* Sparkline: daily usage (last 30 days) */}
-            <FadeInCard className="card" delay={320} style={{ padding: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Icon name="calendar" size={16} className="text-accent" />
-                  <h2 className="card-title">مصرف روزانه</h2>
-                </div>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>۳۰ روز گذشته</span>
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-end',
-                  gap: 2,
-                  height: 160,
-                  paddingTop: 8,
-                }}
-                aria-label="نمودار مصرف روزانه ۳۰ روز گذشته"
-              >
-                {sparkline.buckets.map((b, i) => {
-                  const h = Math.max((b.cost / sparkline.maxCost) * 100, b.cost > 0 ? 4 : 1.5)
-                  return (
-                    <div
-                      key={i}
-                      title={`${fmtDateShort(b.date.toISOString())}: ${faNum(b.cost)} تومان · ${b.calls} درخواست`}
-                      style={{
-                        flex: 1,
-                        height: `${h}%`,
-                        minWidth: 2,
-                        borderRadius: '3px 3px 0 0',
-                        background: b.cost > 0 ? 'var(--accent)' : 'var(--border)',
-                        opacity: b.cost > 0 ? 0.85 : 0.4,
-                        transition: 'height 0.5s ease, background 0.2s ease, opacity 0.2s ease',
-                        alignSelf: 'flex-end',
-                      }}
-                    />
-                  )
-                })}
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 10, color: 'var(--text-muted)' }}>
-                <span>{fmtDateShort(sparkline.buckets[0]?.date.toISOString() ?? null)}</span>
-                <span>{fmtDateShort(sparkline.buckets[sparkline.buckets.length - 1]?.date.toISOString() ?? null)}</span>
-              </div>
             </FadeInCard>
           </div>
 
@@ -681,18 +569,21 @@ export default function UsagePage() {
             </FadeInCard>
           )}
 
-          {/* Recent events table */}
+          {/* Recent events — the server returns at most the latest 20 rows, so
+              the heading says exactly that rather than "تاریخچه مصرف" (which
+              implied a complete history). The full history is available via the
+              CSV export above. */}
           <FadeInCard className="card overflow-hidden" delay={440}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 8 }}>
               <Icon name="chart" size={16} className="text-accent" />
-              <h2 className="card-title">تاریخچه مصرف</h2>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)', marginInlineStart: 'auto' }}>{faNum(rangedEvents.length)} مورد</span>
+              <h2 className="card-title">۲۰ رویداد اخیر</h2>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', marginInlineStart: 'auto' }}>{faNum(recentEvents.length)} مورد</span>
             </div>
 
-            {rangedEvents.length === 0 ? (
+            {recentEvents.length === 0 ? (
               <div style={{ padding: 48, textAlign: 'center' }}>
                 <Icon name="info" size={32} style={{ color: 'var(--text-muted)', marginBottom: 12 }} />
-                <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>رویدادی در بازه انتخابی یافت نشد</p>
+                <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>رویدادی ثبت نشده است</p>
               </div>
             ) : (
               <>
@@ -706,7 +597,7 @@ export default function UsagePage() {
                 </div>
                 {/* Table rows */}
                 <div className="usage-table-body">
-                  {rangedEvents.slice(0, 50).map((evt, idx) => (
+                  {recentEvents.map((evt, idx) => (
                     <div
                       key={evt.id}
                       style={{
@@ -714,7 +605,7 @@ export default function UsagePage() {
                         gridTemplateColumns: '1fr 80px 80px 90px 110px',
                         gap: 8,
                         padding: '10px 20px',
-                        borderBottom: idx < rangedEvents.slice(0, 50).length - 1 ? '1px solid var(--border)' : 'none',
+                        borderBottom: idx < recentEvents.length - 1 ? '1px solid var(--border)' : 'none',
                         fontSize: 13,
                         alignItems: 'center',
                         transition: 'background 0.15s ease',

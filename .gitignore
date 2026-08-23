@@ -77,3 +77,7 @@ docs/NEXT-SESSION.md
 docs/ROADMAP.md
 docs/NEXT-SESSION-PROMPT.md
 docs/TODO.md
+
+# Syncthing / macOS artefacts (Obsidian vault syncs this tree)
+*.sync-conflict-*
+.DS_Store

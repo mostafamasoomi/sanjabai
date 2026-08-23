@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { apiFetch } from '@/lib/apiFetch'
-import { toast } from '@/components/ui'
+import { toast, EmptyState } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
+import { faDate } from '@/lib/format'
 
 /* ═══════════════════════════════════════════════════════════════
    Types
@@ -45,7 +47,8 @@ const CATEGORY_MAP: Record<string, string> = {
    ═══════════════════════════════════════════════════════════════ */
 
 export default function MemoryPage() {
-  const { user } = useAuth()
+  const { user, token, loading: authLoading } = useAuth()
+  const router = useRouter()
 
   /* ── State ────────────────────────────────────────────────── */
   const [memories, setMemories] = useState<Memory[]>([])
@@ -70,10 +73,8 @@ export default function MemoryPage() {
 
   /* ── Fetch memories ───────────────────────────────────────── */
   const fetchMemories = useCallback(async (category?: string, q?: string) => {
+    if (!token) return
     try {
-      const token = localStorage.getItem('sanjabai_auth_token')
-      if (!token) return
-
       let url = '/api/memories'
       if (q) {
         url = `/api/memories/search?q=${encodeURIComponent(q)}`
@@ -85,17 +86,23 @@ export default function MemoryPage() {
       if (r.ok) {
         const data = await r.json()
         setMemories(data)
+      } else {
+        toast('خطا در دریافت حافظه', 'error')
       }
     } catch {
       toast('خطا در دریافت حافظه', 'error')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [token])
 
   useEffect(() => {
+    if (!authLoading && !user) {
+      router.replace('/login')
+      return
+    }
     if (user) fetchMemories()
-  }, [user, fetchMemories])
+  }, [user, authLoading, router, fetchMemories])
 
   /* ── Search with debounce ─────────────────────────────────── */
   const handleSearch = (value: string) => {
@@ -119,9 +126,9 @@ export default function MemoryPage() {
       toast('محتوا را وارد کنید', 'error')
       return
     }
+    if (!token) return
     setSaving(true)
     try {
-      const token = localStorage.getItem('sanjabai_auth_token')
       const r = await apiFetch('/api/memories', {
         method: 'POST',
         headers: {
@@ -161,9 +168,8 @@ export default function MemoryPage() {
   }
 
   const saveEdit = async () => {
-    if (editingId === null) return
+    if (editingId === null || !token) return
     try {
-      const token = localStorage.getItem('sanjabai_auth_token')
       const r = await apiFetch(`/api/memories/${editingId}`, {
         method: 'PUT',
         headers: {
@@ -192,8 +198,8 @@ export default function MemoryPage() {
 
   /* ── Delete memory ────────────────────────────────────────── */
   const deleteMemory = async (id: number) => {
+    if (!token) return
     try {
-      const token = localStorage.getItem('sanjabai_auth_token')
       const r = await apiFetch(`/api/memories/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
@@ -210,10 +216,34 @@ export default function MemoryPage() {
   }
 
   /* ── Helpers ──────────────────────────────────────────────── */
-  const formatDate = (s: string) =>
-    new Date(s).toLocaleDateString('fa-IR', { year: 'numeric', month: 'short', day: 'numeric' })
+  const formatDate = (s: string) => faDate(s)
 
   const isEditing = (id: number) => editingId === id
+
+  /* ── Login gate ───────────────────────────────────────────── */
+  // Unlike /skills and /tasks, this page previously had no gate at all and
+  // read the token straight out of localStorage in four places instead of
+  // going through useAuth — a logged-out visitor saw an empty "no memories"
+  // state instead of a login prompt, and every mutating action failed
+  // silently against `Authorization: Bearer null`.
+  if (authLoading || (!user && !authLoading)) {
+    return (
+      <div style={{ maxWidth: 800, margin: '0 auto', padding: '0 16px' }}>
+        {authLoading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="card">
+                <div className="skeleton" style={{ height: 14, width: '70%', marginBottom: 8 }} />
+                <div className="skeleton" style={{ height: 10, width: '40%' }} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState icon="lock" title="برای مشاهده حافظه وارد شوید" description="ابتدا باید وارد حساب خود شوید." />
+        )}
+      </div>
+    )
+  }
 
   /* ── Render ───────────────────────────────────────────────── */
   return (

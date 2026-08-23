@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth'
 import { apiFetch } from '@/lib/apiFetch'
-import { faNum } from '@/lib/format'
+import { toast } from '@/components/ui'
+import { faNum, faDate } from '@/lib/format'
 
 type DocType = 'pptx' | 'docx' | 'mdx'
 
@@ -69,9 +70,12 @@ export default function DocumentsPage() {
     fetch('/v1/documents', {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error('failed')
+        return r.json()
+      })
       .then(d => setHistory(d.documents || []))
-      .catch(() => {})
+      .catch(() => toast('خطا در دریافت سوابق تولید سند', 'error'))
       .finally(() => setLoadingHistory(false))
   }, [token])
 
@@ -114,13 +118,23 @@ export default function DocumentsPage() {
 
   const handleDelete = async (docId: string) => {
     if (!token) return
+    // Optimistic removal used to happen unconditionally, before checking the
+    // response — a 404/500 from the backend still emptied the row out of the
+    // list, so a failed delete looked successful. Remove only after `res.ok`,
+    // and surface a Persian error (with the row intact) otherwise.
     try {
-      await apiFetch(`/v1/documents/${docId}`, {
+      const res = await apiFetch(`/v1/documents/${docId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })
-      setHistory(prev => prev.filter(d => d.id !== docId))
-    } catch {}
+      if (res.ok) {
+        setHistory(prev => prev.filter(d => d.id !== docId))
+      } else {
+        toast('حذف سند ناموفق بود', 'error')
+      }
+    } catch {
+      toast('خطا در ارتباط با سرور', 'error')
+    }
   }
 
   const formatSize = (bytes: number) => {
@@ -129,18 +143,7 @@ export default function DocumentsPage() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
-  const formatDate = (iso: string) => {
-    try {
-      return new Date(iso).toLocaleDateString('fa-IR', {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    } catch {
-      return iso
-    }
-  }
+  const formatDate = (iso: string) => faDate(iso, iso)
 
   const suggestions = [
     'یک ارائه درباره آینده هوش مصنوعی بساز',

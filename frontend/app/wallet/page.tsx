@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
@@ -144,6 +145,14 @@ function EmptyStateIcon({ icon, title, desc }: { icon: string; title: string; de
 // ─── Main Page ──────────────────────────────────────────────────────────────
 export default function WalletPage() {
   const { token, user, loading: authLoading } = useAuth()
+  const searchParams = useSearchParams()
+
+  // Payment-return banner. The gateway callback redirects here with
+  // ?payment=success after a credit is applied, ?payment=failed on a
+  // decline/cancel, and ?payment=error when the callback itself faulted
+  // (backend/payment_endpoints.py + app/api/payment/callback/route.ts).
+  // Nothing used to read these, so a real charge landed with no feedback.
+  const [paymentBanner, setPaymentBanner] = useState<{ ok: boolean; text: string } | null>(null)
 
   // Data state
   const [balance, setBalance] = useState<number | null>(null)
@@ -224,6 +233,26 @@ export default function WalletPage() {
     }
     fetchData()
   }, [token, fetchData])
+
+  // ── Payment-return feedback ──────────────────────────────────────────────
+  useEffect(() => {
+    const payment = searchParams.get('payment')
+    let banner: { ok: boolean; text: string } | null = null
+    if (payment === 'success') {
+      banner = { ok: true, text: 'پرداخت با موفقیت انجام شد و کیف پول شما شارژ شد.' }
+    } else if (payment === 'failed') {
+      banner = { ok: false, text: 'پرداخت ناموفق بود یا لغو شد. مبلغی از حساب شما کسر نشده است.' }
+    } else if (payment === 'error') {
+      banner = { ok: false, text: 'خطایی در پردازش پرداخت رخ داد. اگر مبلغی کسر شده باشد، به‌زودی بازمی‌گردد.' }
+    }
+    if (banner) {
+      setPaymentBanner(banner)
+      // Strip the param so a refresh does not replay the banner.
+      const url = new URL(window.location.href)
+      url.searchParams.delete('payment')
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash)
+    }
+  }, [searchParams])
 
   // ── Topup logic ──────────────────────────────────────────────────────────
   const effectiveAmount = (selectedPreset ?? parseInt(topupAmount)) || 0
@@ -380,6 +409,37 @@ export default function WalletPage() {
           بروزرسانی
         </button>
       </div>
+
+      {/* Payment-return banner */}
+      {paymentBanner && (
+        <div
+          role="status"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '14px 16px',
+            marginBottom: 24,
+            borderRadius: 'var(--radius-md)',
+            border: `1px solid ${paymentBanner.ok ? 'var(--positive)' : 'var(--danger)'}`,
+            background: paymentBanner.ok
+              ? 'color-mix(in srgb, var(--positive) 12%, transparent)'
+              : 'color-mix(in srgb, var(--danger) 12%, transparent)',
+          }}
+        >
+          <span style={{ flexShrink: 0, color: paymentBanner.ok ? 'var(--positive)' : 'var(--danger)' }}>
+            <Icon name={paymentBanner.ok ? 'check' : 'warning'} size={18} />
+          </span>
+          <span style={{ flex: 1, fontSize: 14, color: 'var(--text-primary)' }}>{paymentBanner.text}</span>
+          <button
+            onClick={() => setPaymentBanner(null)}
+            aria-label="بستن"
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'inline-flex' }}
+          >
+            <Icon name="close" size={16} />
+          </button>
+        </div>
+      )}
 
       {/* Balance + Topup grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 24 }}>

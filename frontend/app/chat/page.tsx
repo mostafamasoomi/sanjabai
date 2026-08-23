@@ -9,9 +9,10 @@ import { useCatalog } from '@/lib/useCatalog'
 import { type ModelCatalogItem } from '@/types/catalog'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { Skeleton, EmptyState, toast } from '@/components/ui'
-import { Num, faNum } from '@/lib/format'
+import { Num, faNum, faDate } from '@/lib/format'
 import MarkdownRenderer from './components/MarkdownRenderer'
 import ModelPicker from './components/ModelPicker'
+import { isUsableModel } from './components/modelUtils'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Sanjabai Chat — Aurora v2 + Conversation History Sidebar
@@ -122,7 +123,9 @@ function formatDate(dateStr: string): string {
     if (diffMins < 60) return `${diffMins} دقیقه پیش`
     if (diffHours < 24) return `${diffHours} ساعت پیش`
     if (diffDays < 7) return `${diffDays} روز پیش`
-    return d.toLocaleDateString('fa-IR')
+    // faDate normalises to Persian digits (raw toLocaleDateString leaks Latin
+    // digits under small-icu); dateStr is already the ISO string faDate wants.
+    return faDate(dateStr)
   } catch {
     return ''
   }
@@ -351,6 +354,15 @@ export default function ChatPage() {
 
   const loadConversation = useCallback(async (id: string) => {
     if (!token) return
+    // Abort any in-flight stream before swapping conversations: the orphaned
+    // stream's setMessages would findIndex into the NEW conversation (-1, text
+    // dropped), leave `streaming` stuck true, and keep billing a response the
+    // user has navigated away from. Mirrors the Stop button (cancel()).
+    if (abortRef.current) {
+      abortRef.current.abort()
+      abortRef.current = null
+      setStreaming(false)
+    }
     try {
       const res = await fetch(`/api/conversations/${id}`, { headers: authHeaders() })
       if (!res.ok) throw new Error('failed')
@@ -437,6 +449,13 @@ export default function ChatPage() {
   }, [token, authHeaders, activeConversationId])
 
   const startNewChat = useCallback(() => {
+    // Abort any in-flight stream first — same orphaned-stream hazard as
+    // loadConversation (dropped text, stuck composer, silent billing).
+    if (abortRef.current) {
+      abortRef.current.abort()
+      abortRef.current = null
+      setStreaming(false)
+    }
     setActiveConversationId(null)
     setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Sanjabai خوش آمدید. چطور می‌توانم کمک کنید؟' }])
     setShowPresets(true)
@@ -531,7 +550,16 @@ export default function ChatPage() {
   useEffect(() => {
     if (modelParam && models.length > 0 && !model) {
       const found = models.find(m => m.id === modelParam || m.providerModelId === modelParam)
-      if (found) setModel(found)
+      // ?model= bypasses the picker, which never offers a down model
+      // (ModelPicker filters on isUsableModel). Honour the same gate here so a
+      // deep link can't start a chat against a model that guarantees an error;
+      // fall back to the default and say so instead of failing silently.
+      if (found && isUsableModel(found)) {
+        setModel(found)
+      } else {
+        setModel(models[0])
+        toast(found ? 'مدل درخواستی در دسترس نیست؛ مدل پیش‌فرض انتخاب شد.' : 'مدل درخواستی یافت نشد؛ مدل پیش‌فرض انتخاب شد.', 'error')
+      }
     }
   }, [modelParam, models, model])
 
@@ -669,63 +697,117 @@ export default function ChatPage() {
 
       let acc = ''
       let usageData: { prompt_tokens?: number; completion_tokens?: number } | null = null
+      // Carry-over buffer: a `data: {...}` line can split across two
+      // reader.read() calls behind the Docker/Caddy proxy. Accumulate, split
+      // on \n, keep the last (possibly incomplete) segment for the next read,
+      // flush on stream end -- without this, a split line JSON.parse-fails and
+      // is silently lost (and an error event with it).
+      let sseBuffer = ''
+
+      // Returns true when the stream must stop (upstream error event).
+      const processLine = (rawLine: string): boolean => {
+        const trimmed = rawLine.trim()
+        if (!trimmed || !trimmed.startsWith('data:')) return false
+        const data = trimmed.slice(5).trim()
+        if (data === '[DONE]') return false
+        let obj: any
+        try { obj = JSON.parse(data) } catch { return false /* partial/non-JSON */ }
+        // ── upstream error event ── backend emits `data: {"error": ...}` on
+        // failure (two shapes; one leaks a raw Python exception string). Never
+        // render that to the user: log the detail, show a generic Persian line
+        // in the assistant bubble (keeping any partial text), and stop.
+        if (obj.error) {
+          console.error('chat stream upstream error:', obj.error, obj.code ?? '')
+          // chat_stream.py's _sse_error_event emits {error:{code,message}} with
+          // a message that is always a safe Persian string — prefer it so the
+          // user sees the specific cause. A bare-string `error` is the older
+          // shape and may carry a raw exception, so it never reaches the UI.
+          const fromBackend = typeof obj.error?.message === 'string' ? obj.error.message : ''
+          const errText = fromBackend || 'دریافت پاسخ از سرویس با خطا مواجه شد. لطفاً دوباره تلاش کنید.'
+          setMessages(prev => {
+            const copy = [...prev]
+            const idx = copy.findIndex(m => m.id === assistantId)
+            if (idx >= 0) copy[idx] = { ...copy[idx], content: acc ? `${acc}\n\n${errText}` : errText }
+            return copy
+          })
+          return true
+        }
+        const delta = obj.choices?.[0]?.delta?.content
+        if (delta) {
+          acc += delta
+          setMessages(prev => {
+            const copy = [...prev]
+            const idx = copy.findIndex(m => m.id === assistantId)
+            if (idx >= 0) copy[idx] = { ...copy[idx], content: acc }
+            return copy
+          })
+        }
+        if (obj.usage) usageData = obj.usage
+        if (obj.x_smart_model) setSmartModel(obj.x_smart_model)
+        // ── billing event (real IRT cost) ──
+        if (obj.type === 'billing') {
+          // Wallet balance changed -- reflect the authoritative post-charge
+          // amount the event carries (raw toman); refetch if it is absent.
+          if (typeof obj.balance_after === 'number') {
+            setWalletBalance(obj.balance_after)
+          } else if (token) {
+            fetch('/api/wallet', { headers: { Authorization: `Bearer ${token}` } })
+              .then(r => r.ok ? r.json() : Promise.reject())
+              .then(d => setWalletBalance(d.balance ?? 0))
+              .catch(() => { /* silent */ })
+          }
+          setUsageStats(prev => ({
+            promptTokens: obj.input_tokens ?? prev.promptTokens,
+            completionTokens: obj.output_tokens ?? prev.completionTokens,
+            totalTokens: (obj.input_tokens ?? 0) + (obj.output_tokens ?? 0),
+            estimatedCost: obj.cost ?? prev.estimatedCost
+          }))
+        }
+        // ── smart_info event ──
+        if (obj.type === 'smart_info') {
+          setSmartModel(obj.model)
+        }
+        // ── tokens/sec ──
+        if (streamStartTimeRef.current > 0) {
+          const elapsed = (Date.now() - streamStartTimeRef.current) / 1000
+          const tps = usageData
+            ? Math.round(((usageData.prompt_tokens ?? 0) + (usageData.completion_tokens ?? 0)) / Math.max(elapsed, 0.1))
+            : 0
+          setTokensPerSec(tps)
+        }
+        return false
+      }
+
+      let errored = false
       while (true) {
         const { value, done } = await reader!.read()
         if (done) break
-        const chunk = decoder.decode(value, { stream: true })
-        for (const line of chunk.split('\n')) {
-          const trimmed = line.trim()
-          if (!trimmed || !trimmed.startsWith('data:')) continue
-          const data = trimmed.slice(5).trim()
-          if (data === '[DONE]') continue
-          try {
-            const obj = JSON.parse(data)
-            const delta = obj.choices?.[0]?.delta?.content
-            if (delta) {
-              acc += delta
-              setMessages(prev => {
-                const copy = [...prev]
-                const idx = copy.findIndex(m => m.id === assistantId)
-                if (idx >= 0) copy[idx] = { ...copy[idx], content: acc }
-                return copy
-              })
-            }
-            if (obj.usage) usageData = obj.usage
-            if (obj.x_smart_model) setSmartModel(obj.x_smart_model)
-            // ── billing event (real IRT cost) ──
-            if (obj.type === 'billing') {
-              setUsageStats(prev => ({
-                promptTokens: obj.input_tokens ?? prev.promptTokens,
-                completionTokens: obj.output_tokens ?? prev.completionTokens,
-                totalTokens: (obj.input_tokens ?? 0) + (obj.output_tokens ?? 0),
-                estimatedCost: obj.cost ?? prev.estimatedCost
-              }))
-            }
-            // ── smart_info event ──
-            if (obj.type === 'smart_info') {
-              setSmartModel(obj.model)
-            }
-            // ── tokens/sec ──
-            if (streamStartTimeRef.current > 0) {
-              const elapsed = (Date.now() - streamStartTimeRef.current) / 1000
-              const tps = usageData
-                ? Math.round(((usageData.prompt_tokens ?? 0) + (usageData.completion_tokens ?? 0)) / Math.max(elapsed, 0.1))
-                : 0
-              setTokensPerSec(tps)
-            }
-          } catch { /* partial chunk */ }
+        sseBuffer += decoder.decode(value, { stream: true })
+        const lines = sseBuffer.split('\n')
+        sseBuffer = lines.pop() ?? ''
+        for (const line of lines) {
+          if (processLine(line)) { errored = true; break }
         }
+        if (errored) break
       }
+      // Flush a trailing complete line the buffer still holds at stream end.
+      if (!errored && sseBuffer.trim()) processLine(sseBuffer)
+      // On an upstream error, stop reading the (now-defunct) body cleanly.
+      if (errored) { try { await reader!.cancel() } catch { /* already closed */ } }
 
       // Auto-save after streaming completes
       if (convId) {
         const finalMsgs = [...updated, { id: assistantId, role: 'assistant' as const, content: acc }]
         saveMessages(convId, finalMsgs)
       }
-      // Update token counts from usageData (cost comes from billing events)
-      if (usageData) {
-        const promptTokens = usageData.prompt_tokens || 0
-        const completionTokens = usageData.completion_tokens || 0
+      // Update token counts from usageData (cost comes from billing events).
+      // usageData is now assigned inside the processLine closure above, which
+      // defeats TS control-flow narrowing (it stays typed as its `null`
+      // initializer here) -- the cast restores the real declared type.
+      const finalUsage = usageData as { prompt_tokens?: number; completion_tokens?: number } | null
+      if (finalUsage) {
+        const promptTokens = finalUsage.prompt_tokens || 0
+        const completionTokens = finalUsage.completion_tokens || 0
         const totalTokens = promptTokens + completionTokens
         setUsageStats(prev => ({
           promptTokens: prev.promptTokens + promptTokens,

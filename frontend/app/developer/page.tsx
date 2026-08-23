@@ -6,6 +6,7 @@ import { apiFetch } from '@/lib/apiFetch'
 import { toast, EmptyState, Skeleton, Tabs } from '@/components/ui'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { ApiKeyRevealModal } from '@/components/ApiKeyRevealModal'
+import { faDate } from '@/lib/format'
 
 // Shared Persian message for the (expected-rare) CSRF-rejection path — the
 // backend returns 403 with "هدر X-Requested-With ارسال نشده" if a mutating
@@ -82,17 +83,16 @@ console.log(response.choices[0].message.content);`,
   },
 }
 
+// Real limits, read off backend/security.py — flat per-minute request caps
+// keyed by subscription plan, not the "tokens/day" tiers this table used to
+// show (those numbers existed nowhere in the backend; a daily token quota
+// table exists in the schema but its enforcement is unreachable on the
+// normal request path, so it is not a real limit and is not listed here).
 const RATE_LIMITS = [
-  { plan: 'رایگان', requests: '۱۰۰ درخواست', tokens: '۱۰,۰۰۰ توکن/روز' },
-  { plan: 'پایه', requests: '۱,۰۰۰ درخواست', tokens: '۱۰۰,۰۰۰ توکن/روز' },
-  { plan: 'حرفه‌ای', requests: '۱۰,۰۰۰ درخواست', tokens: '۱,۰۰۰,۰۰۰ توکن/روز' },
-  { plan: 'سازمانی', requests: 'نامحدود', tokens: 'نامحدود' },
+  { plan: 'رایگان / بدون اشتراک', requests: '۳۰ درخواست در دقیقه' },
+  { plan: 'پایه (pro)', requests: '۱۲۰ درخواست در دقیقه' },
+  { plan: 'سازمانی (enterprise)', requests: '۳۰۰ درخواست در دقیقه' },
 ]
-
-function formatDate(s: string | null): string {
-  if (!s) return '—'
-  return new Date(s).toLocaleDateString('fa-IR', { year: 'numeric', month: 'short', day: 'numeric' })
-}
 
 const ENDPOINTS = [
   {
@@ -139,8 +139,12 @@ export default function DeveloperPage() {
         const data = await r.json()
         // Backend may return array or paginated {items: [...]} format
         setKeys(Array.isArray(data) ? data : (data?.items ?? []))
+      } else {
+        toast('خطا در دریافت کلیدهای API', 'error')
       }
-    } catch {}
+    } catch {
+      toast('خطا در ارتباط با سرور', 'error')
+    }
   }, [token, headers])
 
   useEffect(() => {
@@ -290,8 +294,7 @@ export default function DeveloperPage() {
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
                 <th style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 600 }}>پلن</th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 600 }}>درخواست</th>
-                <th style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 600 }}>توکن</th>
+                <th style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 600 }}>محدودیت درخواست</th>
               </tr>
             </thead>
             <tbody>
@@ -299,7 +302,6 @@ export default function DeveloperPage() {
                 <tr key={r.plan} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td style={{ padding: '8px 12px', color: 'var(--text-primary)', fontWeight: 600 }}>{r.plan}</td>
                   <td style={{ padding: '8px 12px', color: 'var(--text-secondary)' }}>{r.requests}</td>
-                  <td style={{ padding: '8px 12px', color: 'var(--text-secondary)' }}>{r.tokens}</td>
                 </tr>
               ))}
             </tbody>
@@ -363,7 +365,7 @@ export default function DeveloperPage() {
                     </div>
                     <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)' }}>
                       <code style={{ direction: 'ltr' }}>{k.prefix}{'•'.repeat(20)}</code>
-                      {k.created_at && <span>{formatDate(k.created_at)}</span>}
+                      {k.created_at && <span>{faDate(k.created_at)}</span>}
                     </div>
                   </div>
                   {k.active && (

@@ -9,3 +9,7 @@ tests/
 venv/
 .venv/
 *.log
+
+# Syncthing / macOS artefacts (Obsidian vault syncs this tree)
+*.sync-conflict-*
+.DS_Store

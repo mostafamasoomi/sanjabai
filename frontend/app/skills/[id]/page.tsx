@@ -6,93 +6,15 @@ import { useAuth } from '@/lib/auth'
 import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
-
-/* ═══════════════════════════════════════════════════════════════
-   Types
-   ═══════════════════════════════════════════════════════════════ */
-
-type SkillVariable = {
-  name: string
-  description: string
-  type?: string
-  default?: string
-}
-
-type Skill = {
-  id: number
-  title: string
-  title_fa: string
-  description: string
-  description_fa: string
-  category: string
-  prompt_template: string
-  variables: SkillVariable[]
-  default_model: string
-  is_public: boolean
-  is_featured: boolean
-  usage_count: number
-  rating_sum: number
-  rating_count: number
-  tags: string[]
-  user_id: number
-  created_at: string
-}
-
-type UseResult = {
-  rendered_prompt: string
-  model: string
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   Constants
-   ═══════════════════════════════════════════════════════════════ */
-
-const CATEGORY_BADGES: Record<string, string> = {
-  writing: 'aurora-cap-blue',
-  coding: 'aurora-cap-purple',
-  analysis: 'aurora-cap-amber',
-  translation: 'aurora-cap-cyan',
-  marketing: 'aurora-cap-green',
-  other: 'aurora-cap-default',
-}
-
-const CATEGORY_LABELS: Record<string, string> = {
-  writing: 'نوشتن',
-  coding: 'برنامه‌نویسی',
-  analysis: 'تحلیل',
-  translation: 'ترجمه',
-  marketing: 'بازاریابی',
-  other: 'سایر',
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   Helpers
-   ═══════════════════════════════════════════════════════════════ */
-
-function faNumber(n: number): string {
-  return faNum(n)
-}
-
-function renderStars(rating: number, size = 14) {
-  const stars = []
-  for (let i = 1; i <= 5; i++) {
-    stars.push(
-      <Icon
-        key={i}
-        name="sparkles"
-        size={size}
-        className={i <= Math.round(rating) ? 'text-[var(--warning)]' : 'text-[var(--text-muted)]'}
-        style={{ opacity: i <= Math.round(rating) ? 1 : 0.3 }}
-      />
-    )
-  }
-  return stars
-}
-
-function getAverageRating(s: Skill): number {
-  return s.rating_count > 0 ? s.rating_sum / s.rating_count : 0
-}
+import { faNum, faDate } from '@/lib/format'
+import {
+  type Skill,
+  type UseResult,
+  CATEGORY_BADGES,
+  CATEGORY_LABELS,
+  renderStars,
+  getAverageRating,
+} from '../types'
 
 /* ═══════════════════════════════════════════════════════════════
    Loading Skeleton
@@ -283,7 +205,7 @@ export default function SkillDetailPage() {
             </span>
           )}
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginRight: 'auto' }}>
-            {new Date(skill.created_at).toLocaleDateString('fa-IR')}
+            {faDate(skill.created_at)}
           </span>
         </div>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.4, marginBottom: '0.5rem' }}>
@@ -314,13 +236,13 @@ export default function SkillDetailPage() {
             {avg > 0 ? avg.toFixed(1) : '—'}
           </span>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            ({faNumber(skill.rating_count)} نظر)
+            ({faNum(skill.rating_count)} نظر)
           </span>
         </div>
         <div style={{ width: '1px', height: '1.25rem', background: 'var(--border)' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
           <Icon name="user" size={14} />
-          {faNumber(skill.usage_count)} استفاده
+          {faNum(skill.usage_count)} استفاده
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
           <Icon name="key" size={14} />

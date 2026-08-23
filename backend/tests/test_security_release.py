@@ -17,9 +17,11 @@ def test_admin_auth_uses_constant_time_header_token_and_no_query_token():
 
 
 def test_admin_token_is_required_by_compose_without_public_fallback():
-    source = (ROOT.parent / "docker-compose.sanjabai.yml").read_text()
+    # docker-compose.yml is the file the stack actually runs on and the one
+    # CI deploys with. This used to read docker-compose.sanjabai.yml, a stale
+    # copy predating the Caddy services — guarding a file nobody deploys.
+    source = (ROOT.parent / "docker-compose.yml").read_text()
     assert "ADMIN_TOKEN:?ADMIN_TOKEN must be set in .env" in source
-    assert "sanjabai-admin-secret-change-me" not in source
     assert "sanjabai-admin-secret-change-me" not in source
 
 
@@ -29,5 +31,20 @@ def test_rate_limiter_fails_closed_when_redis_is_unavailable():
 
 
 def test_sanjabai_frontend_is_published_on_3003():
-    source = (ROOT.parent / "docker-compose.sanjabai.yml").read_text()
+    source = (ROOT.parent / "docker-compose.yml").read_text()
     assert '"0.0.0.0:3003:3000"' in source
+
+
+def test_ci_deploys_the_live_compose_file():
+    """CI must deploy the stack that actually runs.
+
+    The deploy job ran `docker compose -f docker-compose.sanjabai.yml up -d`:
+    the stale compose file (no Caddy), and a bare `up -d` that recreates
+    depends_on services and can rebuild an image from the working tree
+    mid-deploy. Both are the documented way to break this box.
+    """
+    ci = (ROOT.parent / ".github" / "workflows" / "ci.yml").read_text()
+    deploy = ci.split("name: Deploy via SSH", 1)[1]
+    assert "-f docker-compose.yml" in deploy
+    assert "docker compose -f docker-compose.sanjabai.yml" not in deploy
+    assert "--no-deps --no-build --force-recreate" in deploy

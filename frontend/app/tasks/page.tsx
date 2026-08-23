@@ -1,117 +1,43 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '@/lib/auth'
 import { apiFetch } from '@/lib/apiFetch'
-import { toast, Modal, EmptyState, Skeleton, Tabs } from '@/components/ui'
-import { Icon, type IconName } from '@/components/ui/Icon'
-import { faNum, faPrice, toFaDigits } from '@/lib/format'
+import { toast, EmptyState, Skeleton } from '@/components/ui'
+import { Icon } from '@/components/ui/Icon'
+import { useCatalog } from '@/lib/useCatalog'
+import { type Task, type Execution, type TaskForm } from './types'
+import TaskCard from './components/TaskCard'
+import TaskFormModal from './components/TaskFormModal'
+import ExecutionHistoryModal from './components/ExecutionHistoryModal'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Scheduled Tasks Page
    ═══════════════════════════════════════════════════════════════════════════ */
 
-type Task = {
-  id: number
-  title: string
-  description: string
-  prompt: string
-  model: string
-  cron_expression: string
-  is_active: boolean
-  last_run_at: string | null
-  next_run_at: string | null
-  run_count: number
-  last_result: string | null
-  delivery_channel: string
-  created_at: string
-}
-
-type Execution = {
-  id: number
-  status: string
-  result: string
-  tokens_used: number
-  cost_toman: number
-  error: string | null
-  started_at: string
-  completed_at: string | null
-}
-
-type TaskForm = {
-  title: string
-  description: string
-  prompt: string
-  model: string
-  cron_expression: string
-  delivery_channel: string
-}
-
-const MODELS = ['mimo-v2.5', 'gpt-5.6-luna', 'claude-sonnet-4', 'qwen3-coder-480b']
-
-const DELIVERY_CHANNELS: Record<string, { label: string; icon: IconName }> = {
-  dashboard: { label: 'داشبورد', icon: 'dashboard' },
-  email: { label: 'ایمیل', icon: 'mail' },
-  telegram: { label: 'تلگرام', icon: 'chat' },
-}
-
-const CRON_PRESETS = [
-  { label: 'هر روز ساعت ۹ صبح', value: '0 9 * * *' },
-  { label: 'هر روز ساعت ۱۲ شب', value: '0 0 * * *' },
-  { label: 'هر ساعت', value: '0 * * * *' },
-  { label: 'هر ۶ ساعت', value: '0 */6 * * *' },
-  { label: 'هر هفته (دوشنبه)', value: '0 9 * * 1' },
-  { label: 'هر ماه اول', value: '0 9 1 * *' },
-]
-
-function describeCron(expr: string): string {
-  if (!expr) return '—'
-  const presets = CRON_PRESETS.find((p) => p.value === expr)
-  if (presets) return presets.label
-  const parts = expr.split(' ')
-  if (parts.length !== 5) return expr
-  const [min, hour, dom, mon, dow] = parts
-  if (dom === '*' && mon === '*' && dow === '*') {
-    if (hour !== '*' && min !== '*') return `هر روز ساعت ${hour}:${min.padStart(2, '0')}`
-    if (hour !== '*') return `هر ساعت`
-    return `هر ${min} دقیقه`
-  }
-  if (dow !== '*') {
-    const days: Record<string, string> = {
-      '0': 'یکشنبه', '1': 'دوشنبه', '2': 'سه‌شنبه', '3': 'چهارشنبه',
-      '4': 'پنجشنبه', '5': 'جمعه', '6': 'شنبه',
-    }
-    const day = days[dow] || dow
-    if (hour !== '*') return `هر ${day} ساعت ${hour}:${min.padStart(2, '0')}`
-    return `هر ${day}`
-  }
-  return expr
-}
-
-function formatDateTime(s: string | null): string {
-  if (!s) return '—'
-  return toFaDigits(
-    new Date(s).toLocaleString('fa-IR', {
-      year: 'numeric', month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit',
-    }),
-  )
-}
-
-const STATUS_MAP: Record<string, { label: string; color: string }> = {
-  success: { label: 'موفق', color: 'badge-positive' },
-  failed: { label: 'ناموفق', color: 'badge-danger' },
-  running: { label: 'در حال اجرا', color: 'badge-warning' },
-}
-
 export default function TasksPage() {
   const { token, user, loading: authLoading } = useAuth()
+  const { models: catalogModels, loading: catalogLoading } = useCatalog()
+  // Cheapest currently-available model first, mirroring the backend's own
+  // _default_model() resolution (backend/tasks.py) so the preselected value
+  // matches what an empty model field would resolve to anyway. Never a
+  // hardcoded id: a prior version defaulted to 'mimo-v2.5' and silently
+  // broke every task when that model went into maintenance.
+  const availableModels = useMemo(
+    () =>
+      catalogModels
+        .filter((m) => m.availability === 'available')
+        .slice()
+        .sort((a, b) => (a.pricing.inputPerMillion + a.pricing.outputPerMillion) - (b.pricing.inputPerMillion + b.pricing.outputPerMillion)),
+    [catalogModels],
+  )
+  const defaultModelId = availableModels[0]?.id ?? ''
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [form, setForm] = useState<TaskForm>({
-    title: '', description: '', prompt: '', model: MODELS[0],
+    title: '', description: '', prompt: '', model: '',
     cron_expression: '0 9 * * *', delivery_channel: 'dashboard',
   })
   const [saving, setSaving] = useState(false)
@@ -150,7 +76,7 @@ export default function TasksPage() {
   const openCreate = () => {
     setEditingTask(null)
     setForm({
-      title: '', description: '', prompt: '', model: MODELS[0],
+      title: '', description: '', prompt: '', model: defaultModelId,
       cron_expression: '0 9 * * *', delivery_channel: 'dashboard',
     })
     setModalOpen(true)
@@ -347,349 +273,40 @@ export default function TasksPage() {
         />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {tasks.map((task) => {
-            const ch = DELIVERY_CHANNELS[task.delivery_channel] || DELIVERY_CHANNELS.dashboard
-            return (
-              <div key={task.id} className="card" style={{
-                padding: '18px 20px',
-                opacity: task.is_active ? 1 : 0.7,
-                transition: 'opacity 0.2s',
-              }}>
-                {/* Top row: title + toggle */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                    <h3 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {task.title}
-                    </h3>
-                    <span className="badge badge-accent" style={{ fontSize: 11, flexShrink: 0 }}>
-                      {task.model}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => toggleTask(task)}
-                    style={{
-                      width: 44, height: 24, borderRadius: 12,
-                      background: task.is_active ? 'var(--positive)' : 'var(--border)',
-                      border: 'none', cursor: 'pointer', position: 'relative',
-                      transition: 'background 0.2s', flexShrink: 0,
-                    }}
-                    title={task.is_active ? 'غیرفعال کردن' : 'فعال کردن'}
-                  >
-                    <span style={{
-                      width: 18, height: 18, borderRadius: '50%',
-                      background: 'var(--text-on-accent)', position: 'absolute', top: 3,
-                      left: task.is_active ? 3 : 23,
-                      transition: 'left 0.2s',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                    }} />
-                  </button>
-                </div>
-
-                {/* Cron + badges */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10, alignItems: 'center' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
-                    <Icon name="clock" size={12} />
-                    {describeCron(task.cron_expression)}
-                  </span>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', direction: 'ltr', fontFamily: 'var(--font-mono)' }}>
-                    {task.cron_expression}
-                  </span>
-                  <span className="badge" style={{
-                    background: task.is_active ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-                    color: task.is_active ? 'var(--positive)' : 'var(--danger)',
-                    fontSize: 11,
-                  }}>
-                    {task.is_active ? 'فعال' : 'غیرفعال'}
-                  </span>
-                  <span className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, background: 'var(--bg-surface, var(--bg-elev))' }}>
-                    <Icon name={ch.icon} size={11} />
-                    {ch.label}
-                  </span>
-                </div>
-
-                {/* Description */}
-                {task.description && (
-                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 10px', lineHeight: 1.6 }}>
-                    {task.description}
-                  </p>
-                )}
-
-                {/* Stats row */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <Icon name="history" size={12} />
-                    اجرا: {faNum(task.run_count)} بار
-                  </span>
-                  {task.last_run_at && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <Icon name="clock" size={12} />
-                      آخرین اجرا: {formatDateTime(task.last_run_at)}
-                    </span>
-                  )}
-                  {task.next_run_at && (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <Icon name="calendar" size={12} />
-                      اجرای بعدی: {formatDateTime(task.next_run_at)}
-                    </span>
-                  )}
-                </div>
-
-                {/* Action buttons */}
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button
-                    onClick={() => runTask(task)}
-                    disabled={runningTaskId === task.id}
-                    className="btn btn-primary btn-sm"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                  >
-                    {runningTaskId === task.id ? (
-                      <span style={{ width: 12, height: 12, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
-                    ) : (
-                      <Icon name="send" size={13} />
-                    )}
-                    اجرا
-                  </button>
-                  <button
-                    onClick={() => showHistory(task)}
-                    className="btn btn-ghost btn-sm"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                  >
-                    <Icon name="history" size={13} />
-                    تاریخچه
-                  </button>
-                  <button
-                    onClick={() => openEdit(task)}
-                    className="btn btn-ghost btn-sm"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                  >
-                    <Icon name="settings" size={13} />
-                    ویرایش
-                  </button>
-                  <button
-                    onClick={() => deleteTask(task)}
-                    disabled={deletingId === task.id}
-                    className="btn btn-ghost btn-sm"
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--danger)' }}
-                  >
-                    {deletingId === task.id ? (
-                      <span style={{ width: 12, height: 12, border: '2px solid var(--danger)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
-                    ) : (
-                      <Icon name="trash" size={13} />
-                    )}
-                    حذف
-                  </button>
-                </div>
-
-                {/* Last result preview */}
-                {task.last_result && (
-                  <div style={{
-                    marginTop: 12, padding: '10px 14px', borderRadius: 8,
-                    background: 'var(--bg-surface, var(--bg-elev))',
-                    fontSize: 12, color: 'var(--text-secondary)',
-                    fontFamily: 'var(--font-mono)', direction: 'ltr', textAlign: 'left',
-                    maxHeight: 60, overflow: 'hidden', lineHeight: 1.6,
-                    whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-                  }}>
-                    {task.last_result.slice(0, 200)}{task.last_result.length > 200 ? '...' : ''}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+          {tasks.map((task) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              runningTaskId={runningTaskId}
+              deletingId={deletingId}
+              onToggle={toggleTask}
+              onRun={runTask}
+              onEdit={openEdit}
+              onDelete={deleteTask}
+              onHistory={showHistory}
+            />
+          ))}
         </div>
       )}
 
-      {/* Create/Edit Modal */}
-      <Modal
+      <TaskFormModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editingTask ? 'ویرایش تسک' : 'ایجاد تسک جدید'}
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Title */}
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
-              عنوان <span className="text-danger">*</span>
-            </label>
-            <input
-              className="input"
-              value={form.title}
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-              placeholder="مثلاً: خلاصه روزانه اخبار"
-            />
-          </div>
+        editingTask={editingTask}
+        form={form}
+        setForm={setForm}
+        saving={saving}
+        onSave={saveTask}
+        availableModels={availableModels}
+        catalogLoading={catalogLoading}
+      />
 
-          {/* Description */}
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
-              توضیحات
-            </label>
-            <textarea dir="rtl"
-              className="input"
-              rows={2}
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              placeholder="توضیح کوتاه درباره این تسک..."
-              style={{ resize: 'vertical' }}
-            />
-          </div>
-
-          {/* Prompt */}
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
-              پرامپت <span className="text-danger">*</span>
-            </label>
-            <textarea dir="rtl"
-              className="input"
-              rows={5}
-              value={form.prompt}
-              onChange={(e) => setForm((f) => ({ ...f, prompt: e.target.value }))}
-              placeholder="پرامپتی که قرار است اجرا شود...&#10;از {variable} برای متغیرها استفاده کنید"
-              style={{ resize: 'vertical', direction: 'ltr', textAlign: 'left', fontFamily: 'var(--font-mono)' }}
-            />
-            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-              از {'{variable}'} برای جایگذاری متغیرها در زمان اجرا استفاده کنید.
-            </p>
-          </div>
-
-          {/* Model */}
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
-              مدل
-            </label>
-            <select
-              className="input cursor-pointer"
-              value={form.model}
-              onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
-            >
-              {MODELS.map((m) => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Cron Expression */}
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
-              زمان‌بندی (Cron Expression)
-            </label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-              {CRON_PRESETS.map((preset) => (
-                <button
-                  key={preset.value}
-                  type="button"
-                  className={`btn btn-sm ${form.cron_expression === preset.value ? 'btn-primary' : 'btn-ghost'}`}
-                  onClick={() => setForm((f) => ({ ...f, cron_expression: preset.value }))}
-                  style={{ fontSize: 11 }}
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-            <input
-              className="input"
-              value={form.cron_expression}
-              onChange={(e) => setForm((f) => ({ ...f, cron_expression: e.target.value }))}
-              placeholder="0 9 * * *"
-              style={{ direction: 'ltr', textAlign: 'left', fontFamily: 'var(--font-mono)' }}
-            />
-            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-              فرمت: دقیقه ساعت روز ماه ماه روز_هفته — مثال: <code>0 9 * * *</code> = هر روز ساعت ۹ صبح
-            </p>
-          </div>
-
-          {/* Delivery Channel */}
-          <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>
-              کانال ارسال نتیجه
-            </label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {Object.entries(DELIVERY_CHANNELS).map(([key, ch]) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={`btn btn-sm ${form.delivery_channel === key ? 'btn-primary' : 'btn-ghost'}`}
-                  onClick={() => setForm((f) => ({ ...f, delivery_channel: key }))}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                >
-                  <Icon name={ch.icon} size={14} />
-                  {ch.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Save */}
-          <button
-            onClick={saveTask}
-            disabled={saving || !form.title.trim() || !form.prompt.trim()}
-            className="btn btn-primary w-full"
-            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 4 }}
-          >
-            {saving ? (
-              <span style={{ width: 16, height: 16, border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.6s linear infinite' }} />
-            ) : (
-              <Icon name="check" size={16} />
-            )}
-            ذخیره
-          </button>
-        </div>
-      </Modal>
-
-      {/* Execution History Modal */}
-      <Modal
+      <ExecutionHistoryModal
         open={historyModalOpen}
         onClose={() => { setHistoryModalOpen(false); setExecutions([]) }}
-        title={`تاریخچه اجرا — ${historyTaskTitle}`}
-      >
-        {executions.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-muted)' }}>
-            <Icon name="history" size={32} style={{ marginBottom: 8 }} />
-            <p>هنوز اجرایی ثبت نشده است</p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {executions.map((ex) => {
-              const st = STATUS_MAP[ex.status] || { label: ex.status, color: 'badge-accent' }
-              return (
-                <div key={ex.id} style={{
-                  padding: '12px 14px', borderRadius: 8,
-                  border: '1px solid var(--border)',
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                    <span className={`badge ${st.color}`} style={{ fontSize: 11 }}>{st.label}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                      {formatDateTime(ex.started_at)}
-                    </span>
-                  </div>
-                  {ex.error && (
-                    <p style={{ fontSize: 12, color: 'var(--danger)', margin: '4px 0', direction: 'ltr', fontFamily: 'var(--font-mono)' }}>
-                      {ex.error}
-                    </p>
-                  )}
-                  {ex.result && (
-                    <div style={{
-                      fontSize: 12, color: 'var(--text-secondary)', direction: 'ltr', textAlign: 'left',
-                      fontFamily: 'var(--font-mono)', maxHeight: 60, overflow: 'hidden',
-                      lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-                    }}>
-                      {ex.result.slice(0, 200)}{ex.result.length > 200 ? '...' : ''}
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
-                    {ex.tokens_used > 0 && (
-                      <span>{faNum(ex.tokens_used)} توکن</span>
-                    )}
-                    {ex.cost_toman > 0 && (
-                      <span>{faPrice(ex.cost_toman)}</span>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </Modal>
+        taskTitle={historyTaskTitle}
+        executions={executions}
+      />
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>

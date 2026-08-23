@@ -34,6 +34,17 @@ import chat
 logger = logging.getLogger('chat')  # keep all chat_*.py logs under the pre-split 'chat' logger name
 
 
+def _sse_error_event(code: str, message: str) -> str:
+    """Build the one mid-stream SSE error payload shape shared by
+    `_chat_stream` and `_smart_chat_stream`: `{"error": {"code", "message"}}`.
+
+    `message` must always be a safe, Persian, user-facing string -- never an
+    interpolated exception. Callers log the real exception server-side
+    (`logger.warning`/`logger.exception`) before calling this.
+    """
+    return f'data: {json.dumps({"error": {"code": code, "message": message}})}\n\n'
+
+
 async def _chat_stream(payload: dict[str, Any], request: Request):
     """Stream chat completion via SSE, collecting usage for billing."""
     uid = await chat._get_user_id(request)
@@ -182,7 +193,7 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
         except Exception as e:
             logger.warning(f"_chat_stream error uid={uid} model={payload.get('model')}: {e}")
             if not client_gone:
-                yield f'data: {json.dumps({"error": "سرویس موقتاً در دسترس نیست", "code": "gateway_error"})}\n\n'
+                yield _sse_error_event('upstream_failed', 'سرویس موقتاً در دسترس نیست. لطفاً دوباره تلاش کنید.')
         finally:
             # FIX 1: flush any text the filter was still holding back to
             # disambiguate a possible tag (e.g. the stream ended right after
@@ -367,7 +378,7 @@ async def _smart_chat_stream(
         except Exception as e:
             logger.warning(f"_smart_chat_stream error uid={uid} model={selected_model}: {e}")
             if not client_gone:
-                yield f'data: {json.dumps({"error": f"upstream unavailable: {e}"})}\n\n'
+                yield _sse_error_event('upstream_failed', 'سرویس موقتاً در دسترس نیست. لطفاً دوباره تلاش کنید.')
         finally:
             # FIX 1: flush any held-back text -- see _chat_stream for the
             # rationale/docstring pointer.

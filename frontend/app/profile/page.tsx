@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/auth'
 import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
-import { faNum, faPrice } from '@/lib/format'
+import { faNum, faPrice, toFaDigits } from '@/lib/format'
 
 const AUTONOMY_LEVELS = [
   {
@@ -84,6 +84,12 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false)
   const [avatarUploading, setAvatarUploading] = useState(false)
 
+  // Load-error states. These used to be empty `catch {}` blocks, so a failed
+  // fetch left the form silently blank with no signal to the user.
+  const [profileError, setProfileError] = useState(false)
+  const [modelsError, setModelsError] = useState(false)
+  const [statsError, setStatsError] = useState(false)
+
   // Refs
   const fileInputRef = useRef<HTMLInputElement>(null)
   const mdFileInputRef = useRef<HTMLInputElement>(null)
@@ -101,6 +107,7 @@ export default function ProfilePage() {
   }, [user])
 
   const fetchProfile = async () => {
+    setProfileError(false)
     try {
       const t = token || localStorage.getItem('sanjabai_auth_token')
       const r = await fetch('/api/auth/profile', {
@@ -134,20 +141,32 @@ export default function ProfilePage() {
           email_notif: prefs.notification_settings?.email !== false,
           telegram_notif: prefs.notification_settings?.telegram === true,
         })
+      } else {
+        setProfileError(true)
       }
-    } catch {} finally {
+    } catch {
+      setProfileError(true)
+    } finally {
       setLoadingProfile(false)
     }
   }
 
   const fetchModels = async () => {
+    setModelsError(false)
     try {
-      const r = await fetch('/api/models')
+      // /api/models does not exist (404). The real catalog endpoint is
+      // /catalog/models (same shape: { data: [{ id }] }); the old 404 is why
+      // the default-model <select> could never populate.
+      const r = await fetch('/api/catalog/models')
       if (r.ok) {
         const data = await r.json()
         setModels((data.data || []).map((m: { id: string }) => m.id))
+      } else {
+        setModelsError(true)
       }
-    } catch {}
+    } catch {
+      setModelsError(true)
+    }
   }
 
   const fetchUsage = async () => {
@@ -155,7 +174,10 @@ export default function ProfilePage() {
       const t = token || localStorage.getItem('sanjabai_auth_token')
       const r = await fetch('/api/me/usage', { headers: { Authorization: `Bearer ${t}` } })
       if (r.ok) setUsage(await r.json())
-    } catch {}
+      else setStatsError(true)
+    } catch {
+      setStatsError(true)
+    }
   }
 
   const fetchBalance = async () => {
@@ -163,7 +185,10 @@ export default function ProfilePage() {
       const t = token || localStorage.getItem('sanjabai_auth_token')
       const r = await fetch('/api/wallet', { headers: { Authorization: `Bearer ${t}` } })
       if (r.ok) setBalance((await r.json()).balance)
-    } catch {}
+      else setStatsError(true)
+    } catch {
+      setStatsError(true)
+    }
   }
 
   const handleSaveProfile = async () => {
@@ -323,6 +348,14 @@ export default function ProfilePage() {
       toast(language === 'fa' ? 'شناسه تلگرام را وارد کنید' : 'Enter Telegram ID', 'error')
       return
     }
+    // Validate before sending: a non-numeric value makes parseInt return NaN,
+    // which serialises to null and the backend rejects with a generic error.
+    // Telegram IDs are positive integers.
+    const tgId = parseInt(telegramId.trim(), 10)
+    if (!Number.isInteger(tgId) || tgId <= 0 || String(tgId) !== telegramId.trim()) {
+      toast(language === 'fa' ? 'شناسه تلگرام باید یک عدد صحیح مثبت باشد' : 'Telegram ID must be a positive whole number', 'error')
+      return
+    }
     setLinkingTelegram(true)
     try {
       const t = token || localStorage.getItem('sanjabai_auth_token')
@@ -332,7 +365,7 @@ export default function ProfilePage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${t}`,
         },
-        body: JSON.stringify({ telegram_id: parseInt(telegramId) }),
+        body: JSON.stringify({ telegram_id: tgId }),
       })
       if (r.ok) {
         toast(language === 'fa' ? 'حساب تلگرام با موفقیت متصل شد' : 'Telegram linked successfully', 'success')
@@ -348,6 +381,23 @@ export default function ProfilePage() {
 
   const userInitial = displayName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'U'
   const isFa = language === 'fa'
+
+  // Dirty check against the values last loaded/saved. originalValues was
+  // declared for this but never read, so Save was always enabled. The `??`
+  // defaults mean an as-yet-unpopulated originalValues ({}) compares equal to
+  // the initial field defaults, so the form starts clean.
+  const isDirty =
+    displayName !== (originalValues.display_name ?? '') ||
+    bio !== (originalValues.bio ?? '') ||
+    timezone !== (originalValues.timezone ?? 'Asia/Tehran') ||
+    language !== (originalValues.language ?? 'fa') ||
+    defaultModel !== (originalValues.default_model ?? '') ||
+    aiPersonality !== (originalValues.ai_personality ?? '') ||
+    pinnedContext !== (originalValues.pinned_context ?? '') ||
+    autonomyLevel !== (originalValues.autonomy_level ?? 'medium') ||
+    theme !== (originalValues.theme ?? 'dark') ||
+    emailNotif !== (originalValues.email_notif ?? true) ||
+    telegramNotif !== (originalValues.telegram_notif ?? false)
 
   if (loadingProfile) {
     return (
@@ -370,6 +420,34 @@ export default function ProfilePage() {
           </h1>
         </div>
       </div>
+
+      {/* Profile load error — the fetch used to fail silently, leaving the
+          form blank with no explanation. */}
+      {profileError && (
+        <div
+          role="alert"
+          className="card"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16,
+            border: '1px solid var(--danger)',
+            background: 'color-mix(in srgb, var(--danger) 12%, transparent)',
+          }}
+        >
+          <span style={{ color: 'var(--danger)', flexShrink: 0 }}>
+            <Icon name="warning" size={18} />
+          </span>
+          <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>
+            {isFa ? 'خطا در بارگذاری اطلاعات پروفایل. لطفاً صفحه را تازه‌سازی کنید.' : 'Failed to load your profile. Please refresh the page.'}
+          </span>
+          <button
+            onClick={() => { setLoadingProfile(true); fetchProfile() }}
+            className="btn btn-sm btn-secondary"
+            style={{ flexShrink: 0 }}
+          >
+            {isFa ? 'تلاش مجدد' : 'Retry'}
+          </button>
+        </div>
+      )}
 
       {/* Avatar + User info card */}
       <div className="card profile-avatar-card">
@@ -413,7 +491,7 @@ export default function ProfilePage() {
             </h2>
             <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
               {isFa
-                ? `عضو از ${user?.created_at ? new Date(user.created_at).toLocaleDateString('fa-IR', { year: 'numeric', month: 'long' }) : '—'}`
+                ? `عضو از ${user?.created_at ? toFaDigits(new Date(user.created_at).toLocaleDateString('fa-IR', { year: 'numeric', month: 'long' })) : '—'}`
                 : `Member since ${user?.created_at ? new Date(user.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : '—'}`
               }
             </p>
@@ -427,7 +505,10 @@ export default function ProfilePage() {
             <div>
               <span className="profile-stat-label">{isFa ? 'موجودی' : 'Balance'}</span>
               <span className="profile-stat-value text-gradient">
-                {balance === null ? '—' : isFa ? faPrice(balance) : `${balance.toLocaleString('en-US')} IRR`}
+                {/* balance is raw integer TOMAN. The old English branch both
+                    bypassed faPrice and mislabeled toman as "IRR" (Rial) — a
+                    10x-class currency bug. Always go through faPrice. */}
+                {balance === null ? '—' : faPrice(balance)}
               </span>
             </div>
           </div>
@@ -436,11 +517,14 @@ export default function ProfilePage() {
             <div>
               <span className="profile-stat-label">{isFa ? 'مصرف ماهانه' : 'Monthly usage'}</span>
               <span className="profile-stat-value">
+                {/* Token counts go through faNum in both branches — the old
+                    English branch used toLocaleString, which returns Latin
+                    digits on the production small-icu runtime. */}
                 {!usage?.monthly
                   ? '—'
                   : isFa
                     ? `${faNum(usage.monthly.inp + usage.monthly.out || 0)} توکن`
-                    : `${(usage.monthly.inp + usage.monthly.out || 0).toLocaleString('en-US')} tokens`}
+                    : `${faNum(usage.monthly.inp + usage.monthly.out || 0)} tokens`}
               </span>
             </div>
           </div>
@@ -452,6 +536,12 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
+        {statsError && (
+          <p style={{ fontSize: 12, color: 'var(--danger)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Icon name="warning" size={13} />
+            {isFa ? 'خطا در بارگذاری موجودی و آمار مصرف.' : 'Failed to load balance and usage stats.'}
+          </p>
+        )}
       </div>
 
       {/* ─── Profile Info Section ─── */}
@@ -528,9 +618,23 @@ export default function ProfilePage() {
                 <option key={m} value={m}>{m}</option>
               ))}
             </select>
-            <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-              {isFa ? 'مدل پیش‌فرض برای چت‌های جدید' : 'Default model for new chats'}
-            </p>
+            {modelsError ? (
+              <p style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Icon name="warning" size={12} />
+                {isFa ? 'خطا در بارگذاری فهرست مدل‌ها.' : 'Failed to load the model list.'}
+                <button
+                  type="button"
+                  onClick={fetchModels}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0, fontSize: 11 }}
+                >
+                  {isFa ? 'تلاش مجدد' : 'Retry'}
+                </button>
+              </p>
+            ) : (
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                {isFa ? 'مدل پیش‌فرض برای چت‌های جدید' : 'Default model for new chats'}
+              </p>
+            )}
           </div>
 
           {/* AI Personality */}
@@ -592,7 +696,7 @@ export default function ProfilePage() {
             />
             <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
               {isFa
-                ? `این یادداشت (تا ۶۰۰۰ کاراکتر ابتدایی آن) در تمام چت‌ها و مستقل از دستیار انتخابی تزریق می‌شود. ${pinnedContext.length.toLocaleString('fa-IR')} / ۲۰,۰۰۰ کاراکتر`
+                ? `این یادداشت (تا ۶۰۰۰ کاراکتر ابتدایی آن) در تمام چت‌ها و مستقل از دستیار انتخابی تزریق می‌شود. ${faNum(pinnedContext.length)} / ۲۰٬۰۰۰ کاراکتر`
                 : `This note (up to its first 6000 characters) is injected into every chat regardless of the selected assistant. ${pinnedContext.length}/20,000 characters`}
             </p>
           </div>
@@ -774,9 +878,9 @@ export default function ProfilePage() {
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
         <button
           onClick={handleSaveProfile}
-          disabled={saving}
+          disabled={saving || !isDirty}
           className="btn btn-primary"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 24px', fontSize: 14, fontWeight: 600 }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 24px', fontSize: 14, fontWeight: 600, opacity: saving || !isDirty ? 0.5 : 1 }}
         >
           {saving ? (
             <span className="apikeys-spinner" />

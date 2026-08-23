@@ -6,7 +6,7 @@ import { apiFetch } from '@/lib/apiFetch'
 import { useCatalog, priceBand, PRICE_BAND_LABEL } from '@/lib/useCatalog'
 import { type ModelCatalogItem } from '@/types/catalog'
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
+import { faNum, faPrice } from '@/lib/format'
 import { Skeleton, EmptyState, toast } from '@/components/ui'
 import MarkdownRenderer from '@/app/chat/components/MarkdownRenderer'
 import ModelPicker from '@/app/chat/components/ModelPicker'
@@ -49,11 +49,6 @@ function Spinner({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
 function formatElapsed(sec: number): string {
   if (sec < 1) return `${(sec * 1000).toFixed(0)}ms`
   return `${sec.toFixed(1)}s`
-}
-
-function formatCost(tomans: number): string {
-  if (tomans >= 1000) return `${(tomans / 1000).toFixed(1)}k`
-  return `${tomans}`
 }
 
 export default function ComparePage() {
@@ -196,8 +191,10 @@ export default function ComparePage() {
             </div>
             <div className="compare-stat">
               <span className="compare-stat-label">هزینه</span>
+              {/* Toman via faPrice — no page-local ÷1000 formatter, no "IRT"
+                  label on a divided value (that was the old 10x-style trap). */}
               <span className={`compare-stat-value ${isCheaper ? 'compare-stat-winner' : ''}`}>
-                {formatCost(result.cost)} IRT
+                {faPrice(result.cost)}
               </span>
             </div>
           </div>

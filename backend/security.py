@@ -356,10 +356,17 @@ MAX_CONCURRENT_SESSIONS = 3
 
 
 async def track_session(token: str, user_id: int, request: Request) -> None:
-    """Track session metadata and enforce concurrent session limit.
+    """Track session metadata and enforce the concurrent-session limit.
 
     Stores session metadata (IP, user-agent, created_at) in Redis.
     If user exceeds MAX_CONCURRENT_SESSIONS, revokes the oldest session.
+
+    The per-user set is `sessions:{uid}` -- the same one dependencies.py's
+    `_create_session` writes and `/auth/logout-all` reads. This used to keep
+    its own parallel `active_sessions:{uid}` set, which meant revoking a
+    session here removed it from one set but left it in the other, so
+    logout-all still walked a token that no longer existed and the limit was
+    counted against a set nothing else maintained. One set, one truth.
     """
     try:
         metadata = {
@@ -372,10 +379,8 @@ async def track_session(token: str, user_id: int, request: Request) -> None:
         session_key = f'session_meta:{token}'
         await _get_redis().setex(session_key, 86400 * 7, _json.dumps(metadata))
 
-        # Track active sessions per user for concurrent limit
-        user_sessions_key = f'active_sessions:{user_id}'
+        user_sessions_key = f'sessions:{user_id}'
         await _get_redis().sadd(user_sessions_key, token)
-        await _get_redis().expire(user_sessions_key, 86400 * 7)
 
         # Enforce concurrent session limit
         members = await _get_redis().smembers(user_sessions_key)
@@ -403,10 +408,14 @@ async def track_session(token: str, user_id: int, request: Request) -> None:
 
 
 async def _revoke_session(token: str, user_id: int) -> None:
-    """Revoke a single session and clean up tracking data."""
+    """Revoke a single session and clean up its tracking data.
+
+    Removes the token from `sessions:{uid}` -- the same set _create_session
+    and /auth/logout-all use -- so a revoked session leaves nothing behind.
+    """
     try:
         await _get_redis().delete(f'session:{token}', f'session_meta:{token}')
-        await _get_redis().srem(f'active_sessions:{user_id}', token)
+        await _get_redis().srem(f'sessions:{user_id}', token)
     except Exception:
         pass
 

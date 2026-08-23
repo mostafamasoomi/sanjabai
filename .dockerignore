@@ -10,3 +10,7 @@ audit/
 *.bak.*
 *.orig
 *.rej
+
+# Syncthing / macOS artefacts (Obsidian vault syncs this tree)
+*.sync-conflict-*
+.DS_Store

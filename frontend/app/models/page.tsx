@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { Skeleton, EmptyState, toast } from '@/components/ui'
-import { useAuth } from '@/lib/auth'
 import {
   useCatalog,
   priceBand,
@@ -14,7 +13,7 @@ import {
   CONTEXT_BAND_ORDER,
 } from '@/lib/useCatalog'
 import { Num, faNum } from '@/lib/format'
-import { HEALTH_LABEL, healthOf } from '@/app/chat/components/modelUtils'
+import { HEALTH_LABEL, healthOf, isUsableModel } from '@/app/chat/components/modelUtils'
 import type { Availability, ModelCatalogItem } from '@/types/catalog'
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -44,10 +43,14 @@ const AVAILABILITY_NOTE: Partial<Record<Availability, string>> = {
    Card
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function ModelTile({ model, probe, allModels }: { model: ModelCatalogItem; probe?: { ok: boolean }; allModels: ModelCatalogItem[] }) {
+function ModelTile({ model, allModels }: { model: ModelCatalogItem; allModels: ModelCatalogItem[] }) {
   const health = healthOf(model)
   const note = AVAILABILITY_NOTE[model.availability]
   const band = priceBand(model, allModels)
+  // Same usability check ModelPicker filters chat model selection by
+  // (status !== 'down') — this link must not offer a chat that the picker
+  // itself would refuse to start.
+  const usable = isUsableModel(model)
 
   return (
     <article className="model-tile">
@@ -59,7 +62,6 @@ function ModelTile({ model, probe, allModels }: { model: ModelCatalogItem; probe
           <p className="model-tile__provider">{PRICE_BAND_LABEL[band]}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {probe && <span className="text-xs">{probe.ok ? '✅' : '❌'}</span>}
           <span className={`model-health-badge model-health-${health.status}`}>
             <span className="model-health-dot" style={{ background: 'currentColor' }} aria-hidden />
             {HEALTH_LABEL[health.status]}
@@ -112,15 +114,34 @@ function ModelTile({ model, probe, allModels }: { model: ModelCatalogItem; probe
         {/* Secondary, not primary: on a page whose job is comparison, three
             saturated bars all reading "شروع چت با <title>" were the loudest
             thing on screen and repeated information already in the heading.
-            The model name lives in the accessible name instead. */}
-        <a
-          href={`/chat?model=${encodeURIComponent(model.id)}`}
-          className="btn btn-secondary btn-sm"
-          aria-label={`شروع چت با ${model.displayName}`}
-        >
-          <Icon name="chat" size={14} />
-          شروع چت
-        </a>
+            The model name lives in the accessible name instead.
+
+            Only linked when the model is usable: ModelPicker (the chat
+            page's own model selector) filters out anything with
+            health.status === 'down', so a link into /chat for a down model
+            would land the user on a picker that refuses the very model
+            this button promised. */}
+        {usable ? (
+          <a
+            href={`/chat?model=${encodeURIComponent(model.id)}`}
+            className="btn btn-secondary btn-sm"
+            aria-label={`شروع چت با ${model.displayName}`}
+          >
+            <Icon name="chat" size={14} />
+            شروع چت
+          </a>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            disabled
+            title="این مدل در حال حاضر در دسترس نیست"
+            aria-label={`${model.displayName} در حال حاضر در دسترس نیست`}
+          >
+            <Icon name="chat" size={14} />
+            در دسترس نیست
+          </button>
+        )}
       </div>
     </article>
   )
@@ -132,27 +153,9 @@ function ModelTile({ model, probe, allModels }: { model: ModelCatalogItem; probe
 
 export default function ModelsPage() {
   const { models, loading, error } = useCatalog()
-  const { token } = useAuth()
   const [filter, setFilter] = useState('all')
   const [contextFilter, setContextFilter] = useState('all')
   const [search, setSearch] = useState('')
-  const [testing, setTesting] = useState(false)
-  const [testResults, setTestResults] = useState<{ id: string; ok: boolean }[]>([])
-
-  const handleTestModels = async () => {
-    setTesting(true)
-    setTestResults([])
-    try {
-      const t = token || localStorage.getItem('sanjabai_auth_token')
-      const r = await fetch('/api/admin/test-models', { headers: { Authorization: `Bearer ${t}` } })
-      const d = await r.json()
-      setTestResults(d.results || [])
-    } catch {
-      toast('خطا در تست مدل‌ها', 'error')
-    } finally {
-      setTesting(false)
-    }
-  }
 
   // Surface catalog load failures as a toast (design-system error state).
   useEffect(() => {
@@ -194,6 +197,13 @@ export default function ModelsPage() {
     setSearch('')
   }
 
+  // "تست همه مدل‌ها" used to live here, calling the admin-only
+  // /api/admin/test-models endpoint. It is now admin_required-gated
+  // (backend/content.py:1092) — every ordinary user got a silent no-op
+  // (the fetch was never checked for res.ok) while also being able to
+  // trigger one real upstream call per model. Removed rather than
+  // admin-gated: this is a public page, and the action never belonged on
+  // it — model testing is an admin-panel concern.
   const header = (
     <header className="models-header">
       <div>
@@ -202,10 +212,6 @@ export default function ModelsPage() {
           همه مدل‌ها از یک پنل — وضعیت هر مدل به‌صورت زنده اندازه‌گیری می‌شود.
         </p>
       </div>
-      <button className="btn btn-sm btn-secondary" onClick={handleTestModels} disabled={testing}>
-        <Icon name="refresh" size={14} />
-        {testing ? 'در حال تست...' : 'تست همه مدل‌ها'}
-      </button>
     </header>
   )
 
@@ -344,30 +350,9 @@ export default function ModelsPage() {
               key={m.id}
               model={m}
               allModels={models}
-              probe={testResults.find((r) => r.id === m.id || r.id === m.providerModelId)}
             />
           ))}
         </div>
-      )}
-
-      {testResults.length > 0 && (
-        <section className="card">
-          <h2 className="card-title" style={{ marginBottom: 'var(--space-3)' }}>
-            نتایج تست مدل‌ها — {faNum(testResults.filter((r) => r.ok).length)} از{' '}
-            {faNum(testResults.length)} فعال
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-            {testResults.map((r) => (
-              <div
-                key={r.id}
-                className={`flex items-center gap-2 p-2 rounded ${r.ok ? 'bg-[var(--positive)]/10' : 'bg-[var(--danger)]/10'}`}
-              >
-                <span>{r.ok ? '✅' : '❌'}</span>
-                <span className="truncate" dir="ltr">{r.id}</span>
-              </div>
-            ))}
-          </div>
-        </section>
       )}
     </div>
   )

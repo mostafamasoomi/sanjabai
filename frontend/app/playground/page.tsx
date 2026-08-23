@@ -74,7 +74,11 @@ export default function PlaygroundPage() {
     if (token) headers['Authorization'] = `Bearer ${token}`
 
     try {
-      const res = await apiFetch('/api/chat', {
+      // Real backend route — /api/chat does not exist (only /v1/chat/completions,
+      // /v1/smart-chat, /v1/chat/with-file; backend/chat.py:303). The curl
+      // snippet shown alongside this form already used the right path; the
+      // button itself never did.
+      const res = await apiFetch('/v1/chat/completions', {
         method: 'POST',
         headers,
         body: JSON.stringify(requestBody),

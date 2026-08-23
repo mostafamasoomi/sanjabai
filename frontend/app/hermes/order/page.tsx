@@ -57,6 +57,27 @@ export default function HermesOrderPage() {
   const [offeringId, setOfferingId] = useState(searchParams.get('offering') || '')
   const [selected, setSelected] = useState<SelectedSkill[]>([])
 
+  // Payment-return banner. A declined/cancelled Hermes order redirects back
+  // here with ?payment=failed (backend/payment_endpoints.py:148); nothing used
+  // to read it, so the user landed on the order form with no explanation.
+  const [paymentBanner, setPaymentBanner] = useState<{ ok: boolean; text: string } | null>(null)
+
+  useEffect(() => {
+    const payment = searchParams.get('payment')
+    let banner: { ok: boolean; text: string } | null = null
+    if (payment === 'failed') {
+      banner = { ok: false, text: 'پرداخت سفارش ناموفق بود یا لغو شد. مبلغی از حساب شما کسر نشده است؛ می‌توانید دوباره تلاش کنید.' }
+    } else if (payment === 'error') {
+      banner = { ok: false, text: 'خطایی در پردازش پرداخت رخ داد. اگر مبلغی کسر شده باشد، به‌زودی بازمی‌گردد.' }
+    }
+    if (banner) {
+      setPaymentBanner(banner)
+      const url = new URL(window.location.href)
+      url.searchParams.delete('payment')
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash)
+    }
+  }, [searchParams])
+
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -145,6 +166,34 @@ export default function HermesOrderPage() {
   return (
     <div className="flex flex-col gap-6" style={{ maxWidth: '48rem' }}>
       <h1 className="page-title">سفارش سرور هرمس</h1>
+
+      {/* Payment-return banner */}
+      {paymentBanner && (
+        <div
+          role="status"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            padding: '0.875rem 1rem',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--danger)',
+            background: 'color-mix(in srgb, var(--danger) 12%, transparent)',
+          }}
+        >
+          <span style={{ flexShrink: 0, color: 'var(--danger)' }}>
+            <Icon name="warning" size={18} />
+          </span>
+          <span style={{ flex: 1, fontSize: '0.875rem', color: 'var(--text-primary)' }}>{paymentBanner.text}</span>
+          <button
+            onClick={() => setPaymentBanner(null)}
+            aria-label="بستن"
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'inline-flex' }}
+          >
+            <Icon name="close" size={16} />
+          </button>
+        </div>
+      )}
 
       {/* ── Step 1: offering ── */}
       <section className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>

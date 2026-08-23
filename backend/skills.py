@@ -20,6 +20,27 @@ from services.skill_injection import MAX_SKILLS_INJECTED
 router = APIRouter()
 
 
+def _render_skill_prompt(template: str, variables: dict[str, str]) -> str:
+    """Substitute skill-template variables into `template`.
+
+    UI-documented form is {{var}} (frontend/app/skills/page.tsx); {var} is a
+    legacy single-brace form some existing templates still use. Must
+    substitute {{var}} FIRST: since "{{name}}" contains "{name}" as a
+    substring, doing the single-brace pass first would leave the outer
+    braces stranded (-> "{Bob}" instead of "Bob"). str.replace() is a single
+    non-recursive scan, so running the double-brace pass first and then the
+    single-brace pass is safe -- text just substituted in (e.g. a value that
+    itself contains "{other}") is never rescanned. A variable with no entry
+    in `variables` is left as literal text, unchanged (existing behavior).
+    """
+    rendered = template
+    for var_name, var_value in variables.items():
+        rendered = rendered.replace('{{' + var_name + '}}', var_value)
+    for var_name, var_value in variables.items():
+        rendered = rendered.replace('{' + var_name + '}', var_value)
+    return rendered
+
+
 class SkillTemplateCreate(BaseModel):
     title: str
     title_fa: str
@@ -449,9 +470,7 @@ async def use_skill_template(request: Request, template_id: int, payload: SkillU
                 {'usage_count': SkillTemplate.usage_count + 1, 'updated_at': now},
             )
             await session.commit()
-            rendered = row.prompt_template
-            for var_name, var_value in payload.variables.items():
-                rendered = rendered.replace('{' + var_name + '}', var_value)
+            rendered = _render_skill_prompt(row.prompt_template, payload.variables)
             model = payload.model or row.default_model or ''
         return JSONResponse(jsonable_encoder({
             'rendered_prompt': rendered,

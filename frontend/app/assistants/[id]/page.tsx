@@ -7,6 +7,7 @@ import { apiFetch } from '@/lib/apiFetch'
 import { useCatalog, priceBand, PRICE_BAND_LABEL } from '@/lib/useCatalog'
 import { toast } from '@/components/ui'
 import { Icon, type IconName } from '@/components/ui/Icon'
+import { faDate } from '@/lib/format'
 
 /* ═══════════════════════════════════════════════════════════════
    Types
@@ -248,7 +249,7 @@ export default function AssistantDetailPage() {
           </h1>
           {!isOwner && (
             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              ساخته شده در {new Date(assistant.created_at).toLocaleDateString('fa-IR')}
+              ساخته شده در {faDate(assistant.created_at)}
             </p>
           )}
         </div>

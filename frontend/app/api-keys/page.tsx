@@ -6,7 +6,7 @@ import { useAuth } from '@/lib/auth'
 import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
+import { faNum, faDate } from '@/lib/format'
 import { ApiKeyRevealModal } from '@/components/ApiKeyRevealModal'
 
 // Shared Persian message for the (expected-rare) CSRF-rejection path — the
@@ -116,10 +116,7 @@ export default function ApiKeysPage() {
     }
   }
 
-  const formatDate = (s: string | null) => {
-    if (!s) return '—'
-    return new Date(s).toLocaleDateString('fa-IR', { year: 'numeric', month: 'short', day: 'numeric' })
-  }
+  const formatDate = (s: string | null) => faDate(s)
 
   return (
     <div className="apikeys-page">

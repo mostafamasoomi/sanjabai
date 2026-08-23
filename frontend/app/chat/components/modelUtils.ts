@@ -44,11 +44,6 @@ export function isUsableModel(m: Pick<ModelCatalogItem, 'health'>): boolean {
   return healthOf(m).status !== 'down'
 }
 
-/** True only when the model is actively answering. */
-export function isHealthyModel(m: Pick<ModelCatalogItem, 'health'>): boolean {
-  return healthOf(m).status === 'healthy'
-}
-
 export const HEALTH_LABEL: Record<HealthStatus, string> = {
   healthy: 'سالم',
   degraded: 'ناپایدار',
@@ -83,16 +78,6 @@ export function formatPriceIRT(price: number): string {
   // word, a slash, then a Latin M, which the RTL run reorders. Spelled out in
   // Persian it is unambiguous.
   return `${faNum(price)} تومان/میلیون`
-}
-
-export function formatPricePair(
-  input: number | undefined,
-  output: number | undefined
-): { input: string; output: string } {
-  return {
-    input: input != null ? formatPriceIRT(input) : '—',
-    output: output != null ? formatPriceIRT(output) : '—',
-  }
 }
 
 export function formatContextWindow(ctx: number): string {

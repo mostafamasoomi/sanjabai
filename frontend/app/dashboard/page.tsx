@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
@@ -24,7 +24,11 @@ type UserProfile = {
 
 type Usage = {
   total_spent_this_month: number
-  turns: number
+  // The count of billable calls this month, as returned by /me/usage
+  // (backend/admin_usage_me.py). This is the field the "تعداد مکالمات" card
+  // actually renders -- it used to be reached through `as any` because the
+  // type declared a `turns` field the endpoint never sends.
+  event_count_this_month: number
   total_input_tokens_this_month: number
 }
 
@@ -282,6 +286,13 @@ function InfoRow({ icon, label, value }: { icon: IconName; label: string; value:
 export default function DashboardPage() {
   const { token, user, loading: authLoading } = useAuth()
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Payment-return banner. The gateway callback redirects here with
+  // ?subscription=active on a successful plan purchase and ?payment=failed on
+  // a decline/cancel (backend/payment_endpoints.py). Nothing used to read
+  // those params, so a real charge landed with zero feedback.
+  const [paymentBanner, setPaymentBanner] = useState<{ ok: boolean; text: string } | null>(null)
 
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [usage, setUsage] = useState<Usage | null>(null)
@@ -314,7 +325,10 @@ export default function DashboardPage() {
         fetch('/api/me/usage', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),
         fetch('/api/wallet', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),
         fetch('/api/wallet/ledger', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),
-        fetch('/api/models', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),
+        // /api/models does not exist (404) -- the real catalog endpoint is
+        // /catalog/models (the same one wallet uses). The 404 is why the
+        // "N مدل در دسترس" quick-action read ۰ forever.
+        fetch('/api/catalog/models', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),
         fetch('/api/subscription', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),
         fetch('/api/billing/settings', { headers }).then((r) => r.ok ? r.json() : Promise.reject(r.status)),
       ])
@@ -347,6 +361,31 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!authLoading) fetchData()
   }, [authLoading, fetchData])
+
+  /* ─── Payment-return feedback ─── */
+  useEffect(() => {
+    const payment = searchParams.get('payment')
+    const subscription = searchParams.get('subscription')
+    let banner: { ok: boolean; text: string } | null = null
+    if (subscription === 'active') {
+      banner = { ok: true, text: 'اشتراک شما با موفقیت فعال شد.' }
+    } else if (payment === 'success') {
+      banner = { ok: true, text: 'پرداخت با موفقیت انجام شد.' }
+    } else if (payment === 'failed') {
+      banner = { ok: false, text: 'پرداخت ناموفق بود یا لغو شد. مبلغی از حساب شما کسر نشده است.' }
+    } else if (payment === 'error') {
+      banner = { ok: false, text: 'خطایی در پردازش پرداخت رخ داد. اگر مبلغی کسر شده باشد، به‌زودی بازمی‌گردد.' }
+    }
+    if (banner) {
+      setPaymentBanner(banner)
+      // Strip the params so a refresh (or back/forward) does not replay the
+      // banner over a payment the user already saw the result of.
+      const url = new URL(window.location.href)
+      url.searchParams.delete('payment')
+      url.searchParams.delete('subscription')
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash)
+    }
+  }, [searchParams])
 
   /* ─── Toggle PAYG ─── */
   const togglePayg = useCallback(async () => {
@@ -477,6 +516,37 @@ export default function DashboardPage() {
     // the measure it takes, so every row fills the width instead of collapsing
     // to a half-width column pinned to the inline-start edge.
     <div className="dash-grid">
+      {/* ─── Payment-return banner ─── */}
+      {paymentBanner && (
+        <div
+          className="dash-span-12"
+          role="status"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            padding: '0.875rem 1rem',
+            borderRadius: 'var(--radius-md)',
+            border: `1px solid ${paymentBanner.ok ? 'var(--positive)' : 'var(--danger)'}`,
+            background: paymentBanner.ok
+              ? 'color-mix(in srgb, var(--positive) 12%, transparent)'
+              : 'color-mix(in srgb, var(--danger) 12%, transparent)',
+          }}
+        >
+          <span className={paymentBanner.ok ? 'text-[var(--positive)]' : 'text-[var(--danger)]'} style={{ flexShrink: 0 }}>
+            <Icon name={paymentBanner.ok ? 'check' : 'warning'} size={18} />
+          </span>
+          <span style={{ flex: 1, fontSize: '0.875rem', color: 'var(--text-primary)' }}>{paymentBanner.text}</span>
+          <button
+            onClick={() => setPaymentBanner(null)}
+            aria-label="بستن"
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'inline-flex' }}
+          >
+            <Icon name="close" size={16} />
+          </button>
+        </div>
+      )}
+
       {/* ─── Header ─── */}
       <header className="dash-span-12" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
@@ -514,7 +584,7 @@ export default function DashboardPage() {
         <StatCard icon="payment" label="کل هزینه" value={usage?.total_spent_this_month ?? 0} unit="تومان" />
       </div>
       <div className="dash-span-3">
-        <StatCard icon="chat" label="تعداد مکالمات" value={(usage as any)?.event_count_this_month ?? 0} unit="مکالمه" />
+        <StatCard icon="chat" label="تعداد مکالمات" value={usage?.event_count_this_month ?? 0} unit="مکالمه" />
       </div>
       <div className="dash-span-3">
         <StatCard icon="code" label="کل توکن‌ها" value={usage?.total_input_tokens_this_month ?? 0} unit="توکن" />

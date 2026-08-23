@@ -299,7 +299,8 @@ async def list_task_executions(request: Request, task_id: int) -> JSONResponse:
         execs = res2.scalars().all()
         return JSONResponse([{
             'id': e.id, 'task_id': e.task_id, 'status': e.status,
-            'result': e.result, 'tokens_used': e.tokens_used, 'error': e.error,
+            'result': e.result, 'tokens_used': e.tokens_used,
+            'cost_toman': e.cost_toman, 'error': e.error,
             'started_at': e.started_at.isoformat() if e.started_at else None,
             'completed_at': e.completed_at.isoformat() if e.completed_at else None,
             'created_at': e.created_at.isoformat() if e.created_at else None,

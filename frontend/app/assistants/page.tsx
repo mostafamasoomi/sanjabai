@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon, type IconName } from '@/components/ui/Icon'
+import { faDate } from '@/lib/format'
 
 /* ═══════════════════════════════════════════════════════════════
    Types
@@ -128,7 +129,7 @@ function AssistantCard({ assistant, onClick }: { assistant: Assistant; onClick: 
           </span>
         )}
         <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginRight: 'auto' }}>
-          {new Date(assistant.created_at).toLocaleDateString('fa-IR')}
+          {faDate(assistant.created_at)}
         </span>
       </div>
     </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { Icon } from '@/components/ui/Icon'
 import { Spinner, EmptyState, toast } from '@/components/ui'
@@ -39,8 +40,32 @@ const STATUS_BADGE: Record<string, string> = {
 
 export default function HermesOrdersPage() {
   const { token, user, loading: authLoading } = useAuth()
+  const searchParams = useSearchParams()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
+
+  // Payment-return banner. A paid Hermes order redirects here with
+  // ?payment=success (backend/payment_endpoints.py:253); nothing used to read
+  // it, so a successful purchase landed with no confirmation.
+  const [paymentBanner, setPaymentBanner] = useState<{ ok: boolean; text: string } | null>(null)
+
+  useEffect(() => {
+    const payment = searchParams.get('payment')
+    let banner: { ok: boolean; text: string } | null = null
+    if (payment === 'success') {
+      banner = { ok: true, text: 'پرداخت با موفقیت انجام شد و سفارش شما ثبت شد. سفارش در صف تحویل قرار گرفت.' }
+    } else if (payment === 'failed') {
+      banner = { ok: false, text: 'پرداخت ناموفق بود یا لغو شد. مبلغی از حساب شما کسر نشده است.' }
+    } else if (payment === 'error') {
+      banner = { ok: false, text: 'خطایی در پردازش پرداخت رخ داد. اگر مبلغی کسر شده باشد، به‌زودی بازمی‌گردد.' }
+    }
+    if (banner) {
+      setPaymentBanner(banner)
+      const url = new URL(window.location.href)
+      url.searchParams.delete('payment')
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     if (!token) return
@@ -78,6 +103,36 @@ export default function HermesOrdersPage() {
           سفارش جدید
         </Link>
       </div>
+
+      {/* Payment-return banner */}
+      {paymentBanner && (
+        <div
+          role="status"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            padding: '0.875rem 1rem',
+            borderRadius: 'var(--radius-md)',
+            border: `1px solid ${paymentBanner.ok ? 'var(--positive)' : 'var(--danger)'}`,
+            background: paymentBanner.ok
+              ? 'color-mix(in srgb, var(--positive) 12%, transparent)'
+              : 'color-mix(in srgb, var(--danger) 12%, transparent)',
+          }}
+        >
+          <span style={{ flexShrink: 0, color: paymentBanner.ok ? 'var(--positive)' : 'var(--danger)' }}>
+            <Icon name={paymentBanner.ok ? 'check' : 'warning'} size={18} />
+          </span>
+          <span style={{ flex: 1, fontSize: '0.875rem', color: 'var(--text-primary)' }}>{paymentBanner.text}</span>
+          <button
+            onClick={() => setPaymentBanner(null)}
+            aria-label="بستن"
+            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'inline-flex' }}
+          >
+            <Icon name="close" size={16} />
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center" style={{ minHeight: '30vh' }}><Spinner size="lg" /></div>

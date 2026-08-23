@@ -1058,11 +1058,16 @@ async def refresh_pricing() -> dict[str, Any]:
 @router.post('/admin/refresh-pricing')
 async def admin_refresh_pricing(request: Request) -> JSONResponse:
     """Admin endpoint to trigger a pricing refresh."""
-    from dependencies import _get_user_id
-    uid = await _get_user_id(request)
-    # Allow if admin token in header
+    # The old test here was `if not uid and admin_tok != ADMIN_TOKEN`, which let
+    # through ANY logged-in user- merely being authenticated was enough, because
+    # `uid` is truthy for every ordinary account. That is a privilege check on
+    # the wrong predicate. refresh_pricing() calls upstream pricing sources and
+    # rewrites our pricing table, so a normal user could trigger repeated
+    # upstream work and catalog churn through an /admin/ route. Now it needs a
+    # real admin session, or the X-Admin-Token shared secret that the
+    # non-interactive callers have always used.
     admin_tok = request.headers.get('X-Admin-Token', '')
-    if not uid and admin_tok != ADMIN_TOKEN:
+    if admin_tok != ADMIN_TOKEN and not await admin_required(request):
         return JSONResponse({'detail': 'admin access required'}, status_code=403)
     result = await refresh_pricing()
     return JSONResponse(jsonable_encoder(result))
@@ -1074,6 +1079,18 @@ async def admin_refresh_pricing(request: Request) -> JSONResponse:
 @router.get("/admin/test-models")
 async def test_all_models(request: Request):
     """Ping every model concurrently, return status, and mark healthy ones as recommended."""
+    # This route was reachable by ANY anonymous caller until 2026-08-23 -- it is
+    # named /admin/* and sits beside other /admin/ routes that do check, so the
+    # missing gate read as an oversight rather than a decision. Two things made
+    # it expensive rather than merely untidy- it fires one real upstream chat
+    # completion per available model (25 at the time) on every call, so anyone
+    # could burn provider money in a loop, squarely against "no request may be
+    # loss-making" -- and it then WRITES to the production catalog
+    # (UPDATE model_catalog SET recommended_for), so an anonymous request could
+    # change which models we recommend to real users. Verified open on
+    # production before this fix- an unauthenticated GET returned 200.
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'دسترسی مدیر لازم است'}, status_code=403)
     import httpx, asyncio
     async with async_session() as session:
         res = await session.execute(sqlalchemy.text(

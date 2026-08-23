@@ -6,6 +6,7 @@ import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { faNum } from '@/lib/format'
+import SkillActivationPanel from './SkillActivationPanel'
 
 /* ═══════════════════════════════════════════════════════════════
    Types
@@ -918,6 +919,8 @@ export default function SkillsPage() {
           ایجاد اسکیل جدید
         </button>
       </div>
+
+      <SkillActivationPanel />
 
       {/* ── Search + Sort ── */}
       <div className="flex gap-3 items-center flex-wrap">

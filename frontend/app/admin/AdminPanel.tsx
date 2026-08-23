@@ -20,6 +20,7 @@ import SecuritySection from './sections/SecuritySection'
 const MonitoringTab = dynamic(() => import('./components/MonitoringTab'), { ssr: false })
 const MarkupSection = dynamic(() => import('./sections/MarkupSection'), { ssr: false })
 const ExchangeRateSection = dynamic(() => import('./sections/ExchangeRateSection'), { ssr: false })
+const UpstreamOverheadSection = dynamic(() => import('./sections/UpstreamOverheadSection'), { ssr: false })
 const ImagePricingSection = dynamic(() => import('./sections/ImagePricingSection'), { ssr: false })
 const PackagesSection = dynamic(() => import('./sections/PackagesSection'), { ssr: false })
 const AnalyticsSection = dynamic(() => import('./sections/AnalyticsSection'), { ssr: false })
@@ -35,7 +36,7 @@ const LogicalModelsSection = dynamic(() => import('./sections/LogicalModelsSecti
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Page = 'dashboard' | 'analytics' | 'site-control' | 'logical-models' | 'pricing' | 'markup' | 'exchange-rate' | 'image-pricing' | 'packages' | 'plans' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'model-ops' | 'users' | 'security' | 'monitoring'
+type Page = 'dashboard' | 'analytics' | 'site-control' | 'logical-models' | 'pricing' | 'markup' | 'exchange-rate' | 'upstream-overhead' | 'image-pricing' | 'packages' | 'plans' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'model-ops' | 'users' | 'security' | 'monitoring'
 
 export interface Analytics {
   user_count: number
@@ -186,6 +187,7 @@ const NAV_ITEMS: { key: Page; label: string; icon: IconName }[] = [
   { key: 'pricing', label: 'تعرفه‌ها', icon: 'pricing' },
   { key: 'markup', label: 'درصد سود', icon: 'chart' },
   { key: 'exchange-rate', label: 'نرخ ارز', icon: 'globe' },
+  { key: 'upstream-overhead', label: 'توکن تزریقی بالادست', icon: 'chart' },
   { key: 'image-pricing', label: 'قیمت‌گذاری تصویر', icon: 'camera' },
   { key: 'packages', label: 'بسته‌ها', icon: 'wallet' },
   { key: 'plans', label: 'پلن و اشتراک', icon: 'wallet' },
@@ -998,6 +1000,7 @@ export default function AdminPage() {
           )}
           {page === 'markup' && <MarkupSection api={api} />}
           {page === 'exchange-rate' && <ExchangeRateSection api={api} />}
+          {page === 'upstream-overhead' && <UpstreamOverheadSection api={api} />}
           {page === 'image-pricing' && <ImagePricingSection api={api} />}
           {page === 'packages' && <PackagesSection api={api} />}
           {page === 'analytics' && <AnalyticsSection api={api} />}

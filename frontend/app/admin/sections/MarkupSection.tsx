@@ -54,6 +54,9 @@ function previewPrice(base: number | null | undefined, pct: number): number {
 
 export default function MarkupSection({ api }: MarkupSectionProps) {
   const [loading, setLoading] = useState(true)
+  // Distinct from an empty table: a failed load must not look like "zero
+  // models exist" once the toast fades (see PlansSection's plansError).
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const [globalPct, setGlobalPct] = useState(0)
   const [globalInput, setGlobalInput] = useState('0')
@@ -70,6 +73,7 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
 
   const load = useCallback(async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       const [gRes, mRes] = await Promise.all([
         api('/api/admin/markup/global'),
@@ -86,8 +90,10 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
       const next: Record<string, string> = {}
       for (const r of m) next[r.id] = r.markup_pct == null ? '' : String(r.markup_pct)
       setRowInputs(next)
-    } catch {
-      toast('خطا در دریافت اطلاعات درصد سود', 'error')
+    } catch (err) {
+      const msg = err instanceof Error && err.message !== 'unauthorized' ? err.message : 'خطا در دریافت اطلاعات درصد سود'
+      setLoadError(msg)
+      toast(msg, 'error')
     } finally {
       setLoading(false)
     }
@@ -106,8 +112,8 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
       await api('/api/admin/markup/global', { method: 'POST', body: JSON.stringify({ markup_pct: pct }) })
       toast('درصد سراسری ذخیره شد', 'success')
       await load()
-    } catch {
-      toast('ذخیره درصد سراسری ناموفق بود', 'error')
+    } catch (err) {
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'ذخیره درصد سراسری ناموفق بود', 'error')
     } finally {
       setSavingGlobal(false)
     }
@@ -127,8 +133,8 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
       })
       toast(pct === null ? 'override پاک شد — این مدل درصد سراسری را دارد' : 'override این مدل ذخیره شد', 'success')
       await load()
-    } catch {
-      toast('ذخیره ناموفق بود', 'error')
+    } catch (err) {
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'ذخیره ناموفق بود', 'error')
     } finally {
       setSavingRow(null)
     }
@@ -176,8 +182,8 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
       toast(`${faNum(body.updated ?? selected.size)} مدل به‌روزرسانی شد`, 'success')
       setSelected(new Set())
       await load()
-    } catch {
-      toast('اعمال گروهی ناموفق بود', 'error')
+    } catch (err) {
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'اعمال گروهی ناموفق بود', 'error')
     } finally {
       setBulkSaving(false)
     }
@@ -300,6 +306,10 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
             <tbody>
               {loading ? (
                 <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">در حال بارگذاری…</td></tr>
+              ) : loadError ? (
+                <tr><td colSpan={8} className="p-6 text-center text-sm" style={{ color: 'var(--danger, #ef4444)' }}>
+                  {loadError} — <button className="underline" onClick={load}>تلاش دوباره</button>
+                </td></tr>
               ) : visibleRows.length === 0 ? (
                 <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">مدلی یافت نشد</td></tr>
               ) : (

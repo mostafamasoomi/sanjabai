@@ -202,7 +202,7 @@ async def admin_user_detail(request: Request, uid: int) -> JSONResponse:
         # Usage events total
         usage_res = await session.execute(
             sqlalchemy.text('''SELECT COALESCE(SUM(input_tokens + output_tokens), 0) as total,
-                               COUNT(*) as events, COALESCE(SUM(charge_amount), 0) as total_cost
+                               COUNT(*) as events, COALESCE(SUM(charged_amount), 0) as total_cost
                                FROM usage_events WHERE user_id = :uid'''),
             {'uid': uid},
         )
@@ -277,7 +277,7 @@ async def admin_user_usage(request: Request, uid: int) -> JSONResponse:
             sqlalchemy.text('''SELECT model, COUNT(*) as calls,
                               SUM(input_tokens) as input_tokens,
                               SUM(output_tokens) as output_tokens,
-                              SUM(charge_amount) as total_cost,
+                              SUM(charged_amount) as total_cost,
                               MAX(created_at) as last_used
                               FROM usage_events WHERE user_id = :uid
                               GROUP BY model ORDER BY total_cost DESC'''),
@@ -287,7 +287,7 @@ async def admin_user_usage(request: Request, uid: int) -> JSONResponse:
         # Daily usage last 30 days
         daily = await session.execute(
             sqlalchemy.text('''SELECT DATE(created_at) as day, SUM(input_tokens + output_tokens) as tokens,
-                              SUM(charge_amount) as cost, COUNT(*) as calls
+                              SUM(charged_amount) as cost, COUNT(*) as calls
                               FROM usage_events WHERE user_id = :uid
                               AND created_at > NOW() - INTERVAL '30 days'
                               GROUP BY DATE(created_at) ORDER BY day DESC'''),

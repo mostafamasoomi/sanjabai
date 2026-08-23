@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
 import { faNum, faPrice, faDate } from '@/lib/format'
@@ -100,18 +100,28 @@ export default function UserDetailDrawer({ api, uid, onClose, onBanToggled }: Us
   const [editSaving, setEditSaving] = useState(false)
   const [banBusy, setBanBusy] = useState(false)
 
+  // Always the LATEST `uid` prop, updated synchronously every render (not
+  // just in an effect) so an in-flight request started for a previous user
+  // can tell, the moment it resolves, whether the drawer has since moved on
+  // to a different user -- see loadDetail/loadTab below.
+  const uidRef = useRef(uid)
+  uidRef.current = uid
+
   const loadDetail = useCallback(async () => {
+    const requestedUid = uid
     setDetailStatus('loading')
     setDetailError('')
     try {
-      const res = await api(`/api/admin/users/${uid}/detail`)
+      const res = await api(`/api/admin/users/${requestedUid}/detail`)
       const data: UserDetail = await res.json()
+      if (uidRef.current !== requestedUid) return // a different user is open now — discard
       setDetail(data)
       setEditEmail(data.user.email || '')
       setEditPhone(data.user.phone || '')
       setEditDailyLimit(data.quota ? String(data.quota.daily_limit) : '')
       setDetailStatus('ready')
     } catch (e) {
+      if (uidRef.current !== requestedUid) return
       setDetailStatus('error')
       setDetailError(errMessage(e, 'خطا در دریافت اطلاعات کاربر'))
     }
@@ -128,71 +138,70 @@ export default function UserDetailDrawer({ api, uid, onClose, onBanToggled }: Us
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid])
 
-  const loadLedger = useCallback(async () => {
-    setLedgerState({ status: 'loading', data: null, error: '' })
+  // One shape shared by the four data-heavy tabs below (ledger/payments/
+  // usage/conversations) -- was four copy-pasted loaders that only differed
+  // in the endpoint suffix, the setState call, and the response->payload
+  // mapping. `transform` turns the raw JSON body into the tab's payload
+  // type; the stale-uid guard mirrors loadDetail's above.
+  const loadTab = useCallback(async <T,>(
+    endpointSuffix: string,
+    setState: (s: TabState<T>) => void,
+    transform: (json: any) => T,
+    fallback: string,
+  ) => {
+    const requestedUid = uid
+    setState({ status: 'loading', data: null, error: '' })
     try {
-      const res = await api(`/api/admin/users/${uid}/ledger`)
+      const res = await api(`/api/admin/users/${requestedUid}/${endpointSuffix}`)
       const j = await res.json()
-      setLedgerState({ status: 'ready', data: { items: j.items || [], total: j.total || 0 }, error: '' })
+      if (uidRef.current !== requestedUid) return
+      setState({ status: 'ready', data: transform(j), error: '' })
     } catch (e) {
-      setLedgerState({ status: 'error', data: null, error: errMessage(e, 'خطا در دریافت تراکنش‌ها') })
-    }
-  }, [api, uid])
-
-  const loadPayments = useCallback(async () => {
-    setPaymentsState({ status: 'loading', data: null, error: '' })
-    try {
-      const res = await api(`/api/admin/users/${uid}/payments`)
-      const j = await res.json()
-      setPaymentsState({
-        status: 'ready',
-        data: { payments: j.payments || [], subscriptions: j.subscriptions || [] },
-        error: '',
-      })
-    } catch (e) {
-      setPaymentsState({ status: 'error', data: null, error: errMessage(e, 'خطا در دریافت پرداخت‌ها') })
-    }
-  }, [api, uid])
-
-  const loadUsage = useCallback(async () => {
-    setUsageState({ status: 'loading', data: null, error: '' })
-    try {
-      const res = await api(`/api/admin/users/${uid}/usage`)
-      const j = await res.json()
-      setUsageState({ status: 'ready', data: { by_model: j.by_model || [], daily: j.daily || [] }, error: '' })
-    } catch (e) {
-      setUsageState({ status: 'error', data: null, error: errMessage(e, 'خطا در دریافت مصرف') })
-    }
-  }, [api, uid])
-
-  const loadConversations = useCallback(async () => {
-    setConvState({ status: 'loading', data: null, error: '' })
-    try {
-      const res = await api(`/api/admin/users/${uid}/conversations`)
-      const j = await res.json()
-      setConvState({ status: 'ready', data: { items: j.items || [], total: j.total || 0 }, error: '' })
-    } catch (e) {
-      setConvState({ status: 'error', data: null, error: errMessage(e, 'خطا در دریافت گفتگوها') })
+      if (uidRef.current !== requestedUid) return
+      setState({ status: 'error', data: null, error: errMessage(e, fallback) })
     }
   }, [api, uid])
 
   const openTab = (t: DrawerTab) => {
     setTab(t)
-    if (t === 'wallet' && ledgerState.status === 'idle') loadLedger()
-    if (t === 'payments' && paymentsState.status === 'idle') loadPayments()
-    if (t === 'usage' && usageState.status === 'idle') loadUsage()
-    if (t === 'conversations' && convState.status === 'idle') loadConversations()
+    if (t === 'wallet' && ledgerState.status === 'idle') {
+      loadTab<LedgerPayload>('ledger', setLedgerState, (j) => ({ items: j.items || [], total: j.total || 0 }), 'خطا در دریافت تراکنش‌ها')
+    }
+    if (t === 'payments' && paymentsState.status === 'idle') {
+      loadTab<PaymentsPayload>('payments', setPaymentsState, (j) => ({ payments: j.payments || [], subscriptions: j.subscriptions || [] }), 'خطا در دریافت پرداخت‌ها')
+    }
+    if (t === 'usage' && usageState.status === 'idle') {
+      loadTab<UsagePayload>('usage', setUsageState, (j) => ({ by_model: j.by_model || [], daily: j.daily || [] }), 'خطا در دریافت مصرف')
+    }
+    if (t === 'conversations' && convState.status === 'idle') {
+      loadTab<ConversationsPayload>('conversations', setConvState, (j) => ({ items: j.items || [], total: j.total || 0 }), 'خطا در دریافت گفتگوها')
+    }
   }
 
   // Ban/unban delegates the network call to AdminPanel's banUser (keeps the
   // outer list's badge in sync); this only mirrors the flip locally for
-  // instant feedback in the drawer.
-  const toggleBan = () => {
+  // instant feedback in the drawer. `onBanToggled` is typed `=> void` but
+  // AdminPanel's actual banUser is an async function that awaits the
+  // network call before returning -- `await`ing it here (Promise.resolve
+  // handles a genuinely void-returning caller too) keeps `banBusy` true,
+  // and the double-click guard armed, until that call has actually
+  // settled, not just until this synchronous function returns.
+  const toggleBan = async () => {
     if (!detail || banBusy) return
     setBanBusy(true)
-    onBanToggled(uid)
-    setDetail({ ...detail, user: { ...detail.user, banned: !detail.user.banned } })
-    setBanBusy(false)
+    const prevBanned = detail.user.banned
+    setDetail({ ...detail, user: { ...detail.user, banned: !prevBanned } })
+    try {
+      await Promise.resolve(onBanToggled(uid))
+    } catch {
+      // Defensive: today's banUser (AdminPanel.tsx) catches its own errors
+      // and always resolves, so this branch isn't exercised by the current
+      // prop -- but a future implementation that does reject must not
+      // leave the optimistic flip standing.
+      setDetail((d) => (d ? { ...d, user: { ...d.user, banned: prevBanned } } : d))
+    } finally {
+      setBanBusy(false)
+    }
   }
 
   const saveEdit = async () => {

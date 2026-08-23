@@ -164,3 +164,25 @@ class TestAdminAbout:
             'title': 'درباره ما', 'body': 'Test content.',
         }, headers=admin_headers)
         assert response.status_code == 200
+
+    def test_get_about_returns_stored_content(self, client, mock_async_session, admin_headers):
+        # Regression (session 11 A4): the panel loaded the about form from this
+        # GET; before it existed the 405 was swallowed, the form showed empty,
+        # and a save then wiped the live page. It must return the same
+        # title/body shape the POST accepts.
+        mock_async_session._execute_result = make_result(
+            fetchone=make_row(title='درباره ما', body='متن'))
+        response = client.get('/admin/about', headers=admin_headers)
+        assert response.status_code == 200
+        body = response.json()
+        assert body == {'title': 'درباره ما', 'body': 'متن'}
+
+    def test_get_about_empty_when_unset(self, client, mock_async_session, admin_headers):
+        mock_async_session._execute_result = make_result(fetchone=None)
+        response = client.get('/admin/about', headers=admin_headers)
+        assert response.status_code == 200
+        assert response.json() == {'title': '', 'body': ''}
+
+    def test_get_about_requires_admin(self, client):
+        response = client.get('/admin/about')
+        assert response.status_code == 401

@@ -4,7 +4,7 @@ import { Fragment, useState, useEffect, useCallback } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
 import { faNum, faPrice } from '@/lib/format'
-import { SectionHeader, Field } from './shared'
+import { SectionHeader, Field, NumInput } from './shared'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Packages — GapGPT-style credit packages: a Toman top-up that can also
@@ -92,21 +92,26 @@ function toDraft(p: PackageRow): Draft {
 }
 
 /** true when a quota is set (draft) with no ceiling -- the loss path the
-    backend rejects; mirrored here so the warning shows before a failed save. */
-function isLossPath(d: Draft): boolean {
+    backend rejects; mirrored here so the warning shows before a failed save.
+    Takes only the three fields it needs so it also works for the create
+    form's draft, which doesn't carry every `Draft` field. */
+function isLossPath(d: { request_quota: string; token_quota: string; max_cost_per_request_toman: string }): boolean {
   const hasQuota = d.request_quota.trim() !== '' || d.token_quota.trim() !== ''
   return hasQuota && d.max_cost_per_request_toman.trim() === ''
 }
 
-function NumInput({ value, onChange, width = 120, placeholder }: {
-  value: string; onChange: (v: string) => void; width?: number; placeholder?: string
-}) {
-  return (
-    <input
-      className="input" type="number" min={0} value={value} placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)} style={{ maxWidth: width }}
-    />
-  )
+type NewPackageDraft = {
+  id: string; name_fa: string; name_en: string
+  base_amount: string; total_credits: string; bonus_percent: string
+  request_quota: string; token_quota: string; max_cost_per_request_toman: string
+  validity_days: string; active: boolean
+}
+
+const EMPTY_NEW_PACKAGE: NewPackageDraft = {
+  id: '', name_fa: '', name_en: '',
+  base_amount: '', total_credits: '', bonus_percent: '',
+  request_quota: '', token_quota: '', max_cost_per_request_toman: '',
+  validity_days: '', active: true,
 }
 
 export default function PackagesSection({ api }: PackagesSectionProps) {
@@ -115,9 +120,17 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [saving, setSaving] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  // Distinct from an empty table: a failed load must not look like "no
+  // packages exist" once the toast fades.
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  const [showCreate, setShowCreate] = useState(false)
+  const [newPackage, setNewPackage] = useState<NewPackageDraft>(EMPTY_NEW_PACKAGE)
+  const [creating, setCreating] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       const res = await api('/api/admin/packages')
       const data: PackageRow[] = await res.json()
@@ -125,8 +138,10 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
       const next: Record<string, Draft> = {}
       for (const p of data) next[p.id] = toDraft(p)
       setDrafts(next)
-    } catch {
-      toast('خطا در دریافت بسته‌ها', 'error')
+    } catch (err) {
+      const msg = err instanceof Error && err.message !== 'unauthorized' ? err.message : 'خطا در دریافت بسته‌ها'
+      setLoadError(msg)
+      toast(msg, 'error')
     } finally {
       setLoading(false)
     }
@@ -171,20 +186,61 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
     }
     setSaving(id)
     try {
-      const res = await api(`/api/admin/packages/${encodeURIComponent(id)}`, {
+      // api() throws before returning on a non-2xx response (see
+      // ImagePricingSection.tsx's saveRowPrice), so a dedicated !res.ok
+      // branch here is unreachable -- the catch below is the only path.
+      await api(`/api/admin/packages/${encodeURIComponent(id)}`, {
         method: 'POST', body: JSON.stringify(payload),
       })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        toast(body.detail || 'ذخیره ناموفق بود', 'error')
-        return
-      }
       toast('بسته ذخیره شد', 'success')
       await load()
-    } catch {
-      toast('ذخیره ناموفق بود', 'error')
+    } catch (err) {
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'ذخیره ناموفق بود', 'error')
     } finally {
       setSaving(null)
+    }
+  }
+
+  const createPackage = async () => {
+    const id = newPackage.id.trim()
+    if (!id) { toast('شناسهٔ بسته الزامی است', 'error'); return }
+    if (!newPackage.name_fa.trim() || !newPackage.name_en.trim()) {
+      toast('نام فارسی و انگلیسی الزامی است', 'error')
+      return
+    }
+    if (isLossPath(newPackage)) {
+      toast(
+        'بسته‌ای که سهمیهٔ درخواست یا توکن دارد باید سقف هزینهٔ هر درخواست هم داشته باشد، وگرنه مسیر ضررده است',
+        'error',
+      )
+      return
+    }
+    const n = (s: string) => (s.trim() === '' ? null : Number(s))
+    setCreating(true)
+    try {
+      // backend/admin_packages.py::create_package -- `id` plus whichever of
+      // the live/quota/text fields are given; the legacy NOT-NULL trio
+      // (name/price/credits) is defaulted server-side, not sent from here.
+      await api('/api/admin/packages', {
+        method: 'POST',
+        body: JSON.stringify({
+          id, name_fa: newPackage.name_fa, name_en: newPackage.name_en,
+          active: newPackage.active,
+          base_amount: n(newPackage.base_amount), total_credits: n(newPackage.total_credits),
+          bonus_percent: n(newPackage.bonus_percent),
+          request_quota: n(newPackage.request_quota), token_quota: n(newPackage.token_quota),
+          max_cost_per_request_toman: n(newPackage.max_cost_per_request_toman),
+          validity_days: n(newPackage.validity_days),
+        }),
+      })
+      toast('بستهٔ جدید ایجاد شد', 'success')
+      setNewPackage(EMPTY_NEW_PACKAGE)
+      setShowCreate(false)
+      await load()
+    } catch (err) {
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'ایجاد بسته ناموفق بود', 'error')
+    } finally {
+      setCreating(false)
     }
   }
 
@@ -227,6 +283,10 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
             <tbody>
               {loading ? (
                 <tr><td colSpan={10} className="p-6 text-center text-sm text-muted">در حال بارگذاری…</td></tr>
+              ) : loadError ? (
+                <tr><td colSpan={10} className="p-6 text-center text-sm" style={{ color: 'var(--danger, #ef4444)' }}>
+                  {loadError} — <button className="underline" onClick={load}>تلاش دوباره</button>
+                </td></tr>
               ) : rows.length === 0 ? (
                 <tr><td colSpan={10} className="p-6 text-center text-sm text-muted">بسته‌ای یافت نشد</td></tr>
               ) : (
@@ -310,6 +370,70 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+          <button className="text-xs underline" onClick={() => setShowCreate((v) => !v)}>
+            {showCreate ? 'بستن فرم بستهٔ جدید' : '+ افزودن بسته'}
+          </button>
+          {showCreate && (
+            <div className="mt-3 space-y-3">
+              <div className="flex flex-wrap gap-3 items-end">
+                <Field label="شناسه (id)">
+                  <input className="input" dir="ltr" value={newPackage.id}
+                    onChange={(e) => setNewPackage({ ...newPackage, id: e.target.value })} style={{ maxWidth: 140 }} />
+                </Field>
+                <Field label="نام فارسی">
+                  <input className="input" value={newPackage.name_fa}
+                    onChange={(e) => setNewPackage({ ...newPackage, name_fa: e.target.value })} style={{ maxWidth: 150 }} />
+                </Field>
+                <Field label="نام انگلیسی">
+                  <input className="input" value={newPackage.name_en}
+                    onChange={(e) => setNewPackage({ ...newPackage, name_en: e.target.value })} style={{ maxWidth: 150 }} />
+                </Field>
+                <Field label="فعال">
+                  <input type="checkbox" checked={newPackage.active}
+                    onChange={(e) => setNewPackage({ ...newPackage, active: e.target.checked })} />
+                </Field>
+              </div>
+              <div className="flex flex-wrap gap-3 items-end">
+                <Field label="مبلغ پرداختی">
+                  <NumInput value={newPackage.base_amount} onChange={(v) => setNewPackage({ ...newPackage, base_amount: v })} />
+                </Field>
+                <Field label="مبلغ واریزی به کیف پول">
+                  <NumInput value={newPackage.total_credits} onChange={(v) => setNewPackage({ ...newPackage, total_credits: v })} />
+                </Field>
+                <Field label="درصد پاداش">
+                  <NumInput value={newPackage.bonus_percent} onChange={(v) => setNewPackage({ ...newPackage, bonus_percent: v })} width={80} />
+                </Field>
+                <Field label="سهمیهٔ درخواست">
+                  <NumInput value={newPackage.request_quota} onChange={(v) => setNewPackage({ ...newPackage, request_quota: v })} placeholder="بدون سهمیه" />
+                </Field>
+                <Field label="سهمیهٔ توکن">
+                  <NumInput value={newPackage.token_quota} onChange={(v) => setNewPackage({ ...newPackage, token_quota: v })} placeholder="بدون سهمیه" />
+                </Field>
+                <Field label="سقف هزینهٔ هر درخواست">
+                  <NumInput
+                    value={newPackage.max_cost_per_request_toman}
+                    onChange={(v) => setNewPackage({ ...newPackage, max_cost_per_request_toman: v })}
+                    placeholder="بدون سقف"
+                  />
+                </Field>
+                <Field label="مدت اعتبار (روز)">
+                  <NumInput value={newPackage.validity_days} onChange={(v) => setNewPackage({ ...newPackage, validity_days: v })} width={90} placeholder="بدون انقضا" />
+                </Field>
+              </div>
+              {isLossPath(newPackage) && (
+                <div className="text-xs flex items-center gap-1" style={{ color: 'var(--warning, #f59e0b)' }}>
+                  <Icon name="warning" size={12} />
+                  <span>سهمیه بدون سقف هزینه — سرور این را رد می‌کند</span>
+                </div>
+              )}
+              <button className="btn btn-sm" onClick={createPackage} disabled={creating}>
+                {creating ? 'در حال ایجاد...' : 'ایجاد بسته'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

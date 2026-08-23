@@ -65,9 +65,13 @@ export default function ImagePricingSection({ api }: ImagePricingSectionProps) {
   const [rowInputs, setRowInputs] = useState<Record<string, string>>({})
   const [savingRow, setSavingRow] = useState<string | null>(null)
   const [filter, setFilter] = useState('')
+  // Distinct from an empty table: a failed load must not look like "no
+  // image models exist" once the toast fades.
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       const res = await api('/api/admin/catalog/media-models')
       const m: MediaModelRow[] = await res.json()
@@ -77,8 +81,10 @@ export default function ImagePricingSection({ api }: ImagePricingSectionProps) {
       const next: Record<string, string> = {}
       for (const r of m) next[r.id] = r.image_price_per_unit == null ? '' : String(r.image_price_per_unit)
       setRowInputs(next)
-    } catch {
-      toast('خطا در دریافت مدل‌های تصویری', 'error')
+    } catch (err) {
+      const msg = err instanceof Error && err.message !== 'unauthorized' ? err.message : 'خطا در دریافت مدل‌های تصویری'
+      setLoadError(msg)
+      toast(msg, 'error')
     } finally {
       setLoading(false)
     }
@@ -110,8 +116,8 @@ export default function ImagePricingSection({ api }: ImagePricingSectionProps) {
       })
       toast(price === null ? 'قیمت پاک شد — این مدل دیگر قابل ارائه نیست' : 'قیمت این مدل ذخیره شد', 'success')
       await load()
-    } catch {
-      toast('ذخیره ناموفق بود', 'error')
+    } catch (err) {
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'ذخیره ناموفق بود', 'error')
     } finally {
       setSavingRow(null)
     }
@@ -168,6 +174,10 @@ export default function ImagePricingSection({ api }: ImagePricingSectionProps) {
             <tbody>
               {loading ? (
                 <tr><td colSpan={7} className="p-6 text-center text-sm text-muted">در حال بارگذاری…</td></tr>
+              ) : loadError ? (
+                <tr><td colSpan={7} className="p-6 text-center text-sm" style={{ color: 'var(--danger, #ef4444)' }}>
+                  {loadError} — <button className="underline" onClick={load}>تلاش دوباره</button>
+                </td></tr>
               ) : visibleRows.length === 0 ? (
                 <tr><td colSpan={7} className="p-6 text-center text-sm text-muted">مدل تصویری یافت نشد</td></tr>
               ) : (

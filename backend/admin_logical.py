@@ -132,7 +132,12 @@ async def list_logical_models(request: Request) -> JSONResponse:
 
     params = {'q': q, 'qlike': f'%{q}%', 'availability': availability}
 
-    having = "HAVING (:pending_only = false OR proposed_count > 0)"
+    # WHERE, not HAVING: the GROUP BY lives inside the subquery, so the outer
+    # query is ungrouped — HAVING here made Postgres treat the whole result as
+    # one aggregate group and reject the bare `proposed_count` column
+    # (GroupingError, endpoint returned 500 on every call; caught by the live
+    # smoke of session 11 — the mocked-session tests can't see SQL errors).
+    having = "WHERE (:pending_only = false OR proposed_count > 0)"
     async with async_session() as session:
         count_res = await session.execute(
             sqlalchemy.text(

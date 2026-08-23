@@ -44,3 +44,19 @@ export function Field({ label, children }: { label: string; children: React.Reac
     </div>
   )
 }
+
+// ─── Numeric Input ───────────────────────────────────────────────────────────
+
+/** Byte-identical control shared by PackagesSection.tsx and PlansSection.tsx
+    (and now new admin forms) -- was copy-pasted in both before, moved here
+    so a change to one no longer risks drifting from the other. */
+export function NumInput({ value, onChange, width = 120, placeholder }: {
+  value: string; onChange: (v: string) => void; width?: number; placeholder?: string
+}) {
+  return (
+    <input
+      className="input" type="number" min={0} value={value} placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)} style={{ maxWidth: width }}
+    />
+  )
+}

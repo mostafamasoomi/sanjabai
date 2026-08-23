@@ -136,6 +136,27 @@ async def delete_discount(request: Request, did: int) -> JSONResponse:
 
 # ── About ───────────────────────────────────────────────────────
 
+@router.get('/admin/about')
+async def get_about_admin(request: Request) -> JSONResponse:
+    """Current about content, for the admin edit form.
+
+    Without this the panel could only POST blind: the form loaded empty and
+    a save overwrote the live page with whatever happened to be in the boxes
+    -- usually nothing (session 11 found the panel GETting this path and
+    silently swallowing the 405). Same shape the form saves: title/body.
+    """
+    if not await admin.admin_required(request):
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'title': '', 'body': ''})
+    async with async_session() as session:
+        res = await session.execute(AboutContent.__table__.select())
+        row = res.fetchone()
+        if not row:
+            return JSONResponse({'title': '', 'body': ''})
+        return JSONResponse({'title': row.title or '', 'body': row.body or ''})
+
+
 @router.post('/admin/about')
 async def set_about(request: Request, payload: dict[str, Any]) -> JSONResponse:
     if not await admin.admin_required(request):

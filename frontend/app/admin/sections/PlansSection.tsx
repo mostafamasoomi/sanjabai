@@ -4,7 +4,7 @@ import { Fragment, useState, useEffect, useCallback } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
 import { faNum, faPrice, faDate } from '@/lib/format'
-import { SectionHeader, Field } from './shared'
+import { SectionHeader, Field, NumInput } from './shared'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Plans & Subscriptions — first frontend consumer of backend/admin.py's
@@ -116,21 +116,12 @@ const EMPTY_NEW_PLAN: PlanDraft & { id: string } = {
   daily_token_limit: '', priority_queue: false, active: true, sort_order: '0',
 }
 
-function NumInput({ value, onChange, width = 130, placeholder }: {
-  value: string; onChange: (v: string) => void; width?: number; placeholder?: string
-}) {
-  return (
-    <input className="input" type="number" min={0} value={value} placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)} style={{ maxWidth: width }} />
-  )
-}
-
 const SUB_PAGE_SIZE = 50
 
 export default function PlansSection({ api }: PlansSectionProps) {
   // ── Plans ──
   const [plansLoading, setPlansLoading] = useState(true)
-  const [plansError, setPlansError] = useState(false)
+  const [plansError, setPlansError] = useState<string | null>(null)
   const [plans, setPlans] = useState<PlanRow[]>([])
   const [drafts, setDrafts] = useState<Record<string, PlanDraft>>({})
   const [savingId, setSavingId] = useState<string | null>(null)
@@ -141,7 +132,7 @@ export default function PlansSection({ api }: PlansSectionProps) {
   const [creating, setCreating] = useState(false)
 
   const loadPlans = useCallback(async () => {
-    setPlansLoading(true); setPlansError(false)
+    setPlansLoading(true); setPlansError(null)
     try {
       const res = await api('/api/admin/plans')
       const data: PlanRow[] = await res.json()
@@ -149,8 +140,8 @@ export default function PlansSection({ api }: PlansSectionProps) {
       const next: Record<string, PlanDraft> = {}
       for (const p of data) next[p.id] = toPlanDraft(p)
       setDrafts(next)
-    } catch {
-      setPlansError(true)
+    } catch (err) {
+      setPlansError(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'خطا در دریافت پلن‌ها')
     } finally {
       setPlansLoading(false)
     }
@@ -185,8 +176,8 @@ export default function PlansSection({ api }: PlansSectionProps) {
       })
       toast('پلن ذخیره شد', 'success')
       await loadPlans()
-    } catch {
-      toast('ذخیره پلن ناموفق بود', 'error')
+    } catch (err) {
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'ذخیره پلن ناموفق بود', 'error')
     } finally {
       setSavingId(null)
     }
@@ -212,8 +203,8 @@ export default function PlansSection({ api }: PlansSectionProps) {
       setNewPlan(EMPTY_NEW_PLAN)
       setShowCreate(false)
       await loadPlans()
-    } catch {
-      toast('ایجاد پلن ناموفق بود', 'error')
+    } catch (err) {
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'ایجاد پلن ناموفق بود', 'error')
     } finally {
       setCreating(false)
     }
@@ -223,20 +214,20 @@ export default function PlansSection({ api }: PlansSectionProps) {
 
   // ── Subscriptions ──
   const [subsLoading, setSubsLoading] = useState(true)
-  const [subsError, setSubsError] = useState(false)
+  const [subsError, setSubsError] = useState<string | null>(null)
   const [subs, setSubs] = useState<SubscriptionRow[]>([])
   const [subsTotal, setSubsTotal] = useState(0)
   const [subsPage, setSubsPage] = useState(1)
 
   const loadSubs = useCallback(async (page: number) => {
-    setSubsLoading(true); setSubsError(false)
+    setSubsLoading(true); setSubsError(null)
     try {
       const res = await api(`/api/admin/subscriptions?page=${page}&limit=${SUB_PAGE_SIZE}`)
       const body = await res.json()
       setSubs(Array.isArray(body.subscriptions) ? body.subscriptions : [])
       setSubsTotal(typeof body.total === 'number' ? body.total : 0)
-    } catch {
-      setSubsError(true)
+    } catch (err) {
+      setSubsError(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'خطا در دریافت اشتراک‌ها')
     } finally {
       setSubsLoading(false)
     }
@@ -290,7 +281,7 @@ export default function PlansSection({ api }: PlansSectionProps) {
                 <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">در حال بارگذاری…</td></tr>
               ) : plansError ? (
                 <tr><td colSpan={8} className="p-6 text-center text-sm" style={{ color: 'var(--danger, #ef4444)' }}>
-                  خطا در دریافت پلن‌ها — <button className="underline" onClick={loadPlans}>تلاش دوباره</button>
+                  {plansError} — <button className="underline" onClick={loadPlans}>تلاش دوباره</button>
                 </td></tr>
               ) : plans.length === 0 ? (
                 <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">پلنی یافت نشد</td></tr>
@@ -393,7 +384,7 @@ export default function PlansSection({ api }: PlansSectionProps) {
                 <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">در حال بارگذاری…</td></tr>
               ) : subsError ? (
                 <tr><td colSpan={8} className="p-6 text-center text-sm" style={{ color: 'var(--danger, #ef4444)' }}>
-                  خطا در دریافت اشتراک‌ها — <button className="underline" onClick={() => loadSubs(subsPage)}>تلاش دوباره</button>
+                  {subsError} — <button className="underline" onClick={() => loadSubs(subsPage)}>تلاش دوباره</button>
                 </td></tr>
               ) : subs.length === 0 ? (
                 <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">هیچ اشتراکی ثبت نشده (خروجی زندهٔ سرور: total = ۰)</td></tr>

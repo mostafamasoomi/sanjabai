@@ -57,15 +57,21 @@ export default function ExchangeRateSection({ api }: ExchangeRateSectionProps) {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [meta, setMeta] = useState<ExchangeRateMeta | null>(null)
+  // Distinct from "no data yet": a failed load must not look like the
+  // inert empty state once the toast fades.
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       const res = await api('/api/admin/exchange-rate')
       const body: ExchangeRateMeta = await res.json()
       setMeta(body)
-    } catch {
-      toast('خطا در دریافت نرخ ارز', 'error')
+    } catch (err) {
+      const msg = err instanceof Error && err.message !== 'unauthorized' ? err.message : 'خطا در دریافت نرخ ارز'
+      setLoadError(msg)
+      toast(msg, 'error')
     } finally {
       setLoading(false)
     }
@@ -80,8 +86,8 @@ export default function ExchangeRateSection({ api }: ExchangeRateSectionProps) {
       const body: ExchangeRateMeta = await res.json()
       setMeta(body)
       toast('نرخ ارز به‌روزرسانی شد', 'success')
-    } catch {
-      toast('به‌روزرسانی نرخ ارز ناموفق بود', 'error')
+    } catch (err) {
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'به‌روزرسانی نرخ ارز ناموفق بود', 'error')
     } finally {
       setRefreshing(false)
     }
@@ -98,6 +104,16 @@ export default function ExchangeRateSection({ api }: ExchangeRateSectionProps) {
 
       {loading ? (
         <div className="admin-card p-6 text-center text-sm text-muted">در حال بارگذاری…</div>
+      ) : loadError ? (
+        <div className="admin-card p-6 text-center text-sm" style={{ color: 'var(--danger, #ef4444)' }}>
+          {loadError}
+          <div className="mt-2">
+            <button className="btn btn-sm" onClick={load}>
+              <Icon name="refresh" size={14} />
+              تلاش دوباره
+            </button>
+          </div>
+        </div>
       ) : !meta ? (
         <div className="admin-card p-6 text-center text-sm text-muted">اطلاعاتی یافت نشد</div>
       ) : (

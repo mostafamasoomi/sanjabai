@@ -98,8 +98,8 @@ export default function UserWalletOps({ uid, balance, panel, onChanged }: UserWa
       setConfirming(false)
       setPendingKey(null)
       onChanged()
-    } catch {
-      toast('خطا در ثبت تراکنش کیف پول', 'error')
+    } catch (err) {
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'خطا در ثبت تراکنش کیف پول', 'error')
     } finally {
       setSubmitting(false)
     }
@@ -115,8 +115,8 @@ export default function UserWalletOps({ uid, balance, panel, onChanged }: UserWa
       })
       toast(next === 'developer' ? 'کاربر به پنل توسعه‌دهنده منتقل شد' : 'کاربر به پنل مصرف‌کننده منتقل شد', 'success')
       onChanged()
-    } catch {
-      toast('خطا در جابه‌جایی پنل', 'error')
+    } catch (err) {
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'خطا در جابه‌جایی پنل', 'error')
     } finally {
       setPanelSaving(false)
     }

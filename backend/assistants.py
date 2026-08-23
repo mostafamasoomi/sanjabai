@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from database import async_session
 from models import Assistant
+import sqlalchemy
 from dependencies import _get_user_id
 
 router = APIRouter()
@@ -70,11 +71,20 @@ async def create_assistant(request: Request, payload: AssistantCreate) -> JSONRe
 
 @router.get('/assistants/{assistant_id}')
 async def get_assistant(assistant_id: int, request: Request) -> JSONResponse:
+    # Ownership gate: an assistant is readable only by its owner or, if
+    # is_public, by anyone. Without the owner/public filter this endpoint was
+    # an IDOR -- ids are sequential ints, so any visitor could walk them and
+    # read another user's private system_prompt (session 11 audit A4). PUT and
+    # DELETE on the same resource already filter on user_id; GET must match.
+    uid = await _get_user_id(request)
     if async_session is None:
         return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
     async with async_session() as session:
         res = await session.execute(
-            Assistant.__table__.select().where(Assistant.id == assistant_id)
+            Assistant.__table__.select().where(
+                Assistant.id == assistant_id,
+                sqlalchemy.or_(Assistant.is_public == True, Assistant.user_id == uid),  # noqa: E712
+            )
         )
         row = res.fetchone()
         if not row:

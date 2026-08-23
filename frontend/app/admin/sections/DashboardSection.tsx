@@ -2,25 +2,48 @@
 
 import dynamic from 'next/dynamic'
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
-import { StatCard } from './shared'
-import type { Analytics } from '../AdminPanel'
+import { faNum, faPrice, faDate } from '@/lib/format'
+import { StatCard, SectionHeader } from './shared'
+import { ErrorCard, RefreshButton, CardSkeleton } from './LoadState'
+import { useAdminResource } from '../useAdminResource'
+import type { Analytics } from '../types'
 
 const AdminCharts = dynamic(() => import('../components/AdminCharts'), { ssr: false })
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Dashboard — moved verbatim out of AdminPanel.tsx (page === 'dashboard').
+   Dashboard — GET /admin/analytics, fetched here rather than handed down
+   from AdminPanel's old loadAll(). A failed load now says so instead of
+   sitting on the skeleton forever.
+
+   Money is integer toman and renders through faPrice; counts through faNum.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export default function DashboardSection({ analytics }: { analytics: Analytics | null }) {
+export default function DashboardSection() {
+  const { data: analytics, error, loading, reload } = useAdminResource<Analytics>(
+    '/api/admin/analytics',
+    (raw) => raw as Analytics,
+    'خطا در دریافت آمار داشبورد',
+  )
+
   return (
     <div className="space-y-6">
-      {analytics ? (
+      <div className="flex items-start justify-between">
+        <SectionHeader title="داشبورد" subtitle="نمای کلی کاربران، درآمد و مصرف" />
+        <RefreshButton onClick={reload} busy={loading} />
+      </div>
+
+      {error && <ErrorCard message={error} onRetry={reload} />}
+
+      {!error && !analytics && <CardSkeleton count={5} />}
+
+      {analytics && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
             <StatCard icon="profile" label="کل کاربران" value={faNum(analytics.user_count)} color="var(--accent)" />
             <StatCard icon="check" label="کاربران فعال" value={faNum(analytics.active_users)} color="var(--positive)" />
-            <StatCard icon="payment" label="درآمد کل (تومان)" value={faNum(analytics.total_revenue, { fallback: '۰' })} color="var(--info)" />
+            {/* faPrice already carries the «تومان» unit — the label must not
+                repeat it, and nothing here scales the raw toman figure. */}
+            <StatCard icon="payment" label="درآمد کل" value={faPrice(analytics.total_revenue, { fallback: '۰ تومان' })} color="var(--info)" />
             <StatCard icon="code" label="توکن مصرفی" value={faNum(analytics.total_tokens, { fallback: '۰' })} color="var(--warning)" />
             <StatCard icon="chat" label="گفتگوها" value={faNum(analytics.conv_count, { fallback: '۰' })} color="var(--accent)" />
           </div>
@@ -51,18 +74,16 @@ export default function DashboardSection({ analytics }: { analytics: Analytics |
                       </td>
                     </tr>
                   ) : (
-                    (analytics.recent_ledger || []).map((l: any) => (
+                    (analytics.recent_ledger || []).map((l) => (
                       <tr key={l.id}>
                         <td className="p-3 text-xs font-mono">{l.user_id}</td>
                         <td className="p-3">
                           <span className={l.amount > 0 ? 'badge badge-positive' : 'badge badge-danger'}>
-                            {l.amount > 0 ? '+' : ''}{faNum(l.amount)}
+                            {faPrice(l.amount, { signed: true })}
                           </span>
                         </td>
                         <td className="p-3 text-xs text-secondary">{l.reason}</td>
-                        <td className="p-3 text-xs text-muted">
-                          {new Date(l.created_at).toLocaleDateString('fa-IR')}
-                        </td>
+                        <td className="p-3 text-xs text-muted">{faDate(l.created_at)}</td>
                       </tr>
                     ))
                   )}
@@ -71,15 +92,6 @@ export default function DashboardSection({ analytics }: { analytics: Analytics |
             </div>
           </div>
         </>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="admin-card">
-              <div className="skeleton h-3 w-20 mb-3 rounded" />
-              <div className="skeleton h-7 w-16 rounded" />
-            </div>
-          ))}
-        </div>
       )}
     </div>
   )

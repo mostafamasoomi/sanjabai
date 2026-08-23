@@ -1,67 +1,111 @@
 'use client'
 
+import { useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
+import { toast } from '@/components/ui'
+import { faNum, faPercent } from '@/lib/format'
 import { SectionHeader, Field } from './shared'
-import type { DiscountRow } from '../AdminPanel'
+import { ErrorCard, RefreshButton, CardSkeleton } from './LoadState'
+import { api, errMessage } from '../api'
+import { useAdminResource } from '../useAdminResource'
+import type { DiscountRow } from '../types'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Discounts — moved verbatim out of AdminPanel.tsx (page === 'discounts').
-   All state and handlers still live in AdminPanel; this component is purely
-   presentational.
+   Discounts — self-contained. GET/POST /admin/discounts, DELETE
+   /admin/discounts/{id} (backend/admin_content.py).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-interface DiscountsSectionProps {
-  discounts: DiscountRow[]
-  dcId: string
-  dcCode: string
-  setDcCode: (v: string) => void
-  dcPercent: string
-  setDcPercent: (v: string) => void
-  dcActive: boolean
-  setDcActive: (v: boolean) => void
-  saveDiscount: () => void
-  editDiscount: (d: DiscountRow) => void
-  delDiscount: (id: number) => void
-  resetDiscountForm: () => void
-}
+export default function DiscountsSection() {
+  const { data: discounts, error, loading, reload } = useAdminResource<DiscountRow[]>(
+    '/api/admin/discounts',
+    (raw) => (Array.isArray(raw) ? raw : raw?.discounts || []),
+    'خطا در دریافت کدهای تخفیف',
+  )
 
-export default function DiscountsSection({
-  discounts, dcId, dcCode, setDcCode, dcPercent, setDcPercent, dcActive, setDcActive,
-  saveDiscount, editDiscount, delDiscount, resetDiscountForm,
-}: DiscountsSectionProps) {
+  const [dcId, setDcId] = useState('')
+  const [dcCode, setDcCode] = useState('')
+  const [dcPercent, setDcPercent] = useState('10')
+  const [dcActive, setDcActive] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  const resetDiscountForm = () => {
+    setDcId(''); setDcCode(''); setDcPercent('10'); setDcActive(true)
+  }
+
+  const editDiscount = (d: DiscountRow) => {
+    setDcId(String(d.id)); setDcCode(d.code); setDcPercent(String(d.percent)); setDcActive(d.active)
+  }
+
+  const saveDiscount = async () => {
+    if (!dcCode.trim()) return
+    setSaving(true)
+    try {
+      await api('/api/admin/discounts', {
+        method: 'POST',
+        body: JSON.stringify({ id: dcId ? +dcId : undefined, code: dcCode, percent: +dcPercent || 0, active: dcActive }),
+      })
+      toast(dcId ? 'تخفیف ویرایش شد' : 'تخفیف اضافه شد', 'success')
+      resetDiscountForm()
+      reload()
+    } catch (err) {
+      toast(errMessage(err, 'خطا در ذخیره تخفیف'), 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const delDiscount = async (id: number) => {
+    try {
+      await api('/api/admin/discounts/' + id, { method: 'DELETE' })
+      toast('تخفیف حذف شد', 'success')
+      reload()
+    } catch (err) {
+      toast(errMessage(err, 'خطا در حذف تخفیف'), 'error')
+    }
+  }
+
+  const list = discounts || []
+
   return (
     <div className="space-y-6">
-      <SectionHeader title="کدهای تخفیف" subtitle={`${faNum(discounts.length)} کد تخفیف فعال`} />
-
-      <div className="space-y-2">
-        {discounts.length === 0 && (
-          <div className="admin-card text-center py-8 text-muted">
-            کد تخفیفی ثبت نشده
-          </div>
-        )}
-        {discounts.map((d) => (
-          <div key={d.id} className="admin-card flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="px-3 py-1.5 rounded-lg font-mono text-sm font-bold" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
-                {d.code}
-              </div>
-              <span className="text-sm text-primary">{d.percent}%</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className={d.active ? 'badge badge-positive' : 'badge badge-warning'}>
-                {d.active ? 'فعال' : 'غیرفعال'}
-              </span>
-              <button className="btn btn-sm" onClick={() => editDiscount(d)}>
-                <Icon name="settings" size={14} />
-              </button>
-              <button className="btn btn-sm btn-danger" onClick={() => delDiscount(d.id)}>
-                <Icon name="close" size={14} />
-              </button>
-            </div>
-          </div>
-        ))}
+      <div className="flex items-start justify-between">
+        <SectionHeader title="کدهای تخفیف" subtitle={`${faNum(list.length)} کد تخفیف ثبت شده`} />
+        <RefreshButton onClick={reload} busy={loading} />
       </div>
+
+      {error && <ErrorCard message={error} onRetry={reload} />}
+      {!error && !discounts && <CardSkeleton count={3} />}
+
+      {discounts && (
+        <div className="space-y-2">
+          {list.length === 0 && (
+            <div className="admin-card text-center py-8 text-muted">
+              کد تخفیفی ثبت نشده
+            </div>
+          )}
+          {list.map((d) => (
+            <div key={d.id} className="admin-card flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="px-3 py-1.5 rounded-lg font-mono text-sm font-bold" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
+                  {d.code}
+                </div>
+                <span className="text-sm text-primary">{faPercent(d.percent)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={d.active ? 'badge badge-positive' : 'badge badge-warning'}>
+                  {d.active ? 'فعال' : 'غیرفعال'}
+                </span>
+                <button className="btn btn-sm" onClick={() => editDiscount(d)}>
+                  <Icon name="settings" size={14} />
+                </button>
+                <button className="btn btn-sm btn-danger" onClick={() => delDiscount(d.id)}>
+                  <Icon name="close" size={14} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="admin-card">
         <h3 className="font-semibold text-sm mb-4 text-primary">
@@ -82,9 +126,10 @@ export default function DiscountsSection({
           </Field>
         </div>
         <div className="flex gap-2 mt-4">
-          <button className="btn" onClick={saveDiscount}>
-            <Icon name="check" size={16} />
-            <span>{dcId ? 'بروزرسانی' : 'افزودن'}</span>
+          <button className="btn" onClick={saveDiscount} disabled={saving}>
+            {saving ? (
+              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
+            ) : (<><Icon name="check" size={16} /><span>{dcId ? 'بروزرسانی' : 'افزودن'}</span></>)}
           </button>
           {dcId && (
             <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={resetDiscountForm}>

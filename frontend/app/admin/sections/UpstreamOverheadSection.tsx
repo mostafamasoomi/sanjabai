@@ -90,7 +90,7 @@ export default function UpstreamOverheadSection({ api }: UpstreamOverheadSection
     setLoading(true)
     setParseError(null)
     try {
-      const res = await api('/admin/upstream-overhead')
+      const res = await api('/api/admin/upstream-overhead')
       const body = await res.json()
       setData(parseOverheadResponse(body))
     } catch (err) {
@@ -120,7 +120,7 @@ export default function UpstreamOverheadSection({ api }: UpstreamOverheadSection
     setElapsedMs(0)
     measureStart.current = Date.now()
     try {
-      const res = await api('/admin/upstream-overhead/measure', { method: 'POST' })
+      const res = await api('/api/admin/upstream-overhead/measure', { method: 'POST' })
       const body = await res.json()
       // measure_upstream_overhead returns {status, measured, skipped, value}
       // where `value` is shaped like GET's `stored` (NOT the full

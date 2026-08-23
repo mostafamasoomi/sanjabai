@@ -90,44 +90,93 @@ async def healthy_model_ids() -> set[str]:
         return set()
 
 
+async def _served_models() -> dict[str, dict[str, str]] | None:
+    """Route id -> public identity, for the models we actually sell.
+
+    `availability = 'available' AND public_id IS NOT NULL` is the same
+    definition of "served" that tasks.py and the public catalog endpoint use;
+    it must not drift from them, or /status starts describing a different
+    product than /catalog/models does.
+
+    Returns None — not {} — when the catalog cannot be read, so the caller can
+    tell "we serve nothing" apart from "we do not know what we serve".
+    """
+    if async_session is None:
+        return None
+    try:
+        async with async_session() as session:
+            res = await session.execute(
+                sqlalchemy.text(
+                    'SELECT provider_model_id, public_id, display_name '
+                    'FROM model_catalog '
+                    "WHERE availability = 'available' AND public_id IS NOT NULL"
+                )
+            )
+            out: dict[str, dict[str, str]] = {}
+            for r in res.fetchall():
+                d = dict(r._mapping)
+                out[str(d['provider_model_id'])] = {
+                    'publicId': str(d['public_id']),
+                    'displayName': str(d['display_name']),
+                }
+            return out
+    except Exception as e:
+        logger.warning('_served_models failed: %s', e)
+        return None
+
+
 @router.get('/models/health')
 async def models_health(request: Request) -> JSONResponse:
-    """Public health summary. Backs the /status page."""
+    """Public health summary. Backs the /status page.
+
+    Reports only models we actually serve, under their public `sanjab/*` ids.
+    This endpoint is anonymous, so every row it emits is public: listing the
+    raw health table here published upstream route prefixes (kr/, cc/, cx/,
+    openrouter/, gemini-api/, ...) to any visitor, which the product forbids,
+    and counted models we do not sell — 45 of 69 rows — into an `overall` of
+    'degraded' while every model a user could actually pick was healthy.
+    Admins still get the unfiltered table via /admin/monitoring, which reads
+    health_map() directly.
+    """
     cached = await rds.get(_SUMMARY_CACHE_KEY)
     if cached:
         return JSONResponse(json.loads(cached))
 
     states = await health_map()
+    served = await _served_models()
 
-    # Join display names on so the status page does not need the catalog too.
-    names: dict[str, str] = {}
-    if async_session is not None:
-        try:
-            async with async_session() as session:
-                res = await session.execute(
-                    sqlalchemy.text(
-                        'SELECT id, provider_model_id, display_name, provider '
-                        'FROM model_catalog'
-                    )
-                )
-                for r in res.fetchall():
-                    d = dict(r._mapping)
-                    names[str(d['provider_model_id'])] = d['display_name']
-                    names[str(d['id'])] = d['display_name']
-        except Exception:
-            pass
+    if served is None:
+        # The catalog is unreadable, so we cannot tell which rows are ours to
+        # talk about. Publishing `states` raw here is what leaked route ids in
+        # the first place, and publishing nothing while claiming 'operational'
+        # would be a lie. Report that we do not know and let the upstream
+        # section below carry the real signal.
+        models: list[dict[str, Any]] = []
+        counts = {'healthy': 0, 'degraded': 0, 'down': 0, 'unknown': 0}
+        unknown_catalog = True
+    else:
+        unknown_catalog = False
+        # One row per model we actually sell, keyed by its public id. A served
+        # model with no health row yet is 'unknown', not missing: the page
+        # promises that anything in the catalog appears here.
+        models = []
+        for route_id, meta in served.items():
+            state = states.get(route_id) or {
+                'status': 'unknown', 'successRate': None,
+                'latencyP50Ms': None, 'latencyP95Ms': None,
+                'sampleCount': 0, 'lastOkAt': None,
+                'lastError': None, 'checkedAt': None,
+            }
+            models.append({
+                'id': meta['publicId'],
+                'displayName': meta['displayName'],
+                **state,
+            })
+        models.sort(key=lambda m: m['id'])
 
-    models = []
-    for model_id, state in sorted(states.items()):
-        models.append({
-            'id': model_id,
-            'displayName': names.get(model_id, model_id),
-            **state,
-        })
-
-    counts = {'healthy': 0, 'degraded': 0, 'down': 0, 'unknown': 0}
-    for m in models:
-        counts[m['status']] = counts.get(m['status'], 0) + 1
+        counts = {'healthy': 0, 'degraded': 0, 'down': 0, 'unknown': 0}
+        for m in models:
+            counts[m['status']] = counts.get(m['status'], 0) + 1
 
     # Run concurrently, not sequentially: 9Router legitimately takes up to
     # ~11s to answer, and upstream_alive's default timeout is only 5s. A
@@ -156,8 +205,13 @@ async def models_health(request: Request) -> JSONResponse:
             'error': r.error,
         })
 
-    # Overall reads as the worst thing a user would actually notice.
-    if counts['healthy'] == 0 and (counts['down'] or counts['degraded']):
+    # Overall reads as the worst thing a user would actually notice — so it is
+    # computed over served models only. A model parked in maintenance/disabled
+    # is not something a user can notice; saying it is "down" advertises an
+    # outage we do not have.
+    if unknown_catalog:
+        overall = 'degraded'
+    elif counts['healthy'] == 0 and (counts['down'] or counts['degraded']):
         overall = 'down'
     elif counts['down'] or counts['degraded']:
         overall = 'degraded'

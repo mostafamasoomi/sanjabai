@@ -97,7 +97,7 @@ def _parse_drop_columns(sql_text: str, table: str) -> set[str]:
     return {m.group(1) for m in pattern.finditer(sql_text)}
 
 
-def _actual_sql_columns(table: str) -> set[str]:
+def _actual_sql_columns(table: str, migrations_dir: pathlib.Path = MIGRATIONS_DIR) -> set[str]:
     """The union of every column the baseline plus every migration file
     actually creates for ``table``, minus anything later dropped -- i.e.
     what a freshly-migrated database really has for this table, right now,
@@ -106,11 +106,16 @@ def _actual_sql_columns(table: str) -> set[str]:
     Scans EVERY migration file for CREATE TABLE (not just the baseline),
     because about_content and assistants are created by
     0035_schema_drift_repair.sql, not by the baseline.
+
+    ``migrations_dir`` defaults to this repo's real migrations/ directory but
+    can be overridden -- tests/test_schema_drift_all_orm.py points this at a
+    scratchpad copy with 0038 removed to prove the guard actually goes red
+    without it, rather than passing vacuously.
     """
     columns: set[str] = set()
     dropped: set[str] = set()
     created = False
-    for path in sorted(MIGRATIONS_DIR.glob('*.sql')):
+    for path in sorted(migrations_dir.glob('*.sql')):
         text = path.read_text(encoding='utf-8')
         # FIRST CREATE WINS. Every CREATE in this repo is `CREATE TABLE IF
         # NOT EXISTS`, so once an earlier migration has created the table, a

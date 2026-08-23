@@ -1,0 +1,48 @@
+-- Add the two columns models.py's UserBillingSettings declares
+-- (user_id, auto_recharge, ..., payg_hard_limit, notify_on_usage_pct) that
+-- production's user_billing_settings table never had. Unlike 0038
+-- (notifications, a missing table), this is a missing-column drift on an
+-- existing table -- the same class of bug as 0033/0037 -- discovered while
+-- widening tests/test_schema_drift.py to cover every ORM table, not just a
+-- hand-picked list (tests/test_schema_drift_all_orm.py).
+--
+-- Confirmed on production before this migration, read-only:
+--   \d user_billing_settings showed only user_id, auto_recharge,
+--   recharge_threshold, recharge_amount, payg_enabled,
+--   spend_limit_monthly, current_spend, created_at, updated_at -- no
+--   payg_hard_limit, no notify_on_usage_pct, in either the table or any
+--   migration file.
+--   SELECT user_id, payg_enabled, payg_hard_limit, notify_on_usage_pct
+--   FROM user_billing_settings WHERE user_id = 1 failed with
+--   "column payg_hard_limit does not exist".
+--
+-- Impact: pricing.py's GET /me/billing runs exactly that SELECT with no
+-- try/except around it, so the route 500s for every authenticated caller,
+-- unconditionally -- this was live-broken, not merely a latent risk.
+--
+-- Coordinator decision: fix migration-side, not by rolling back the ORM.
+-- Production code (pricing.py), not merely models.py, actively selects
+-- both columns and returns them in the route's response contract, so
+-- rolling the ORM back would mean rewriting the endpoint's SQL and its
+-- response shape and would delete a feature the code plainly intends to
+-- offer. Adding two idempotent, nullable/defaulted columns is
+-- non-destructive and brings the ORM, the code and the database into
+-- agreement.
+--
+-- No backfill needed: user_billing_settings had zero rows at the time this
+-- was measured, so there is no existing data for either column to reconcile.
+--
+-- Types match models.py's UserBillingSettings exactly: payg_hard_limit is
+-- Mapped[int | None] with no default (nullable, no server default here);
+-- notify_on_usage_pct is Mapped[int] with default=80 (server default 80 so
+-- any row inserted outside the ORM still gets the same value the ORM would
+-- have written).
+--
+-- Reverse drift noted for the record, out of scope for this migration: the
+-- live table also has five columns the ORM does not declare at all --
+-- auto_recharge, recharge_threshold, recharge_amount, spend_limit_monthly,
+-- current_spend. That direction is harmless (nothing queries them through
+-- the ORM) and is not addressed here.
+
+ALTER TABLE user_billing_settings ADD COLUMN IF NOT EXISTS payg_hard_limit BIGINT;
+ALTER TABLE user_billing_settings ADD COLUMN IF NOT EXISTS notify_on_usage_pct INTEGER DEFAULT 80;

@@ -35,10 +35,18 @@ def _sanitize_injection(s: str, limit: int) -> str:
     return s
 
 
-async def get_injection_messages(uid: int) -> list[dict[str, str]]:
+async def get_injection_messages(
+    uid: int, skill_ids: list[int] | None = None
+) -> list[dict[str, str]]:
     """
-    Fetch memories (limit 5) + soul (truncated) -> list of system messages.
+    Fetch memories (limit 5) + soul (truncated) + pinned context + the
+    user's activated skills -> list of system messages.
     Returns list of dicts to be injected via inject_messages().
+
+    ``skill_ids`` is optional and defaults to None so all existing call
+    sites (chat.py, chat_smart.py, chat_web.py, chat_stream.py x2,
+    chat_compare.py) keep working untouched, picking up the user's
+    activated skills automatically.
     """
     injections: list[dict[str, str]] = []
     if not uid:
@@ -108,6 +116,17 @@ async def get_injection_messages(uid: int) -> list[dict[str, str]]:
                     "content": f"[User Pinned Context — یادداشت دائمی کاربر که در تمام چت‌ها باید در نظر گرفته شود:]\n{pinned_clean}",
                 }
             )
+
+    # --- Activated skills (user-activated only, see services/skill_injection.py) ---
+    try:
+        from services.skill_injection import get_active_skill_messages
+        skill_msgs = await get_active_skill_messages(uid, skill_ids)
+    except Exception as e:
+        logger.warning(f"get_injection_messages: get_active_skill_messages failed uid={uid}: {e}")
+        skill_msgs = []
+    if skill_msgs:
+        injections.extend(skill_msgs)
+
     return injections
 
 
@@ -135,6 +154,10 @@ def inject_messages(
         isinstance(m, dict) and "[User Pinned Context" in (m.get("content") or "")
         for m in msgs
     )
+    has_skills = any(
+        isinstance(m, dict) and "[User Skills" in (m.get("content") or "")
+        for m in msgs
+    )
 
     to_inject: list[dict[str, str]] = []
     for inj in injections:
@@ -144,6 +167,8 @@ def inject_messages(
         if "[User Soul" in c and has_soul:
             continue
         if "[User Pinned Context" in c and has_pinned:
+            continue
+        if "[User Skills" in c and has_skills:
             continue
         to_inject.append(inj)
 

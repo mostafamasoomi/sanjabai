@@ -6,14 +6,16 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+import sqlalchemy
 from fastapi import APIRouter, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from database import async_session
-from models import SkillTemplate, SkillTemplateRating
+from models import SkillTemplate, SkillTemplateRating, UserSkillActivation
 from dependencies import _get_user_id, _escape_like, admin_required
+from services.skill_injection import MAX_SKILLS_INJECTED
 
 router = APIRouter()
 
@@ -110,6 +112,40 @@ async def list_skill_templates(
                 stmt = stmt.order_by(SkillTemplate.usage_count.desc())
             stmt = stmt.offset(skip).limit(min(limit, 100))
             res = await session.execute(stmt)
+            rows = [dict(r._mapping) for r in res.fetchall()]
+        return JSONResponse(jsonable_encoder(rows))
+    except Exception:
+        return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
+
+
+@router.get('/skills/active')
+async def list_active_skills(request: Request) -> JSONResponse:
+    """List the current user's skill activations (enabled and disabled),
+    ordered by position, for the panel to render toggle state."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+    try:
+        async with async_session() as session:
+            res = await session.execute(
+                sqlalchemy.select(
+                    SkillTemplate.id,
+                    SkillTemplate.title,
+                    SkillTemplate.title_fa,
+                    UserSkillActivation.position,
+                    UserSkillActivation.enabled,
+                )
+                .select_from(
+                    UserSkillActivation.__table__.join(
+                        SkillTemplate.__table__,
+                        UserSkillActivation.template_id == SkillTemplate.id,
+                    )
+                )
+                .where(UserSkillActivation.user_id == uid)
+                .order_by(UserSkillActivation.position, SkillTemplate.id)
+            )
             rows = [dict(r._mapping) for r in res.fetchall()]
         return JSONResponse(jsonable_encoder(rows))
     except Exception:
@@ -235,6 +271,100 @@ async def delete_skill_template(request: Request, template_id: int) -> JSONRespo
             )
             await session.commit()
         return JSONResponse({'status': 'deleted'})
+    except Exception:
+        return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
+@router.post('/skills/{template_id}/activate')
+async def activate_skill(request: Request, template_id: int) -> JSONResponse:
+    """Switch a skill on for the current user's own chats (idempotent).
+
+    404 if the template does not exist or is neither owned by the user
+    nor public. Enforces the MAX_SKILLS_INJECTED cap: at most that many
+    skills may be enabled for a user at once.
+    """
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+    try:
+        async with async_session() as session:
+            res = await session.execute(
+                SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
+            )
+            tmpl = res.fetchone()
+            if not tmpl or (tmpl.user_id != uid and not tmpl.is_public):
+                return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+
+            count_res = await session.execute(
+                sqlalchemy.select(sqlalchemy.func.count()).select_from(
+                    UserSkillActivation.__table__
+                ).where(
+                    UserSkillActivation.user_id == uid,
+                    UserSkillActivation.enabled == True,  # noqa: E712
+                    UserSkillActivation.template_id != template_id,
+                )
+            )
+            enabled_count = count_res.scalar_one()
+            if enabled_count >= MAX_SKILLS_INJECTED:
+                return JSONResponse(
+                    {'detail': f'حداکثر {MAX_SKILLS_INJECTED} مهارت را می‌توان همزمان فعال کرد'},
+                    status_code=400,
+                )
+
+            await session.execute(
+                sqlalchemy.text(
+                    """
+                    INSERT INTO user_skill_activations
+                        (user_id, template_id, enabled, position, created_at, updated_at)
+                    VALUES (
+                        :uid, :tid, TRUE,
+                        COALESCE(
+                            (SELECT MAX(position) + 1 FROM user_skill_activations WHERE user_id = :uid),
+                            0
+                        ),
+                        now(), now()
+                    )
+                    ON CONFLICT (user_id, template_id) DO UPDATE SET
+                        enabled = TRUE, updated_at = now()
+                    """
+                ),
+                {'uid': uid, 'tid': template_id},
+            )
+            await session.commit()
+        return JSONResponse({'status': 'ok'})
+    except Exception:
+        return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
+
+
+@router.delete('/skills/{template_id}/activate')
+async def deactivate_skill(request: Request, template_id: int) -> JSONResponse:
+    """Switch a skill off for the current user. The row is kept (enabled
+    set to FALSE) so its position survives a toggle round-trip."""
+    uid = await _get_user_id(request)
+    if not uid:
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+    try:
+        async with async_session() as session:
+            res = await session.execute(
+                UserSkillActivation.__table__.select().where(
+                    UserSkillActivation.user_id == uid,
+                    UserSkillActivation.template_id == template_id,
+                )
+            )
+            row = res.fetchone()
+            if not row:
+                return JSONResponse({'detail': 'این مهارت برای شما فعال نشده است'}, status_code=404)
+            await session.execute(
+                UserSkillActivation.__table__.update().where(
+                    UserSkillActivation.user_id == uid,
+                    UserSkillActivation.template_id == template_id,
+                ),
+                {'enabled': False, 'updated_at': datetime.now(timezone.utc).replace(tzinfo=None)},
+            )
+            await session.commit()
+        return JSONResponse({'status': 'ok'})
     except Exception:
         return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
 

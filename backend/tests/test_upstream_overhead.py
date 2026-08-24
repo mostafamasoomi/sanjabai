@@ -316,3 +316,70 @@ class TestMetaMergePreservesExistingKeys:
         assert event.meta["prompt_overhead_discounted"] == 300
         assert event.meta["estimated"] is False
         assert event.meta["source"] == "upstream"
+
+
+# ── GET /admin/upstream-overhead: Decimal must not reach json.dumps ───────
+#
+# Live production 500 found 2026-08-24 by sweeping every admin GET endpoint
+# against the running API. Postgres widens SUM(bigint) to numeric and
+# asyncpg hands that back as decimal.Decimal; json.dumps has no encoder for
+# it, and the handler builds its JSONResponse *outside* the try/except that
+# guards the query -- so the TypeError escaped as a bare 500. The endpoint
+# was broken for exactly as long as any usage_event carried a
+# prompt_overhead_discounted value, which is the only state in which an
+# admin would ever open this page.
+
+class _DecimalStatsSession:
+    """Session double whose stats query answers the way Postgres really
+    does: COUNT(*) as int, SUM(...) as Decimal.
+
+    The handler opens async_session() twice, so this dispatches on the SQL
+    text rather than on a call counter -- a counter would reset on the
+    second instance and silently feed the app_setting row to the stats
+    query, which is exactly how this test first passed for the wrong
+    reason.
+    """
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def execute(self, stmt, params=None):
+        import decimal
+        sql = str(stmt)
+        res = MagicMock()
+        if 'app_setting' in sql:
+            row = MagicMock()
+            row.value = {'version': 1, 'measured_at': None,
+                         'entries': {}, 'provider_default': {}}
+            row.updated_at = None
+            res.fetchone = MagicMock(return_value=row)
+            return res
+        assert 'usage_events' in sql, f'unexpected statement: {sql[:80]}'
+        stats_row = MagicMock()
+        stats_row.provider = 'ninerouter'
+        stats_row.requests = 7
+        stats_row.total_discounted = decimal.Decimal('14000')
+        res.fetchall = MagicMock(return_value=[stats_row])
+        return res
+
+
+@pytest.mark.asyncio
+async def test_admin_upstream_overhead_serialises_decimal_sums():
+    """A Decimal from SUM() must be coerced before it reaches json.dumps."""
+    import json as _json
+    import admin_overhead
+
+    with patch.object(admin_overhead, 'async_session', _DecimalStatsSession), \
+         patch.object(admin_overhead, 'admin_required', AsyncMock(return_value=True)):
+        resp = await admin_overhead.get_upstream_overhead(MagicMock())
+
+    assert resp.status_code == 200
+    body = _json.loads(bytes(resp.body))
+    stat = body['perProviderStats7d'][0]
+    # The real assertion: these survived json.dumps, and did so as ints.
+    assert stat['totalTokensDiscounted7d'] == 14000
+    assert isinstance(stat['totalTokensDiscounted7d'], int)
+    assert isinstance(stat['requests7d'], int)

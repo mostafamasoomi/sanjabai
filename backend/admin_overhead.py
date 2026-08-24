@@ -359,11 +359,18 @@ async def get_upstream_overhead(request: Request) -> JSONResponse:
                  ORDER BY provider
                 """
             ))
+            # int() on both columns is load-bearing, not cosmetic. Postgres
+            # widens SUM(bigint) to numeric, which asyncpg hands back as a
+            # decimal.Decimal, and JSONResponse's json.dumps has no encoder
+            # for Decimal -- so the moment any usage_event carried a
+            # prompt_overhead_discounted value this endpoint answered 500.
+            # The try/except above only covers the query, not the response
+            # construction below, so the TypeError escaped as a bare 500.
             stats = [
                 {
                     'provider': r.provider,
-                    'requests7d': r.requests,
-                    'totalTokensDiscounted7d': r.total_discounted,
+                    'requests7d': int(r.requests or 0),
+                    'totalTokensDiscounted7d': int(r.total_discounted or 0),
                 }
                 for r in res.fetchall()
             ]

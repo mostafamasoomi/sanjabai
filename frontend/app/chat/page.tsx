@@ -1,258 +1,43 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
-import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
-import { apiFetch } from '@/lib/apiFetch'
 import { useCatalog } from '@/lib/useCatalog'
 import { type ModelCatalogItem } from '@/types/catalog'
-import { Icon, type IconName } from '@/components/ui/Icon'
-import { Skeleton, EmptyState, toast } from '@/components/ui'
-import { Num, faNum, faDate } from '@/lib/format'
-import MarkdownRenderer from './components/MarkdownRenderer'
-import ModelPicker from './components/ModelPicker'
+import { Icon } from '@/components/ui/Icon'
+import { EmptyState, toast } from '@/components/ui'
 import { isUsableModel } from './components/modelUtils'
-import { StreamAccumulator } from './useStreamAccumulator'
-import { getTruncationStatus } from './finishReason'
+import ChatMessageItem from './components/ChatMessageItem'
+import ConversationSidebar from './components/ConversationSidebar'
+import ChatModelBar from './components/ChatModelBar'
+import AssistantBanner from './components/AssistantBanner'
+import SearchHintBanner from './components/SearchHintBanner'
+import ChatErrorBanner from './components/ChatErrorBanner'
+import ChatComposerFooter from './components/ChatComposerFooter'
+import { useConversations } from './hooks/useConversations'
+import { useChatStream } from './hooks/useChatStream'
+import type { Message, UsageStats, Assistant } from './chatTypes'
+import { PRESETS } from './chatHelpers'
 import './chat-stream.css'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Sanjabai Chat — Aurora v2 + Conversation History Sidebar
    Cancel, retry, model picker, cost preview, markdown, keyboard shortcuts.
    Sidebar: conversation CRUD, auto-save, mobile drawer, desktop collapse.
+   State/logic is split across hooks/ (conversation CRUD, SSE streaming) and
+   components/ (message item, sidebar, model bar, composer footer) -- this
+   file wires them together and owns only what's genuinely page-wide.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-type Message = {
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  id: string
-  // Upstream `finish_reason` from the last SSE chunk of this turn (assistant
-  // messages only; undefined until the stream that produced it completes,
-  // and undefined forever for messages loaded from history/older sessions
-  // where this was never captured -- getTruncationStatus treats that the
-  // same as "stop": no false "ناتمام ماند" banner on old conversations).
-  finishReason?: string | null
-}
-
-type UsageStats = { promptTokens: number; completionTokens: number; totalTokens: number; estimatedCost: number }
-
-type Conversation = {
-  id: string
-  title: string
-  model: string
-  created_at: string
-  updated_at: string
-}
-
-type ConversationDetail = Conversation & {
-  messages: { role: string; content: string }[]
-}
-
-type Assistant = {
-  id: number
-  name: string
-  description: string
-  system_prompt: string
-  model_id: string | null
-  icon: string | null
-  is_public: boolean
-  user_id: number
-}
-
-/* ── Icon helper (inline SVG for special cases) ──────────────────────── */
-function CopyIcon({ size = 12 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-    </svg>
-  )
-}
-
-function CheckIcon({ size = 12 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="20 6 9 17 4 12"/>
-    </svg>
-  )
-}
-
-function TrashIcon({ size = 14 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-    </svg>
-  )
-}
-
-const PRESETS = [
-  { icon: 'code' as const, label: 'کدنویسی', description: 'نوشتن و دیباگ کد', prompt: 'یک تابع در ' },
-  { icon: 'chat' as const, label: 'ترجمه', description: 'ترجمه متن به فارسی', prompt: 'متن زیر را به فارسی روان ترجمه کن:\n\n' },
-  { icon: 'search' as const, label: 'خلاصه‌سازی', description: 'خلاصه کردن متن طولانی', prompt: 'متن زیر را خلاصه کن:\n\n' },
-  { icon: 'dashboard' as const, label: 'تحلیل', description: 'تحلیل دادهها و اطلاعات', prompt: 'داده‌های زیر را تحلیل کن:\n\n' },
-]
-
-// walletBalance is raw Toman (see backend/wallet.py, GET /wallet) — the
-// threshold below and the <Num> that renders the same value must agree on
-// that unit, so name it here instead of repeating the bare literal.
-const LOW_BALANCE_TOMAN = 5000
-
-function generateId() { return Date.now().toString(36) + Math.random().toString(36).slice(2) }
-
-/* ── Search-intent detection ──────────────────────────────────────────
-   The web-search feature only ever fires from the globe toggle (default
-   OFF), so a user typing "search the internet" in plain language sees
-   nothing happen. This is a lightweight, no-dependency heuristic used only
-   to offer an inline hint to turn the toggle on and re-send -- it never
-   auto-enables search or auto-resends by itself. */
-const SEARCH_INTENT_PATTERNS: RegExp[] = [
-  /search\s+(the\s+)?(internet|web|online)/i,
-  /google\s+(it|this|that)/i,
-  /look\s+(it|this)?\s*up\s+online/i,
-  /browse\s+the\s+web/i,
-  /جستجو(ی)?\s*(در\s*)?(اینترنت|وب|آنلاین|نت|گوگل)/,
-  /(اینترنت|نت|وب)\s*(رو|را)?\s*(جستجو|سرچ)/,
-  /سرچ\s*(کن|بزن|بکن)/,
-  /گوگل\s*(کن|بزن)/,
-  /بگرد(ی)?\s*(تو|توی|در)?\s*(اینترنت|نت|وب)/,
-]
-
-function hasSearchIntent(text: string): boolean {
-  if (!text) return false
-  return SEARCH_INTENT_PATTERNS.some(re => re.test(text))
-}
-
-/* ── Date formatting helper ──────────────────────────────────────────── */
-function formatDate(dateStr: string): string {
-  try {
-    const d = new Date(dateStr)
-    const now = new Date()
-    const diffMs = now.getTime() - d.getTime()
-    const diffMins = Math.floor(diffMs / 60000)
-    const diffHours = Math.floor(diffMs / 3600000)
-    const diffDays = Math.floor(diffMs / 86400000)
-
-    if (diffMins < 1) return 'اکنون'
-    if (diffMins < 60) return `${diffMins} دقیقه پیش`
-    if (diffHours < 24) return `${diffHours} ساعت پیش`
-    if (diffDays < 7) return `${diffDays} روز پیش`
-    // faDate normalises to Persian digits (raw toLocaleDateString leaks Latin
-    // digits under small-icu); dateStr is already the ISO string faDate wants.
-    return faDate(dateStr)
-  } catch {
-    return ''
-  }
-}
-
-/* ── Memoized chat message item ─────────────────────────────────────── */
-type ChatMessageItemProps = {
-  msg: Message
-  index: number
-  isLast: boolean
-  streaming: boolean
-  userAvatar: string
-  copiedId: string | null
-  onCopy: (id: string, content: string) => void
-  onRetry: (index: number) => void
-  onContinue: (index: number) => void
-}
-
-const ChatMessageItem = memo(function ChatMessageItem({
-  msg,
-  index,
-  isLast,
-  streaming,
-  userAvatar,
-  copiedId,
-  onCopy,
-  onRetry,
-  onContinue,
-}: ChatMessageItemProps) {
-  // finishReason is only populated once this message's own stream finished
-  // (see sendMessage in the parent), so this is naturally false while `msg`
-  // is still the actively-streaming bubble -- no extra `!streaming` guard
-  // needed here.
-  const truncation = msg.role === 'assistant' ? getTruncationStatus(msg.finishReason, msg.content) : { truncated: false as const }
-  return (
-    <div className={`chat-row ${msg.role === 'user' ? 'chat-row-user' : 'chat-row-assistant'}`}>
-      {msg.role === 'assistant' && (
-        <div className="chat-avatar chat-avatar-ai">
-          <Icon name="models" size={16} />
-        </div>
-      )}
-      <div className={`chat-bubble ${msg.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}`}>
-        {msg.role === 'assistant' && streaming && isLast && !msg.content && (
-          <div className="chat-typing">
-            <span /><span /><span />
-          </div>
-        )}
-        {msg.role === 'assistant' ? (
-          <div className="chat-bubble-content">
-            <MarkdownRenderer content={msg.content} />
-            {streaming && isLast && msg.content && (
-              <div className="stream-cursor-line" aria-hidden="true">
-                <span className="stream-cursor" />
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="chat-bubble-content chat-bubble-plain">{msg.content}</div>
-        )}
-        {msg.role === 'assistant' && truncation.truncated && (
-          truncation.empty ? (
-            <div className="chat-truncated-bar chat-truncated-bar-empty" role="status">
-              <span>مدل بدون تولید متن به محدودیت طول رسید.</span>
-              <button type="button" onClick={() => onRetry(index)} className="chat-truncated-btn">
-                تلاش دوباره
-              </button>
-            </div>
-          ) : (
-            <div className="chat-truncated-bar" role="status">
-              <span>این پاسخ به‌خاطر محدودیت طول ناتمام ماند.</span>
-              <button type="button" onClick={() => onContinue(index)} className="chat-truncated-btn">
-                ادامه بده
-              </button>
-            </div>
-          )
-        )}
-        {msg.role === 'assistant' && msg.content && !streaming && (
-          <div className="chat-actions">
-            <button
-              onClick={() => onCopy(msg.id, msg.content)}
-              className="chat-action-btn"
-              title="کپی"
-            >
-              {copiedId === msg.id ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
-              {copiedId === msg.id ? 'کپی شد' : 'کپی'}
-            </button>
-            {index > 0 && (
-              <button onClick={() => onRetry(index)} className="chat-action-btn" title="تلاش مجدد">
-                <Icon name="refresh" size={13} />
-                تلاش مجدد
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-      {msg.role === 'user' && userAvatar && (
-        <div className="chat-avatar chat-avatar-user">
-          {userAvatar}
-        </div>
-      )}
-    </div>
-  )
-})
+const WELCOME_MESSAGE: Message = { id: 'welcome', role: 'assistant', content: 'سلام! به Sanjabai خوش آمدید. چطور می‌توانم کمک کنید؟' }
 
 export default function ChatPage() {
   const { user, token } = useAuth()
   const { models, loading, error: catalogError } = useCatalog()
-  const [messages, setMessages] = useState<Message[]>(() => [
-    { id: 'welcome', role: 'assistant', content: 'سلام! به Sanjabai خوش آمدید. چطور می‌توانم کمک کنید؟' }
-  ])
+  const [messages, setMessages] = useState<Message[]>(() => [WELCOME_MESSAGE])
   const [model, setModel] = useState<ModelCatalogItem | null>(null);
   const [input, setInput] = useState('')
-  const [streaming, setStreaming] = useState(false)
-  const [error, setError] = useState('')
   const abortRef = useRef<AbortController | null>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -268,16 +53,17 @@ export default function ChatPage() {
   const [smartMode, setSmartMode] = useState<boolean>(() => {
     try { return localStorage.getItem('sanjabai_smart_mode') === 'true' } catch { return false }
   })
-  // Inline hint offering to re-send with web search on, when the user typed
-  // a search-intent message but the globe toggle is off. Never auto-enables
-  // search or auto-resends -- only a click on the hint's button does that.
-  const [searchHintFor, setSearchHintFor] = useState<{ userMsgId: string; content: string } | null>(null)
   const [smartModel, setSmartModel] = useState<string | null>(null)
-  const [exportMenuOpen, setExportMenuOpen] = useState(false)
+  // SSE-stream-derived state, written by useChatStream (and reset by
+  // useConversations on new-chat/switch-conversation) -- owned here rather
+  // than inside either hook so both can write it without a circular
+  // hook-to-hook dependency; see useChatStream.ts's header comment.
+  const [streaming, setStreaming] = useState(false)
+  const [error, setError] = useState('')
   const [usageStats, setUsageStats] = useState<UsageStats>({ promptTokens: 0, completionTokens: 0, totalTokens: 0, estimatedCost: 0 })
   const [tokensPerSec, setTokensPerSec] = useState<number>(0)
-  const streamStartTimeRef = useRef<number>(0)
-  const exportMenuRef = useRef<HTMLDivElement>(null)
+  const [searchHintFor, setSearchHintFor] = useState<{ userMsgId: string; content: string } | null>(null)
+  const messagesRef = useRef<Message[]>(messages)
 
   /* ── Assistant integration ──────────────────────────────────────────── */
   const searchParams = useSearchParams()
@@ -315,20 +101,6 @@ export default function ChatPage() {
     }
   }, [promptParam])
 
-  /* ── Conversation sidebar state ──────────────────────────────────────── */
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
-  const [conversations, setConversations] = useState<Conversation[]>([])
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
-  const [loadingConversations, setLoadingConversations] = useState(false)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
-  const [sidebarSearchQuery, setSidebarSearchQuery] = useState('')
-  const activeConversationIdRef = useRef<string | null>(null)
-  const messagesRef = useRef<Message[]>(messages)
-
-  // Keep refs in sync
-  useEffect(() => { activeConversationIdRef.current = activeConversationId }, [activeConversationId])
   useEffect(() => { messagesRef.current = messages }, [messages])
   useEffect(() => {
     try { localStorage.setItem('sanjabai_smart_mode', smartMode ? 'true' : 'false') } catch {}
@@ -336,15 +108,6 @@ export default function ChatPage() {
   useEffect(() => {
     try { localStorage.setItem('sanjabai_web_search', webSearch ? 'true' : 'false') } catch {}
   }, [webSearch])
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
-        setExportMenuOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
 
   /* ── Load assistant from URL param ────────────────────────────────── */
   useEffect(() => {
@@ -372,204 +135,21 @@ export default function ChatPage() {
     return () => { cancelled = true }
   }, [assistantParam, token, models])
 
-  /* ── Conversation API helpers ────────────────────────────────────────── */
-  const authHeaders = useCallback((): Record<string, string> => {
-    return token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' }
-  }, [token])
+  const conv = useConversations({
+    token, models, model, abortRef, setModel,
+    setStreaming, setMessages, setShowPresets, setError, setUsageStats, setSmartModel, setSearchHintFor,
+  })
 
-  const fetchConversations = useCallback(async () => {
-    if (!token) return
-    setLoadingConversations(true)
-    try {
-      const res = await fetch('/api/conversations', { headers: authHeaders() })
-      if (res.ok) {
-        const data = await res.json()
-        // Backend may return array or paginated {items: [...]} format
-        const list = Array.isArray(data) ? data : (data?.items ?? [])
-        setConversations(list)
-      }
-    } catch { /* silent */ }
-    finally { setLoadingConversations(false) }
-  }, [token, authHeaders])
-
-  useEffect(() => { fetchConversations() }, [fetchConversations])
-
-  const loadConversation = useCallback(async (id: string) => {
-    if (!token) return
-    // Abort any in-flight stream before swapping conversations: the orphaned
-    // stream's setMessages would findIndex into the NEW conversation (-1, text
-    // dropped), leave `streaming` stuck true, and keep billing a response the
-    // user has navigated away from. Mirrors the Stop button (cancel()).
-    if (abortRef.current) {
-      abortRef.current.abort()
-      abortRef.current = null
-      setStreaming(false)
-    }
-    try {
-      const res = await fetch(`/api/conversations/${id}`, { headers: authHeaders() })
-      if (!res.ok) throw new Error('failed')
-      const data: ConversationDetail = await res.json()
-      setActiveConversationId(id)
-      if (data.messages && data.messages.length > 0) {
-        const loaded: Message[] = data.messages.map((m, i) => ({ id: `loaded-${i}`, role: m.role as Message['role'], content: m.content }))
-        setMessages(loaded)
-        setShowPresets(false)
-      } else {
-        setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Sanjabai خوش آمدید. چطور می‌توانم کمک کنید؟' }])
-        setShowPresets(true)
-      }
-      // Set model from conversation if possible
-      if (data.model && models.length > 0) {
-        const found = models.find(m => m.providerModelId === data.model || m.id === data.model)
-        if (found) setModel(found)
-      }
-      setMobileDrawerOpen(false)
-    } catch {
-      toast('خطا در بارگذاری مکالمه', 'error')
-    }
-  }, [token, authHeaders, models])
-
-  const createConversation = useCallback(async (firstUserMsg: string): Promise<string | null> => {
-    if (!token) return null
-    const title = firstUserMsg.slice(0, 50) + (firstUserMsg.length > 50 ? '...' : '')
-    try {
-      const res = await apiFetch('/api/conversations', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ title, model: model?.providerModelId || model?.id || '' }),
-      })
-      if (!res.ok) return null
-      const data = await res.json()
-      const newConv: Conversation = {
-        id: data.id?.toString() || data._id || generateId(),
-        title: data.title || title,
-        model: data.model || '',
-        created_at: data.created_at || new Date().toISOString(),
-        updated_at: data.updated_at || new Date().toISOString(),
-      }
-      setConversations(prev => [newConv, ...prev])
-      setActiveConversationId(newConv.id)
-      return newConv.id
-    } catch { return null }
-  }, [token, authHeaders, model])
-
-  const saveMessages = useCallback(async (convId: string, msgs: Message[]) => {
-    if (!token) return
-    const payload = msgs.filter(m => m.id !== 'welcome').map(m => ({ role: m.role, content: m.content }))
-    try {
-      await apiFetch(`/api/conversations/${convId}`, {
-        method: 'PUT',
-        headers: authHeaders(),
-        body: JSON.stringify({ messages: payload }),
-      })
-    } catch { /* silent - don't interrupt user flow */ }
-  }, [token, authHeaders])
-
-  const deleteConversation = useCallback(async (id: string) => {
-    if (!token) return
-    setDeletingId(id)
-    try {
-      const res = await apiFetch(`/api/conversations/${id}`, {
-        method: 'DELETE',
-        headers: authHeaders(),
-      })
-      if (res.ok) {
-        setConversations(prev => prev.filter(c => c.id !== id))
-        if (activeConversationId === id) {
-          setActiveConversationId(null)
-          setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Sanjabai خوش آمدید. چطور می‌توانم کمک کنید؟' }])
-          setShowPresets(true)
-        }
-      }
-    } catch {
-      toast('خطا در حذف مکالمه', 'error')
-    }
-    finally {
-      setDeletingId(null)
-      setConfirmDeleteId(null)
-    }
-  }, [token, authHeaders, activeConversationId])
-
-  const startNewChat = useCallback(() => {
-    // Abort any in-flight stream first — same orphaned-stream hazard as
-    // loadConversation (dropped text, stuck composer, silent billing).
-    if (abortRef.current) {
-      abortRef.current.abort()
-      abortRef.current = null
-      setStreaming(false)
-    }
-    setActiveConversationId(null)
-    setMessages([{ id: 'welcome', role: 'assistant', content: 'سلام! به Sanjabai خوش آمدید. چطور می‌توانم کمک کنید؟' }])
-    setShowPresets(true)
-    setError('')
-    setMobileDrawerOpen(false)
-    setUsageStats({ promptTokens: 0, completionTokens: 0, totalTokens: 0, estimatedCost: 0 })
-    setSmartModel(null)
-    setSearchHintFor(null)
-  }, [])
-
-  /* ── Date grouping helper ──────────────────────────────────────────────── */
-  const getDateGroup = useCallback((dateStr: string): string => {
-    try {
-      const d = new Date(dateStr)
-      const now = new Date()
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      const startOfYesterday = new Date(startOfToday.getTime() - 86400000)
-      const startOfWeek = new Date(startOfToday.getTime() - startOfToday.getDay() * 86400000)
-      if (d >= startOfToday) return 'امروز'
-      if (d >= startOfYesterday) return 'دیروز'
-      if (d >= startOfWeek) return 'این هفته'
-      return 'قدیمی\u200cتر'
-    } catch { return 'قدیمی\u200cتر' }
-  }, [])
-
-  /* ── Filtered + grouped conversations ──────────────────────────────────── */
-  const filteredConversations = useMemo(() => {
-    let list = conversations
-    if (sidebarSearchQuery.trim()) {
-      const q = sidebarSearchQuery.trim().toLowerCase()
-      list = list.filter(c => c.title.toLowerCase().includes(q))
-    }
-    return list
-  }, [conversations, sidebarSearchQuery])
-
-  const groupedConversations = useMemo(() => {
-    const groups: Record<string, Conversation[]> = { 'امروز': [], 'دیروز': [], 'این هفته': [], 'قدیمی\u200cتر': [] }
-    for (const c of filteredConversations) {
-      const g = getDateGroup(c.updated_at || c.created_at)
-      groups[g].push(c)
-    }
-    // Remove empty groups
-    return Object.entries(groups).filter(([, items]) => items.length > 0)
-  }, [filteredConversations, getDateGroup])
-
-  /* ── Export conversation ──────────────────────────────────────────────── */
-  const exportConversation = useCallback(async (format: 'json' | 'markdown' | 'text') => {
-    if (!token || !activeConversationId) {
-      toast('ابتدا یک مکالمه را انتخاب کنید', 'error')
-      return
-    }
-    setExportMenuOpen(false)
-    try {
-      const res = await fetch(`/api/conversations/${activeConversationId}/export?format=${format}`, {
-        headers: authHeaders(),
-      })
-      if (!res.ok) throw new Error('export failed')
-      const blob = await res.blob()
-      const ext = format === 'markdown' ? 'md' : format
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `conversation-${activeConversationId}.${ext}`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      toast('فایل دانلود شد', 'success')
-    } catch {
-      toast('خطا در خروجی گرفتن', 'error')
-    }
-  }, [token, activeConversationId, authHeaders])
+  const chat = useChatStream({
+    model, models, setModel, token, smartMode, webSearch, setWebSearch,
+    attachedFile, setAttachedFile, activeAssistant, messages, setMessages, setInput, messagesRef,
+    activeConversationIdRef: conv.activeConversationIdRef,
+    createConversation: conv.createConversation,
+    saveMessages: conv.saveMessages,
+    setSmartModel, setShowPresets, setWalletBalance, abortRef,
+    setStreaming, setError, setUsageStats, setTokensPerSec,
+    searchHintFor, setSearchHintFor,
+  })
 
   /* ── Detect mobile ───────────────────────────────────────────────────── */
   const [isMobile, setIsMobile] = useState(false)
@@ -628,332 +208,9 @@ export default function ChatPage() {
     setTimeout(() => setCopiedId(null), 2000)
   }, [])
 
-  const cancel = useCallback(() => {
-    abortRef.current?.abort()
-    abortRef.current = null
-    setStreaming(false)
-  }, [])
-
-  const sendMessageRef = useRef<((content: string, existingMsgs?: Message[]) => Promise<void>) | null>(null)
-
-  const retry = useCallback(async (msgIndex: number) => {
-    if (!model) return
-    const userMsg = messages.slice(0, msgIndex).filter(m => m.role === 'user').pop()
-    if (!userMsg) return
-    const newMsgs = messages.slice(0, msgIndex)
-    setMessages(newMsgs)
-    setError('')
-    if (sendMessageRef.current) await sendMessageRef.current(userMsg.content, newMsgs)
-  }, [messages, model])
-
-  // "ادامه بده" button on a length-capped reply. Deliberately reuses the
-  // normal sendMessage codepath (no bespoke "continue" request/endpoint):
-  // it appends a plain user turn asking the model to continue, using the
-  // full current transcript -- including the truncated reply itself -- as
-  // context, exactly like any other follow-up message.
-  const handleContinue = useCallback(() => {
-    if (sendMessageRef.current) sendMessageRef.current('ادامه بده')
-  }, [])
-
-  const sendMessage = useCallback(async (content: string, existingMsgs?: Message[], forceWebSearch?: boolean) => {
-    let currentModel = model;
-    if (!currentModel && models.length > 0) {
-        currentModel = models[0];
-        setModel(models[0]); // Ensure model state is updated
-    }
-    if (!currentModel) {
-      toast('لطفاً یک مدل را انتخاب کنید.', 'error');
-      return;
-    }
-    const effectiveWebSearch = forceWebSearch ?? webSearch
-    if (forceWebSearch && !webSearch) setWebSearch(true)
-    const msgs = existingMsgs || messages
-    const userMsg: Message = { id: generateId(), role: 'user', content }
-    // Offer the re-send-with-search hint only for organic sends (not the
-    // forced resend itself) when search is off but the message reads like
-    // a search request.
-    setSearchHintFor(!forceWebSearch && !webSearch && hasSearchIntent(content) ? { userMsgId: userMsg.id, content } : null)
-    const updated = [...msgs, userMsg]
-    setMessages(updated)
-    setInput('')
-    setShowPresets(false)
-    setStreaming(true)
-    setError('')
-    streamStartTimeRef.current = Date.now()
-    setTokensPerSec(0)
-
-    const controller = new AbortController()
-    abortRef.current = controller
-
-    // If no active conversation, create one on first user message
-    let convId = activeConversationIdRef.current
-    if (!convId) {
-      convId = await createConversation(content)
-    }
-
-    // Outside try so the AbortError catch branch can flush pending tokens.
-    let streamAccumulator: StreamAccumulator | null = null
-
-    try {
-      const chatUrl = (smartMode && !attachedFile) ? '/api/v1/smart-chat' : '/api/v1/chat/completions'
-      let res: Response
-      if (attachedFile) {
-        const fd = new FormData()
-        fd.append('file', attachedFile)
-        fd.append('model', currentModel!.providerModelId || currentModel!.id)
-        fd.append('messages', JSON.stringify(updated.map(m => ({ role: m.role, content: m.content }))))
-        fd.append('stream', 'true')
-        const fh: Record<string, string> = {}
-        if (token) fh['Authorization'] = `Bearer ${token}`
-        res = await apiFetch('/api/v1/chat/with-file', { method: 'POST', headers: fh, body: fd, signal: controller.signal })
-        setAttachedFile(null)
-      } else {
-        res = await apiFetch(chatUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-            ...(smartMode ? { 'X-Smart-Model': currentModel!.providerModelId || currentModel!.id } : {}),
-          },
-          body: JSON.stringify({
-            model: currentModel!.providerModelId || currentModel!.id,
-            messages: updated.map(m => ({ role: m.role, content: m.content })),
-            stream: true,
-            ...(effectiveWebSearch ? { web_search: true } : {}),
-            ...(activeAssistant ? { assistant_id: activeAssistant.id } : {}),
-          }),
-          signal: controller.signal,
-        })
-      }
-
-      if (!res.ok) {
-        let errorBody: { error?: { code?: string; message?: string }; code?: string; detail?: string } | null = null
-        try { errorBody = await res.json() } catch {}
-        const code = errorBody?.error?.code || errorBody?.code || ''
-        // Only a real balance failure gets the "your credit has run out" card.
-        // This used to fire on ANY 429, so a user with ~10,000,000 toman who
-        // merely hit the five-free-messages-per-model window was told their
-        // credit was finished and sent to the top-up page -- false, and it
-        // pushed people to pay for something they had already paid for.
-        // Every other error now shows the server's own Persian message, which
-        // is already specific (the free-tier one names the model and counts
-        // down to the reset).
-        if (code === 'balance') {
-          throw new Error('INSUFFICIENT_BALANCE')
-        }
-        throw new Error(errorBody?.error?.message || errorBody?.detail || `خطای سرور: ${res.status}`)
-      }
-
-      const reader = res.body?.getReader()
-      const decoder = new TextDecoder()
-      const assistantId = generateId()
-      setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '' }])
-
-      // Throttles setMessages to ~once/frame instead of once per SSE token
-      // (see useStreamAccumulator.ts). accumulator.getText() replaces the
-      // old plain `acc` string as the source of truth.
-      const accumulator = new StreamAccumulator((text) => {
-        setMessages(prev => {
-          const copy = [...prev]
-          const idx = copy.findIndex(m => m.id === assistantId)
-          if (idx >= 0) copy[idx] = { ...copy[idx], content: text }
-          return copy
-        })
-      })
-      streamAccumulator = accumulator
-      let usageData: { prompt_tokens?: number; completion_tokens?: number } | null = null
-      // Captured from choices[0].finish_reason on whichever SSE chunk carries
-      // it (null on every delta chunk until the last one; verified live
-      // against the prod API container -- sanjab/gemini-3-flash returns
-      // "length" on max_tokens, not "max_tokens"). Attached to the message
-      // after the stream completes so finishReason.ts can decide whether the
-      // response was cut off by the length ceiling.
-      let capturedFinishReason: string | null = null
-      // Carry-over buffer: a `data: {...}` line can split across two
-      // reader.read() calls behind the Docker/Caddy proxy. Accumulate, split
-      // on \n, keep the last (possibly incomplete) segment for the next read,
-      // flush on stream end -- without this, a split line JSON.parse-fails and
-      // is silently lost (and an error event with it).
-      let sseBuffer = ''
-
-      // Returns true when the stream must stop (upstream error event).
-      const processLine = (rawLine: string): boolean => {
-        const trimmed = rawLine.trim()
-        if (!trimmed || !trimmed.startsWith('data:')) return false
-        const data = trimmed.slice(5).trim()
-        if (data === '[DONE]') return false
-        let obj: any
-        try { obj = JSON.parse(data) } catch { return false /* partial/non-JSON */ }
-        // ── upstream error event ── backend emits `data: {"error": ...}` on
-        // failure (two shapes; one leaks a raw Python exception string). Never
-        // render that to the user: log the detail, show a generic Persian line
-        // in the assistant bubble (keeping any partial text), and stop.
-        if (obj.error) {
-          console.error('chat stream upstream error:', obj.error, obj.code ?? '')
-          // chat_stream.py's _sse_error_event emits {error:{code,message}} with
-          // a message that is always a safe Persian string — prefer it so the
-          // user sees the specific cause. A bare-string `error` is the older
-          // shape and may carry a raw exception, so it never reaches the UI.
-          const fromBackend = typeof obj.error?.message === 'string' ? obj.error.message : ''
-          const errText = fromBackend || 'دریافت پاسخ از سرویس با خطا مواجه شد. لطفاً دوباره تلاش کنید.'
-          // Cancel any pending throttled flush -- it would otherwise fire
-          // after this and overwrite the error text.
-          accumulator.cancel()
-          const accText = accumulator.getText()
-          setMessages(prev => {
-            const copy = [...prev]
-            const idx = copy.findIndex(m => m.id === assistantId)
-            if (idx >= 0) copy[idx] = { ...copy[idx], content: accText ? `${accText}\n\n${errText}` : errText }
-            return copy
-          })
-          return true
-        }
-        const delta = obj.choices?.[0]?.delta?.content
-        if (delta) {
-          accumulator.push(delta)
-        }
-        const finishReason = obj.choices?.[0]?.finish_reason
-        if (typeof finishReason === 'string') capturedFinishReason = finishReason
-        if (obj.usage) usageData = obj.usage
-        if (obj.x_smart_model) setSmartModel(obj.x_smart_model)
-        // ── billing event (real IRT cost) ──
-        if (obj.type === 'billing') {
-          // Wallet balance changed -- reflect the authoritative post-charge
-          // amount the event carries (raw toman); refetch if it is absent.
-          if (typeof obj.balance_after === 'number') {
-            setWalletBalance(obj.balance_after)
-          } else if (token) {
-            fetch('/api/wallet', { headers: { Authorization: `Bearer ${token}` } })
-              .then(r => r.ok ? r.json() : Promise.reject())
-              .then(d => setWalletBalance(d.balance ?? 0))
-              .catch(() => { /* silent */ })
-          }
-          setUsageStats(prev => ({
-            promptTokens: obj.input_tokens ?? prev.promptTokens,
-            completionTokens: obj.output_tokens ?? prev.completionTokens,
-            totalTokens: (obj.input_tokens ?? 0) + (obj.output_tokens ?? 0),
-            estimatedCost: obj.cost ?? prev.estimatedCost
-          }))
-        }
-        // ── smart_info event ──
-        if (obj.type === 'smart_info') {
-          setSmartModel(obj.model)
-        }
-        // ── tokens/sec ──
-        if (streamStartTimeRef.current > 0) {
-          const elapsed = (Date.now() - streamStartTimeRef.current) / 1000
-          const tps = usageData
-            ? Math.round(((usageData.prompt_tokens ?? 0) + (usageData.completion_tokens ?? 0)) / Math.max(elapsed, 0.1))
-            : 0
-          setTokensPerSec(tps)
-        }
-        return false
-      }
-
-      let errored = false
-      while (true) {
-        const { value, done } = await reader!.read()
-        if (done) break
-        sseBuffer += decoder.decode(value, { stream: true })
-        const lines = sseBuffer.split('\n')
-        sseBuffer = lines.pop() ?? ''
-        for (const line of lines) {
-          if (processLine(line)) { errored = true; break }
-        }
-        if (errored) break
-      }
-      // Flush a trailing complete line the buffer still holds at stream end.
-      if (!errored && sseBuffer.trim()) { if (processLine(sseBuffer)) errored = true }
-      // On an upstream error, stop reading the (now-defunct) body cleanly.
-      // (The error branch above already set the final bubble content and
-      // cancelled the throttle, so it must not be flushed again here.)
-      if (errored) {
-        try { await reader!.cancel() } catch { /* already closed */ }
-      } else {
-        // Mandatory final flush -- the last tokens may postdate the last
-        // scheduled throttled flush and must still reach the UI.
-        accumulator.flushNow()
-        // Record whatever finish_reason the stream carried (or null if it
-        // never sent one) so ChatMessageItem can show the "ناتمام ماند" /
-        // "بدون تولید متن" bar. Runs after flushNow() so this update merges
-        // onto the message's final content rather than racing it.
-        setMessages(prev => {
-          const copy = [...prev]
-          const idx = copy.findIndex(m => m.id === assistantId)
-          if (idx >= 0) copy[idx] = { ...copy[idx], finishReason: capturedFinishReason }
-          return copy
-        })
-      }
-
-      // Auto-save after streaming completes
-      if (convId) {
-        const finalMsgs = [...updated, { id: assistantId, role: 'assistant' as const, content: accumulator.getText() }]
-        saveMessages(convId, finalMsgs)
-      }
-      // Update token counts from usageData (cost comes from billing events).
-      // usageData is now assigned inside the processLine closure above, which
-      // defeats TS control-flow narrowing (it stays typed as its `null`
-      // initializer here) -- the cast restores the real declared type.
-      const finalUsage = usageData as { prompt_tokens?: number; completion_tokens?: number } | null
-      if (finalUsage) {
-        const promptTokens = finalUsage.prompt_tokens || 0
-        const completionTokens = finalUsage.completion_tokens || 0
-        const totalTokens = promptTokens + completionTokens
-        setUsageStats(prev => ({
-          promptTokens: prev.promptTokens + promptTokens,
-          completionTokens: prev.completionTokens + completionTokens,
-          totalTokens: prev.totalTokens + totalTokens,
-          estimatedCost: prev.estimatedCost, // cost comes from billing events
-        }))
-      }
-    } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : 'خطا در ارتباط'
-      if (err instanceof Error && err.name === 'AbortError') {
-        // Flush pending throttled tokens first, or the check below could
-        // see a stale empty `last.content` and wrongly stamp "تولید متوقف
-        // شد." over a response that had already started arriving.
-        streamAccumulator?.flushNow()
-        setMessages(prev => {
-          const copy = [...prev]
-          const last = copy[copy.length - 1]
-          if (last?.role === 'assistant' && !last.content.trim()) {
-            copy[copy.length - 1] = { ...last, content: 'تولید متوقف شد.' }
-          }
-          return copy
-        })
-      } else {
-        setError(errMsg)
-      }
-      // Save partial progress even on error
-      if (convId) {
-        saveMessages(convId, messagesRef.current)
-      }
-    } finally {
-      setStreaming(false)
-      abortRef.current = null
-    }
-  }, [messages, model, token, smartMode, webSearch, createConversation, saveMessages, attachedFile])
-
-  // Keep ref in sync so retry() can call sendMessage without circular deps
-  useEffect(() => { sendMessageRef.current = sendMessage }, [sendMessage])
-
-  // Explicit user action from the search-intent hint: drop the non-search
-  // turn and re-send the same question with web search forced on.
-  const handleResendWithSearch = useCallback(() => {
-    if (!searchHintFor) return
-    const { userMsgId, content } = searchHintFor
-    const idx = messages.findIndex(m => m.id === userMsgId)
-    setSearchHintFor(null)
-    if (idx === -1) return
-    const newMsgs = messages.slice(0, idx)
-    setMessages(newMsgs)
-    sendMessage(content, newMsgs, true)
-  }, [searchHintFor, messages, sendMessage])
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-
-    sendMessage(input.trim())
+    chat.sendMessage(input.trim())
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -969,7 +226,7 @@ export default function ChatPage() {
       // Ctrl+N: New chat
       if (e.ctrlKey && e.key === 'n') {
         e.preventDefault()
-        startNewChat()
+        conv.startNewChat()
         inputRef.current?.focus()
         return
       }
@@ -977,7 +234,7 @@ export default function ChatPage() {
       if (e.key === 'Escape') {
         if (streaming) {
           e.preventDefault()
-          cancel()
+          chat.cancel()
           return
         }
         // Focus input if nothing else to escape
@@ -988,110 +245,36 @@ export default function ChatPage() {
     }
     window.addEventListener('keydown', handleGlobalKeyDown)
     return () => window.removeEventListener('keydown', handleGlobalKeyDown)
-  }, [streaming, cancel, startNewChat])
+  }, [streaming, chat, conv])
 
-  /* ── Sidebar conversation list ───────────────────────────────────────── */
-    const sidebarContent = (
-      <div className="conv-sidebar-content">
-        {/* New chat button */}
-        <button onClick={startNewChat} className="conv-new-chat-btn">
-          <Icon name="plus" size={16} />
-          چت جدید
-        </button>
-
-        {/* Search input */}
-        <div className="conv-search-wrapper">
-          <span className="conv-search-icon"><Icon name="search" size={14} /></span>
-          <input
-            type="text"
-            className="conv-search-input"
-            placeholder="جستجوی مکالمه..."
-            value={sidebarSearchQuery}
-            onChange={e => setSidebarSearchQuery(e.target.value)}
-            dir="rtl"
-          />
-          {sidebarSearchQuery && (
-            <button
-              className="conv-search-clear"
-              onClick={() => setSidebarSearchQuery('')}
-              aria-label="پاک کردن جستجو"
-            >
-              <Icon name="close" size={12} />
-            </button>
-          )}
-        </div>
-
-        {/* Conversation list */}
-        <div className="conv-list">
-          {loadingConversations && conversations.length === 0 ? (
-            <div className="conv-list-loading">
-              <Skeleton className="w-full" height="2.5rem" />
-              <Skeleton className="w-full" height="2.5rem" />
-              <Skeleton className="w-full" height="2.5rem" />
-            </div>
-          ) : filteredConversations.length === 0 ? (
-            <div className="conv-list-empty">
-              <Icon name={sidebarSearchQuery ? 'search' : 'chat'} size={20} className="text-[var(--text-muted)]" />
-              <span>{sidebarSearchQuery ? 'مکالمه\u200cای یافت نشد' : 'هنوز مکالمهای ندارید'}</span>
-            </div>
-          ) : (
-            groupedConversations.map(([group, items]) => (
-              <div key={group} className="conv-date-group">
-                <div className="conv-date-header">{group}</div>
-                {items.map(conv => (
-                  <div
-                    key={conv.id}
-                    className={`conv-item ${activeConversationId === conv.id ? 'conv-item-active' : ''}`}
-                    onClick={() => loadConversation(conv.id)}
-                  >
-                    <div className="conv-item-content">
-                      <span className="conv-item-title">{conv.title}</span>
-                      <span className="conv-item-meta">
-                        <span className="conv-item-date">{formatDate(conv.updated_at || conv.created_at)}</span>
-                        {conv.model && <span className="conv-item-model">{conv.model}</span>}
-                      </span>
-                    </div>
-                    <button
-                      className="conv-item-delete"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (confirmDeleteId === conv.id) {
-                          deleteConversation(conv.id)
-                        } else {
-                          setConfirmDeleteId(conv.id)
-                          setTimeout(() => setConfirmDeleteId(prev => prev === conv.id ? null : prev), 3000)
-                        }
-                      }}
-                      disabled={deletingId === conv.id}
-                      title={confirmDeleteId === conv.id ? 'برای تأیید دوباره کلیک کنید' : 'حذف'}
-                    >
-                      {deletingId === conv.id ? (
-                        <span className="conv-delete-spin" />
-                      ) : confirmDeleteId === conv.id ? (
-                        <CheckIcon size={13} />
-                      ) : (
-                        <TrashIcon size={13} />
-                      )}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    )
+  const sidebarContent = (
+    <ConversationSidebar
+      startNewChat={conv.startNewChat}
+      sidebarSearchQuery={conv.sidebarSearchQuery}
+      setSidebarSearchQuery={conv.setSidebarSearchQuery}
+      loadingConversations={conv.loadingConversations}
+      conversationsCount={conv.conversations.length}
+      filteredConversations={conv.filteredConversations}
+      groupedConversations={conv.groupedConversations}
+      activeConversationId={conv.activeConversationId}
+      loadConversation={conv.loadConversation}
+      confirmDeleteId={conv.confirmDeleteId}
+      setConfirmDeleteId={conv.setConfirmDeleteId}
+      deletingId={conv.deletingId}
+      deleteConversation={conv.deleteConversation}
+    />
+  )
 
   return (
     <>
       {/* Mobile overlay */}
-      {isMobile && mobileDrawerOpen && (
-        <div className="conv-drawer-overlay" onClick={() => setMobileDrawerOpen(false)} />
+      {isMobile && conv.mobileDrawerOpen && (
+        <div className="conv-drawer-overlay" onClick={() => conv.setMobileDrawerOpen(false)} />
       )}
 
-      <div className={`chat-page ${!isMobile && sidebarOpen ? 'chat-page-with-sidebar' : ''}`}>
+      <div className={`chat-page ${!isMobile && conv.sidebarOpen ? 'chat-page-with-sidebar' : ''}`}>
         {/* ── Conversation sidebar (desktop) ─────────────────────────── */}
-        {!isMobile && sidebarOpen && (
+        {!isMobile && conv.sidebarOpen && (
           <aside className="conv-sidebar">
             {sidebarContent}
           </aside>
@@ -1099,10 +282,10 @@ export default function ChatPage() {
 
         {/* ── Mobile drawer ──────────────────────────────────────────── */}
         {isMobile && (
-          <aside className={`conv-drawer ${mobileDrawerOpen ? 'conv-drawer-open' : ''}`}>
+          <aside className={`conv-drawer ${conv.mobileDrawerOpen ? 'conv-drawer-open' : ''}`}>
             <div className="conv-drawer-header">
               <span className="conv-drawer-title">مکالمات</span>
-              <button onClick={() => setMobileDrawerOpen(false)} className="conv-drawer-close">
+              <button onClick={() => conv.setMobileDrawerOpen(false)} className="conv-drawer-close">
                 <Icon name="close" size={18} />
               </button>
             </div>
@@ -1119,101 +302,27 @@ export default function ChatPage() {
               visible title would be noise in a surface this dense. */}
           <h1 className="sr-only">چت با مدل‌های هوش مصنوعی</h1>
 
-          {/* ── Model bar ───────────────────────────────────────────── */}
-          <div className="chat-model-bar">
-            <div className="flex items-center gap-2">
-              {/* Sidebar toggle (desktop) / hamburger (mobile) */}
-              {isMobile ? (
-                <button onClick={() => setMobileDrawerOpen(true)} className="conv-toggle-btn" title="مکالمات">
-                  <Icon name="menu" size={18} />
-                </button>
-              ) : (
-                <button onClick={() => setSidebarOpen(prev => !prev)} className="conv-toggle-btn" title={sidebarOpen ? 'بستن سایدبار' : 'باز کردن سایدبار'}>
-                  <Icon name={sidebarOpen ? 'close' : 'menu'} size={16} />
-                </button>
-              )}
-
-              <Icon name="models" size={18} className="text-[var(--accent)]" />
-              {catalogError ? (
-                <span className="text-sm text-[var(--danger)] flex items-center gap-1">
-                  <Icon name="close" size={14} /> خطا در بارگذاری مدل‌ها
-                </span>
-              ) : (
-                <ModelPicker
-                  models={models}
-                  selected={model}
-                  onSelect={setModel}
-                  loading={loading}
-                  smartModeActive={smartMode}
-                />
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {/* Smart Mode toggle. Was a <label> wrapping an .sr-only
-                  checkbox — a 1×1px hit target in the tab order. role="switch"
-                  announces the state without needing the hidden input. */}
-              <button
-                type="button"
-                role="switch"
-                aria-checked={smartMode}
-                onClick={() => setSmartMode(prev => !prev)}
-                className="smart-mode-toggle"
-                title={smartMode ? 'حالت هوشمند فعال' : 'حالت هوشمند غیرفعال'}
-              >
-                <span className={`smart-mode-switch ${smartMode ? 'smart-mode-on' : ''}`}>
-                  <span className="smart-mode-knob" />
-                </span>
-                <span className="select-none">Smart Mode</span>
-              </button>
-              {smartMode && smartModel && (
-                <span className="badge badge-accent text-[9px]" dir="ltr" title="مدل انتخابی توسط Smart Mode">
-                  🧠 {smartModel}
-                </span>
-              )}
-
-              {/* Compare button */}
-              <Link
-                href="/compare"
-                className="conv-toggle-btn no-underline"
-                title="مقایسه مدل‌ها"
-              >
-                <Icon name="compare" size={16} />
-              </Link>
-
-              {/* Export dropdown */}
-              {activeConversationId && (
-                <div className="relative" ref={exportMenuRef}>
-                  <button
-                    onClick={() => setExportMenuOpen(prev => !prev)}
-                    className="conv-toggle-btn"
-                    title="خروجی گرفتن"
-                  >
-                    <Icon name="external" size={16} />
-                  </button>
-                  {exportMenuOpen && (
-                    <div className="export-dropdown">
-                      <button className="export-dropdown-item" onClick={() => exportConversation('json')}>
-                        <Icon name="code" size={14} /> JSON
-                      </button>
-                      <button className="export-dropdown-item" onClick={() => exportConversation('markdown')}>
-                        <Icon name="chat" size={14} /> Markdown
-                      </button>
-                      <button className="export-dropdown-item" onClick={() => exportConversation('text')}>
-                        <Icon name="info" size={14} /> Text
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {streaming && (
-                <button onClick={cancel} className="btn btn-ghost btn-sm text-[var(--danger)]">
-                  <Icon name="close" size={14} />
-                  توقف
-                </button>
-              )}
-            </div>
-          </div>
+          <ChatModelBar
+            isMobile={isMobile}
+            setMobileDrawerOpen={conv.setMobileDrawerOpen}
+            sidebarOpen={conv.sidebarOpen}
+            setSidebarOpen={conv.setSidebarOpen}
+            catalogError={!!catalogError}
+            models={models}
+            model={model}
+            setModel={setModel}
+            loading={loading}
+            smartMode={smartMode}
+            setSmartMode={setSmartMode}
+            smartModel={smartModel}
+            activeConversationId={conv.activeConversationId}
+            exportMenuOpen={conv.exportMenuOpen}
+            setExportMenuOpen={conv.setExportMenuOpen}
+            exportMenuRef={conv.exportMenuRef}
+            exportConversation={conv.exportConversation}
+            streaming={streaming}
+            cancel={chat.cancel}
+          />
 
           {!loading && !catalogError && models.length === 0 && (
             <EmptyState
@@ -1223,58 +332,7 @@ export default function ChatPage() {
             />
           )}
 
-          {/* ── Assistant banner ─────────────────────────────────────── */}
-          {(activeAssistant || loadingAssistant) && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                padding: '0.75rem 1rem',
-                background: 'var(--bg-surface)',
-                borderBottom: '1px solid var(--border)',
-              }}
-            >
-              {loadingAssistant ? (
-                <div className="skeleton" style={{ width: '100%', height: '1.5rem', borderRadius: 'var(--radius-sm)' }} />
-              ) : activeAssistant ? (
-                <>
-                  <div
-                    style={{
-                      width: '2rem',
-                      height: '2rem',
-                      borderRadius: 'var(--radius-md)',
-                      background: 'var(--accent)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <Icon name={(activeAssistant.icon as IconName) || 'sparkles'} size={16} className="text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                      {activeAssistant.name}
-                    </div>
-                    {activeAssistant.description && (
-                      <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {activeAssistant.description}
-                      </div>
-                    )}
-                  </div>
-                  <a
-                    href={`/assistants/${activeAssistant.id}`}
-                    className="btn btn-ghost btn-sm"
-                    style={{ fontSize: '0.6875rem', flexShrink: 0 }}
-                  >
-                    <Icon name="settings" size={12} />
-                    تنظیمات
-                  </a>
-                </>
-              ) : null}
-            </div>
-          )}
+          <AssistantBanner activeAssistant={activeAssistant} loadingAssistant={loadingAssistant} />
 
           {/* ── Messages ────────────────────────────────────────────── */}
           <div ref={scrollContainerRef} onScroll={handleScroll} className="chat-messages">
@@ -1285,7 +343,7 @@ export default function ChatPage() {
                   {PRESETS.map(p => (
                     <button
                       key={p.label}
-                      onClick={() => sendMessage(p.prompt)}
+                      onClick={() => chat.sendMessage(p.prompt)}
                       className="chat-preset-card"
                     >
                       <div className="chat-preset-icon">
@@ -1311,50 +369,12 @@ export default function ChatPage() {
                 userAvatar={user?.email?.[0]?.toUpperCase() || ''}
                 copiedId={copiedId}
                 onCopy={copyToClipboard}
-                onRetry={retry}
-                onContinue={handleContinue}
+                onRetry={chat.retry}
+                onContinue={chat.handleContinue}
               />
             ))}
 
-            {error && (
-              error === 'INSUFFICIENT_BALANCE' ? (
-                <div className="chat-error chat-error-balance" style={{
-                  background: 'linear-gradient(135deg, rgba(243,156,18,0.12), rgba(231,76,60,0.08))',
-                  border: '1px solid rgba(243,156,18,0.3)',
-                  borderRadius: '16px',
-                  padding: '20px 24px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '12px',
-                  alignItems: 'center',
-                  textAlign: 'center',
-                  margin: '12px 0',
-                }}>
-                  <div style={{ fontSize: '2rem' }}>💳</div>
-                  <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)' }}>
-                    اعتبار شما تمام شده!
-                  </div>
-                  <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-                    برای ادامه استفاده از مدل‌های هوش مصنوعی، نیاز به شارژ حساب دارید.
-                    <br />
-                    با شارژ حساب میتونید بدون محدودیت از تمام مدل‌ها استفاده کنید.
-                  </div>
-                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                    <a href="/pricing" className="btn btn-primary" style={{ textDecoration: 'none', padding: '10px 24px', borderRadius: '10px', fontWeight: 600, fontSize: '0.9rem' }}>
-                      🚀 مشاهده پلنها و شارژ حساب
-                    </a>
-                    <a href="/wallet" className="btn btn-ghost" style={{ textDecoration: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 500, fontSize: '0.9rem' }}>
-                      💰 کیف پول
-                    </a>
-                  </div>
-                </div>
-              ) : (
-                <div className="chat-error">
-                  <Icon name="close" size={14} />
-                  {error}
-                </div>
-              )
-            )}
+            <ChatErrorBanner error={error} />
 
             <div ref={bottomRef} />
           </div>
@@ -1368,45 +388,11 @@ export default function ChatPage() {
             </button>
           )}
 
-          {/* ── Search-intent hint ───────────────────────────────────── */}
-          {searchHintFor && !webSearch && (
-            <div
-              dir="rtl"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '8px 14px',
-                margin: '0 12px 8px',
-                background: 'var(--bg-secondary, rgba(255,255,255,0.05))',
-                border: '1px solid var(--border)',
-                borderRadius: '10px',
-                fontSize: '0.8125rem',
-                color: 'var(--text-secondary)',
-              }}
-            >
-              <Icon name="globe" size={14} />
-              <span style={{ flex: 1 }}>
-                به نظر می‌رسد می‌خواهید در اینترنت جستجو شود، ولی جستجوی وب خاموش است.
-              </span>
-              <button
-                type="button"
-                onClick={handleResendWithSearch}
-                className="btn btn-ghost btn-sm"
-                style={{ fontSize: '0.75rem', color: 'var(--accent)', whiteSpace: 'nowrap', fontWeight: 600 }}
-              >
-                فعال‌سازی جستجوی وب و ارسال دوباره
-              </button>
-              <button
-                type="button"
-                onClick={() => setSearchHintFor(null)}
-                aria-label="بستن"
-                style={{ display: 'inline-flex', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: '2px' }}
-              >
-                <Icon name="close" size={12} />
-              </button>
-            </div>
-          )}
+          <SearchHintBanner
+            visible={!!searchHintFor && !webSearch}
+            onResend={chat.handleResendWithSearch}
+            onDismiss={() => setSearchHintFor(null)}
+          />
 
           {/* ── Composer ────────────────────────────────────────────── */}
           <form onSubmit={handleSubmit} className="chat-composer">
@@ -1465,71 +451,16 @@ export default function ChatPage() {
                 </button>
               </div>
             )}
-            <div className="chat-composer-footer">
-              <span className="chat-composer-status">
-                {streaming ? (
-                  <span className="chat-streaming-dot">در حال تولید...</span>
-                ) : (
-                  `${model?.displayName ?? 'منتظر انتخاب مدل'} — ${smartMode ? '🧠 Smart Mode' : 'آماده'}`
-                )}
-              </span>
-              <span className="chat-shortcuts-hint">
-                <kbd>Ctrl+N</kbd> چت جدید · <kbd>Esc</kbd> توقف
-              </span>
-              {/* ── Pre-send cost estimate ─────────────────────────── */}
-              {preSendEstimate && !streaming && (
-                <span className="cost-estimate">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                  </svg>
-                  ~<Num value={preSendEstimate.tokens} unit="توکن" />
-                  <span className="cost-estimate-sep">·</span>
-                  ~<Num value={preSendEstimate.cost} decimals={1} unit="تومان" />
-                </span>
-              )}
-              {usageStats.totalTokens > 0 && (
-                <span className="usage-badge" title={`پرامپت: ${faNum(usageStats.promptTokens)} | پاسخ: ${faNum(usageStats.completionTokens)}`}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                  </svg>
-                  <Num value={usageStats.totalTokens} unit="توکن" />
-                  {/* The cost span was dir="ltr" with a Persian unit, which put
-                      "تومان" on the wrong side of the amount. */}
-                  <Num className="usage-cost" value={usageStats.estimatedCost} unit="تومان" />
-                  {streaming && tokensPerSec > 0 && (
-                    <Num className="usage-tps" value={tokensPerSec} unit="tok/s" />
-                  )}
-                </span>
-              )}
-              {/* ── Wallet balance / warning ────────────────────────── */}
-              {walletBalance !== null && walletBalance < LOW_BALANCE_TOMAN && (
-                <a href="/wallet" className="wallet-warning" title="موجودی کم — شارژ کنید">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                  </svg>
-                  موجودی کم
-                </a>
-              )}
-              {walletBalance !== null && walletBalance >= LOW_BALANCE_TOMAN && (
-                <span className="wallet-balance-inline">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 18v1c0 1.1-.9 2-2 2H5c-1.11 0-2-.9-2-2V5c0-1.1.89-2 2-2h14c1.1 0 2 .9 2 2v1h-9c-1.11 0-2 .9-2 2v8c0 1.1.89 2 2 2h9zm-9-2h10V8H12v8z"/>
-                  </svg>
-                  <Num value={walletBalance} unit="تومان" />
-                </span>
-              )}
-              {/* ── Prompt Library button ───────────────────────────── */}
-              <a href="/prompts" className="prompt-lib-btn" title="کتابخانه پرامپت">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-                </svg>
-                پرامپت‌ها
-              </a>
-              <span className="text-[10px] text-[var(--text-muted)]">
-                {input.length > 0 && `${faNum(input.length)} کاراکتر`}
-              </span>
-            </div>
+            <ChatComposerFooter
+              streaming={streaming}
+              model={model}
+              smartMode={smartMode}
+              preSendEstimate={preSendEstimate}
+              usageStats={usageStats}
+              tokensPerSec={tokensPerSec}
+              walletBalance={walletBalance}
+              inputLength={input.length}
+            />
           </form>
         </div>
       </div>

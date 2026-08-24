@@ -317,6 +317,7 @@ from admin_packages import router as admin_packages_router
 from admin_logical import router as admin_logical_router
 from site_settings import router as site_settings_router
 from admin_watchdog import router as admin_watchdog_router
+from admin_free_tier import router as admin_free_tier_router
 from exchange_rate_admin import router as exchange_rate_admin_router
 from admin_overhead import router as admin_overhead_router
 from images import router as images_router
@@ -356,6 +357,7 @@ app.include_router(admin_packages_router)
 app.include_router(admin_logical_router)
 app.include_router(site_settings_router)
 app.include_router(admin_watchdog_router)
+app.include_router(admin_free_tier_router)
 app.include_router(exchange_rate_admin_router)
 app.include_router(admin_overhead_router)
 app.include_router(images_router)

@@ -7,6 +7,15 @@ which all four chat HTTP routes (/v1/chat/completions, /v1/chat/with-file,
 resolving the user -- so there is one counter, one limit resolution and one
 rejection message rather than four drifting copies.
 
+Also home to :func:`premium_package_window_limit`, the identical
+best-active-package lookup for services/premium_quota.py's
+``premium_rate_limit_per_window`` column (migration 0046). It shares this
+module's tiering logic (package holder -> capped, everyone else -> exempt
+from THAT gate) and its query helper (:func:`_best_package_value`) rather
+than duplicating the JOIN/WHERE in a second module -- see
+services/premium_quota.py's module docstring for what the premium gate does
+with the number this returns.
+
 ── What it counts ─────────────────────────────────────────────────────────
 One *request* = one message, aggregated across ALL models. This is the
 deliberate difference from services/free_tier.py, which counts per model:
@@ -18,11 +27,19 @@ be revisited at a call site without touching this module.
 
 ── How the limit is resolved (three tiers, in this order) ─────────────────
 1. The user holds an active, unexpired ``package_entitlement`` whose
-   ``credit_packages.request_quota`` is set  ->  that quota is the window
-   limit (highest one wins if several packages are held). Checked FIRST,
-   before the paid/balance exemption below: a package buyer has almost
-   certainly paid, so testing has_paid() first would make every package's
-   quota dead code.
+   ``credit_packages.rate_limit_per_window`` is set  ->  that value is the
+   window limit (highest one wins if several packages are held). Checked
+   FIRST, before the paid/balance exemption below: a package buyer has
+   almost certainly paid, so testing has_paid() first would make every
+   package's quota dead code.
+
+   NOTE (migration 0046): this used to read ``request_quota``, which is a
+   DIFFERENT column that services/entitlements.py separately snapshots into
+   a finite bundle of free requests at purchase time. Reading it here too
+   meant setting a rate limit silently handed the buyer that many free
+   requests as well -- the owner never intended that giveaway. This module
+   now reads its own dedicated ``rate_limit_per_window`` column, completely
+   independent of entitlements/request_quota.
 2. Otherwise the user has paid through the gateway or holds wallet credit
    (services/free_tier.py::has_paid / has_balance)  ->  EXEMPT, no cap.
    This preserves today's behaviour exactly: a wallet customer pays per
@@ -44,7 +61,7 @@ quota values are snapshotted at grant time and never re-read live from
 ``credit_packages``. That rule protects a *purchase* (what a user already
 bought must not shrink because an admin edited a package). This is a
 refreshing rate limit, not a purchase: it must follow the admin's current
-setting, so it reads ``credit_packages.request_quota`` live. The
+setting, so it reads ``credit_packages.rate_limit_per_window`` live. The
 entitlement row is used only to answer "does this user hold this package".
 
 ── Windowing ──────────────────────────────────────────────────────────────
@@ -93,7 +110,7 @@ def _msg_key(uid: int) -> str:
     return f'userquota:msg:{uid}'
 
 
-# Highest request_quota among the packages this user currently holds.
+# Highest rate_limit_per_window among the packages this user currently holds.
 #
 # Every clause here is load-bearing and asserted literally in
 # tests/test_user_quota.py (SQL-contract style, following
@@ -102,34 +119,51 @@ def _msg_key(uid: int) -> str:
 # in Python cannot prove a weakened WHERE clause was not shipped):
 #   * active = true and not expired -- a lapsed package must not keep
 #     granting its higher cap
-#   * request_quota IS NOT NULL AND > 0 -- NULL means "this package grants
-#     no request quota", which must fall through to DEFAULT_LIMIT, never be
-#     read as "unlimited"
+#   * rate_limit_per_window IS NOT NULL AND > 0 -- NULL means "this package
+#     grants no rate-limit tier", which must fall through to exempt, never
+#     be read as "unlimited"
 #   * MAX(...) -- a user holding several packages gets the best one
-# Deliberately does NOT filter on requests_remaining: an entitlement whose
-# purchased requests are spent still means the user *holds* that package
-# until it expires, and the rate limit is not the thing that should punish
-# them for it (they have no quota left to spend anyway).
+# Deliberately does NOT filter on requests_remaining/request_quota (a
+# different, entitlements-owned column as of migration 0046 -- see the
+# module docstring): the rate limit and the finite request bundle are now
+# fully independent, and this predicate does not look at the bundle at all.
 _PACKAGE_LIMIT_SQL = sqlalchemy.text(
-    "SELECT MAX(cp.request_quota) AS limit_value "
+    "SELECT MAX(cp.rate_limit_per_window) AS limit_value "
     "FROM package_entitlement pe "
     "JOIN credit_packages cp ON cp.id = pe.package_id "
     "WHERE pe.user_id = :uid "
     "AND pe.active = true "
     "AND (pe.expires_at IS NULL OR pe.expires_at > now()) "
-    "AND cp.request_quota IS NOT NULL "
-    "AND cp.request_quota > 0"
+    "AND cp.rate_limit_per_window IS NOT NULL "
+    "AND cp.rate_limit_per_window > 0"
+)
+
+# Same shape, for services/premium_quota.py's premium_rate_limit_per_window
+# column (migration 0046): of the messages the rate limit above allows, how
+# many may land on an "expensive" model. Same NULL-means-no-tier and
+# MAX-across-packages rules as _PACKAGE_LIMIT_SQL, on the sibling column.
+_PREMIUM_LIMIT_SQL = sqlalchemy.text(
+    "SELECT MAX(cp.premium_rate_limit_per_window) AS limit_value "
+    "FROM package_entitlement pe "
+    "JOIN credit_packages cp ON cp.id = pe.package_id "
+    "WHERE pe.user_id = :uid "
+    "AND pe.active = true "
+    "AND (pe.expires_at IS NULL OR pe.expires_at > now()) "
+    "AND cp.premium_rate_limit_per_window IS NOT NULL "
+    "AND cp.premium_rate_limit_per_window > 0"
 )
 
 
-async def package_window_limit(uid: int) -> Optional[int]:
-    """The window limit granted by the user's best active package, or None.
+async def _best_package_value(uid: int, sql) -> Optional[int]:
+    """Shared body for :func:`package_window_limit` and
+    :func:`premium_package_window_limit`: run ``sql`` (a MAX(...) query over
+    this user's active, unexpired packages) and return the positive int it
+    found, or None on no row / a NULL/non-positive value / any error.
 
     Returns None both when the user holds no quota-granting package AND
     when the lookup itself failed -- the caller cannot tell the difference
-    and must not: both mean "no package-scaled cap applies here", and the
-    tiers below (paid exemption, then the default) are the safe answer in
-    either case. Never raises.
+    and must not: both mean "no package-scaled cap applies here". Never
+    raises.
 
     Not cached. A purchase must lift the cap immediately -- the same reason
     services/free_tier.py::has_balance is not cached -- and this is one
@@ -139,7 +173,7 @@ async def package_window_limit(uid: int) -> Optional[int]:
         if async_session is None:
             return None
         async with async_session() as session:
-            res = await session.execute(_PACKAGE_LIMIT_SQL, {'uid': int(uid)})
+            res = await session.execute(sql, {'uid': int(uid)})
             row = res.fetchone()
             if row is None:
                 return None
@@ -149,8 +183,22 @@ async def package_window_limit(uid: int) -> Optional[int]:
             value = int(value)
             return value if value > 0 else None
     except Exception as e:
-        logger.warning(f"user_quota.package_window_limit failed uid={uid}: {e}")
+        logger.warning(f"user_quota._best_package_value failed uid={uid}: {e}")
         return None
+
+
+async def package_window_limit(uid: int) -> Optional[int]:
+    """The rate-limit window granted by the user's best active package, or
+    None -- see :func:`_best_package_value`."""
+    return await _best_package_value(uid, _PACKAGE_LIMIT_SQL)
+
+
+async def premium_package_window_limit(uid: int) -> Optional[int]:
+    """The premium (expensive-model) sub-allowance granted by the user's
+    best active package, or None -- see :func:`_best_package_value`. Used by
+    services/premium_quota.py; kept here rather than duplicated so both
+    gates share one JOIN/WHERE shape and one set of tests."""
+    return await _best_package_value(uid, _PREMIUM_LIMIT_SQL)
 
 
 async def resolve_limit(uid: int) -> tuple[Optional[int], str]:

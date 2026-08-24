@@ -43,10 +43,14 @@ chat_web._chat_preflight / task_execution.py exactly:
      lifetime + cheap-models-only; no-ops for a paid/package/balance user.
   5. Aggregate package quota (`services.user_quota.check_and_consume`) --
      caps a package holder; exempt for free tier / balance users.
-  6. `BillingService.reserve()` -- pre-flight availability hold.
-  7. The upstream call (`document_ai.generate_content` -- see that
+  6. Premium sub-allowance (`services.premium_quota.check_and_consume`,
+     migration 0046) -- of a package's window allowance, how many may be
+     spent on an expensive model. Needs the resolved model (it prices it),
+     which is why it sits here and not in the pre-model `_chat_preflight`.
+  7. `BillingService.reserve()` -- pre-flight availability hold.
+  8. The upstream call (`document_ai.generate_content` -- see that
      module's docstring for why its internal retry cannot double-bill).
-  8. Bill the REAL cost directly to wallet.balance via
+  9. Bill the REAL cost directly to wallet.balance via
      `chat._bill_stream_usage` (same function task_execution.py uses) --
      this, not `BillingService.settle()`, is what actually charges the
      user; it has its own L1 missing-usage estimate fallback.
@@ -88,6 +92,7 @@ from services.billing import BillingService, InsufficientBalanceError, SqlBillin
 from services.free_tier import check_and_consume
 from services.moderation import BLOCK_MESSAGE_FA, screen_request
 from services.money import Money
+from services.premium_quota import check_and_consume as _premium_quota_check
 from services.user_quota import check_and_consume as _user_quota_check
 from site_settings import get_site_flag
 
@@ -280,7 +285,19 @@ async def generate_document(request: Request) -> JSONResponse:
             status_code=429,
         )
 
-    # ── Gate 6: reserve. Every gate above has now passed; this is the
+    # ── Gate 6: premium (expensive-model) sub-allowance. The same gate the
+    # four chat routes run at their own post-model point, so generating a
+    # document with an expensive model counts against the package's premium
+    # sub-allowance rather than escaping it. ──────────────────────────
+    p_gate = await _premium_quota_check(uid, [model])
+    if p_gate is not None:
+        return JSONResponse(
+            {'error': {'message': p_gate.get('message', _FREE_TIER_MESSAGE),
+                       'type': 'rate_limited', 'code': p_gate.get('code', 'premium_quota_exceeded')}},
+            status_code=429,
+        )
+
+    # ── Gate 7: reserve. Every gate above has now passed; this is the
     # first point money is even provisionally touched. ────────────────
     import chat as chat_mod
     try:

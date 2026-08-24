@@ -261,6 +261,12 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
     if _ft_gate is not None:
         return chat._free_tier_response(_ft_gate)
 
+    # Premium (expensive-model) sub-allowance gate — same position and same
+    # reasoning as the free-tier gate above: post-model, pre-reserve.
+    _premium_gate = await chat.premium_check_and_consume(uid, [selected_model])
+    if _premium_gate is not None:
+        return chat._premium_quota_response(_premium_gate)
+
     # P1: BillingService reserve (replaces _check_quota_pre with proper FOR UPDATE locking)
     # Fall back to legacy _check_quota_pre if BillingService fails
     reservation = None

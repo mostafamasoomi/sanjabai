@@ -222,6 +222,14 @@ async def compare_models(request: Request, payload: CompareRequest) -> Response:
     if _ft_gate is not None:
         return chat._free_tier_response(_ft_gate)
 
+    # Premium (expensive-model) sub-allowance gate — both models in ONE call
+    # for the same reason the free-tier gate above does it: a rejection on the
+    # second model must never burn the first one's allowance. Post-model,
+    # pre-reserve, exactly like the gate above.
+    _premium_gate = await chat.premium_check_and_consume(uid, [model_a, model_b])
+    if _premium_gate is not None:
+        return chat._premium_quota_response(_premium_gate)
+
     # P1: Reserve billing for both models (estimate worst-case)
     reservation_a = None
     reservation_b = None

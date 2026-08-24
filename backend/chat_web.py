@@ -37,6 +37,7 @@ from services.money import Money
 from services.entitlement_gate import covering_entitlement
 from services.moderation import moderation_preflight
 from services.user_quota import check_and_consume as _user_quota_check
+from services.premium_quota import check_and_consume as _premium_quota_check
 from model_output import clean_response_dict
 
 import chat
@@ -173,6 +174,30 @@ def _user_quota_response(gate: dict) -> JSONResponse:
     )
 
 
+def _premium_quota_response(gate: dict) -> JSONResponse:
+    """The 429 for a premium/expensive-model sub-allowance rejection
+    (services/premium_quota.py) -- a different ``error.code`` from both
+    ``message_quota_exceeded`` (this file's own aggregate gate) and
+    ``free_tier_throttle`` (chat.py's), so the three stay distinguishable in
+    logs and support.
+
+    Unlike :func:`_user_quota_response`, the Persian message is built
+    entirely inside premium_quota.py's gate dict (the same split
+    chat.py::_free_tier_response uses for services/free_tier.py) since the
+    message needs no piece of information this function has that the gate
+    dict does not already carry -- this only shapes the HTTP envelope.
+    """
+    return JSONResponse(
+        {'error': {
+            'message': gate.get('message', 'سهم مدل‌های پیشرفته حساب شما پر شده است.'),
+            'type': 'rate_limited',
+            'code': gate.get('code', 'premium_quota_exceeded'),
+            'retry_after_seconds': int(gate.get('retry_after_seconds', 0)),
+        }},
+        status_code=429,
+    )
+
+
 async def _release_reservation(reservation: dict | None, uid: int, label: str = '') -> None:
     """Release a billing reservation; fire-and-forget, logs on failure.
 
@@ -256,6 +281,17 @@ async def chat_with_file(
     _ft_gate = await chat.check_and_consume(uid, [model]) if model else None
     if _ft_gate is not None:
         return chat._free_tier_response(_ft_gate)
+
+    # Premium (expensive-model) sub-allowance gate (services/premium_quota.py,
+    # migration 0046) — runs after the free-tier gate above and strictly
+    # before BillingService.reserve() below, exactly like it: a rejected
+    # request must open no reservation and reach no upstream. Needs `model`
+    # resolved (it looks up the model's base price), which is why it cannot
+    # live in chat._chat_preflight (pre-model, shared by all four routes) and
+    # instead sits here at the same post-model point the free-tier gate does.
+    _premium_gate = await _premium_quota_check(uid, [model]) if model else None
+    if _premium_gate is not None:
+        return _premium_quota_response(_premium_gate)
 
     # P1: BillingService reserve (replaces _check_quota_pre with proper FOR UPDATE locking)
     # Fall back to legacy _check_quota_pre if BillingService fails

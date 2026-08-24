@@ -54,6 +54,7 @@ from services.money import Money
 from services.entitlement_gate import covering_entitlement
 from services.memory_extractor import extract_memories, MIN_MSG_COUNT
 from services.free_tier import check_and_consume
+from services.premium_quota import check_and_consume as premium_check_and_consume
 from middleware.compression import compress_messages, estimate_savings
 from model_output import clean_response_dict
 
@@ -272,7 +273,7 @@ def _as_naive_utc(dt: datetime | None) -> datetime | None:
 
 
 # ── File text extraction / web search / /v1/chat/with-file (chat_web.py) ──
-from chat_web import _apply_web_search, _web_search, _release_reservation, _chat_disabled_response, _chat_preflight  # noqa: E402 -- also registers /v1/chat/with-file
+from chat_web import _apply_web_search, _web_search, _release_reservation, _chat_disabled_response, _chat_preflight, _premium_quota_response  # noqa: E402 -- also registers /v1/chat/with-file
 
 
 # ── Usage estimation / billing (chat_billing.py) ──────────────────────
@@ -341,6 +342,13 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
     _ft_gate = await check_and_consume(uid, [payload_dict['model']]) if payload_dict.get('model') else None
     if _ft_gate is not None:
         return _free_tier_response(_ft_gate)
+
+    # Premium (expensive-model) sub-allowance gate — same position and same
+    # reasoning as the free-tier gate above: post-model (it prices the model),
+    # pre-reserve (a rejection must leave no reservation to unwind).
+    _premium_gate = await premium_check_and_consume(uid, [payload_dict['model']]) if payload_dict.get('model') else None
+    if _premium_gate is not None:
+        return _premium_quota_response(_premium_gate)
 
     # P1: BillingService reserve (replaces _check_quota_pre with proper FOR UPDATE locking)
     # Fall back to legacy _check_quota_pre if BillingService fails

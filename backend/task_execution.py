@@ -54,10 +54,16 @@ and images.py's module docstrings for the incident writeups this mirrors):
           chat_web._chat_preflight so a scheduled task counts against the
           same package window an interactive message does, rather than
           escaping it.
+       e. services.premium_quota.check_and_consume -- the premium
+          sub-allowance (migration 0046): of a package's window allowance,
+          how many may be spent on an expensive model. Needs the resolved
+          model (it prices it), so it sits here rather than in the
+          pre-model chat_web._chat_preflight, mirroring the four chat
+          routes, which run it at their own post-model point too.
      Order matches chat_web._chat_preflight exactly: disabled-switch, then
-     moderation, then quota -- except here BOTH quota gates (free-tier and
-     aggregate) sit after moderation, so a blocked task never consumes
-     either one.
+     moderation, then quota -- except here ALL THREE quota gates (free-tier,
+     aggregate and premium) sit after moderation, so a blocked task never
+     consumes any of them.
   3. BillingService.reserve() -- pre-flight availability check + hold.
   4. The upstream call.
   5. Settle via chat._bill_stream_usage(uid, payload, usage, response_text=...)
@@ -99,6 +105,7 @@ from services.billing import BillingService, InsufficientBalanceError, SqlBillin
 from services.free_tier import check_and_consume
 from services.moderation import BLOCK_MESSAGE_FA, screen_request
 from services.money import Money
+from services.premium_quota import check_and_consume as _premium_quota_check
 from services.user_quota import check_and_consume as _user_quota_check
 from site_settings import get_site_flag
 
@@ -295,6 +302,17 @@ async def _execute_task(task: Any, uid: int) -> dict[str, Any]:
     q_gate = await _user_quota_check(uid)
     if q_gate is not None:
         return await _finalize(execution_id, task.id, 'failed', None, _QUOTA_MESSAGE, 0, 0)
+
+    # 2e. Premium (expensive-model) sub-allowance -- the same gate the four
+    # chat routes run at their own post-model point, so a scheduled task on an
+    # expensive model counts against the package's premium sub-allowance
+    # rather than escaping it. Still before the reservation below.
+    p_gate = await _premium_quota_check(uid, [model_to_call])
+    if p_gate is not None:
+        return await _finalize(
+            execution_id, task.id, 'failed', None,
+            p_gate.get('message', _FREE_TIER_MESSAGE), 0, 0,
+        )
 
     # 3. Reserve.
     import chat as chat_mod

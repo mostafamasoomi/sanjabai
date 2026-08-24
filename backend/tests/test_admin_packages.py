@@ -19,6 +19,7 @@ tests/test_admin_image_price.py's float/negative/bool guards -- same
 """
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -63,7 +64,7 @@ def _pkg_row(**overrides) -> _MappingRow:
     """A full credit_packages row, including the four migration-0034
     columns, shaped like the real seed data (see docstring in
     admin_packages.py for why `credits`/`total_credits` are NOT summed with
-    `bonus_credits`)."""
+    `bonus_credits`), plus the two migration-0046 rate-limit columns."""
     row = dict(
         id='starter-credits', name='Starter Credits', description='Test credit',
         price=100_000, credits=100_000, bonus_credits=0, active=True,
@@ -72,6 +73,7 @@ def _pkg_row(**overrides) -> _MappingRow:
         bonus_percent=0, total_credits=100_000, sort_order=1,
         request_quota=None, token_quota=None, validity_days=None,
         max_cost_per_request_toman=None,
+        rate_limit_per_window=None, premium_rate_limit_per_window=None,
     )
     row.update(overrides)
     return _MappingRow(**row)
@@ -280,3 +282,176 @@ class TestCreatePackage:
         body = resp.json()
         assert body['id'] == 'new-pkg'
         assert body['created']['base_amount'] == 100_000
+
+
+# ── migration-0046 rate-limit fields (rate_limit_per_window /
+#    premium_rate_limit_per_window) ──────────────────────────────────────
+#
+# Pure rate limits: no `package_entitlement` is created by these, so unlike
+# request_quota/token_quota they must NOT be gated by `_check_loss_path`.
+
+class TestRateLimitFields:
+    def test_positive_values_accepted_without_ceiling(self, app_client, admin_ok, mock_async_session):
+        """The core of this change: setting both new columns with NO
+        max_cost_per_request_toman must succeed -- unlike request_quota/
+        token_quota, these never create a wallet-bypassing entitlement."""
+        mock_async_session._execute_result = make_result(
+            fetchone=_pkg_row(max_cost_per_request_toman=None)
+        )
+        resp = app_client.post(
+            '/admin/packages/starter-credits',
+            json={'rate_limit_per_window': 40, 'premium_rate_limit_per_window': 5},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body['updated']['rate_limit_per_window'] == 40
+        assert body['updated']['premium_rate_limit_per_window'] == 5
+
+    def test_zero_rate_limit_rejected(self, app_client, admin_ok, mock_async_session):
+        mock_async_session._execute_result = make_result(fetchone=_pkg_row())
+        resp = app_client.post('/admin/packages/starter-credits', json={'rate_limit_per_window': 0})
+        assert resp.status_code == 400
+
+    def test_negative_premium_rate_limit_rejected(self, app_client, admin_ok, mock_async_session):
+        mock_async_session._execute_result = make_result(fetchone=_pkg_row())
+        resp = app_client.post('/admin/packages/starter-credits', json={'premium_rate_limit_per_window': -5})
+        assert resp.status_code == 400
+
+    def test_float_rate_limit_rejected(self, app_client, admin_ok, mock_async_session):
+        mock_async_session._execute_result = make_result(fetchone=_pkg_row())
+        resp = app_client.post('/admin/packages/starter-credits', json={'rate_limit_per_window': 40.0})
+        assert resp.status_code == 400
+
+    def test_bool_rate_limit_rejected(self, app_client, admin_ok, mock_async_session):
+        mock_async_session._execute_result = make_result(fetchone=_pkg_row())
+        resp = app_client.post('/admin/packages/starter-credits', json={'premium_rate_limit_per_window': True})
+        assert resp.status_code == 400
+
+    def test_null_clears_rate_limit(self, app_client, admin_ok, mock_async_session):
+        mock_async_session._execute_result = make_result(
+            fetchone=_pkg_row(rate_limit_per_window=40)
+        )
+        resp = app_client.post('/admin/packages/starter-credits', json={'rate_limit_per_window': None})
+        assert resp.status_code == 200
+        assert resp.json()['updated']['rate_limit_per_window'] is None
+
+    def test_rate_limit_with_quota_but_no_ceiling_still_rejected_for_quota_reason(
+        self, app_client, admin_ok, mock_async_session
+    ):
+        """Adding a rate limit alongside a request_quota does not exempt the
+        quota from its own ceiling requirement -- the two fields are
+        independent, and _check_loss_path still only cares about
+        request_quota/token_quota."""
+        mock_async_session._execute_result = make_result(
+            fetchone=_pkg_row(request_quota=None, max_cost_per_request_toman=None)
+        )
+        resp = app_client.post(
+            '/admin/packages/starter-credits',
+            json={'rate_limit_per_window': 40, 'request_quota': 500},
+        )
+        assert resp.status_code == 400
+
+    def test_rate_limit_accepted_on_create_without_ceiling(self, app_client, admin_ok, mock_async_session):
+        mock_async_session._execute_result = make_result(fetchone=None)
+        with patch.object(admin_packages, '_write_audit_log', new=AsyncMock()):
+            resp = app_client.post(
+                '/admin/packages',
+                json={'id': 'new-pkg', 'name_fa': 'x', 'name_en': 'y',
+                      'rate_limit_per_window': 40, 'premium_rate_limit_per_window': 5},
+            )
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body['created']['rate_limit_per_window'] == 40
+        assert body['created']['premium_rate_limit_per_window'] == 5
+
+
+# ── GET/POST /admin/premium-threshold ────────────────────────────────────
+
+class TestPremiumThreshold:
+    def test_get_requires_admin(self, app_client, admin_denied):
+        resp = app_client.get('/admin/premium-threshold')
+        assert resp.status_code == 401
+
+    def test_post_requires_admin(self, app_client, admin_denied):
+        resp = app_client.post('/admin/premium-threshold', json={'value': 200_000})
+        assert resp.status_code == 401
+
+    def test_get_missing_row_reports_default(self, app_client, admin_ok, mock_async_session):
+        mock_async_session._execute_result = make_result(fetchone=None)
+        resp = app_client.get('/admin/premium-threshold')
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body['row_missing'] is True
+        assert body['value'] == admin_packages._PREMIUM_THRESHOLD_DEFAULT
+        assert body['default'] == admin_packages._PREMIUM_THRESHOLD_DEFAULT
+
+    def test_get_returns_stored_integer(self, app_client, admin_ok, mock_async_session):
+        """The stored app_setting.value must round-trip as a Python int, not
+        a numeric string -- a JSONB integer row comes back typed already."""
+        mock_async_session._execute_result = make_result(fetchone=_MappingRow(value=200_000))
+        resp = app_client.get('/admin/premium-threshold')
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body['row_missing'] is False
+        assert body['value'] == 200_000
+        assert isinstance(body['value'], int)
+
+    def test_get_coerces_legacy_json_string_row(self, app_client, admin_ok, mock_async_session):
+        """A row that (legacy-style) stored a JSON-encoded string still
+        coerces to an int rather than being handed back as text."""
+        mock_async_session._execute_result = make_result(fetchone=_MappingRow(value='200000'))
+        resp = app_client.get('/admin/premium-threshold')
+        assert resp.status_code == 200
+        assert resp.json()['value'] == 200_000
+
+    def test_post_missing_value_rejected(self, app_client, admin_ok, mock_async_session):
+        resp = app_client.post('/admin/premium-threshold', json={})
+        assert resp.status_code == 400
+
+    def test_post_float_rejected(self, app_client, admin_ok, mock_async_session):
+        resp = app_client.post('/admin/premium-threshold', json={'value': 150000.5})
+        assert resp.status_code == 400
+
+    def test_post_bool_rejected(self, app_client, admin_ok, mock_async_session):
+        resp = app_client.post('/admin/premium-threshold', json={'value': True})
+        assert resp.status_code == 400
+
+    def test_post_negative_rejected(self, app_client, admin_ok, mock_async_session):
+        resp = app_client.post('/admin/premium-threshold', json={'value': -1})
+        assert resp.status_code == 400
+
+    def test_post_above_bounds_rejected(self, app_client, admin_ok, mock_async_session):
+        resp = app_client.post('/admin/premium-threshold', json={'value': 100_000_001})
+        assert resp.status_code == 400
+
+    def test_post_valid_value_round_trips_as_int(self, app_client, admin_ok, mock_async_session):
+        """🔴 The money-typing trap this task calls out explicitly: the value
+        this endpoint writes must serialize as a bare JSON integer
+        (`json.dumps(200000)` -> the text `200000`), never a quoted JSON
+        string -- otherwise every future reader gets the wrong type back."""
+        captured = {}
+
+        async def spy_execute(clause, params=None):
+            if params and 'v' in params:
+                captured['v'] = params['v']
+            return mock_async_session._execute_result
+        mock_async_session.execute = spy_execute
+
+        with patch.object(admin_packages, '_write_audit_log', new=AsyncMock()) as mock_audit:
+            resp = app_client.post('/admin/premium-threshold', json={'value': 200_000})
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body['value'] == 200_000
+        # json.dumps(200000) is the bare text "200000", not '"200000"'.
+        assert captured['v'] == '200000'
+        assert json.loads(captured['v']) == 200_000
+        assert isinstance(json.loads(captured['v']), int)
+        mock_audit.assert_awaited_once()
+        args, kwargs = mock_audit.call_args
+        assert args[0] == 'admin.premium_threshold.update'
+        assert kwargs['target_id'] == admin_packages._PREMIUM_THRESHOLD_KEY
+
+    def test_post_string_digit_value_accepted(self, app_client, admin_ok, mock_async_session):
+        resp = app_client.post('/admin/premium-threshold', json={'value': '150000'})
+        assert resp.status_code == 200
+        assert resp.json()['value'] == 150000

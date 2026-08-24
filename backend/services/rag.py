@@ -34,6 +34,7 @@ from services.rag_retrieval import (
     _rerank,
     _system_prompt,
 )
+from services.premium_quota import check_and_consume as _premium_quota_check
 from services.user_quota import check_and_consume as _user_quota_check
 from site_settings import get_site_flag
 
@@ -59,7 +60,7 @@ LLM_FALLBACK_MODELS = (
 # via services/embeddings.py's usage_events write -- that part was already
 # correct and is untouched here). Order mirrors task_execution.py's
 # _execute_task exactly: kill switch -> moderation -> free-tier -> quota ->
-# reserve -> call -> settle -> release, and all four gates run before the
+# reserve -> call -> settle -> release, and all five gates run before the
 # embedding call too (also a billed upstream request) so a blocked question
 # costs nothing at all, not even an embedding.
 _CHAT_DISABLED_MESSAGE = 'گفتگو موقتاً در دسترس نیست'
@@ -143,7 +144,8 @@ async def query_documents(
 ) -> dict:
     """Query user's documents with RAG.
 
-    0. Kill switch, content moderation, free-tier gate, package quota gate
+    0. Kill switch, content moderation, free-tier gate, package quota gate,
+       premium (expensive-model) sub-allowance gate
        (all before any billed upstream call -- see the module-level "Billed
        / gated query path" note above _CHAT_DISABLED_MESSAGE)
     1. Generate embedding for question
@@ -231,6 +233,15 @@ async def query_documents(
     q_gate = await _user_quota_check(user_id)
     if q_gate is not None:
         return {'answer': _quota_message(q_gate), 'sources': []}
+
+    # Gate 5: premium (expensive-model) sub-allowance -- the same gate the
+    # four chat routes run at their own post-model point, so a RAG query on
+    # an expensive model counts against the package's premium sub-allowance
+    # rather than escaping it. Runs before the embedding call below and well
+    # before reserve(), so a rejection costs nothing.
+    p_gate = await _premium_quota_check(user_id, [resolved_model])
+    if p_gate is not None:
+        return {'answer': p_gate.get('message', _FREE_TIER_MESSAGE), 'sources': []}
 
     # 1. Generate query embedding
     try:

@@ -5,10 +5,12 @@ Two kinds of check, deliberately:
 1. BEHAVIOUR, against an in-memory fake Redis and a fake session, in the
    same spirit as tests/test_free_tier.py and tests/test_entitlements.py.
    The fake session does NOT hand back a canned fetchall(): it evaluates the
-   real predicate (active / not expired / request_quota IS NOT NULL AND > 0
-   / MAX across packages) against in-memory rows, so a test that says "the
-   expired package must not count" is actually exercising that rule rather
-   than a hardcoded answer.
+   real predicate (active / not expired / rate_limit_per_window IS NOT NULL
+   AND > 0 / MAX across packages) against in-memory rows, so a test that
+   says "the expired package must not count" is actually exercising that
+   rule rather than a hardcoded answer. (Migration 0046: this gate used to
+   read ``request_quota``, now reads its own ``rate_limit_per_window``
+   column, independent of services/entitlements.py -- see user_quota.py.)
 
 2. SQL CONTRACT, asserting the literal clause text of _PACKAGE_LIMIT_SQL --
    following tests/test_entitlements_sql_contract.py and for exactly the
@@ -111,8 +113,8 @@ class _FakePackageDB:
         self.entitlements: list[dict] = []
         self.fail = False
 
-    def add_package(self, package_id: str, request_quota=None):
-        self.packages[package_id] = {'id': package_id, 'request_quota': request_quota}
+    def add_package(self, package_id: str, rate_limit_per_window=None):
+        self.packages[package_id] = {'id': package_id, 'rate_limit_per_window': rate_limit_per_window}
 
     def add_entitlement(self, uid: int, package_id: str, *, active=True, expires_at=None):
         self.entitlements.append({
@@ -120,7 +122,7 @@ class _FakePackageDB:
             'active': active, 'expires_at': expires_at,
         })
 
-    def max_request_quota(self, uid: int):
+    def max_rate_limit(self, uid: int):
         """The real WHERE clause, re-implemented -- see module docstring for
         why this is paired with the SQL-text assertions below."""
         now = _utcnow()
@@ -135,7 +137,7 @@ class _FakePackageDB:
             pkg = self.packages.get(e['package_id'])
             if pkg is None:
                 continue  # the JOIN drops it
-            q = pkg['request_quota']
+            q = pkg['rate_limit_per_window']
             if q is None or q <= 0:
                 continue
             best = q if best is None else max(best, q)
@@ -155,7 +157,7 @@ class _FakeSession:
         result.fetchone.return_value = None
         if 'FROM package_entitlement pe' in sql:
             result.fetchone.return_value = _row(
-                {'limit_value': self.db.max_request_quota(params['uid'])}
+                {'limit_value': self.db.max_rate_limit(params['uid'])}
             )
         return result
 
@@ -194,7 +196,7 @@ def _pkg_user(pkg_db, uid: int, quota: int) -> None:
     free tier moved to services/free_tier.py), a package holder is the only
     user this gate actually caps -- so the boundary and window tests below use
     one."""
-    pkg_db.add_package(f'pkg{uid}', request_quota=quota)
+    pkg_db.add_package(f'pkg{uid}', rate_limit_per_window=quota)
     pkg_db.add_entitlement(uid, f'pkg{uid}')
 
 
@@ -207,32 +209,32 @@ class TestResolveLimit:
         assert _run(user_quota.resolve_limit(101)) == (None, user_quota.SOURCE_EXEMPT)
 
     def test_active_package_quota_wins(self, fake_redis, pkg_db):
-        pkg_db.add_package('pro', request_quota=200)
+        pkg_db.add_package('pro', rate_limit_per_window=200)
         pkg_db.add_entitlement(102, 'pro')
         assert _run(user_quota.resolve_limit(102)) == (200, user_quota.SOURCE_PACKAGE)
 
     def test_highest_package_wins(self, fake_redis, pkg_db):
-        pkg_db.add_package('small', request_quota=80)
-        pkg_db.add_package('big', request_quota=500)
+        pkg_db.add_package('small', rate_limit_per_window=80)
+        pkg_db.add_package('big', rate_limit_per_window=500)
         pkg_db.add_entitlement(104, 'small')
         pkg_db.add_entitlement(104, 'big')
         assert _run(user_quota.resolve_limit(104))[0] == 500
 
     def test_expired_package_is_exempt(self, fake_redis, pkg_db):
-        pkg_db.add_package('pro', request_quota=200)
+        pkg_db.add_package('pro', rate_limit_per_window=200)
         pkg_db.add_entitlement(105, 'pro', expires_at=_utcnow() - timedelta(days=1))
         assert _run(user_quota.resolve_limit(105)) == (None, user_quota.SOURCE_EXEMPT)
 
     def test_inactive_package_is_exempt(self, fake_redis, pkg_db):
-        pkg_db.add_package('pro', request_quota=200)
+        pkg_db.add_package('pro', rate_limit_per_window=200)
         pkg_db.add_entitlement(106, 'pro', active=False)
         assert _run(user_quota.resolve_limit(106)) == (None, user_quota.SOURCE_EXEMPT)
 
-    def test_null_request_quota_is_exempt_not_unlimited(self, fake_redis, pkg_db):
-        """Every live package today has request_quota NULL. NULL must mean
-        'grants no window quota' -> fall through to exempt, never 'no limit'
-        read as unlimited-but-counted."""
-        pkg_db.add_package('starter-credits', request_quota=None)
+    def test_null_rate_limit_is_exempt_not_unlimited(self, fake_redis, pkg_db):
+        """Every live package today has rate_limit_per_window NULL. NULL
+        must mean 'grants no window quota' -> fall through to exempt, never
+        'no limit' read as unlimited-but-counted."""
+        pkg_db.add_package('starter-credits', rate_limit_per_window=None)
         pkg_db.add_entitlement(107, 'starter-credits')
         assert _run(user_quota.resolve_limit(107)) == (None, user_quota.SOURCE_EXEMPT)
 
@@ -405,16 +407,27 @@ def test_sql_excludes_expired_entitlements():
     assert "(pe.expires_at IS NULL OR pe.expires_at > now())" in _SQL
 
 
-def test_sql_treats_null_request_quota_as_no_quota_not_unlimited():
-    assert "cp.request_quota IS NOT NULL" in _SQL
+def test_sql_treats_null_rate_limit_as_no_tier_not_unlimited():
+    assert "cp.rate_limit_per_window IS NOT NULL" in _SQL
 
 
-def test_sql_rejects_a_zero_or_negative_quota():
-    assert "cp.request_quota > 0" in _SQL
+def test_sql_rejects_a_zero_or_negative_rate_limit():
+    assert "cp.rate_limit_per_window > 0" in _SQL
 
 
-def test_sql_takes_the_highest_quota_the_user_holds():
-    assert "MAX(cp.request_quota)" in _SQL
+def test_sql_takes_the_highest_rate_limit_the_user_holds():
+    assert "MAX(cp.rate_limit_per_window)" in _SQL
+
+
+def test_sql_does_not_read_the_entitlements_request_quota_column():
+    """migration 0046's whole point: the rate limit must never read
+    request_quota again, or setting it would silently re-hand out free
+    requests through services/entitlements.py's snapshot."""
+    assert "request_quota" not in _SQL
+
+
+# _PREMIUM_LIMIT_SQL's own SQL-contract tests live in
+# tests/test_premium_quota.py (its actual consumer), not here.
 
 
 def test_sql_joins_the_package_table_for_the_live_quota():
@@ -534,7 +547,7 @@ class _QuotaEnv:
         # moved to services/free_tier.py). Give uid 1 a package so the
         # aggregate quota actually binds in these end-to-end tests.
         self.db = _FakePackageDB()
-        self.db.add_package('pro', request_quota=50)
+        self.db.add_package('pro', rate_limit_per_window=50)
         self.db.add_entitlement(1, 'pro')
         self.billing = MagicMock()
         self.billing.reserve = AsyncMock(return_value={'reservation_id': 'r1'})

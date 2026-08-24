@@ -1,33 +1,50 @@
 'use client'
 
-import { Fragment, useState, useEffect, useCallback } from 'react'
-import { Icon } from '@/components/ui/Icon'
+import { useState, useEffect, useCallback } from 'react'
 import { toast } from '@/components/ui'
-import { faNum, faPrice } from '@/lib/format'
-import { SectionHeader, Field, NumInput } from './shared'
+import { faNum } from '@/lib/format'
+import { SectionHeader } from './shared'
+import PackagesRow from './PackagesRow'
+import PackagesCreateForm from './PackagesCreateForm'
+import PackagesPremiumThreshold from './PackagesPremiumThreshold'
+import {
+  toDraft, isLossPath, EMPTY_NEW_PACKAGE,
+  type Draft, type PackageRow, type PackagesSectionProps, type NewPackageDraft,
+} from './PackagesTypes'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Packages — GapGPT-style credit packages: a Toman top-up that can also
    grant a request/token quota counted separately from Toman (migration
    0034: request_quota, token_quota, validity_days,
-   max_cost_per_request_toman on credit_packages).
+   max_cost_per_request_toman on credit_packages), plus two migration-0046
+   rate-limit columns (rate_limit_per_window, premium_rate_limit_per_window)
+   and an app_setting threshold that decides which models count as
+   "expensive" for the second column.
 
-   Self-contained (fetches its own data via the `api` prop), same pattern as
-   ./MarkupSection.tsx, rather than threading state through AdminPanel.tsx.
+   Split across sibling files, all under the 500-line cap:
+     PackagesTypes.ts            -- shared types + pure helpers (no JSX)
+     PackagesRow.tsx             -- one editable table row (+ legacy expander)
+     PackagesCreateForm.tsx      -- the "+ افزودن بسته" form
+     PackagesPremiumThreshold.tsx -- the "expensive model" price threshold field
+     PackagesSection.tsx (here) -- data fetching/orchestration + the table shell
 
    Server contract (backend/admin_packages.py):
      GET  /api/admin/packages               -> full credit_packages rows
      POST /api/admin/packages/{id}          <- partial update of the
                                                 editable fields below
      POST /api/admin/packages               <- create (id + fields)
+     GET  /api/admin/premium-threshold      -> { value, default, row_missing }
+     POST /api/admin/premium-threshold      <- { value: number }
 
-   ── The charge / credit / quota split, three different numbers ──────────
+   ── The charge / credit / quota / rate-limit split, FOUR different numbers ──
    `base_amount` is what the buyer PAYS. `total_credits` is what lands in
    their WALLET as Toman (already includes any bonus — it is NOT
    base_amount + bonus_credits, see below). `request_quota`/`token_quota`
-   are a THIRD, separate thing: a count of requests/tokens, not Toman at
-   all. An admin who conflates these will misconfigure a package, so the
-   table below always shows all three side by side, never merges them.
+   are a THIRD, separate thing: a count of requests/tokens that also creates
+   a wallet-bypassing entitlement. `rate_limit_per_window` /
+   `premium_rate_limit_per_window` are a FOURTH thing: pure per-5-hour-
+   window message caps that never bypass the wallet — the second is a
+   SUBSET counted from inside the first, never an additional cap.
 
    `price` / `credits` / `bonus_credits` / `name` are legacy columns that
    predate `base_amount`/`total_credits`/`bonus_percent` — grep across the
@@ -37,82 +54,6 @@ import { SectionHeader, Field, NumInput } from './shared'
    and labeled as having no effect on checkout, so an edit here is never
    mistaken for changing what a buyer actually pays or receives.
    ═══════════════════════════════════════════════════════════════════════════ */
-
-interface PackageRow {
-  id: string
-  name_fa: string | null
-  name_en: string | null
-  description: string | null
-  active: boolean
-  base_amount: number | null
-  total_credits: number | null
-  bonus_percent: number | null
-  request_quota: number | null
-  token_quota: number | null
-  validity_days: number | null
-  max_cost_per_request_toman: number | null
-  price: number
-  credits: number
-  bonus_credits: number
-  name: string
-  sort_order: number
-}
-
-interface PackagesSectionProps {
-  api: (path: string, opts?: RequestInit) => Promise<Response>
-}
-
-type Draft = {
-  name_fa: string
-  name_en: string
-  description: string
-  active: boolean
-  base_amount: string
-  total_credits: string
-  bonus_percent: string
-  request_quota: string
-  token_quota: string
-  validity_days: string
-  max_cost_per_request_toman: string
-  price: string
-  credits: string
-  bonus_credits: string
-}
-
-function toDraft(p: PackageRow): Draft {
-  const s = (v: number | null) => (v == null ? '' : String(v))
-  return {
-    name_fa: p.name_fa ?? '', name_en: p.name_en ?? '', description: p.description ?? '',
-    active: p.active,
-    base_amount: s(p.base_amount), total_credits: s(p.total_credits), bonus_percent: s(p.bonus_percent),
-    request_quota: s(p.request_quota), token_quota: s(p.token_quota), validity_days: s(p.validity_days),
-    max_cost_per_request_toman: s(p.max_cost_per_request_toman),
-    price: s(p.price), credits: s(p.credits), bonus_credits: s(p.bonus_credits),
-  }
-}
-
-/** true when a quota is set (draft) with no ceiling -- the loss path the
-    backend rejects; mirrored here so the warning shows before a failed save.
-    Takes only the three fields it needs so it also works for the create
-    form's draft, which doesn't carry every `Draft` field. */
-function isLossPath(d: { request_quota: string; token_quota: string; max_cost_per_request_toman: string }): boolean {
-  const hasQuota = d.request_quota.trim() !== '' || d.token_quota.trim() !== ''
-  return hasQuota && d.max_cost_per_request_toman.trim() === ''
-}
-
-type NewPackageDraft = {
-  id: string; name_fa: string; name_en: string
-  base_amount: string; total_credits: string; bonus_percent: string
-  request_quota: string; token_quota: string; max_cost_per_request_toman: string
-  validity_days: string; active: boolean
-}
-
-const EMPTY_NEW_PACKAGE: NewPackageDraft = {
-  id: '', name_fa: '', name_en: '',
-  base_amount: '', total_credits: '', bonus_percent: '',
-  request_quota: '', token_quota: '', max_cost_per_request_toman: '',
-  validity_days: '', active: true,
-}
 
 export default function PackagesSection({ api }: PackagesSectionProps) {
   const [loading, setLoading] = useState(true)
@@ -182,6 +123,8 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
       base_amount: n(d.base_amount), total_credits: n(d.total_credits), bonus_percent: n(d.bonus_percent),
       request_quota: n(d.request_quota), token_quota: n(d.token_quota), validity_days: n(d.validity_days),
       max_cost_per_request_toman: n(d.max_cost_per_request_toman),
+      rate_limit_per_window: n(d.rate_limit_per_window),
+      premium_rate_limit_per_window: n(d.premium_rate_limit_per_window),
       price: n(d.price) ?? 0, credits: n(d.credits) ?? 0, bonus_credits: n(d.bonus_credits) ?? 0,
     }
     setSaving(id)
@@ -219,8 +162,8 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
     setCreating(true)
     try {
       // backend/admin_packages.py::create_package -- `id` plus whichever of
-      // the live/quota/text fields are given; the legacy NOT-NULL trio
-      // (name/price/credits) is defaulted server-side, not sent from here.
+      // the live/quota/rate-limit/text fields are given; the legacy
+      // NOT-NULL trio (name/price/credits) is defaulted server-side.
       await api('/api/admin/packages', {
         method: 'POST',
         body: JSON.stringify({
@@ -230,6 +173,8 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
           bonus_percent: n(newPackage.bonus_percent),
           request_quota: n(newPackage.request_quota), token_quota: n(newPackage.token_quota),
           max_cost_per_request_toman: n(newPackage.max_cost_per_request_toman),
+          rate_limit_per_window: n(newPackage.rate_limit_per_window),
+          premium_rate_limit_per_window: n(newPackage.premium_rate_limit_per_window),
           validity_days: n(newPackage.validity_days),
         }),
       })
@@ -248,19 +193,21 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
     <div className="space-y-6">
       <SectionHeader
         title="بسته‌های اعتباری"
-        subtitle={`${faNum(rows.length)} بسته — پرداختی، اعتبار واریزی و سهمیهٔ درخواست/توکن سه عدد جداگانه‌اند`}
+        subtitle={`${faNum(rows.length)} بسته — پرداختی، اعتبار واریزی، سهمیهٔ درخواست/توکن و سقف پیام ۵ ساعته چهار عدد جداگانه‌اند`}
       />
 
+      <PackagesPremiumThreshold api={api} />
+
       <div className="admin-card" style={{ borderRight: '3px solid var(--accent)' }}>
-        <h3 className="font-semibold text-sm mb-2 text-primary">سه عدد، سه معنای متفاوت</h3>
+        <h3 className="font-semibold text-sm mb-2 text-primary">چهار عدد، چهار معنای متفاوت</h3>
         <ul className="text-xs text-muted space-y-1" style={{ listStyle: 'disc', paddingRight: 18 }}>
           <li><b className="text-secondary">مبلغ پرداختی</b> (base_amount): مبلغی که کاربر واقعاً پرداخت می‌کند.</li>
           <li><b className="text-secondary">مبلغ واریزی به کیف پول</b> (total_credits): مبلغ نهایی (شامل پاداش) که به کیف پول کاربر اضافه می‌شود — این عدد از قبل شامل پاداش است، جمع‌کردن درصد پاداش رویش دوباره اشتباه است.</li>
-          <li><b className="text-secondary">سهمیهٔ درخواست/توکن</b>: عددی کاملاً جدا از تومان — تعداد درخواست یا توکن، نه مبلغ.</li>
-          <li><b className="text-secondary">«سهمیهٔ درخواست» دو نقش دارد</b>: هم کل درخواست‌هایی که این بسته می‌خرد، و هم <b>سقف پیام کاربر در هر پنجرهٔ ۵ ساعته</b>. کاربر بدون بسته سقف پیش‌فرض ۵۰ پیام در ۵ ساعت را دارد؛ کاربری که این بسته را دارد، همین عدد سقف ۵ ساعته‌اش می‌شود. خالی بگذارید تا همان سقف پیش‌فرض اعمال شود.</li>
+          <li><b className="text-secondary">سهمیهٔ درخواست/توکن</b>: عددی کاملاً جدا از تومان — تعداد کل درخواست یا توکنی که این بسته می‌خرد و به کاربر سهمیهٔ مستقل از کیف پول می‌دهد.</li>
+          <li><b className="text-secondary">سقف پیام ۵ ساعته</b>: محدودیت نرخ ارسال پیام، ربطی به سهمیهٔ بالا ندارد — کیف پول همیشه هزینهٔ این پیام‌ها را می‌پردازد؛ فقط تعداد پیام در هر پنجرهٔ ۵ ساعته را محدود می‌کند. ستون «از این، روی مدل گران» زیرمجموعهٔ همین سقف است، نه عددی جدا و اضافه.</li>
         </ul>
         <p className="text-xs mt-2" style={{ color: 'var(--warning, #f59e0b)' }}>
-          🔴 بسته‌ای که سهمیهٔ درخواست یا توکن دارد باید «سقف هزینهٔ هر درخواست» هم داشته باشد — وگرنه کاربر می‌تواند کل سهمیه را روی گران‌ترین مدل خرج کند و هر درخواست ضررده شود. سرور این را رد می‌کند؛ این فرم فقط از قبل هشدار می‌دهد.
+          🔴 بسته‌ای که سهمیهٔ درخواست یا توکن دارد باید «سقف هزینهٔ هر درخواست» هم داشته باشد — وگرنه کاربر می‌تواند کل سهمیه را روی گران‌ترین مدل خرج کند و هر درخواست ضررده شود. سرور این را رد می‌کند؛ این فرم فقط از قبل هشدار می‌دهد. سقف پیام ۵ ساعته و زیرمجموعهٔ آن روی مدل گران این قاعده را ندارند، چون کیف پول همیشه پرداخت می‌کند.
         </p>
       </div>
 
@@ -274,98 +221,41 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
                 <th className="text-right p-3">مبلغ پرداختی</th>
                 <th className="text-right p-3">مبلغ واریزی به کیف پول</th>
                 <th className="text-right p-3">درصد پاداش</th>
-                <th className="text-right p-3" title="هم کل درخواست‌های بسته، هم سقف پیام در هر پنجرهٔ ۵ ساعته. خالی = سقف پیش‌فرض ۵۰ پیام.">سهمیهٔ درخواست / سقف ۵ ساعته</th>
+                <th className="text-right p-3">سهمیهٔ درخواست</th>
                 <th className="text-right p-3">سهمیهٔ توکن</th>
                 <th className="text-right p-3">سقف هزینهٔ هر درخواست</th>
+                <th className="text-right p-3">
+                  <div>سقف پیام</div>
+                  <div className="text-xs text-muted font-normal">۵ ساعته</div>
+                </th>
+                <th className="text-right p-3" title="زیرمجموعهٔ ستون «سقف پیام» است، نه عددی جدا و اضافه">
+                  <div>از این، روی مدل گران</div>
+                  <div className="text-xs text-muted font-normal">۵ ساعته</div>
+                </th>
                 <th className="text-right p-3">مدت اعتبار (روز)</th>
                 <th className="text-right p-3">عملیات</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={10} className="p-6 text-center text-sm text-muted">در حال بارگذاری…</td></tr>
+                <tr><td colSpan={11} className="p-6 text-center text-sm text-muted">در حال بارگذاری…</td></tr>
               ) : loadError ? (
-                <tr><td colSpan={10} className="p-6 text-center text-sm" style={{ color: 'var(--danger, #ef4444)' }}>
+                <tr><td colSpan={11} className="p-6 text-center text-sm" style={{ color: 'var(--danger, #ef4444)' }}>
                   {loadError} — <button className="underline" onClick={load}>تلاش دوباره</button>
                 </td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={10} className="p-6 text-center text-sm text-muted">بسته‌ای یافت نشد</td></tr>
+                <tr><td colSpan={11} className="p-6 text-center text-sm text-muted">بسته‌ای یافت نشد</td></tr>
               ) : (
                 rows.map((p) => {
                   const d = drafts[p.id]
                   if (!d) return null
-                  const warn = isLossPath(d)
                   return (
-                    <Fragment key={p.id}>
-                      <tr style={warn ? { background: 'color-mix(in srgb, var(--warning, #f59e0b) 10%, transparent)' } : undefined}>
-                        <td className="p-3">
-                          <input className="input mb-1" value={d.name_fa} placeholder="نام فارسی"
-                            onChange={(e) => setField(p.id, 'name_fa', e.target.value)} style={{ maxWidth: 160 }} />
-                          <input className="input" value={d.name_en} placeholder="نام انگلیسی"
-                            onChange={(e) => setField(p.id, 'name_en', e.target.value)} style={{ maxWidth: 160 }} />
-                          <div className="text-xs font-mono text-muted mt-1">{p.id}</div>
-                          <button className="text-xs text-muted underline mt-1" onClick={() => toggleExpanded(p.id)}>
-                            {expanded.has(p.id) ? 'بستن فیلدهای قدیمی' : 'نمایش فیلدهای قدیمی'}
-                          </button>
-                        </td>
-                        <td className="p-3">
-                          <input type="checkbox" checked={d.active} onChange={(e) => setField(p.id, 'active', e.target.checked)} />
-                        </td>
-                        <td className="p-3">
-                          <NumInput value={d.base_amount} onChange={(v) => setField(p.id, 'base_amount', v)} />
-                          <div className="text-xs text-muted mt-1">{faPrice(p.base_amount)}</div>
-                        </td>
-                        <td className="p-3">
-                          <NumInput value={d.total_credits} onChange={(v) => setField(p.id, 'total_credits', v)} />
-                          <div className="text-xs text-muted mt-1">{faPrice(p.total_credits)}</div>
-                        </td>
-                        <td className="p-3"><NumInput value={d.bonus_percent} onChange={(v) => setField(p.id, 'bonus_percent', v)} width={80} /></td>
-                        <td className="p-3"><NumInput value={d.request_quota} onChange={(v) => setField(p.id, 'request_quota', v)} placeholder="بدون سهمیه" /></td>
-                        <td className="p-3"><NumInput value={d.token_quota} onChange={(v) => setField(p.id, 'token_quota', v)} placeholder="بدون سهمیه" /></td>
-                        <td className="p-3">
-                          <NumInput value={d.max_cost_per_request_toman} onChange={(v) => setField(p.id, 'max_cost_per_request_toman', v)} placeholder="بدون سقف" />
-                          {warn && (
-                            <div className="text-xs flex items-center gap-1 mt-1" style={{ color: 'var(--warning, #f59e0b)' }}>
-                              <Icon name="warning" size={12} />
-                              <span>سقف لازم است</span>
-                            </div>
-                          )}
-                        </td>
-                        <td className="p-3"><NumInput value={d.validity_days} onChange={(v) => setField(p.id, 'validity_days', v)} width={90} placeholder="بدون انقضا" /></td>
-                        <td className="p-3">
-                          <button className="btn btn-sm" onClick={() => save(p.id)} disabled={saving === p.id} title="ذخیره">
-                            {saving === p.id ? (
-                              <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-                            ) : <Icon name="check" size={14} />}
-                          </button>
-                        </td>
-                      </tr>
-                      {expanded.has(p.id) && (
-                        <tr>
-                          <td colSpan={10} className="p-3" style={{ background: 'var(--bg-elevated)' }}>
-                            <p className="text-xs text-muted mb-2">
-                              فیلدهای قدیمی — این‌ها روی مبلغ پرداختی یا واریزی واقعی هیچ اثری ندارند (کد خرید فقط
-                              مبلغ پرداختی و مبلغ واریزی بالا را می‌خواند)، صرفاً برای سازگاری با داده‌های قدیمی نگه داشته شده‌اند.
-                            </p>
-                            <div className="flex flex-wrap gap-4">
-                              <Field label="توضیحات">
-                                <input className="input" value={d.description}
-                                  onChange={(e) => setField(p.id, 'description', e.target.value)} style={{ minWidth: 220 }} />
-                              </Field>
-                              <Field label="price (قدیمی)">
-                                <NumInput value={d.price} onChange={(v) => setField(p.id, 'price', v)} width={110} />
-                              </Field>
-                              <Field label="credits (قدیمی)">
-                                <NumInput value={d.credits} onChange={(v) => setField(p.id, 'credits', v)} width={110} />
-                              </Field>
-                              <Field label="bonus_credits (قدیمی)">
-                                <NumInput value={d.bonus_credits} onChange={(v) => setField(p.id, 'bonus_credits', v)} width={110} />
-                              </Field>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
+                    <PackagesRow
+                      key={p.id} p={p} d={d} saving={saving === p.id} expanded={expanded.has(p.id)}
+                      onField={(field, value) => setField(p.id, field, value)}
+                      onSave={() => save(p.id)}
+                      onToggleExpanded={() => toggleExpanded(p.id)}
+                    />
                   )
                 })
               )}
@@ -373,67 +263,20 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
           </table>
         </div>
 
+        <p className="text-xs text-muted mt-3">
+          «از این، روی مدل گران» از داخل «سقف پیام» شمرده می‌شود، نه اضافه بر آن — مثلاً کاربری با ۴۰ و ۵، در هر
+          پنجرهٔ ۵ ساعته حداکثر ۴۰ پیام می‌فرستد که حداکثر ۵ تای آن‌ها می‌تواند روی مدل‌های گران باشد.
+        </p>
+
         <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
           <button className="text-xs underline" onClick={() => setShowCreate((v) => !v)}>
             {showCreate ? 'بستن فرم بستهٔ جدید' : '+ افزودن بسته'}
           </button>
           {showCreate && (
-            <div className="mt-3 space-y-3">
-              <div className="flex flex-wrap gap-3 items-end">
-                <Field label="شناسه (id)">
-                  <input className="input" dir="ltr" value={newPackage.id}
-                    onChange={(e) => setNewPackage({ ...newPackage, id: e.target.value })} style={{ maxWidth: 140 }} />
-                </Field>
-                <Field label="نام فارسی">
-                  <input className="input" value={newPackage.name_fa}
-                    onChange={(e) => setNewPackage({ ...newPackage, name_fa: e.target.value })} style={{ maxWidth: 150 }} />
-                </Field>
-                <Field label="نام انگلیسی">
-                  <input className="input" value={newPackage.name_en}
-                    onChange={(e) => setNewPackage({ ...newPackage, name_en: e.target.value })} style={{ maxWidth: 150 }} />
-                </Field>
-                <Field label="فعال">
-                  <input type="checkbox" checked={newPackage.active}
-                    onChange={(e) => setNewPackage({ ...newPackage, active: e.target.checked })} />
-                </Field>
-              </div>
-              <div className="flex flex-wrap gap-3 items-end">
-                <Field label="مبلغ پرداختی">
-                  <NumInput value={newPackage.base_amount} onChange={(v) => setNewPackage({ ...newPackage, base_amount: v })} />
-                </Field>
-                <Field label="مبلغ واریزی به کیف پول">
-                  <NumInput value={newPackage.total_credits} onChange={(v) => setNewPackage({ ...newPackage, total_credits: v })} />
-                </Field>
-                <Field label="درصد پاداش">
-                  <NumInput value={newPackage.bonus_percent} onChange={(v) => setNewPackage({ ...newPackage, bonus_percent: v })} width={80} />
-                </Field>
-                <Field label="سهمیهٔ درخواست / سقف پیام در هر پنجرهٔ ۵ ساعته">
-                  <NumInput value={newPackage.request_quota} onChange={(v) => setNewPackage({ ...newPackage, request_quota: v })} placeholder="خالی = سقف پیش‌فرض ۵۰" />
-                </Field>
-                <Field label="سهمیهٔ توکن">
-                  <NumInput value={newPackage.token_quota} onChange={(v) => setNewPackage({ ...newPackage, token_quota: v })} placeholder="بدون سهمیه" />
-                </Field>
-                <Field label="سقف هزینهٔ هر درخواست">
-                  <NumInput
-                    value={newPackage.max_cost_per_request_toman}
-                    onChange={(v) => setNewPackage({ ...newPackage, max_cost_per_request_toman: v })}
-                    placeholder="بدون سقف"
-                  />
-                </Field>
-                <Field label="مدت اعتبار (روز)">
-                  <NumInput value={newPackage.validity_days} onChange={(v) => setNewPackage({ ...newPackage, validity_days: v })} width={90} placeholder="بدون انقضا" />
-                </Field>
-              </div>
-              {isLossPath(newPackage) && (
-                <div className="text-xs flex items-center gap-1" style={{ color: 'var(--warning, #f59e0b)' }}>
-                  <Icon name="warning" size={12} />
-                  <span>سهمیه بدون سقف هزینه — سرور این را رد می‌کند</span>
-                </div>
-              )}
-              <button className="btn btn-sm" onClick={createPackage} disabled={creating}>
-                {creating ? 'در حال ایجاد...' : 'ایجاد بسته'}
-              </button>
-            </div>
+            <PackagesCreateForm
+              newPackage={newPackage} setNewPackage={setNewPackage}
+              creating={creating} onCreate={createPackage}
+            />
           )}
         </div>
       </div>

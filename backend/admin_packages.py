@@ -53,6 +53,8 @@ match a new price.
 """
 from __future__ import annotations
 
+import json
+import logging
 import re
 from typing import Any
 
@@ -63,6 +65,8 @@ from fastapi.responses import JSONResponse
 
 from database import async_session
 from dependencies import admin_required, _write_audit_log
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -87,13 +91,24 @@ _ALL_MONEY_FIELDS = _LEGACY_MONEY_FIELDS + _LIVE_MONEY_FIELDS + (_CEILING_FIELD,
 # quota is meaningless and should just be NULL.
 _QUOTA_FIELDS = ('request_quota', 'token_quota', 'validity_days')
 
+# migrations/0046_*: nullable pure rate-limit fields, NULL = "no cap of that
+# kind". Deliberately NOT part of _QUOTA_FIELDS and NOT wired into
+# `_check_loss_path` below -- these never create a `package_entitlement`
+# (see user_quota.py/chat_billing.py for what does), so the wallet always
+# pays for what they gate; a ceiling requirement here would just re-couple
+# a pure rate limit to the wallet-bypass entitlement the guard polices.
+# `premium_rate_limit_per_window` is a subset counted from inside
+# `rate_limit_per_window`, not an additional cap.
+_RATE_LIMIT_FIELDS = ('rate_limit_per_window', 'premium_rate_limit_per_window')
+
 _TEXT_FIELDS = ('name_fa', 'name_en', 'description', 'name')
 
 _PERCENT_FIELD = 'bonus_percent'
 
 # Every field this router will write if present in a request payload.
 _EDITABLE_FIELDS = (
-    _TEXT_FIELDS + _ALL_MONEY_FIELDS + _QUOTA_FIELDS + (_PERCENT_FIELD, 'active')
+    _TEXT_FIELDS + _ALL_MONEY_FIELDS + _QUOTA_FIELDS + _RATE_LIMIT_FIELDS
+    + (_PERCENT_FIELD, 'active')
 )
 
 def _parse_int_field(raw: Any, *, label: str, allow_null: bool, min_value: int) -> tuple[int | None, str | None]:
@@ -136,6 +151,10 @@ _QUOTA_LABELS = {
     'token_quota': 'سهمیهٔ توکن',
     'validity_days': 'مدت اعتبار (روز)',
 }
+_RATE_LIMIT_LABELS = {
+    'rate_limit_per_window': 'سقف پیام در هر پنجرهٔ ۵ ساعته',
+    'premium_rate_limit_per_window': 'سقف پیام روی مدل‌های گران در هر پنجرهٔ ۵ ساعته',
+}
 
 
 def _validate_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
@@ -167,6 +186,18 @@ def _validate_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], str | No
         if field not in payload:
             continue
         value, err = _parse_int_field(payload[field], label=_QUOTA_LABELS[field], allow_null=True, min_value=1)
+        if err:
+            return {}, err
+        cleaned[field] = value
+
+    # Same non-negative-integer, positive-only-when-set rule as the quota
+    # fields above -- NULL means "no rate cap", zero is meaningless and
+    # should just be NULL. See the field-group comment above _QUOTA_FIELDS:
+    # deliberately not fed into `_check_loss_path`.
+    for field in _RATE_LIMIT_FIELDS:
+        if field not in payload:
+            continue
+        value, err = _parse_int_field(payload[field], label=_RATE_LIMIT_LABELS[field], allow_null=True, min_value=1)
         if err:
             return {}, err
         cleaned[field] = value
@@ -203,6 +234,12 @@ def _check_loss_path(effective: dict[str, Any]) -> str | None:
     every one of those requests loses money. A request priced above the
     ceiling simply isn't covered by the quota and falls back to the wallet
     -- so the ceiling is not optional once either quota is set.
+
+    Deliberately checks ONLY `request_quota`/`token_quota` -- do NOT extend
+    this to `rate_limit_per_window`/`premium_rate_limit_per_window`
+    (migration 0046, see `_RATE_LIMIT_FIELDS` above): those create no
+    `package_entitlement` and the wallet always pays for what they gate, so
+    there is no loss path here to close for them.
     """
     has_quota = effective.get('request_quota') is not None or effective.get('token_quota') is not None
     if has_quota and effective.get(_CEILING_FIELD) is None:
@@ -350,3 +387,113 @@ async def create_package(request: Request, payload: dict[str, Any]) -> JSONRespo
         details=cleaned, request=request,
     )
     return JSONResponse({'status': 'ok', 'id': package_id, 'created': cleaned}, status_code=201)
+
+
+# ── Premium-model price threshold (app_setting, migration 0046) ────────────
+# A model counts as "expensive" for `premium_rate_limit_per_window` above
+# when `model_catalog.input_per_million` is STRICTLY GREATER than this many
+# Toman/M -- the comparison side lives wherever the rate-limit gate reads
+# model_catalog, not here; this router only owns the admin-editable number.
+# Shape mirrors admin_free_tier.py's GET/POST pair for a single value.
+# Routed top-level (`/admin/premium-threshold`), NOT under
+# `/admin/packages/...`, since `POST /admin/packages/{package_id}` above
+# treats any path segment there as a package id and would silently collide.
+# ⚠️ app_setting.value is JSONB, must hold a bare JSON integer
+# (`json.dumps(150000)` -> `150000`), NOT a JSON string -- same convention
+# as migration 0045 / admin_free_tier.py.
+_PREMIUM_THRESHOLD_KEY = 'premium_model_min_input_per_million'
+_PREMIUM_THRESHOLD_DEFAULT = 150_000  # must match migration 0046's seed
+_PREMIUM_THRESHOLD_BOUNDS = (0, 100_000_000)  # same ceiling admin_free_tier.py uses
+
+def _coerce_premium_threshold(value: Any) -> int:
+    """Mirrors services/free_tier_config.py::_coerce_int for this one key --
+    JSONB gives back a Python int already; a legacy JSON-string row is
+    parsed once; anything else falls back to the seeded default."""
+    try:
+        if isinstance(value, str):
+            value = json.loads(value)
+        n = int(value)
+        return n if n >= 0 else _PREMIUM_THRESHOLD_DEFAULT
+    except Exception:
+        return _PREMIUM_THRESHOLD_DEFAULT
+
+
+@router.get('/admin/premium-threshold')
+async def get_premium_threshold(request: Request) -> JSONResponse:
+    """Current 'expensive model' price threshold. Direct DB read, no cache
+    here, no fail-open: a DB error is a 500, never a guessed default shown
+    as if it were the stored value."""
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+
+    try:
+        async with async_session() as session:
+            res = await session.execute(
+                sqlalchemy.text('SELECT value FROM app_setting WHERE key = :k'),
+                {'k': _PREMIUM_THRESHOLD_KEY},
+            )
+            row = res.fetchone()
+    except Exception as e:
+        logger.warning('GET /admin/premium-threshold DB read failed: %s', e)
+        return JSONResponse({'detail': 'خطا در خواندن تنظیمات از پایگاه داده'}, status_code=500)
+
+    row_missing = row is None
+    value = (
+        _PREMIUM_THRESHOLD_DEFAULT if row_missing
+        else _coerce_premium_threshold(row._mapping['value'])
+    )
+    return JSONResponse({
+        'value': value,
+        'default': _PREMIUM_THRESHOLD_DEFAULT,
+        'row_missing': row_missing,
+    })
+
+
+@router.post('/admin/premium-threshold')
+async def update_premium_threshold(request: Request, payload: dict[str, Any]) -> JSONResponse:
+    """Write the threshold: ``{"value": 200000}`` -- one non-negative
+    integer within bounds, stored as a bare JSON number."""
+    if not await admin_required(request):
+        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    if async_session is None:
+        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+
+    if not isinstance(payload, dict) or 'value' not in payload:
+        return JSONResponse({'detail': 'مقدار الزامی است'}, status_code=400)
+
+    raw = payload['value']
+    # Reject non-integers explicitly (admin_free_tier.py's rule): "3.5" or
+    # "abc" must error, never silently floor. bool excluded first -- it's
+    # an int subclass in Python.
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        if isinstance(raw, str) and raw.strip().lstrip('-').isdigit():
+            raw = int(raw.strip())
+        else:
+            return JSONResponse({'detail': 'مقدار باید یک عدد صحیح باشد'}, status_code=400)
+
+    lo, hi = _PREMIUM_THRESHOLD_BOUNDS
+    if raw < lo or raw > hi:
+        return JSONResponse({'detail': f'مقدار باید بین {lo} و {hi} باشد'}, status_code=400)
+
+    try:
+        async with async_session() as session:
+            await session.execute(
+                sqlalchemy.text(
+                    'INSERT INTO app_setting (key, value, updated_at) '
+                    'VALUES (:k, :v, now()) '
+                    'ON CONFLICT (key) DO UPDATE SET value = :v, updated_at = now()'
+                ),
+                {'k': _PREMIUM_THRESHOLD_KEY, 'v': json.dumps(raw)},
+            )
+            await session.commit()
+    except Exception as e:
+        logger.warning('POST /admin/premium-threshold DB write failed: %s', e)
+        return JSONResponse({'detail': 'خطا در ذخیرهٔ تنظیمات در پایگاه داده'}, status_code=500)
+
+    await _write_audit_log(
+        'admin.premium_threshold.update', target_type='app_setting',
+        target_id=_PREMIUM_THRESHOLD_KEY, details={'value': raw}, request=request,
+    )
+    return JSONResponse({'status': 'ok', 'value': raw})

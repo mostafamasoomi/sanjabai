@@ -129,7 +129,7 @@ class _Patches:
     `bill_result`/`bill_side_effect` on top for its own scenario."""
 
     def __init__(self, *, task, resolved_model='bynara/some-model', is_working=True,
-                 http_post=None, ft_gate=None, reserve_result=None, reserve_side_effect=None,
+                 http_post=None, ft_gate=None, q_gate=None, reserve_result=None, reserve_side_effect=None,
                  bill_result=None, bill_side_effect=None):
         self.session = _FakeSession(task=task)
         self.billing_cls, self.billing_instance = _billing_mock(reserve_result, reserve_side_effect)
@@ -138,6 +138,9 @@ class _Patches:
         self.resolved_model = resolved_model
         self.is_working = is_working
         self.ft_gate = ft_gate
+        # None = the aggregate package quota lets the task through (the default:
+        # the free tier and balance users are exempt from it). A dict = blocked.
+        self.q_gate = q_gate
         self.bill_result = bill_result if bill_result is not None else {
             'cost': 123, 'input_tokens': 20, 'output_tokens': 22, 'balance_after': 999,
         }
@@ -154,6 +157,7 @@ class _Patches:
             patch.object(task_execution_mod, '_http', self.fake_http),
             patch.object(task_execution_mod, 'BillingService', self.billing_cls),
             patch.object(task_execution_mod, 'check_and_consume', AsyncMock(return_value=self.ft_gate)),
+            patch.object(task_execution_mod, '_user_quota_check', AsyncMock(return_value=self.q_gate)),
             patch.object(tasks_mod, '_resolve_task_model', AsyncMock(return_value=self.resolved_model)),
             patch.object(chat_mod, 'is_working_model', AsyncMock(return_value=self.is_working)),
             patch.object(chat_mod, '_resolve_provider', AsyncMock(return_value=_fake_provider())),
@@ -311,6 +315,37 @@ class TestFreeTierGate:
         p.billing_instance.reserve.assert_not_called()
         p.fake_http.post.assert_not_called()
         p.bill_mock.assert_not_called()
+
+
+# ── Aggregate package quota also gates a scheduled task ─────────────────
+
+class TestPackageQuotaGate:
+    @pytest.mark.asyncio
+    async def test_package_quota_blocks_before_reserve_and_upstream(self):
+        """A package holder over their window quota is stopped here too, so a
+        scheduled task cannot escape the aggregate cap the chat path enforces.
+        Blocks before any reservation or upstream call, like the free tier."""
+        task = _fake_task()
+        with _Patches(
+            task=task,
+            q_gate={'limit': 200, 'used': 200, 'source': 'package', 'retry_after_seconds': 60},
+        ) as p:
+            result = await task_execution_mod._execute_task(task, 42)
+
+        assert result['status'] == 'failed'
+        p.billing_instance.reserve.assert_not_called()
+        p.fake_http.post.assert_not_called()
+        p.bill_mock.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_free_tier_pass_still_runs_the_quota_gate(self):
+        """The two gates are independent: passing the free tier (q_gate=None
+        default is the pass case) must still let a normal task complete."""
+        task = _fake_task()
+        with _Patches(task=task, ft_gate=None, q_gate=None) as p:
+            result = await task_execution_mod._execute_task(task, 42)
+        assert result['status'] == 'completed'
+        p.billing_instance.reserve.assert_awaited_once()
 
 
 # ── No model available fails before free-tier gate and reserve ─────────

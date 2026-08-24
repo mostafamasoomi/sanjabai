@@ -18,11 +18,20 @@ and images.py's module docstrings for the incident writeups this mirrors):
   1. Resolve the model EXACTLY ONCE, first (tasks._resolve_task_model) --
      an unresolved/unconverted model id makes _record_usage's price lookup
      MISS, and a fallback CEILING rate applies, overcharging the user.
-  2. The free-tier gate (services.free_tier.check_and_consume) -- the same
-     one chat.py's handler runs, so a scheduled task can't be used to bypass
-     the 5-message free-tier throttle. Must run before any reservation is
-     opened: a pre-reserve rejection means there is never a reservation to
-     unwind.
+  2. The two message gates the interactive chat path runs, so a scheduled
+     task cannot be used to bypass either -- both BEFORE any reservation is
+     opened (a pre-reserve rejection means there is never a reservation to
+     unwind), and both fail open on a storage error:
+       a. services.free_tier.check_and_consume -- the free-tier gate (hourly
+          + lifetime + cheap-models-only for a user with no pay/package/
+          balance). No-ops for a paid/package/balance user.
+       b. services.user_quota.check_and_consume -- the aggregate per-user
+          window quota, which caps a PACKAGE holder by their package's
+          request_quota. No-ops (exempt) for the free tier and for a
+          pay-per-use balance user. Wiring it here mirrors
+          chat_web._chat_preflight so a scheduled task counts against the
+          same package window an interactive message does, rather than
+          escaping it.
   3. BillingService.reserve() -- pre-flight availability check + hold.
   4. The upstream call.
   5. Settle via chat._bill_stream_usage(uid, payload, usage, response_text=...)
@@ -63,6 +72,7 @@ from models import ScheduledTask, TaskExecution
 from services.billing import BillingService, InsufficientBalanceError, SqlBillingRepo
 from services.free_tier import check_and_consume
 from services.money import Money
+from services.user_quota import check_and_consume as _user_quota_check
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +93,10 @@ _FREE_TIER_MESSAGE = (
 _NO_MODEL_MESSAGE = 'در حال حاضر مدلی برای اجرای این وظیفه در دسترس نیست'
 _EMPTY_RESPONSE_MESSAGE = 'پاسخ خالی از سرویس دریافت شد'
 _GATEWAY_ERROR_MESSAGE = 'سرویس موقتاً در دسترس نیست'
+_QUOTA_MESSAGE = (
+    'سقف پیام بستهٔ شما برای این بازه پر شده است؛ کمی بعد دوباره تلاش کنید '
+    'یا بستهٔ بزرگ‌تری تهیه کنید.'
+)
 
 
 def _utcnow() -> datetime:
@@ -209,10 +223,21 @@ async def _execute_task(task: Any, uid: int) -> dict[str, Any]:
         'stream': False,
     }
 
-    # 2. Free-tier gate -- before any reservation is opened.
+    # 2a. Free-tier gate (per-model; cheap/hourly/lifetime for the free tier).
     ft_gate = await check_and_consume(uid, [model_to_call])
     if ft_gate is not None:
-        return await _finalize(execution_id, task.id, 'failed', None, _FREE_TIER_MESSAGE, 0, 0)
+        return await _finalize(
+            execution_id, task.id, 'failed', None,
+            ft_gate.get('message', _FREE_TIER_MESSAGE), 0, 0,
+        )
+
+    # 2b. Aggregate package quota (caps a package holder by request_quota;
+    # exempt for the free tier and for a balance/pay-per-use user). Same gate
+    # chat_web._chat_preflight runs, so a scheduled task can't escape the
+    # package window. Both gates run BEFORE the reservation below.
+    q_gate = await _user_quota_check(uid)
+    if q_gate is not None:
+        return await _finalize(execution_id, task.id, 'failed', None, _QUOTA_MESSAGE, 0, 0)
 
     # 3. Reserve.
     import chat as chat_mod

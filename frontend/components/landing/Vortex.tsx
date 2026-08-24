@@ -1256,9 +1256,41 @@ function createVortex(
     renderer.render(scene, camera);
   }
 
+  /* ---------------------------------------- play/pause
+     Six thousand instanced dots and the comets keep rendering at full
+     frame rate even when the hero has been scrolled past — pure GPU burn
+     for something nobody is looking at. Run only while the canvas is on
+     screen and the tab is foregrounded; a paused loop is cancelled
+     outright, not just held. */
+  let onScreen = true;
+  let docVisible = true;
+  function syncPlay() {
+    const run = onScreen && docVisible;
+    if (run && frame === 0) {
+      lastTime = performance.now();
+      frame = requestAnimationFrame(step);
+    } else if (!run && frame !== 0) {
+      cancelAnimationFrame(frame);
+      frame = 0;
+    }
+  }
+  const viewObserver = new IntersectionObserver(
+    (entries) => {
+      onScreen = entries.some((e) => e.isIntersecting);
+      syncPlay();
+    },
+    { threshold: 0 }
+  );
+  function onDocVisibility() {
+    docVisible = document.visibilityState !== "hidden";
+    syncPlay();
+  }
+
   /* ---------------------------------------- boot */
   build();
   observer.observe(container);
+  viewObserver.observe(container);
+  document.addEventListener("visibilitychange", onDocVisibility);
   lastTime = performance.now();
   frame = requestAnimationFrame(step);
 
@@ -1268,7 +1300,10 @@ function createVortex(
     },
     dispose() {
       cancelAnimationFrame(frame);
+      frame = 0;
       observer.disconnect();
+      viewObserver.disconnect();
+      document.removeEventListener("visibilitychange", onDocVisibility);
       container.removeEventListener("pointermove", onPointerMove);
       container.removeEventListener("pointerleave", onPointerLeave);
       container.removeEventListener("pointercancel", onPointerLeave);

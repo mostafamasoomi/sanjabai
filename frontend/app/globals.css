@@ -26,7 +26,9 @@
 
   /* Text tiers not covered by the palette block further down */
   --text-muted: #a1876e;
-  --text-dim: #6f5a48;
+  /* Lifted from #6f5a48 (2.6:1 on cards) to clear WCAG AA 4.5:1 on both
+     --bg-base and the lighter --bg-card; still a step below --text-muted. */
+  --text-dim: #9a8168;
 
   /* Hairlines */
   --border: rgba(255, 247, 238, 0.09);
@@ -227,7 +229,9 @@ img, svg, video, canvas {
   --text-primary: #211509;
   --text-secondary: #5b4632;
   --text-muted: #7d6852;
-  --text-dim: #a68f76;
+  /* Darkened from #a68f76 (3.0:1 on white) to clear WCAG AA 4.5:1 on cream
+     and white; still a step lighter than --text-muted for this theme. */
+  --text-dim: #826e54;
 
   --border: rgba(30,20,12,0.1);
   --border-strong: rgba(30,20,12,0.18);

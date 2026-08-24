@@ -165,11 +165,20 @@ async def sync_provider(p: Provider) -> dict[str, Any]:
 
             # NOTE on the ON CONFLICT branches below: `model_catalog.provenance
             # <> 'admin-approved'` guards the whole clause, so a curated row is
-            # never touched by any of these three columns either. On top of
+            # never touched by any of these columns either. On top of
             # that, each column has its own narrower guard so a value someone
             # (an admin, or a previous discovery sweep that already saw a
             # better upstream payload) has since set is never clobbered by a
             # rediscovery that only has a worse or unknown value this time:
+            #   * upstream -- only overwritten when the row is NOT currently
+            #     sold (availability <> 'available'), or the value is
+            #     unchanged. A live, sellable model's upstream is never
+            #     silently moved to a different (possibly paid) provider by a
+            #     rediscovery -- that would let it keep its old displayed price
+            #     while costing more upstream, i.e. sell at a loss (the one
+            #     product rule that never reopens). Moving a NON-sold row is
+            #     fine: promotion back to 'available' goes through
+            #     model_health_policy, which checks margin first (session 11).
             #   * modalities -- only overwritten when the stored value is
             #     still the plain text/text default, OR the newly derived
             #     value is itself non-default (never replace a real
@@ -192,7 +201,12 @@ async def sync_provider(p: Provider) -> dict[str, Any]:
                          :max_out, 'maintenance', 'provider', :upstream, :modalities,
                          now())
                     ON CONFLICT (id) DO UPDATE SET
-                        upstream         = EXCLUDED.upstream,
+                        upstream = CASE
+                            WHEN model_catalog.availability <> 'available'
+                              OR model_catalog.upstream = EXCLUDED.upstream
+                            THEN EXCLUDED.upstream
+                            ELSE model_catalog.upstream
+                        END,
                         last_verified_at = now(),
                         modalities = CASE
                             WHEN model_catalog.modalities = '{"input": ["text"], "output": ["text"]}'::jsonb

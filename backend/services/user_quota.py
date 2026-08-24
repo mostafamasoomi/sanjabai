@@ -28,7 +28,16 @@ be revisited at a call site without touching this module.
    This preserves today's behaviour exactly: a wallet customer pays per
    request and is self-limiting, and the account holding 9,954,787 toman
    that was once told "your credit has run out" must never be capped again.
-3. Otherwise (never paid, no balance, no package)  ->  :data:`DEFAULT_LIMIT`.
+3. Otherwise (never paid, no balance, no package = the FREE TIER)  ->  also
+   EXEMPT here. The free tier is handled entirely by services/free_tier.py,
+   which runs post-model (after model resolution) so it can additionally
+   enforce the cheap-models-only rule alongside its hourly and lifetime
+   caps -- something this pre-model, per-user gate cannot do. Gating free
+   users here as well would double-count and could burn a free user's
+   lifetime allowance on a premium request this gate cannot even see. So in
+   practice this module is now the PACKAGE-holder gate; :data:`DEFAULT_LIMIT`
+   is retained only as documentation of the former default and is no longer
+   returned.
 
 Note the deliberate divergence from services/entitlements.py's rule that
 quota values are snapshotted at grant time and never re-read live from
@@ -61,14 +70,13 @@ from typing import Optional
 import sqlalchemy
 
 from database import async_session, rds
-from services.free_tier import has_balance, has_paid
 
 logger = logging.getLogger(__name__)
 
-# Messages per window for a user with no paid package. Product baseline,
-# owner-set. Mainstream AI chat products cap free chat with a modest
-# time-windowed message allowance and a substantially larger one on paid
-# tiers; this is that shape, with the paid tier read off the package.
+# LEGACY. Was the free-tier aggregate cap; the free tier moved wholesale to
+# services/free_tier.py (hourly + lifetime + cheap-models). Retained as a
+# named constant only so tests and readers can refer to the former value; it
+# is no longer returned by resolve_limit().
 DEFAULT_LIMIT = 50
 
 # 5 hours, the same bucket length services/free_tier.py uses.
@@ -77,7 +85,7 @@ WINDOW_SECONDS = 18000
 # Limit sources, reported in the gate dict and in get_status() so the
 # rejection message and any admin debugging can say WHY this cap applied.
 SOURCE_PACKAGE = 'package'
-SOURCE_DEFAULT = 'default'
+SOURCE_DEFAULT = 'default'  # legacy, no longer returned (see DEFAULT_LIMIT)
 SOURCE_EXEMPT = 'exempt'
 
 
@@ -155,12 +163,11 @@ async def resolve_limit(uid: int) -> tuple[Optional[int], str]:
     if pkg_limit is not None:
         return pkg_limit, SOURCE_PACKAGE
 
-    if await has_paid(uid):
-        return None, SOURCE_EXEMPT
-    if await has_balance(uid):
-        return None, SOURCE_EXEMPT
-
-    return DEFAULT_LIMIT, SOURCE_DEFAULT
+    # Everyone without a quota-granting package is exempt from THIS gate:
+    # paid/balance users pay per request, and the free tier is enforced by
+    # services/free_tier.py (post-model, so it can also gate on model price).
+    # See the module docstring, tier 3.
+    return None, SOURCE_EXEMPT
 
 
 async def check_and_consume(uid: int, cost: int = 1) -> Optional[dict]:

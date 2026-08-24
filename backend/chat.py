@@ -53,7 +53,7 @@ from services.billing import SqlBillingRepo, BillingService, InsufficientBalance
 from services.money import Money
 from services.entitlement_gate import covering_entitlement
 from services.memory_extractor import extract_memories, MIN_MSG_COUNT
-from services.free_tier import FREE_LIMIT, check_and_consume
+from services.free_tier import check_and_consume
 from middleware.compression import compress_messages, estimate_savings
 from model_output import clean_response_dict
 
@@ -231,22 +231,18 @@ def _persian_duration(seconds: int) -> str:
 
 
 def _free_tier_response(gate: dict) -> JSONResponse:
-    """429 for the per-MODEL free-tier throttle -- NOT the aggregate message
-    quota (chat_web._user_quota_response, a different error.code). Reads
-    FREE_LIMIT, now pinned to user_quota.DEFAULT_LIMIT -- see free_tier.py."""
-    retry = int(gate.get('retry_after_seconds', 0))
-    model = gate.get('model', '')
-    message = (
-        f'سقف {_to_fa(FREE_LIMIT)} پیام رایگان این مدل پر شده است. حدود {_persian_duration(retry)} دیگر دوباره فعال می‌شود. '
-        'با اولین شارژ حساب، این محدودیت برای همیشه برداشته می‌شود.'
-    )
+    """429 for the free-tier gate (services/free_tier.py) -- NOT the package
+    message quota (chat_web._user_quota_response, a different error.code). The
+    Persian message differs by reason (cheap-model / lifetime / hourly) and is
+    built in free_tier.py; this renders it verbatim so the reason-specific text
+    lives in one place and chat.py stays under the house line cap."""
     return JSONResponse(
         {'error': {
-            'message': message,
+            'message': gate.get('message', 'محدودیت حساب رایگان اعمال شد.'),
             'type': 'rate_limited',
-            'code': 'free_tier_throttle',
-            'model': model,
-            'retry_after_seconds': retry,
+            'code': gate.get('code', 'free_tier_throttle'),
+            'model': gate.get('model', ''),
+            'retry_after_seconds': int(gate.get('retry_after_seconds', 0)),
         }},
         status_code=429,
     )

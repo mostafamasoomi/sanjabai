@@ -51,15 +51,18 @@ async def test_a_user_with_balance_is_not_throttled(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_a_user_with_no_balance_still_hits_the_gate(monkeypatch):
-    """Guard the guard: the throttle must still work for a zero balance."""
-    monkeypatch.setattr(ft, 'async_session', lambda: _Session(False))
-    rds = AsyncMock()
-    rds.get = AsyncMock(return_value=str(ft.FREE_LIMIT))
-    rds.ttl = AsyncMock(return_value=1200)
-    monkeypatch.setattr(ft, 'rds', rds)
-    with patch.object(ft, 'has_paid', AsyncMock(return_value=False)):
+    """Guard the guard: the free tier must still gate a zero-balance user.
+    Here a premium model is refused -- the cheap-model gate is the first of
+    the three free-tier checks and needs no counter state to demonstrate."""
+    async def _cfg():
+        return {'free_hourly_limit': 3, 'free_lifetime_limit': 30,
+                'free_tier_max_input_per_million': 60000}
+    monkeypatch.setattr(ft, 'get_config', _cfg)
+    monkeypatch.setattr(ft, '_model_input_price', AsyncMock(return_value=953000))
+    with patch.object(ft, 'has_paid', AsyncMock(return_value=False)), \
+         patch.object(ft, 'has_balance', AsyncMock(return_value=False)):
         gate = await ft.check_and_consume(1, ['sanjab/x'])
-    assert gate is not None and gate['model'] == 'sanjab/x'
+    assert gate is not None and gate['code'] == 'free_model_not_allowed'
 
 
 @pytest.mark.asyncio

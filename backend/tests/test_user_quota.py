@@ -34,7 +34,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from services import free_tier, user_quota
+from services import user_quota
 
 
 def _run(coro):
@@ -188,120 +188,89 @@ def pkg_db(monkeypatch):
     return db
 
 
-def _stub_paid(monkeypatch, paid=False, balance=False):
-    async def _paid(uid):
-        return paid
-
-    async def _bal(uid):
-        return balance
-
-    monkeypatch.setattr(user_quota, 'has_paid', _paid)
-    monkeypatch.setattr(user_quota, 'has_balance', _bal)
+def _pkg_user(pkg_db, uid: int, quota: int) -> None:
+    """Give ``uid`` an active package granting ``quota`` requests/window.
+    Since the free/paid/balance tiers are all exempt from THIS gate now (the
+    free tier moved to services/free_tier.py), a package holder is the only
+    user this gate actually caps -- so the boundary and window tests below use
+    one."""
+    pkg_db.add_package(f'pkg{uid}', request_quota=quota)
+    pkg_db.add_entitlement(uid, f'pkg{uid}')
 
 
 # ── 1. limit resolution ──────────────────────────────────────────────────
 
 class TestResolveLimit:
-    def test_no_package_no_payment_gets_the_default(self, fake_redis, pkg_db):
-        limit, source = _run(user_quota.resolve_limit(101))
-        assert limit == user_quota.DEFAULT_LIMIT
-        assert source == user_quota.SOURCE_DEFAULT
+    def test_no_package_is_exempt(self, fake_redis, pkg_db):
+        """Never paid, no balance, no package = the free tier, which is now
+        handled entirely by services/free_tier.py. THIS gate exempts it."""
+        assert _run(user_quota.resolve_limit(101)) == (None, user_quota.SOURCE_EXEMPT)
 
-    def test_active_package_quota_wins(self, fake_redis, pkg_db, monkeypatch):
-        _stub_paid(monkeypatch, paid=True)  # a package buyer HAS paid
+    def test_active_package_quota_wins(self, fake_redis, pkg_db):
         pkg_db.add_package('pro', request_quota=200)
         pkg_db.add_entitlement(102, 'pro')
-        limit, source = _run(user_quota.resolve_limit(102))
-        assert (limit, source) == (200, user_quota.SOURCE_PACKAGE)
+        assert _run(user_quota.resolve_limit(102)) == (200, user_quota.SOURCE_PACKAGE)
 
-    def test_package_is_resolved_before_the_paid_exemption(self, fake_redis, pkg_db, monkeypatch):
-        """If has_paid() were consulted first, every package's request_quota
-        would be unreachable dead code -- a package buyer has paid."""
-        _stub_paid(monkeypatch, paid=True, balance=True)
-        pkg_db.add_package('pro', request_quota=200)
-        pkg_db.add_entitlement(103, 'pro')
-        assert _run(user_quota.resolve_limit(103)) == (200, user_quota.SOURCE_PACKAGE)
-
-    def test_highest_package_wins(self, fake_redis, pkg_db, monkeypatch):
-        _stub_paid(monkeypatch, paid=True)
+    def test_highest_package_wins(self, fake_redis, pkg_db):
         pkg_db.add_package('small', request_quota=80)
         pkg_db.add_package('big', request_quota=500)
         pkg_db.add_entitlement(104, 'small')
         pkg_db.add_entitlement(104, 'big')
         assert _run(user_quota.resolve_limit(104))[0] == 500
 
-    def test_expired_package_does_not_count(self, fake_redis, pkg_db):
+    def test_expired_package_is_exempt(self, fake_redis, pkg_db):
         pkg_db.add_package('pro', request_quota=200)
         pkg_db.add_entitlement(105, 'pro', expires_at=_utcnow() - timedelta(days=1))
-        assert _run(user_quota.resolve_limit(105)) == (
-            user_quota.DEFAULT_LIMIT, user_quota.SOURCE_DEFAULT)
+        assert _run(user_quota.resolve_limit(105)) == (None, user_quota.SOURCE_EXEMPT)
 
-    def test_inactive_package_does_not_count(self, fake_redis, pkg_db):
+    def test_inactive_package_is_exempt(self, fake_redis, pkg_db):
         pkg_db.add_package('pro', request_quota=200)
         pkg_db.add_entitlement(106, 'pro', active=False)
-        assert _run(user_quota.resolve_limit(106))[0] == user_quota.DEFAULT_LIMIT
+        assert _run(user_quota.resolve_limit(106)) == (None, user_quota.SOURCE_EXEMPT)
 
-    def test_null_request_quota_falls_through_not_unlimited(self, fake_redis, pkg_db):
+    def test_null_request_quota_is_exempt_not_unlimited(self, fake_redis, pkg_db):
         """Every live package today has request_quota NULL. NULL must mean
-        'grants no window quota' -> the default, never 'no limit'."""
+        'grants no window quota' -> fall through to exempt, never 'no limit'
+        read as unlimited-but-counted."""
         pkg_db.add_package('starter-credits', request_quota=None)
         pkg_db.add_entitlement(107, 'starter-credits')
-        assert _run(user_quota.resolve_limit(107)) == (
-            user_quota.DEFAULT_LIMIT, user_quota.SOURCE_DEFAULT)
-
-    def test_paid_wallet_user_without_a_package_is_exempt(self, fake_redis, pkg_db, monkeypatch):
-        _stub_paid(monkeypatch, paid=True)
-        limit, source = _run(user_quota.resolve_limit(108))
-        assert limit is None
-        assert source == user_quota.SOURCE_EXEMPT
-
-    def test_wallet_balance_alone_is_exempt(self, fake_redis, pkg_db, monkeypatch):
-        """The 9,954,787-toman account that was once told its credit had run
-        out. A balance holder must never be capped."""
-        _stub_paid(monkeypatch, paid=False, balance=True)
-        assert _run(user_quota.resolve_limit(109))[0] is None
+        assert _run(user_quota.resolve_limit(107)) == (None, user_quota.SOURCE_EXEMPT)
 
 
-# ── 2. boundaries ────────────────────────────────────────────────────────
+# ── 2. boundaries (a PACKAGE user is the only one this gate caps) ─────────
 
 class TestBoundary:
-    def test_default_user_allowed_at_forty_nine(self, fake_redis, pkg_db):
+    def test_package_user_allowed_just_below_limit(self, fake_redis, pkg_db):
+        _pkg_user(pkg_db, 201, 50)
         fake_redis.seed(201, 49)
         assert _run(user_quota.check_and_consume(201)) is None
         assert fake_redis.used(201) == 50
 
-    def test_default_user_blocked_at_fifty(self, fake_redis, pkg_db):
+    def test_package_user_blocked_at_limit(self, fake_redis, pkg_db):
+        _pkg_user(pkg_db, 202, 50)
         fake_redis.seed(202, 50, ttl=777)
         gate = _run(user_quota.check_and_consume(202))
         assert gate is not None
         assert gate['limit'] == 50
         assert gate['used'] == 50
-        assert gate['source'] == user_quota.SOURCE_DEFAULT
+        assert gate['source'] == user_quota.SOURCE_PACKAGE
         assert gate['retry_after_seconds'] == 777
 
     def test_rejection_consumes_nothing(self, fake_redis, pkg_db):
+        _pkg_user(pkg_db, 203, 50)
         fake_redis.seed(203, 50)
         _run(user_quota.check_and_consume(203))
         assert fake_redis.used(203) == 50, "a blocked request must not INCR"
 
-    def test_fifty_messages_then_the_fifty_first_is_blocked(self, fake_redis, pkg_db):
+    def test_n_messages_then_the_next_is_blocked(self, fake_redis, pkg_db):
         uid = 204
-        for i in range(user_quota.DEFAULT_LIMIT):
+        _pkg_user(pkg_db, uid, 50)
+        for i in range(50):
             assert _run(user_quota.check_and_consume(uid)) is None, f"message {i + 1}"
         assert _run(user_quota.check_and_consume(uid)) is not None
 
-    def test_package_user_allowed_at_fifty_one(self, fake_redis, pkg_db, monkeypatch):
-        _stub_paid(monkeypatch, paid=True)
-        pkg_db.add_package('pro', request_quota=200)
-        pkg_db.add_entitlement(205, 'pro')
-        fake_redis.seed(205, 50)
-        assert _run(user_quota.check_and_consume(205)) is None
-        assert fake_redis.used(205) == 51
-
-    def test_package_user_blocked_at_two_hundred(self, fake_redis, pkg_db, monkeypatch):
-        _stub_paid(monkeypatch, paid=True)
-        pkg_db.add_package('pro', request_quota=200)
-        pkg_db.add_entitlement(206, 'pro')
+    def test_bigger_package_allows_more(self, fake_redis, pkg_db):
+        _pkg_user(pkg_db, 206, 200)
         fake_redis.seed(206, 200, ttl=60)
         gate = _run(user_quota.check_and_consume(206))
         assert gate is not None
@@ -309,22 +278,25 @@ class TestBoundary:
         assert gate['source'] == user_quota.SOURCE_PACKAGE
         assert gate['retry_after_seconds'] == 60
 
-    def test_exempt_user_is_never_counted(self, fake_redis, pkg_db, monkeypatch):
-        _stub_paid(monkeypatch, paid=True)
-        for _ in range(user_quota.DEFAULT_LIMIT + 5):
+    def test_no_package_user_is_never_counted(self, fake_redis, pkg_db):
+        """An exempt (free/paid/balance) user's window is never touched here --
+        the free tier's counters live in services/free_tier.py."""
+        for _ in range(55):
             assert _run(user_quota.check_and_consume(301)) is None
-        assert fake_redis.used(301) == 0, "an exempt user's window is never touched"
+        assert fake_redis.used(301) == 0
 
     def test_aggregate_not_per_model(self, fake_redis, pkg_db):
         """The whole point of this gate: one counter for the user, whatever
-        model the message went to. services/free_tier.py is the per-model one."""
+        model the message went to."""
         uid = 302
-        for _ in range(user_quota.DEFAULT_LIMIT):
+        _pkg_user(pkg_db, uid, 50)
+        for _ in range(50):
             assert _run(user_quota.check_and_consume(uid)) is None
-        assert fake_redis.used(uid) == user_quota.DEFAULT_LIMIT
+        assert fake_redis.used(uid) == 50
         assert len([k for k in fake_redis.store if k.startswith('userquota:')]) == 1
 
     def test_cost_greater_than_one_cannot_straddle_the_limit(self, fake_redis, pkg_db):
+        _pkg_user(pkg_db, 303, 50)
         fake_redis.seed(303, 49)
         gate = _run(user_quota.check_and_consume(303, cost=2))
         assert gate is not None, "49 + 2 > 50 must be refused, not clamped"
@@ -335,25 +307,29 @@ class TestBoundary:
 
 class TestWindow:
     def test_first_message_anchors_the_five_hour_window(self, fake_redis, pkg_db):
+        _pkg_user(pkg_db, 401, 50)
         assert _run(user_quota.check_and_consume(401)) is None
         assert fake_redis.ttls[user_quota._msg_key(401)] == user_quota.WINDOW_SECONDS
         assert user_quota.WINDOW_SECONDS == 18000
 
     def test_expiry_resets_the_allowance(self, fake_redis, pkg_db):
         uid = 402
-        fake_redis.seed(uid, user_quota.DEFAULT_LIMIT)
+        _pkg_user(pkg_db, uid, 50)
+        fake_redis.seed(uid, 50)
         assert _run(user_quota.check_and_consume(uid)) is not None
         fake_redis.expire_now(uid)
         assert _run(user_quota.check_and_consume(uid)) is None
 
     def test_at_cap_with_no_ttl_fails_open_rather_than_trapping(self, fake_redis, pkg_db):
         uid = 403
-        fake_redis.store[user_quota._msg_key(uid)] = str(user_quota.DEFAULT_LIMIT)
+        _pkg_user(pkg_db, uid, 50)
+        fake_redis.store[user_quota._msg_key(uid)] = '50'
         # no TTL entry -> ttl() returns -1, a bucket that would never reset
         assert _run(user_quota.check_and_consume(uid)) is None
 
     def test_a_key_that_lost_its_ttl_gets_one_back(self, fake_redis, pkg_db):
         uid = 404
+        _pkg_user(pkg_db, uid, 50)
         fake_redis.store[user_quota._msg_key(uid)] = '3'
         assert _run(user_quota.check_and_consume(uid)) is None
         assert fake_redis.ttls[user_quota._msg_key(uid)] == user_quota.WINDOW_SECONDS
@@ -363,18 +339,19 @@ class TestWindow:
 
 class TestFailOpen:
     def test_redis_outage_allows_the_request(self, fake_redis, pkg_db):
+        _pkg_user(pkg_db, 501, 50)
         fake_redis.seed(501, 999)
         fake_redis.fail = True
         assert _run(user_quota.check_and_consume(501)) is None
 
-    def test_database_outage_does_not_grant_a_package_limit(self, fake_redis, pkg_db):
-        """A DB error must not raise, and must not be mistaken for 'has a
-        package'. It falls through to the default cap, still enforced."""
+    def test_database_outage_is_exempt_not_a_crash(self, fake_redis, pkg_db):
+        """A DB error must not raise. The package lookup returns None, so the
+        user resolves to exempt (uncapped) rather than trapping them -- money
+        is still guarded by BillingService.reserve regardless."""
         pkg_db.fail = True
-        limit, source = _run(user_quota.resolve_limit(502))
-        assert (limit, source) == (user_quota.DEFAULT_LIMIT, user_quota.SOURCE_DEFAULT)
-        fake_redis.seed(502, user_quota.DEFAULT_LIMIT)
-        assert _run(user_quota.check_and_consume(502)) is not None
+        assert _run(user_quota.resolve_limit(502)) == (None, user_quota.SOURCE_EXEMPT)
+        fake_redis.seed(502, 999)
+        assert _run(user_quota.check_and_consume(502)) is None
 
     def test_database_outage_on_the_whole_gate_still_serves(self, fake_redis, pkg_db):
         pkg_db.fail = True
@@ -385,6 +362,7 @@ class TestFailOpen:
         assert _run(user_quota.package_window_limit(504)) is None
 
     def test_garbage_counter_value_fails_open(self, fake_redis, pkg_db):
+        _pkg_user(pkg_db, 505, 50)
         fake_redis.store[user_quota._msg_key(505)] = 'not-a-number'
         assert _run(user_quota.check_and_consume(505)) is None
 
@@ -393,17 +371,18 @@ class TestFailOpen:
 
 class TestStatus:
     def test_status_reports_used_and_remaining_without_consuming(self, fake_redis, pkg_db):
+        _pkg_user(pkg_db, 601, 50)
         fake_redis.seed(601, 12, ttl=900)
         st = _run(user_quota.get_status(601))
         assert st['limited'] is True
-        assert st['limit'] == user_quota.DEFAULT_LIMIT
+        assert st['limit'] == 50
         assert st['used'] == 12
-        assert st['remaining'] == user_quota.DEFAULT_LIMIT - 12
+        assert st['remaining'] == 38
         assert st['reset_in_seconds'] == 900
         assert fake_redis.used(601) == 12
 
-    def test_status_for_an_exempt_user(self, fake_redis, pkg_db, monkeypatch):
-        _stub_paid(monkeypatch, paid=True)
+    def test_status_for_an_exempt_user(self, fake_redis, pkg_db):
+        # no package -> exempt
         st = _run(user_quota.get_status(602))
         assert st['limited'] is False
         assert st['limit'] is None
@@ -445,25 +424,10 @@ def test_sql_joins_the_package_table_for_the_live_quota():
     assert "JOIN credit_packages cp ON cp.id = pe.package_id" in _SQL
 
 
-# ── 7. the two gates must not compete ────────────────────────────────────
-
-def test_per_model_ceiling_never_binds_first():
-    """services/free_tier.py's per-model cap is subordinate to this
-    aggregate one: pinned equal to DEFAULT_LIMIT so it cannot reject a
-    default-tier user before the aggregate gate does. Lowering FREE_LIMIT
-    below DEFAULT_LIMIT would make the per-model cap the real limit again
-    and silently contradict the '50 messages per 5 hours' product rule --
-    if that is what you want, change it here on purpose."""
-    assert free_tier.FREE_LIMIT >= user_quota.DEFAULT_LIMIT
-
-
-def test_both_gates_share_the_same_window_length():
-    assert free_tier.WINDOW_SECONDS == user_quota.WINDOW_SECONDS
-
-
 def test_the_two_gates_use_separate_redis_namespaces():
+    from services import free_tier
     assert user_quota._msg_key(7) == 'userquota:msg:7'
-    assert free_tier._msg_key(7, 'm') == 'freetier:msg:7:m'
+    assert free_tier._hourly_key(7) == 'freetier:hourly:7'
     assert not user_quota._msg_key(7).startswith('freetier:')
 
 
@@ -566,7 +530,12 @@ class _QuotaEnv:
     def __init__(self, used: int = 999, limit_ttl: int = 3600):
         self.redis = FakeRedis()
         self.redis.seed(1, used, ttl=limit_ttl)
-        self.db = _FakePackageDB()  # no packages -> DEFAULT_LIMIT applies
+        # A package holder is the only user THIS gate now caps (the free tier
+        # moved to services/free_tier.py). Give uid 1 a package so the
+        # aggregate quota actually binds in these end-to-end tests.
+        self.db = _FakePackageDB()
+        self.db.add_package('pro', request_quota=50)
+        self.db.add_entitlement(1, 'pro')
         self.billing = MagicMock()
         self.billing.reserve = AsyncMock(return_value={'reservation_id': 'r1'})
         self.billing.release = AsyncMock(return_value=None)

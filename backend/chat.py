@@ -53,7 +53,7 @@ from services.billing import SqlBillingRepo, BillingService, InsufficientBalance
 from services.money import Money
 from services.entitlement_gate import covering_entitlement
 from services.memory_extractor import extract_memories, MIN_MSG_COUNT
-from services.free_tier import check_and_consume
+from services.free_tier import FREE_LIMIT, check_and_consume
 from middleware.compression import compress_messages, estimate_savings
 from model_output import clean_response_dict
 
@@ -231,11 +231,13 @@ def _persian_duration(seconds: int) -> str:
 
 
 def _free_tier_response(gate: dict) -> JSONResponse:
-    """Build the 429 response for a free-tier throttle rejection."""
+    """429 for the per-MODEL free-tier throttle -- NOT the aggregate message
+    quota (chat_web._user_quota_response, a different error.code). Reads
+    FREE_LIMIT, now pinned to user_quota.DEFAULT_LIMIT -- see free_tier.py."""
     retry = int(gate.get('retry_after_seconds', 0))
     model = gate.get('model', '')
     message = (
-        f'سقف ۵ پیام رایگان این مدل پر شده است. حدود {_persian_duration(retry)} دیگر دوباره فعال می‌شود. '
+        f'سقف {_to_fa(FREE_LIMIT)} پیام رایگان این مدل پر شده است. حدود {_persian_duration(retry)} دیگر دوباره فعال می‌شود. '
         'با اولین شارژ حساب، این محدودیت برای همیشه برداشته می‌شود.'
     )
     return JSONResponse(

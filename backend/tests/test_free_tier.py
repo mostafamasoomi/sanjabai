@@ -176,7 +176,12 @@ class TestStatus:
         assert status['window_seconds'] == free_tier.WINDOW_SECONDS
         entry = next(m for m in status['models'] if m['model'] == 'tencent-hy3')
         assert entry['used'] == 2
-        assert entry['remaining'] == 3
+        # Symbolic, not the literal 3 it used to be: FREE_LIMIT is now pinned
+        # to services.user_quota.DEFAULT_LIMIT (the per-model ceiling became
+        # subordinate to the aggregate message quota -- see free_tier.py's
+        # module docstring), so a hardcoded remainder no longer holds. The
+        # relationship being asserted, remaining == limit - used, is unchanged.
+        assert entry['remaining'] == free_tier.FREE_LIMIT - 2
         assert entry['reset_in_seconds'] > 0
 
     def test_status_absent_model_not_listed(self, fake_redis):

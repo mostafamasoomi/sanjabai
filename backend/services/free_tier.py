@@ -1,5 +1,26 @@
 """Free-tier per-model message throttle.
 
+── SUBORDINATE TO services/user_quota.py AS OF THE AGGREGATE-QUOTA CHANGE ──
+The binding message cap is now the AGGREGATE per-user one in
+services/user_quota.py (50 messages per 5-hour window with no paid package,
+the package's ``request_quota`` with one). This module survives as the
+per-MODEL ceiling that sits on top of that aggregate cap -- the shape
+mainstream chat products use, where a premium model can carry its own
+sub-limit inside the overall allowance.
+
+:data:`FREE_LIMIT` is therefore pinned EQUAL to
+``services.user_quota.DEFAULT_LIMIT`` so this ceiling can never bind before
+the aggregate one for a default-tier user: the two gates do not compete,
+the aggregate one decides. Do not lower FREE_LIMIT without deciding on
+purpose that a per-model sub-limit should become the real cap again, and
+note that this module is *also* still the only message gate on
+task_execution.py's scheduled-task path, which does not run the chat
+pre-flight and so never reaches the aggregate gate. The equality is
+enforced by tests/test_user_quota.py::test_per_model_ceiling_never_binds_first.
+It is a literal rather than an import because services/user_quota.py
+imports has_paid/has_balance from THIS module -- importing back would be
+circular.
+
 Applies ONLY to users who have neither made a real gateway payment (see
 :func:`has_paid`) nor hold any wallet credit (see :func:`has_balance`).
 Free-mode messages are still charged against the wallet as normal by
@@ -16,7 +37,7 @@ while holding millions of toman.
 Storage: Redis only, no DB migration involved. Key
 ``freetier:msg:{uid}:{model}`` is a fixed 5-hour bucket anchored at the
 first message of the bucket (NOT a rolling window): the first message
-INCRs the key to 1 then sets EXPIRE 18000; messages 2-5 INCR the same key;
+INCRs the key to 1 then sets EXPIRE 18000; later ones INCR the same key;
 an attempt while the count already sits at FREE_LIMIT is rejected and the
 counter is left untouched (never decremented, never incremented past the
 limit) — the key's remaining TTL is what gets handed back as the retry
@@ -47,7 +68,9 @@ from database import async_session, rds
 
 logger = logging.getLogger(__name__)
 
-FREE_LIMIT = 5
+# Per-MODEL ceiling. Pinned equal to services.user_quota.DEFAULT_LIMIT --
+# see this module's docstring for why, and why it is a literal here.
+FREE_LIMIT = 50
 WINDOW_SECONDS = 18000  # 5 hours
 
 _PAID_TTL = 30 * 24 * 3600  # 30 days — paying never un-pays
@@ -238,8 +261,8 @@ async def get_status(uid: int) -> dict:
             key = _msg_key(uid, model)
             raw = await rds.get(key)
             if raw is None:
-                # Bucket already expired (or never existed) — the frontend
-                # treats an absent model as 5/5 remaining.
+                # Bucket already expired (or never existed) — an absent
+                # model means the full FREE_LIMIT is still available.
                 continue
             ttl = await rds.ttl(key)
             if ttl is None or ttl < 0:

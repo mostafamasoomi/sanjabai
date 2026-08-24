@@ -36,6 +36,7 @@ from services.billing import SqlBillingRepo, BillingService, InsufficientBalance
 from services.money import Money
 from services.entitlement_gate import covering_entitlement
 from services.moderation import moderation_preflight
+from services.user_quota import check_and_consume as _user_quota_check
 from model_output import clean_response_dict
 
 import chat
@@ -112,11 +113,64 @@ async def _chat_preflight(uid: int, messages) -> JSONResponse | None:
     Screening never mutates it -- a clean payload goes upstream byte for
     byte -- and it never raises: a broken detector allows the request (see
     services/moderation.py's fail-safe contract).
+
+    THE AGGREGATE MESSAGE QUOTA (services/user_quota.py) is charged here,
+    last, and this is its ONLY call site in the codebase. Here because it is
+    the one function all four routes share, it is per-user rather than
+    per-model (so unlike the per-model free-tier gate it does not need to
+    wait for model resolution), and it already sits after user resolution
+    and far before every BillingService.reserve() -- a request rejected on
+    quota never opens a wallet reservation, so there is never one to unwind.
+    Charged AFTER the screen so a message blocked for content costs the user
+    nothing, and it charges ONE message per HTTP request -- including
+    /v1/compare, which fans out to two models on that single message. It
+    never raises: services/user_quota.py fails open on any Redis/DB error.
     """
     disabled = await chat._chat_disabled_response()
     if disabled is not None:
         return disabled
-    return await moderation_preflight(uid, messages)
+    screened = await moderation_preflight(uid, messages)
+    if screened is not None:
+        return screened
+    gate = await _user_quota_check(uid)
+    if gate is not None:
+        return _user_quota_response(gate)
+    return None
+
+
+def _user_quota_response(gate: dict) -> JSONResponse:
+    """The 429 for an aggregate message-quota rejection.
+
+    Deliberately the same shape as chat.py::_free_tier_response (429,
+    ``error.type='rate_limited'``, a Persian message and a numeric
+    ``retry_after_seconds``) so the frontend's existing error handling needs
+    no change -- only ``error.code`` differs, so the two caps stay
+    distinguishable in logs and in support. Numerals go through
+    dependencies._to_fa via chat._persian_duration, per the Persian-first
+    rule; the limit itself is rendered with _to_fa for the same reason.
+    """
+    retry = int(gate.get('retry_after_seconds', 0))
+    limit = int(gate.get('limit', 0))
+    if gate.get('source') == 'package':
+        tail = 'برای سقف بالاتر، بستهٔ بزرگ‌تری تهیه کنید.'
+    else:
+        tail = 'با تهیهٔ بسته یا شارژ حساب، سقف شما افزایش می‌یابد.'
+    message = (
+        f'سقف {_to_fa(limit)} پیام در هر ۵ ساعت پر شده است. '
+        f'حدود {chat._persian_duration(retry)} دیگر دوباره فعال می‌شود. {tail}'
+    )
+    return JSONResponse(
+        {'error': {
+            'message': message,
+            'type': 'rate_limited',
+            'code': 'message_quota_exceeded',
+            'limit': limit,
+            'used': int(gate.get('used', 0)),
+            'source': gate.get('source', ''),
+            'retry_after_seconds': retry,
+        }},
+        status_code=429,
+    )
 
 
 async def _release_reservation(reservation: dict | None, uid: int, label: str = '') -> None:

@@ -257,6 +257,7 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
           <li><b className="text-secondary">مبلغ پرداختی</b> (base_amount): مبلغی که کاربر واقعاً پرداخت می‌کند.</li>
           <li><b className="text-secondary">مبلغ واریزی به کیف پول</b> (total_credits): مبلغ نهایی (شامل پاداش) که به کیف پول کاربر اضافه می‌شود — این عدد از قبل شامل پاداش است، جمع‌کردن درصد پاداش رویش دوباره اشتباه است.</li>
           <li><b className="text-secondary">سهمیهٔ درخواست/توکن</b>: عددی کاملاً جدا از تومان — تعداد درخواست یا توکن، نه مبلغ.</li>
+          <li><b className="text-secondary">«سهمیهٔ درخواست» دو نقش دارد</b>: هم کل درخواست‌هایی که این بسته می‌خرد، و هم <b>سقف پیام کاربر در هر پنجرهٔ ۵ ساعته</b>. کاربر بدون بسته سقف پیش‌فرض ۵۰ پیام در ۵ ساعت را دارد؛ کاربری که این بسته را دارد، همین عدد سقف ۵ ساعته‌اش می‌شود. خالی بگذارید تا همان سقف پیش‌فرض اعمال شود.</li>
         </ul>
         <p className="text-xs mt-2" style={{ color: 'var(--warning, #f59e0b)' }}>
           🔴 بسته‌ای که سهمیهٔ درخواست یا توکن دارد باید «سقف هزینهٔ هر درخواست» هم داشته باشد — وگرنه کاربر می‌تواند کل سهمیه را روی گران‌ترین مدل خرج کند و هر درخواست ضررده شود. سرور این را رد می‌کند؛ این فرم فقط از قبل هشدار می‌دهد.
@@ -273,7 +274,7 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
                 <th className="text-right p-3">مبلغ پرداختی</th>
                 <th className="text-right p-3">مبلغ واریزی به کیف پول</th>
                 <th className="text-right p-3">درصد پاداش</th>
-                <th className="text-right p-3">سهمیهٔ درخواست</th>
+                <th className="text-right p-3" title="هم کل درخواست‌های بسته، هم سقف پیام در هر پنجرهٔ ۵ ساعته. خالی = سقف پیش‌فرض ۵۰ پیام.">سهمیهٔ درخواست / سقف ۵ ساعته</th>
                 <th className="text-right p-3">سهمیهٔ توکن</th>
                 <th className="text-right p-3">سقف هزینهٔ هر درخواست</th>
                 <th className="text-right p-3">مدت اعتبار (روز)</th>
@@ -406,8 +407,8 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
                 <Field label="درصد پاداش">
                   <NumInput value={newPackage.bonus_percent} onChange={(v) => setNewPackage({ ...newPackage, bonus_percent: v })} width={80} />
                 </Field>
-                <Field label="سهمیهٔ درخواست">
-                  <NumInput value={newPackage.request_quota} onChange={(v) => setNewPackage({ ...newPackage, request_quota: v })} placeholder="بدون سهمیه" />
+                <Field label="سهمیهٔ درخواست / سقف پیام در هر پنجرهٔ ۵ ساعته">
+                  <NumInput value={newPackage.request_quota} onChange={(v) => setNewPackage({ ...newPackage, request_quota: v })} placeholder="خالی = سقف پیش‌فرض ۵۰" />
                 </Field>
                 <Field label="سهمیهٔ توکن">
                   <NumInput value={newPackage.token_quota} onChange={(v) => setNewPackage({ ...newPackage, token_quota: v })} placeholder="بدون سهمیه" />

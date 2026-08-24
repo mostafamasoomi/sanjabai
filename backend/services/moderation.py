@@ -76,6 +76,7 @@ from services.moderation_rules import (  # noqa: F401 -- re-exported facade
     MAX_SCAN_CHARS,
     MAX_SNIPPET_CHARS,
     REGEX_BUDGET_SECONDS,
+    SELF_HARM_MESSAGE_FA,
     SEVERITIES,
     Config,
     Rule,
@@ -85,6 +86,7 @@ from services.moderation_rules import (  # noqa: F401 -- re-exported facade
     _last_user_text,
     _match,
     _rank,
+    block_message_for_category,
     normalize_variants,
 )
 from services.moderation_store import (  # noqa: F401 -- re-exported facade
@@ -145,7 +147,8 @@ async def screen_request(uid: int, messages: Any,
 
         v = Verdict(decision=decision, category=rule.category,
                     severity=rule.severity, rule_id=rule.id, snippet=snippet,
-                    message_fa=BLOCK_MESSAGE_FA if decision == 'block' else None)
+                    message_fa=block_message_for_category(rule.category)
+                    if decision == 'block' else None)
         await _record_event(uid, conversation_id, v, cfg.retention_days)
         await _send_alert(uid, v)
         return v

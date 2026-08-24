@@ -56,6 +56,29 @@ BLOCK_MESSAGE_FA = (
     'شما پردازش نشد. اگر فکر می‌کنید اشتباهی رخ داده، با پشتیبانی تماس بگیرید.'
 )
 
+# category == 'self_harm' gets a warm, non-judgmental message instead of the
+# bureaucratic generic one above -- a user in this state should not be told
+# "contact support", they should be told someone is there and given a
+# concrete, immediate step. Iran's social emergency line (اورژانس اجتماعی)
+# is 123, nationwide, free, 24/7. Still: no rule name, no model/provider.
+SELF_HARM_MESSAGE_FA = (
+    'به نظر می‌رسد این روزها حال خوبی ندارید و این پیام به همین دلیل برای '
+    'شما پردازش نشد. حرف‌هایی که نوشتید مهم است و شما تنها نیستید؛ در این '
+    'شرایط بهتر است با یک نفر که بهش اعتماد دارید صحبت کنید. همچنین می‌توانید '
+    'همین حالا و به‌صورت رایگان با اورژانس اجتماعی به شماره ۱۲۳ (123) تماس '
+    'بگیرید؛ افرادی آموزش‌دیده آنجا هستند تا به شما کمک کنند.'
+)
+
+
+def block_message_for_category(category: str | None) -> str:
+    """The Persian text sent to the user for a real block, chosen by the
+    matched rule's category. Every category except self_harm keeps the
+    generic :data:`BLOCK_MESSAGE_FA`; self_harm gets the supportive message
+    above. Called at Verdict-construction time in services/moderation.py."""
+    if category == 'self_harm':
+        return SELF_HARM_MESSAGE_FA
+    return BLOCK_MESSAGE_FA
+
 class _BudgetExceeded(Exception):
     """Rule sweep ran past REGEX_BUDGET_SECONDS -- a detector failure, i.e.
     allow + flag + alert, never a silent pass."""

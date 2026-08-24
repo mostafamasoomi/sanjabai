@@ -55,6 +55,7 @@ from chat import _resolve_public_model, _resolve_provider, _release_reservation
 from content import apply_markup, get_effective_markup_pct
 from services.billing import SqlBillingRepo, BillingService, InsufficientBalanceError
 from services.money import Money
+from services.moderation import moderation_preflight
 from site_settings import get_site_flag
 
 logger = logging.getLogger(__name__)
@@ -148,6 +149,23 @@ async def images_generations(request: Request, payload: ImageGenerationRequest) 
     model_in = (payload.model or '').strip()
     if not model_in:
         return _error('مدل مشخص نشده است', code='model_required', status=400)
+
+    # Gate -1 (content safety, Phase J): screen the image prompt BEFORE any
+    # model resolution, availability/price gate, or wallet reservation --
+    # same choke point and ordering as chat_web._chat_preflight (see that
+    # module's docstring: screening must run before reserve() so a blocked
+    # request never opens a hold, let alone reaches an upstream). The
+    # prompt is wrapped as a one-message "user" turn because
+    # moderation_preflight/screen_request read the newest user turn out of
+    # a messages list (services/moderation_rules.py::_last_user_text) --
+    # there is no separate "prompt screening" API, and there must not be a
+    # second copy of the detection logic here. Never raises (fail-safe:
+    # allow + flag + alert on a detector failure) and never leaks a rule,
+    # model, or provider name to the user -- the message is byte-for-byte
+    # whatever services/moderation.py produced.
+    screened = await moderation_preflight(uid, [{'role': 'user', 'content': payload.prompt}])
+    if screened is not None:
+        return screened
 
     # Gate 0 (financial rule): canonicalize BEFORE every other gate and
     # before the reservation -- see module docstring.

@@ -3,7 +3,7 @@
 Three places in this backend send a Telegram alert, and until migration
 0044 all three read the same two PLAIN ENVIRONMENT VARIABLES:
 
-  * ``backend/security.py::_send_lockout_alert``      -- account lockout
+  * ``backend/security_lockout.py::_send_lockout_alert`` -- account lockout
   * ``backend/watchdog.py::_send_telegram``           -- financial anomalies
   * ``backend/services/moderation_store.py::_send_alert`` -- content safety
 

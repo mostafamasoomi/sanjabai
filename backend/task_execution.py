@@ -18,20 +18,46 @@ and images.py's module docstrings for the incident writeups this mirrors):
   1. Resolve the model EXACTLY ONCE, first (tasks._resolve_task_model) --
      an unresolved/unconverted model id makes _record_usage's price lookup
      MISS, and a fallback CEILING rate applies, overcharging the user.
-  2. The two message gates the interactive chat path runs, so a scheduled
-     task cannot be used to bypass either -- both BEFORE any reservation is
-     opened (a pre-reserve rejection means there is never a reservation to
-     unwind), and both fail open on a storage error:
-       a. services.free_tier.check_and_consume -- the free-tier gate (hourly
+  2. FOUR message/availability gates the interactive chat path runs, so a
+     scheduled task cannot be used to bypass any of them -- all BEFORE any
+     reservation is opened (a pre-reserve rejection means there is never a
+     reservation to unwind), and all fail open on a storage error:
+       a. site_settings.get_site_flag('chat_enabled') -- the admin chat kill
+          switch. This is the same flag chat_web._chat_disabled_response()
+          reads; a scheduled task must not keep burning upstream credit
+          while an admin has turned chat off. get_site_flag() itself never
+          raises and fails open to the registered default (True), so a
+          Redis/DB outage never blocks a paying user's task -- it only
+          blocks when the flag is genuinely off.
+       b. services.moderation.screen_request -- Phase J content screening,
+          the SAME detection engine chat_web._chat_preflight calls (via its
+          thin JSONResponse wrapper, moderation_preflight). Called directly
+          here rather than through moderation_preflight because this module
+          never produces an HTTP response of its own -- _finalize wants a
+          plain Persian string, and Verdict.message_fa already IS that
+          string, so going through screen_request avoids parsing a
+          JSONResponse body back into a string for no reason. This does not
+          reopen "ONE CHOKE POINT, NOT SIX" (services/moderation.py's module
+          docstring): that claim is about the four HTTP chat routes sharing
+          ONE detector implementation, and screen_request *is* that
+          implementation -- moderation_preflight is only its JSONResponse
+          adapter, and stays the single thing HTTP routes call. Never
+          raises; a broken detector ALLOWS (see services/moderation.py's
+          fail-safe contract) rather than locking out a scheduled task.
+       c. services.free_tier.check_and_consume -- the free-tier gate (hourly
           + lifetime + cheap-models-only for a user with no pay/package/
           balance). No-ops for a paid/package/balance user.
-       b. services.user_quota.check_and_consume -- the aggregate per-user
+       d. services.user_quota.check_and_consume -- the aggregate per-user
           window quota, which caps a PACKAGE holder by their package's
           request_quota. No-ops (exempt) for the free tier and for a
           pay-per-use balance user. Wiring it here mirrors
           chat_web._chat_preflight so a scheduled task counts against the
           same package window an interactive message does, rather than
           escaping it.
+     Order matches chat_web._chat_preflight exactly: disabled-switch, then
+     moderation, then quota -- except here BOTH quota gates (free-tier and
+     aggregate) sit after moderation, so a blocked task never consumes
+     either one.
   3. BillingService.reserve() -- pre-flight availability check + hold.
   4. The upstream call.
   5. Settle via chat._bill_stream_usage(uid, payload, usage, response_text=...)
@@ -71,8 +97,10 @@ from database import _http, async_session
 from models import ScheduledTask, TaskExecution
 from services.billing import BillingService, InsufficientBalanceError, SqlBillingRepo
 from services.free_tier import check_and_consume
+from services.moderation import BLOCK_MESSAGE_FA, screen_request
 from services.money import Money
 from services.user_quota import check_and_consume as _user_quota_check
+from site_settings import get_site_flag
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +114,10 @@ _RESERVE_ESTIMATE_WORKING = 1000
 _RESERVE_ESTIMATE_UNKNOWN = 5000
 
 _INSUFFICIENT_BALANCE_MESSAGE = 'موجودی کیف پول شما کافی نیست. لطفاً حساب خود را شارژ کنید.'
+# Byte-for-byte the same text chat_web._chat_disabled_response() returns in
+# its 503 body, so a user sees the identical message whether the switch
+# caught an interactive message or a scheduled task.
+_CHAT_DISABLED_MESSAGE = 'گفتگو موقتاً در دسترس نیست'
 _FREE_TIER_MESSAGE = (
     'سقف پیام رایگان این مدل برای اکنون پر شده است؛ کمی بعد دوباره تلاش کنید '
     'یا با شارژ حساب این محدودیت را برای همیشه بردارید.'
@@ -223,7 +255,32 @@ async def _execute_task(task: Any, uid: int) -> dict[str, Any]:
         'stream': False,
     }
 
-    # 2a. Free-tier gate (per-model; cheap/hourly/lifetime for the free tier).
+    # 2a. chat_enabled kill switch -- same flag/message chat_web's
+    # _chat_disabled_response() gates all four interactive routes with. Read
+    # directly rather than through chat_web, which returns a JSONResponse
+    # this module has no use for.
+    if not await get_site_flag('chat_enabled'):
+        return await _finalize(
+            execution_id, task.id, 'failed', None, _CHAT_DISABLED_MESSAGE, 0, 0,
+            error_code='chat_disabled',
+        )
+
+    # 2b. Content moderation (Phase J) -- the same detector
+    # chat_web._chat_preflight runs via moderation_preflight, called here as
+    # screen_request directly (see module docstring) so the block message is
+    # read straight off Verdict.message_fa instead of being parsed back out
+    # of a JSONResponse body. conversation_id is always None here for the
+    # same reason chat_web's four routes pass None: a scheduled task's
+    # request carries no conversation id to record truthfully.
+    verdict = await screen_request(uid, chat_payload['messages'])
+    if verdict.decision == 'block':
+        return await _finalize(
+            execution_id, task.id, 'failed', None,
+            verdict.message_fa or BLOCK_MESSAGE_FA, 0, 0,
+            error_code='content_blocked',
+        )
+
+    # 2c. Free-tier gate (per-model; cheap/hourly/lifetime for the free tier).
     ft_gate = await check_and_consume(uid, [model_to_call])
     if ft_gate is not None:
         return await _finalize(
@@ -231,10 +288,10 @@ async def _execute_task(task: Any, uid: int) -> dict[str, Any]:
             ft_gate.get('message', _FREE_TIER_MESSAGE), 0, 0,
         )
 
-    # 2b. Aggregate package quota (caps a package holder by request_quota;
+    # 2d. Aggregate package quota (caps a package holder by request_quota;
     # exempt for the free tier and for a balance/pay-per-use user). Same gate
     # chat_web._chat_preflight runs, so a scheduled task can't escape the
-    # package window. Both gates run BEFORE the reservation below.
+    # package window. All four gates above run BEFORE the reservation below.
     q_gate = await _user_quota_check(uid)
     if q_gate is not None:
         return await _finalize(execution_id, task.id, 'failed', None, _QUOTA_MESSAGE, 0, 0)

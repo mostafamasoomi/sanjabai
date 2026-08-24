@@ -380,12 +380,42 @@ class TestCallSitesAreWired:
         assert ('POST', '/admin/watchdog-settings') in got
 
     def test_no_call_site_still_reads_the_env_var_directly(self):
+        """No backend module may read the credentials out of the environment.
+
+        The env-var read was moved into services/watchdog_settings.py
+        (migration 0044) so the admin panel is the single source of truth;
+        a module that goes back to os.getenv would silently ignore whatever
+        the owner typed into the panel.
+
+        This used to name three files explicitly, which quietly went stale
+        the moment security.py was split and _send_lockout_alert moved to
+        security_lockout.py: the alert still went through the helper, but
+        the assertion looked for it in a file that no longer held it. It now
+        sweeps EVERY backend module instead, so the guard cannot be
+        invalidated by a future file split -- and it is strictly stronger
+        than the three-file version it replaces.
+        """
         import pathlib
         root = pathlib.Path(__file__).resolve().parent.parent
-        for rel in ('security.py', 'watchdog.py', 'services/moderation_store.py'):
-            src = (root / rel).read_text(encoding='utf-8')
+        scanned = 0
+        for path in sorted(root.rglob('*.py')):
+            parts = path.relative_to(root).parts
+            if parts[0] in ('tests', 'migrations'):
+                continue
+            # the one module that is *supposed* to read the environment
+            if path.name == 'watchdog_settings.py':
+                continue
+            src = path.read_text(encoding='utf-8')
+            rel = path.relative_to(root)
             assert "os.getenv('WATCHDOG_BOT_TOKEN'" not in src, rel
             assert "os.getenv('WATCHDOG_CHAT_ID'" not in src, rel
+            scanned += 1
+        assert scanned > 20, f'sweep found only {scanned} modules -- it is not scanning'
+
+        # Every module that actually sends an alert must go through the helper.
+        for rel in ('security_lockout.py', 'watchdog.py',
+                    'services/moderation_store.py'):
+            src = (root / rel).read_text(encoding='utf-8')
             assert 'get_watchdog_credentials' in src, rel
 
     def test_watchdog_reads_credentials_per_send_not_at_import(self):

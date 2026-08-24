@@ -4,24 +4,96 @@ POST /v1/documents/generate  — Generate PPTX/DOCX/MDX from AI prompt
 GET  /v1/documents           — List user's generated documents
 GET  /v1/documents/{id}/download — Download generated document
 DELETE /v1/documents/{id}    — Delete generated document
+
+── THE BUG THIS MODULE CLOSES (2026-08-24) ─────────────────────────────
+POST /v1/documents/generate used to post straight to
+`{LITELLM_HOST}/v1/chat/completions` with NONE of the gates every other
+billed model call in this codebase runs: no `BillingService.reserve()`/
+settle (grep `reserve(`/`settle`/`record_usage` was 0 -- charged NOTHING),
+no free-tier gate, no package quota gate, no content moderation, and no
+catalog/allow-list validation of the client-supplied `model` (straight off
+`body.get('model', ...)`, unchanged, to the upstream) -- combined with the
+file's `for attempt in range(2)` resilience retry, a failure could even
+double the unbilled cost. Violated the two rules that never reopen: «هیچ
+درخواستی نباید ضررده باشد» (no request may be loss-making) and «هیچ مدل
+رایگانی نداریم» (there are no free models). Precedent: backend/
+task_execution.py (commit 5f7b84f) closed the identical hole for scheduled
+tasks; this fix mirrors that module's structure and gate order, not a new
+billing pattern.
+
+GATE ORDER, all BEFORE `BillingService.reserve()` (a pre-reserve rejection
+means there is never a reservation to unwind), matching
+chat_web._chat_preflight / task_execution.py exactly:
+
+  1. Model validation (`_resolve_and_validate_model`) -- resolve the
+     client-supplied model to a catalog `provider_model_id` and confirm
+     it is probe-verified/available, same as chat_web.chat_with_file.
+     Unknown/non-working -> Persian error, never forwarded upstream.
+     Done FIRST: an unresolved id also misses `_record_usage`'s price
+     lookup later and bills the fallback ceiling rate.
+  2. `chat_enabled` kill switch (`site_settings.get_site_flag`) -- same
+     flag/message as `chat_web._chat_disabled_response()`.
+  3. Content moderation (`services.moderation.screen_request`) -- the
+     same detector every chat route runs, called directly (not the
+     JSONResponse-returning `moderation_preflight` wrapper) so the block
+     message reads straight off `Verdict.message_fa`. Never raises; a
+     broken detector ALLOWS (fail-safe contract) rather than locking out
+     a paying user.
+  4. Free-tier gate (`services.free_tier.check_and_consume`) -- hourly +
+     lifetime + cheap-models-only; no-ops for a paid/package/balance user.
+  5. Aggregate package quota (`services.user_quota.check_and_consume`) --
+     caps a package holder; exempt for free tier / balance users.
+  6. `BillingService.reserve()` -- pre-flight availability hold.
+  7. The upstream call (`document_ai.generate_content` -- see that
+     module's docstring for why its internal retry cannot double-bill).
+  8. Bill the REAL cost directly to wallet.balance via
+     `chat._bill_stream_usage` (same function task_execution.py uses) --
+     this, not `BillingService.settle()`, is what actually charges the
+     user; it has its own L1 missing-usage estimate fallback.
+  9. Release the pre-flight hold from step 6 -- ALWAYS, failure or
+     success (the real charge in step 8 is independent of the hold, so
+     there is nothing to "settle" against it -- task_execution.py step 6).
+
+MODULE SPLIT (house 500-line cap). One-directional (no circular import,
+unlike the chat_*.py family) -- only this file needs the other two:
+  document_ai.py        the one upstream call (`generate_content`) --
+                        HTTP + retry + JSON-shape parsing/capping.
+  document_builders.py  the three pure file builders + `_escape_mdx_text`.
+  document_generator.py this file: `router` (app.py's only external
+                        import of this module, grepped 2026-08-24),
+                        storage/registry, all four endpoints + gates.
+
+Known constraint, unchanged: the document registry (`_doc_registry`) is
+in-memory only, does not survive a restart (documented gap). The
+path-traversal defence in `download_document` is preserved exactly.
 """
 from __future__ import annotations
 
 import os
 import re
 import json
+import secrets
 import time
 import uuid
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, FileResponse, Response
 
-from database import async_session, _http, LITELLM_HOST
+from database import async_session
 from dependencies import _get_user_id
+from services.billing import BillingService, InsufficientBalanceError, SqlBillingRepo
+from services.free_tier import check_and_consume
+from services.moderation import BLOCK_MESSAGE_FA, screen_request
+from services.money import Money
+from services.user_quota import check_and_consume as _user_quota_check
+from site_settings import get_site_flag
+
+import document_ai
+from document_ai import generate_content
+from document_builders import _create_pptx, _create_docx, _create_mdx
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -35,348 +107,111 @@ _doc_registry: dict[str, dict] = {}
 
 # ── Safety constants ─────────────────────────────────────────────
 MAX_PROMPT_LENGTH = 4000
-MAX_SLIDES = 30
-MAX_SECTIONS = 30
-ALLOWED_MODELS = {
-    'tencent-hy3', 'mimo-v2.5-pro', 'mimo-v2.5-pro-ultraspeed',
-    'deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-v4-pro-bynara',
-    'mistral-large', 'mistral-medium-3.5',
-}
 DOC_ID_RE = re.compile(r'^[0-9a-f]{12}$')
+EXT_MAP = {'pptx': '.pptx', 'docx': '.docx', 'mdx': '.md'}
 
-# ── AI content generation ────────────────────────────────────────
+# Reserve is a cheap pre-flight availability hold, not a prediction of the
+# real cost -- same shape as chat_with_file's / task_execution.py's
+# estimates. Sized higher than chat's (1000/5000) because document
+# generation's max_tokens (3072-4096, see document_ai.py) is itself well
+# above a typical chat reply -- the real charge (step 8 below) is whatever
+# _bill_stream_usage/_record_usage computes from actual usage regardless
+# of this number; this only has to not be exceeded on a routine request.
+_RESERVE_ESTIMATE_WORKING = 4000
+_RESERVE_ESTIMATE_UNKNOWN = 8000
 
-async def _generate_content(prompt: str, doc_type: str, model: str = 'mimo-v2.5-pro') -> dict:
-    """Use AI model to generate structured content for the document."""
-    import httpx
-
-    type_instructions = {
-        'pptx': '''Return a JSON object with this exact structure:
-{
-  "title": "Presentation Title",
-  "subtitle": "Optional subtitle",
-  "slides": [
-    {
-      "title": "Slide Title",
-      "content": ["Bullet point 1", "Bullet point 2", "Bullet point 3"],
-      "notes": "Optional speaker notes"
-    }
-  ]
-}
-Create 6-10 slides. Make content professional and detailed.''',
-
-        'docx': '''Return a JSON object with this exact structure:
-{
-  "title": "Document Title",
-  "subtitle": "Optional subtitle",
-  "sections": [
-    {
-      "heading": "Section Heading",
-      "content": "Full paragraph content for this section.",
-      "subsections": [
-        {
-          "heading": "Subsection",
-          "content": "Subsection content."
-        }
-      ]
-    }
-  ]
-}
-Create 4-8 sections. Make content professional and detailed.''',
-    }
-
-    system_msg = f'''You are a professional document/content creator. 
-Generate structured content for a {doc_type.upper()} document based on the user's request.
-{type_instructions.get(doc_type, type_instructions['pptx'])}
-
-IMPORTANT: Return ONLY valid JSON. No markdown code blocks, no explanations. Just the raw JSON.'''
-
-    # DOCX/PPTX content is long — use a dedicated longer timeout + one retry
-    max_tokens = 4096 if doc_type != 'docx' else 3072
-    timeout = httpx.Timeout(120.0, connect=15.0)
-    payload = {
-        'model': model,
-        'messages': [
-            {'role': 'system', 'content': system_msg},
-            {'role': 'user', 'content': prompt},
-        ],
-        'stream': False,
-        'max_tokens': max_tokens,
-    }
-    last_err: Exception | None = None
-    r = None
-    for attempt in range(2):
-        try:
-            r = await _http.post(
-                f'{LITELLM_HOST}/v1/chat/completions',
-                json=payload,
-                headers={'Accept': 'application/json'},
-                timeout=timeout,
-            )
-            r.raise_for_status()
-            break
-        except (httpx.TimeoutException, httpx.HTTPStatusError, httpx.TransportError) as e:
-            last_err = e
-            logger.warning('docgen AI attempt %s failed: %s', attempt + 1, e)
-            if attempt == 0:
-                # fallback model for second try if primary is slow/unavailable
-                if payload['model'] != 'mimo-v2.5-pro':
-                    payload['model'] = 'mimo-v2.5-pro'
-                continue
-            raise
-    if r is None:
-        raise last_err or RuntimeError('document content generation failed')
-    content = r.json()['choices'][0]['message']['content']
-
-    # Try to parse JSON from response — handle markdown code blocks
-    content = content.strip()
-    if content.startswith('```'):
-        # Remove ```json or ``` wrapper
-        lines = content.split('\n')
-        if lines[0].startswith('```'):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == '```':
-            lines = lines[:-1]
-        content = '\n'.join(lines).strip()
-    
-    # Try to find JSON object in the text
-    if not content.startswith('{'):
-        match = re.search(r'\{[\s\S]*\}', content)
-        if match:
-            content = match.group(0)
-
-    data = json.loads(content)
-    if not isinstance(data, dict):
-        raise ValueError('Model returned non-object JSON')
-
-    # Cap unbounded lists to avoid memory/CPU exhaustion (DoS)
-    if 'slides' in data:
-        data['slides'] = data['slides'][:MAX_SLIDES]
-    if 'sections' in data:
-        data['sections'] = data['sections'][:MAX_SECTIONS]
-    return data
+# ── Persian error messages ────────────────────────────────────────
+# _CHAT_DISABLED_MESSAGE is byte-for-byte chat_web._chat_disabled_response's
+# text, and _FREE_TIER_MESSAGE/_QUOTA_MESSAGE/_INSUFFICIENT_BALANCE_MESSAGE/
+# _GATEWAY_ERROR_MESSAGE are byte-for-byte task_execution.py's constants --
+# reused deliberately (not reworded) per this fix's "mirror the reference,
+# don't invent a new pattern" instruction.
+_MODEL_NOT_ALLOWED_MESSAGE = 'مدل انتخابی پشتیبانی نمیشود'
+_CHAT_DISABLED_MESSAGE = 'گفتگو موقتاً در دسترس نیست'
+_FREE_TIER_MESSAGE = (
+    'سقف پیام رایگان این مدل برای اکنون پر شده است؛ کمی بعد دوباره تلاش کنید '
+    'یا با شارژ حساب این محدودیت را برای همیشه بردارید.'
+)
+_QUOTA_MESSAGE = (
+    'سقف پیام بستهٔ شما برای این بازه پر شده است؛ کمی بعد دوباره تلاش کنید '
+    'یا بستهٔ بزرگ‌تری تهیه کنید.'
+)
+_INSUFFICIENT_BALANCE_MESSAGE = 'موجودی کیف پول شما کافی نیست. لطفاً حساب خود را شارژ کنید.'
+_GATEWAY_ERROR_MESSAGE = 'سرویس موقتاً در دسترس نیست'
 
 
-# ── Markdown escaping (prevent stored XSS in MDX output) ─────────
+# ── Model resolution/validation ───────────────────────────────────
+#
+# Late-bound `import chat` inside each function (not at module scope, and
+# never `from chat import X`) -- same reasoning as task_execution.py's
+# module docstring: chat.py's model-resolution names
+# (`_resolve_public_model`, `_safe_default_model`, `_is_model_allowed`) are
+# what the test suite monkeypatches directly on the `chat` module, and a
+# module-level import would both risk a chat.py <-> document_generator.py
+# load-order issue and silently defeat that monkeypatching.
 
-def _escape_mdx_text(text: str) -> str:
-    """Escape text destined for a Markdown slide deck."""
-    if not isinstance(text, str):
-        text = str(text)
-    # Escape HTML tags and common Markdown link injection
-    return (text.replace('&', '&amp;').replace('<', '&lt;')
-                .replace('>', '&gt;'))
+async def _resolve_and_validate_model(requested_model: str) -> str | None:
+    """Resolve a user-supplied model string to a catalog `provider_model_id`
+    and confirm it is currently probe-verified ('available'), the exact
+    same two-step chat_web.chat_with_file uses for a chat request's model.
 
-
-# ── PPTX generation ──────────────────────────────────────────────
-
-def _create_pptx(data: dict, output_path: Path) -> None:
-    """Create a PowerPoint file from structured data."""
-    from pptx import Presentation
-    from pptx.util import Inches, Pt, Emu
-    from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
-    from pptx.dml.color import RGBColor
-
-    prs = Presentation()
-    prs.slide_width = Inches(13.333)
-    prs.slide_height = Inches(7.5)
-
-    # Color scheme
-    PRIMARY = RGBColor(0x25, 0x63, 0xEB)    # Blue
-    DARK = RGBColor(0x1E, 0x29, 0x3B)       # Dark navy
-    LIGHT = RGBColor(0xF8, 0xFA, 0xFC)      # Light gray
-    WHITE = RGBColor(0xFF, 0xFF, 0xFF)
-    ACCENT = RGBColor(0x10, 0xB9, 0x81)     # Green
-
-    def add_bg(slide, color):
-        bg = slide.background
-        fill = bg.fill
-        fill.solid()
-        fill.fore_color.rgb = color
-
-    # Title slide
-    slide = prs.slides.add_slide(prs.slide_layouts[6])  # Blank
-    add_bg(slide, DARK)
-
-    # Title
-    left, top, width, height = Inches(1), Inches(2), Inches(11), Inches(2)
-    txBox = slide.shapes.add_textbox(left, top, width, height)
-    tf = txBox.text_frame
-    tf.word_wrap = True
-    p = tf.paragraphs[0]
-    p.text = data.get('title', 'Presentation')
-    p.font.size = Pt(44)
-    p.font.bold = True
-    p.font.color.rgb = WHITE
-    p.alignment = PP_ALIGN.CENTER
-
-    # Subtitle
-    if data.get('subtitle'):
-        left, top, width, height = Inches(2), Inches(4.2), Inches(9), Inches(1)
-        txBox = slide.shapes.add_textbox(left, top, width, height)
-        tf = txBox.text_frame
-        tf.word_wrap = True
-        p = tf.paragraphs[0]
-        p.text = data['subtitle']
-        p.font.size = Pt(20)
-        p.font.color.rgb = RGBColor(0x94, 0xA3, 0xB8)
-        p.alignment = PP_ALIGN.CENTER
-
-    # Content slides
-    for i, slide_data in enumerate(data.get('slides', [])):
-        slide = prs.slides.add_slide(prs.slide_layouts[6])
-        add_bg(slide, WHITE)
-
-        # Slide number
-        txBox = slide.shapes.add_textbox(Inches(12), Inches(0.3), Inches(1), Inches(0.5))
-        tf = txBox.text_frame
-        p = tf.paragraphs[0]
-        p.text = str(i + 2)
-        p.font.size = Pt(14)
-        p.font.color.rgb = RGBColor(0x94, 0xA3, 0xB8)
-        p.alignment = PP_ALIGN.RIGHT
-
-        # Accent bar
-        from pptx.util import Emu
-        shape = slide.shapes.add_shape(
-            1, Inches(0.5), Inches(0.8), Inches(0.08), Inches(0.6)
-        )
-        shape.fill.solid()
-        shape.fill.fore_color.rgb = PRIMARY
-        shape.line.fill.background()
-
-        # Title
-        txBox = slide.shapes.add_textbox(Inches(0.8), Inches(0.7), Inches(11), Inches(0.8))
-        tf = txBox.text_frame
-        tf.word_wrap = True
-        p = tf.paragraphs[0]
-        p.text = slide_data.get('title', f'Slide {i+2}')
-        p.font.size = Pt(32)
-        p.font.bold = True
-        p.font.color.rgb = DARK
-
-        # Content bullets
-        txBox = slide.shapes.add_textbox(Inches(0.8), Inches(1.8), Inches(11), Inches(5))
-        tf = txBox.text_frame
-        tf.word_wrap = True
-        content_items = slide_data.get('content', [])
-        for j, item in enumerate(content_items):
-            if j == 0:
-                p = tf.paragraphs[0]
-            else:
-                p = tf.add_paragraph()
-            p.text = f"  •  {item}"
-            p.font.size = Pt(18)
-            p.font.color.rgb = RGBColor(0x33, 0x41, 0x55)
-            p.space_after = Pt(12)
-
-        # Speaker notes
-        if slide_data.get('notes'):
-            notes_slide = slide.notes_slide
-            notes_slide.notes_text_frame.text = slide_data['notes']
-
-    # Thank you slide
-    slide = prs.slides.add_slide(prs.slide_layouts[6])
-    add_bg(slide, PRIMARY)
-    txBox = slide.shapes.add_textbox(Inches(1), Inches(2.5), Inches(11), Inches(2))
-    tf = txBox.text_frame
-    p = tf.paragraphs[0]
-    p.text = 'Thank You! 🙏'
-    p.font.size = Pt(48)
-    p.font.bold = True
-    p.font.color.rgb = WHITE
-    p.alignment = PP_ALIGN.CENTER
-
-    prs.save(str(output_path))
+    Returns ``None`` when nothing usable is available -- never a
+    hardcoded model literal (see chat_models._safe_default_model's
+    docstring: an unresolved/rotted default silently bills the fallback
+    ceiling rate instead of failing honestly).
+    """
+    import chat as chat_mod
+    if requested_model:
+        model = await chat_mod._resolve_public_model(requested_model)
+    else:
+        model = await chat_mod._safe_default_model()
+    if not model:
+        return None
+    if not await chat_mod._is_model_allowed(model):
+        return None
+    return model
 
 
-# ── DOCX generation ──────────────────────────────────────────────
-
-def _create_docx(data: dict, output_path: Path) -> None:
-    """Create a Word document from structured data."""
-    from docx import Document
-    from docx.shared import Pt, Inches, RGBColor
-    from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.enum.style import WD_STYLE_TYPE
-
-    doc = Document()
-
-    # Style setup
-    style = doc.styles['Normal']
-    font = style.font
-    font.size = Pt(11)
-    font.name = 'Arial'
-
-    # Title
-    title = doc.add_heading(data.get('title', 'Document'), level=0)
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-    if data.get('subtitle'):
-        subtitle = doc.add_paragraph(data['subtitle'])
-        subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        subtitle.runs[0].font.size = Pt(14)
-        subtitle.runs[0].font.color.rgb = RGBColor(0x64, 0x74, 0x8B)
-
-    doc.add_paragraph('')  # Spacer
-
-    # Sections
-    for section_data in data.get('sections', []):
-        doc.add_heading(section_data.get('heading', 'Section'), level=1)
-
-        if section_data.get('content'):
-            doc.add_paragraph(section_data['content'])
-
-        for subsection in section_data.get('subsections', []):
-            doc.add_heading(subsection.get('heading', ''), level=2)
-            if subsection.get('content'):
-                doc.add_paragraph(subsection['content'])
-
-    # Footer
-    doc.add_paragraph('')
-    footer = doc.add_paragraph('Generated by Sanjabai — sanjabai.ir')
-    footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    footer.runs[0].font.size = Pt(9)
-    footer.runs[0].font.color.rgb = RGBColor(0x94, 0xA3, 0xB8)
-
-    doc.save(str(output_path))
+async def _resolve_fallback_model(primary_model: str) -> str | None:
+    """Best-effort catalog-verified fallback for document_ai.generate_content's
+    internal resilience retry. Returns ``None`` (disabling the model-switch
+    on retry, not disabling the retry itself) rather than forwarding an
+    unverified model name upstream -- see document_ai.py's `FALLBACK_MODEL`
+    docstring for why this must never be the raw literal."""
+    import chat as chat_mod
+    if document_ai.FALLBACK_MODEL == primary_model:
+        return None
+    try:
+        resolved = await chat_mod._resolve_public_model(document_ai.FALLBACK_MODEL)
+        if resolved and resolved != primary_model and await chat_mod._is_model_allowed(resolved):
+            return resolved
+    except Exception as e:
+        logger.warning(f"document_generator: fallback model resolution failed: {e}")
+    return None
 
 
-# ── Markdown Slide Deck generation ───────────────────────────────
-
-def _create_mdx(data: dict, output_path: Path) -> None:
-    """Create a Markdown slide deck (compatible with Marp/reveal.js)."""
-    lines = []
-
-    # Title slide
-    lines.append('---')
-    lines.append(f'# {data.get("title", "Presentation")}')
-    if data.get('subtitle'):
-        lines.append(f'\n### {data["subtitle"]}')
-    lines.append('\n---\n')
-
-    # Content slides
-    for slide_data in data.get('slides', []):
-        lines.append('---')
-        lines.append(f'\n## {_escape_mdx_text(slide_data.get("title", "Slide"))}\n')
-        for item in slide_data.get('content', []):
-            lines.append(f'- {_escape_mdx_text(item)}')
-        if slide_data.get('notes'):
-            lines.append(f'\n<!-- Notes: {_escape_mdx_text(slide_data["notes"])} -->')
-        lines.append('')
-
-    # End
-    lines.append('---')
-    lines.append('\n# Thank You! 🙏')
-    lines.append('\n---')
-
-    output_path.write_text('\n'.join(lines), encoding='utf-8')
+async def _release_reservation(reservation: dict | None, uid: int, label: str = '') -> None:
+    """Release a billing reservation; fire-and-forget, logs on failure.
+    Mirrors chat_web._release_reservation / task_execution._release."""
+    if not reservation or async_session is None:
+        return
+    try:
+        async with async_session() as s:
+            repo = SqlBillingRepo(s)
+            svc = BillingService(repo)
+            await svc.release(reservation['reservation_id'])
+            await s.commit()
+    except Exception as e:
+        logger.warning(f"document_generator._release_reservation failed uid={uid} {label}: {e}")
 
 
 # ── Endpoints ────────────────────────────────────────────────────
 
 @router.post('/v1/documents/generate')
 async def generate_document(request: Request) -> JSONResponse:
-    """Generate a document from a prompt."""
+    """Generate a document from a prompt. See module docstring for the
+    mandatory gate order -- every gate below runs before `reserve()`, and
+    `reserve()` always runs before the upstream call."""
     uid = await _get_user_id(request)
     if not uid:
         return JSONResponse({'error': {'message': 'لطفاً وارد حساب خود شوید'}}, status_code=401)
@@ -386,9 +221,9 @@ async def generate_document(request: Request) -> JSONResponse:
     except Exception:
         return JSONResponse({'error': {'message': 'درخواست نامعتبر'}}, status_code=400)
 
-    prompt = body.get('prompt', '').strip()
-    doc_type = body.get('type', 'pptx').lower()  # pptx, docx, mdx
-    model = body.get('model', 'mimo-v2.5-pro')
+    prompt = (body.get('prompt') or '').strip()
+    doc_type = (body.get('type') or 'pptx').lower()  # pptx, docx, mdx
+    requested_model = (body.get('model') or '').strip()
 
     if not prompt:
         return JSONResponse({'error': {'message': 'متن درخواست الزامی است'}}, status_code=400)
@@ -402,63 +237,176 @@ async def generate_document(request: Request) -> JSONResponse:
     if doc_type not in ('pptx', 'docx', 'mdx'):
         return JSONResponse({'error': {'message': 'نوع فایل نامعتبر. pptx, docx, یا mdx'}}, status_code=400)
 
-    if model not in ALLOWED_MODELS:
-        return JSONResponse({'error': {'message': 'مدل انتخابی پشتیبانی نمیشود'}}, status_code=400)
+    # ── Gate 1: model validation — BEFORE anything else, never forwarded
+    # to the upstream unresolved/unverified. ──────────────────────────
+    model = await _resolve_and_validate_model(requested_model)
+    if model is None:
+        return JSONResponse({'error': {'message': _MODEL_NOT_ALLOWED_MESSAGE}}, status_code=400)
+
+    # ── Gate 2: chat_enabled kill switch. ──────────────────────────────
+    if not await get_site_flag('chat_enabled'):
+        return JSONResponse(
+            {'error': {'message': _CHAT_DISABLED_MESSAGE,
+                       'type': 'service_unavailable', 'code': 'chat_disabled'}},
+            status_code=503,
+        )
+
+    # ── Gate 3: content moderation — BEFORE any reservation and BEFORE
+    # the free-tier/quota gates. Never leaks the matched rule, model, or
+    # provider name. ───────────────────────────────────────────────────
+    verdict = await screen_request(uid, [{'role': 'user', 'content': prompt}])
+    if verdict.decision == 'block':
+        return JSONResponse(
+            {'error': {'message': verdict.message_fa or BLOCK_MESSAGE_FA,
+                       'type': 'content_policy', 'code': 'content_blocked'}},
+            status_code=403,
+        )
+
+    # ── Gate 4: free-tier gate (per-model). ────────────────────────────
+    ft_gate = await check_and_consume(uid, [model])
+    if ft_gate is not None:
+        return JSONResponse(
+            {'error': {'message': ft_gate.get('message', _FREE_TIER_MESSAGE),
+                       'type': 'rate_limited', 'code': ft_gate.get('code', 'free_tier')}},
+            status_code=429,
+        )
+
+    # ── Gate 5: aggregate package quota gate. ──────────────────────────
+    q_gate = await _user_quota_check(uid)
+    if q_gate is not None:
+        return JSONResponse(
+            {'error': {'message': _QUOTA_MESSAGE,
+                       'type': 'rate_limited', 'code': 'message_quota_exceeded'}},
+            status_code=429,
+        )
+
+    # ── Gate 6: reserve. Every gate above has now passed; this is the
+    # first point money is even provisionally touched. ────────────────
+    import chat as chat_mod
+    try:
+        is_working = await chat_mod.is_working_model(model)
+    except Exception as e:
+        logger.warning(f"document_generator: is_working_model failed model={model}: {e}")
+        is_working = False
+    est_cost = _RESERVE_ESTIMATE_WORKING if is_working else _RESERVE_ESTIMATE_UNKNOWN
+
+    reservation: dict | None = None
+    try:
+        async with async_session() as bill_session:
+            repo = SqlBillingRepo(bill_session)
+            svc = BillingService(repo)
+            reservation = await svc.reserve(
+                uid, Money(est_cost),
+                idempotency_key=f"docgen:{secrets.token_hex(8)}",
+                model=model,
+            )
+            await bill_session.commit()
+    except InsufficientBalanceError:
+        return JSONResponse(
+            {'error': {'message': _INSUFFICIENT_BALANCE_MESSAGE,
+                       'type': 'quota_exceeded', 'code': 'balance'}},
+            status_code=429,
+        )
+    except Exception as e:
+        logger.warning(f"document_generator: reserve failed uid={uid} model={model}: {e}")
+        return JSONResponse({'error': {'message': _GATEWAY_ERROR_MESSAGE}}, status_code=502)
 
     doc_id = uuid.uuid4().hex[:12]
-    ext_map = {'pptx': '.pptx', 'docx': '.docx', 'mdx': '.md'}
-    output_path = DOC_STORAGE / f'{doc_id}{ext_map[doc_type]}'
+    output_path = DOC_STORAGE / f'{doc_id}{EXT_MAP[doc_type]}'
+
+    # ── Gate 7: the upstream call. generate_content's internal retry
+    # (see document_ai.py's module docstring) cannot double-bill: it
+    # returns exactly once, and billing below runs exactly once, after
+    # this single call returns successfully. `fallback_model` is resolved
+    # here, not earlier, so a request rejected by an earlier gate never
+    # pays for the extra catalog lookup. ──────────────────────────────
+    fallback_model = await _resolve_fallback_model(model)
+    try:
+        start = time.time()
+        data, usage, model_used = await generate_content(
+            prompt, doc_type if doc_type != 'mdx' else 'pptx', model, fallback_model,
+        )
+        gen_time = time.time() - start
+    except json.JSONDecodeError as e:
+        logger.error(f'JSON parse error: {e}')
+        await _release_reservation(reservation, uid, 'json_parse_error')
+        return JSONResponse({'error': {'message': 'خطا در تولید محتوا. دوباره تلاش کنید.'}}, status_code=500)
+    except Exception as e:
+        logger.error(f'Document generation failed: {e}', exc_info=True)
+        await _release_reservation(reservation, uid, 'generation_failed')
+        return JSONResponse({'error': {'message': 'خطا در تولید سند. لطفاً دوباره تلاش کنید.'}}, status_code=500)
 
     try:
-        # Generate content with AI
-        start = time.time()
-        data = await _generate_content(prompt, doc_type if doc_type != 'mdx' else 'pptx', model)
-        gen_time = time.time() - start
-
-        # Create document
         if doc_type == 'pptx':
             _create_pptx(data, output_path)
         elif doc_type == 'docx':
             _create_docx(data, output_path)
         else:
             _create_mdx(data, output_path)
-
         file_size = output_path.stat().st_size
-
-        # Register document
-        _doc_registry[doc_id] = {
-            'id': doc_id,
-            'user_id': uid,
-            'prompt': prompt[:MAX_PROMPT_LENGTH],
-            'type': doc_type,
-            'model': model,
-            'title': data.get('title', 'Untitled'),
-            'filename': f'{doc_id}{ext_map[doc_type]}',
-            'file_size': file_size,
-            'generation_time': round(gen_time, 1),
-            'slides_count': len(data.get('slides', [])),
-            'sections_count': len(data.get('sections', [])),
-            'created_at': datetime.now(timezone.utc).isoformat(),
-        }
-
-        return JSONResponse({
-            'id': doc_id,
-            'type': doc_type,
-            'title': data.get('title', 'Untitled'),
-            'filename': f'{doc_id}{ext_map[doc_type]}',
-            'file_size': file_size,
-            'generation_time': round(gen_time, 1),
-            'slides_count': len(data.get('slides', [])),
-            'sections_count': len(data.get('sections', [])),
-            'download_url': f'/v1/documents/{doc_id}/download',
-        })
-
-    except json.JSONDecodeError as e:
-        logger.error(f'JSON parse error: {e}')
-        return JSONResponse({'error': {'message': 'خطا در تولید محتوا. دوباره تلاش کنید.'}}, status_code=500)
     except Exception as e:
-        logger.error(f'Document generation failed: {e}', exc_info=True)
+        logger.error(f'Document file build failed: {e}', exc_info=True)
+        await _release_reservation(reservation, uid, 'build_failed')
         return JSONResponse({'error': {'message': 'خطا در تولید سند. لطفاً دوباره تلاش کنید.'}}, status_code=500)
+
+    # ── Gate 8: bill the REAL cost directly to wallet.balance. The
+    # response was already generated at this point -- a settle failure
+    # here is a reconciliation problem to log loudly, not a reason to
+    # withhold a response already paid the compute cost for (same
+    # reasoning as task_execution.py's step 5 comment). ────────────────
+    cost_toman = 0
+    try:
+        bill_payload = {
+            'model': model_used,
+            'messages': [{'role': 'user', 'content': prompt}],
+            'stream': False,
+        }
+        cost_info = await chat_mod._bill_stream_usage(
+            uid, bill_payload, usage, response_text=json.dumps(data, ensure_ascii=False),
+        )
+        cost_toman = int((cost_info or {}).get('cost') or 0)
+    except Exception as e:
+        logger.error(
+            f"document_generator: billing FAILED after a successful generation "
+            f"uid={uid} model={model_used} doc_id={doc_id} "
+            f"reservation={reservation.get('reservation_id') if reservation else None}: {e}"
+        )
+
+    # ── Gate 9: release the pre-flight hold — always, success or
+    # failure. The real charge was already applied directly against
+    # wallet.balance above; the hold is released, never settled, once the
+    # real charge has landed (same pattern as task_execution.py step 6 /
+    # chat.py's own non-streaming handler). ────────────────────────────
+    await _release_reservation(reservation, uid, 'after_success')
+
+    # Register document
+    _doc_registry[doc_id] = {
+        'id': doc_id,
+        'user_id': uid,
+        'prompt': prompt[:MAX_PROMPT_LENGTH],
+        'type': doc_type,
+        'model': model_used,
+        'title': data.get('title', 'Untitled'),
+        'filename': f'{doc_id}{EXT_MAP[doc_type]}',
+        'file_size': file_size,
+        'generation_time': round(gen_time, 1),
+        'slides_count': len(data.get('slides', [])),
+        'sections_count': len(data.get('sections', [])),
+        'cost_toman': cost_toman,
+        'created_at': datetime.now(timezone.utc).isoformat(),
+    }
+
+    return JSONResponse({
+        'id': doc_id,
+        'type': doc_type,
+        'title': data.get('title', 'Untitled'),
+        'filename': f'{doc_id}{EXT_MAP[doc_type]}',
+        'file_size': file_size,
+        'generation_time': round(gen_time, 1),
+        'slides_count': len(data.get('slides', [])),
+        'sections_count': len(data.get('sections', [])),
+        'download_url': f'/v1/documents/{doc_id}/download',
+    })
 
 
 @router.get('/v1/documents')
@@ -488,8 +436,7 @@ async def download_document(doc_id: str, request: Request) -> Response:
     if not doc or doc['user_id'] != uid:
         return JSONResponse({'error': {'message': 'سند یافت نشد'}}, status_code=404)
 
-    ext_map = {'pptx': '.pptx', 'docx': '.docx', 'mdx': '.md'}
-    path = DOC_STORAGE / f'{doc_id}{ext_map[doc["type"]]}'
+    path = DOC_STORAGE / f'{doc_id}{EXT_MAP[doc["type"]]}'
 
     # Ensure resolved path stays inside DOC_STORAGE (defense-in-depth)
     if not str(path.resolve()).startswith(str(DOC_STORAGE.resolve()) + os.sep):
@@ -505,12 +452,12 @@ async def download_document(doc_id: str, request: Request) -> Response:
     }
 
     # Sanitize download filename
-    safe_title = re.sub(r'[^A-Za-z0-9_\u0600-\u06FF\- ]', '', doc['title'])[:80] or 'document'
+    safe_title = re.sub(r'[^A-Za-z0-9_؀-ۿ\- ]', '', doc['title'])[:80] or 'document'
 
     return FileResponse(
         path=str(path),
         media_type=mime_map.get(doc['type'], 'application/octet-stream'),
-        filename=f'{safe_title}{ext_map[doc["type"]]}',
+        filename=f'{safe_title}{EXT_MAP[doc["type"]]}',
     )
 
 
@@ -528,8 +475,7 @@ async def delete_document(doc_id: str, request: Request) -> JSONResponse:
     if not doc or doc['user_id'] != uid:
         return JSONResponse({'error': {'message': 'سند یافت نشد'}}, status_code=404)
 
-    ext_map = {'pptx': '.pptx', 'docx': '.docx', 'mdx': '.md'}
-    path = DOC_STORAGE / f'{doc_id}{ext_map[doc["type"]]}'
+    path = DOC_STORAGE / f'{doc_id}{EXT_MAP[doc["type"]]}'
     path.unlink(missing_ok=True)
     del _doc_registry[doc_id]
 

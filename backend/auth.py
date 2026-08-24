@@ -1,16 +1,36 @@
 """
 Auth endpoints: signup, login, logout, profile management, password reset,
 telegram linking, referral stats, welcome email.
+
+MODULE SPLIT (house 500-line cap; this file used to be 687 lines) -- auth.py
+is now the router PLUS a namespace facade, following the same pattern as
+chat.py/chat_web.py/chat_search.py: it owns the core session-lifecycle
+endpoints directly (admin session, signup, login, /auth/me, referral stats,
+logout, logout-all) and re-exports everything the sibling modules need to
+keep resolving as `auth.<name>`: auth_profile.py (change-password, profile
+get/update, avatar upload) and auth_account.py (password reset, telegram
+linking, welcome email).
+
+MONKEYPATCH CONTRACT: tests patch `auth._get_user_id`, `auth.send_email`
+and `auth.get_site_flag` directly on THIS module object (see
+tests/test_email_honesty.py, tests/test_site_flag_wiring.py), not on
+whichever auth_*.py file actually defines a given route today. Both
+auth_profile.py and auth_account.py do a plain `import auth` (safe against
+the circular import -- nothing touches an `auth` attribute until a function
+actually runs, by which point this file has finished executing) and read
+`_get_user_id` / `send_email` / `INTERNAL_TOKEN` through `auth.<name>` at
+call time wherever they use them, never via `from auth import X` and never
+via a bare intra-module reference. Do not "tidy" that into a direct import;
+it would silently break the patches above. `get_site_flag` is only ever
+used by `signup`, which stays physically in this file, so it keeps its
+plain bare-name resolution.
 """
 from __future__ import annotations
 
-import base64
-import logging as _logging
 import os
 import secrets
 import hmac
 from datetime import datetime, timedelta, timezone
-from typing import Any
 
 import sqlalchemy
 from fastapi import APIRouter, Request
@@ -21,9 +41,9 @@ from database import async_session, rds, BASE_URL
 from models import User, Quota
 from site_settings import get_site_flag
 from dependencies import (
-    SESSION_TTL, SESSION_COOKIE_NAME, _hash_password, _verify_password, _gen_token,
-    _create_session, _get_session, _get_session_user_id, _set_session_cookie,
-    _clear_session_cookie, _rotate_session, _get_user_id, admin_required,
+    SESSION_COOKIE_NAME, _hash_password, _verify_password,
+    _create_session, _get_session_user_id, _set_session_cookie,
+    _clear_session_cookie, _get_user_id, admin_required,
     _write_audit_log, _get_admin_session, _create_admin_session,
     ADMIN_COOKIE_NAME, ADMIN_CSRF_COOKIE_NAME, SESSION_COOKIE_SECURE, ADMIN_SESSION_TTL,
     send_email, ADMIN_TOKEN, INTERNAL_TOKEN,
@@ -59,39 +79,10 @@ class AuthLogin(BaseModel):
     captcha_answer: str | None = None
 
 
-class ChangePasswordRequest(BaseModel):
-    current_password: str
-    new_password: str
-
-
-class UpdateProfileRequest(BaseModel):
-    display_name: str | None = None
-    bio: str | None = None
-    timezone: str | None = None
-    language: str | None = None
-    preferences: dict | None = None
-
-
-class AvatarUploadRequest(BaseModel):
-    avatar_url: str | None = None
-    avatar_base64: str | None = None
-
-
-class ForgotPasswordRequest(BaseModel):
-    email: str
-
-
-class ResetPasswordRequest(BaseModel):
-    token: str
-    new_password: str
-
-
-class TelegramLink(BaseModel):
-    telegram_id: int
-
-
-class TelegramTokenRequest(BaseModel):
-    telegram_id: int
+# NOTE: ChangePasswordRequest / UpdateProfileRequest / AvatarUploadRequest now
+# live in auth_profile.py; ForgotPasswordRequest / ResetPasswordRequest /
+# TelegramLink / TelegramTokenRequest now live in auth_account.py. Both are
+# re-exported at the bottom of this file so `auth.<Model>` keeps resolving.
 
 
 # ── Admin session endpoints ─────────────────────────────────────
@@ -377,311 +368,20 @@ async def logout_all(request: Request) -> JSONResponse:
     return response
 
 
-# ── Profile management ──────────────────────────────────────────
-
-@router.post('/auth/change-password')
-async def change_password(request: Request, payload: ChangePasswordRequest) -> JSONResponse:
-    """Change user password"""
-    uid = await _get_user_id(request)
-    if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
-    from security import validate_password
-    valid, err = validate_password(payload.new_password)
-    if not valid:
-        return JSONResponse({'detail': err}, status_code=400)
-    if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
-
-    async with async_session() as session:
-        res = await session.execute(User.__table__.select().where(User.id == uid))
-        user = res.fetchone()
-        if not user or not _verify_password(payload.current_password, user.password_hash):
-            return JSONResponse({'detail': 'current password is incorrect | رمز عبور فعلی نادرست است'}, status_code=401)
-
-        new_hash = _hash_password(payload.new_password)
-        await session.execute(
-            User.__table__.update().where(User.id == uid),
-            {'password_hash': new_hash}
-        )
-        await session.commit()
-
-    response = JSONResponse({'status': 'ok'})
-    await _rotate_session(request, response, uid)
-    await _write_audit_log('auth.change_password', target_type='user', target_id=uid)
-    return response
-
-
-@router.get('/auth/profile')
-async def get_profile(request: Request) -> JSONResponse:
-    """Get full user profile including preferences and autonomy settings"""
-    uid = await _get_user_id(request)
-    if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
-    if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
-
-    async with async_session() as session:
-        res = await session.execute(User.__table__.select().where(User.id == uid))
-        user = res.fetchone()
-        if not user:
-            return JSONResponse({'detail': 'user not found | کاربر یافت نشد'}, status_code=404)
-
-        prefs = user.preferences or {}
-        from fastapi.encoders import jsonable_encoder
-        return JSONResponse(jsonable_encoder({
-            'id': user.id,
-            'email': user.email,
-            'display_name': user.display_name,
-            'avatar_url': user.avatar_url,
-            'bio': user.bio,
-            'timezone': user.timezone or 'Asia/Tehran',
-            'language': user.language or 'fa',
-            'preferences': {
-                'default_model': prefs.get('default_model', ''),
-                'theme': prefs.get('theme', 'dark'),
-                'ai_personality': prefs.get('ai_personality', ''),
-                'pinned_context': prefs.get('pinned_context', ''),
-                'autonomy_level': prefs.get('autonomy_level', 'medium'),
-                'notification_settings': prefs.get('notification_settings', {
-                    'email': True,
-                    'telegram': False,
-                }),
-            },
-            'created_at': user.created_at,
-            'referral_code': user.referral_code,
-        }))
-
-
-@router.put('/auth/profile')
-async def update_profile(request: Request, payload: UpdateProfileRequest) -> JSONResponse:
-    """Update user profile fields including preferences"""
-    uid = await _get_user_id(request)
-    if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
-    if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
-
-    update_data: dict[str, Any] = {}
-    if payload.display_name is not None:
-        if len(payload.display_name) > 100:
-            return JSONResponse({'detail': 'نام نمایشی نباید بیشتر از ۱۰۰ کاراکتر باشد'}, status_code=400)
-        update_data['display_name'] = payload.display_name.strip() or None
-    if payload.bio is not None:
-        if len(payload.bio) > 500:
-            return JSONResponse({'detail': 'بیوگرافی نباید بیشتر از ۵۰۰ کاراکتر باشد'}, status_code=400)
-        update_data['bio'] = payload.bio.strip() or None
-    if payload.timezone is not None:
-        update_data['timezone'] = payload.timezone
-    if payload.language is not None:
-        if payload.language not in ('fa', 'en'):
-            return JSONResponse({'detail': 'زبان باید fa یا en باشد'}, status_code=400)
-        update_data['language'] = payload.language
-
-    if payload.preferences is not None:
-        async with async_session() as session:
-            res = await session.execute(User.__table__.select().where(User.id == uid))
-            user = res.fetchone()
-            existing_prefs = (user.preferences or {}) if user else {}
-
-        if 'autonomy_level' in payload.preferences:
-            level = payload.preferences['autonomy_level']
-            if level not in ('low', 'medium', 'high'):
-                return JSONResponse({'detail': 'سطح خودمختاری باید low، medium یا high باشد'}, status_code=400)
-
-        if 'pinned_context' in payload.preferences:
-            pinned = payload.preferences['pinned_context']
-            if not isinstance(pinned, str):
-                return JSONResponse({'detail': 'یادداشت دائمی باید متن باشد'}, status_code=400)
-            if len(pinned) > 20000:
-                return JSONResponse({'detail': 'یادداشت دائمی نباید بیشتر از ۲۰,۰۰۰ کاراکتر باشد'}, status_code=400)
-
-        existing_prefs.update(payload.preferences)
-        update_data['preferences'] = existing_prefs
-
-    if not update_data:
-        return JSONResponse({'detail': 'فیلد معتبری برای بروزرسانی وجود ندارد'}, status_code=400)
-
-    async with async_session() as session:
-        await session.execute(
-            User.__table__.update().where(User.id == uid),
-            update_data
-        )
-        await session.commit()
-
-    await _write_audit_log('auth.update_profile', target_type='user', target_id=uid,
-                           details={'fields': list(update_data.keys())})
-    return JSONResponse({'status': 'ok', 'updated': list(update_data.keys())})
-
-
-@router.post('/auth/avatar')
-async def upload_avatar(request: Request, payload: AvatarUploadRequest) -> JSONResponse:
-    """Upload or set user avatar (URL or base64 image)"""
-    uid = await _get_user_id(request)
-    if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
-    if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
-
-    avatar_url = None
-
-    if payload.avatar_url:
-        if not payload.avatar_url.startswith(('http://', 'https://')):
-            return JSONResponse({'detail': 'آدرس تصویر نامعتبر است'}, status_code=400)
-        if len(payload.avatar_url) > 2000:
-            return JSONResponse({'detail': 'آدرس تصویر بیش از حد طولانی است'}, status_code=400)
-        avatar_url = payload.avatar_url
-    elif payload.avatar_base64:
-        raw = payload.avatar_base64
-        if ',' in raw and raw.startswith('data:'):
-            raw = raw.split(',', 1)[1]
-        try:
-            decoded = base64.b64decode(raw)
-        except Exception:
-            return JSONResponse({'detail': 'تصویر نامعتبر است (base64 نادرست)'}, status_code=400)
-        if len(decoded) > 2 * 1024 * 1024:
-            return JSONResponse({'detail': 'حجم تصویر نباید بیشتر از ۲ مگابایت باشد'}, status_code=400)
-        mime = 'image/jpeg'
-        if decoded[:8] == b'\x89PNG\r\n\x1a\n':
-            mime = 'image/png'
-        elif decoded[:4] == b'RIFF' and decoded[8:12] == b'WEBP':
-            mime = 'image/webp'
-        elif decoded[:4] == b'GIF8':
-            mime = 'image/gif'
-        avatar_url = f'data:{mime};base64,{raw}'
-    else:
-        return JSONResponse({'detail': 'آدرس تصویر یا داده base64 ارسال کنید'}, status_code=400)
-
-    async with async_session() as session:
-        await session.execute(
-            User.__table__.update().where(User.id == uid),
-            {'avatar_url': avatar_url}
-        )
-        await session.commit()
-
-    await _write_audit_log('auth.upload_avatar', target_type='user', target_id=uid)
-    return JSONResponse({'status': 'ok', 'avatar_url': avatar_url})
-
-
-# ── Password reset ──────────────────────────────────────────────
-
-@router.post('/auth/forgot-password')
-async def forgot_password(payload: ForgotPasswordRequest) -> JSONResponse:
-    """Send password reset token (stored in Redis for 15 min)"""
-    if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
-
-    async with async_session() as session:
-        res = await session.execute(User.__table__.select().where(User.email == payload.email))
-        user = res.fetchone()
-        if not user:
-            return JSONResponse({'status': 'ok', 'message': 'در صورت وجود ایمیل، لینک بازیابی ارسال شد'})
-
-        reset_token = secrets.token_urlsafe(32)
-        await rds.setex(f'reset:{reset_token}', 900, str(user.id))
-
-        _logging.getLogger(__name__).warning('Password reset token generated for user %s (email delivery not configured)', user.id)
-        return JSONResponse({
-            'status': 'ok',
-            'message': 'لینک بازیابی به ایمیل شما ارسال شد',
-        })
-
-
-@router.post('/auth/reset-password')
-async def reset_password(payload: ResetPasswordRequest) -> JSONResponse:
-    """Reset password using token"""
-    from security import validate_password
-    valid, err = validate_password(payload.new_password)
-    if not valid:
-        return JSONResponse({'detail': err}, status_code=400)
-
-    uid = await rds.get(f'reset:{payload.token}')
-    if not uid:
-        return JSONResponse({'detail': 'توکن بازیابی نامعتبر یا منقضی شده است'}, status_code=400)
-
-    if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
-
-    new_hash = _hash_password(payload.new_password)
-    async with async_session() as session:
-        await session.execute(
-            User.__table__.update().where(User.id == int(uid)),
-            {'password_hash': new_hash}
-        )
-        await session.commit()
-
-    await rds.delete(f'reset:{payload.token}')
-    return JSONResponse({'status': 'ok', 'message': 'رمز عبور با موفقیت تغییر کرد'})
-
-
-# ── Telegram account linking ────────────────────────────────────
-
-@router.post('/auth/telegram-link')
-async def telegram_link(request: Request, payload: TelegramLink) -> JSONResponse:
-    """Link a Telegram account to existing user"""
-    uid = await _get_user_id(request)
-    if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
-    if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
-    async with async_session() as session:
-        await session.execute(
-            User.__table__.update().where(User.id == uid),
-            {'telegram_id': payload.telegram_id}
-        )
-        await session.commit()
-    return JSONResponse({'status': 'ok', 'telegram_id': payload.telegram_id})
-
-
-@router.post('/auth/telegram-token')
-async def get_telegram_token(request: Request, payload: TelegramTokenRequest) -> JSONResponse:
-    """Exchange a Telegram ID for a session token. Requires internal service auth."""
-    internal_token = request.headers.get('x-internal-token', '')
-    if not INTERNAL_TOKEN or not internal_token or not hmac.compare_digest(internal_token, INTERNAL_TOKEN):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
-    if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
-
-    async with async_session() as session:
-        res = await session.execute(User.__table__.select().where(User.telegram_id == payload.telegram_id))
-        user = res.fetchone()
-        if not user:
-            return JSONResponse({'detail': 'متصل نشده'}, status_code=404)
-        if user.telegram_id != payload.telegram_id:
-            return JSONResponse({'detail': 'عدم تطابق شناسه تلگرام'}, status_code=403)
-        token = _gen_token()
-        rds.setex(f'session:{token}', SESSION_TTL, str(user.id))
-        await _write_audit_log('auth.telegram_token', target_type='user', target_id=user.id)
-        return JSONResponse({'token': token, 'user': {'id': user.id, 'email': user.email}})
-
-
-# ── Welcome email ───────────────────────────────────────────────
-
-@router.post('/auth/send-welcome')
-async def send_welcome_email(request: Request) -> JSONResponse:
-    uid = await _get_user_id(request)
-    if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
-    if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
-    async with async_session() as session:
-        res = await session.execute(User.__table__.select().where(User.id == uid))
-        user = res.fetchone()
-        if not user or not user.email:
-            return JSONResponse({'detail': 'ایمیلی ثبت نشده است'}, status_code=400)
-    body = f'<div dir="rtl" style="font-family:Tahoma;max-width:600px;margin:auto;padding:20px;"><h1 style="color:#6c5cf5;">به Sanjabai خوش آمدید! 🎉</h1><p>سلام {user.email}،</p><p>حساب شما با موفقیت ساخته شد.</p><p><a href="{BASE_URL}/chat" style="background:#6c5cf5;color:white;padding:10px 20px;text-decoration:none;border-radius:8px;">شروع چت</a></p></div>'
-    ok = await send_email(user.email, 'به Sanjabai خوش آمدید!', body)
-    # 'queued' used to be returned on failure too, implying a background
-    # queue would retry and deliver it later. There is no such queue --
-    # send_email either sent synchronously or did nothing at all (and, on
-    # this host, outbound SMTP is blocked entirely -- see dependencies.py's
-    # send_email for the measured port results -- so `ok` is always False
-    # here in production today). Report honestly instead: a caller must be
-    # able to tell "sent" from "not sent" from `status` alone, and the
-    # user-facing `message` must never claim an email is on its way when
-    # none was sent and none can be.
-    if ok:
-        return JSONResponse({'status': 'sent', 'message': 'ایمیل خوش‌آمدگویی ارسال شد.'})
-    return JSONResponse({
-        'status': 'not_sent',
-        'message': 'در حال حاضر امکان ارسال ایمیل وجود ندارد؛ حساب شما همچنان فعال و قابل استفاده است.',
-    })
+# ── Split-out route modules ─────────────────────────────────────
+#
+# These imports run AFTER `router` is defined above, so importing each
+# module registers its `@auth.router.<verb>(...)`-decorated routes onto
+# THIS router object as a side effect (same pattern as chat.py importing
+# chat_web/chat_compare/chat_smart -- see those modules' docstrings). Every
+# name is re-exported here (with `# noqa: F401`) purely so `auth.<name>`
+# keeps resolving for any external consumer, exactly as if it were still
+# defined directly in this file.
+from auth_profile import (  # noqa: E402,F401 -- also registers /auth/change-password, /auth/profile, /auth/avatar
+    ChangePasswordRequest, UpdateProfileRequest, AvatarUploadRequest,
+    change_password, get_profile, update_profile, upload_avatar,
+)
+from auth_account import (  # noqa: E402,F401 -- also registers /auth/forgot-password, /auth/reset-password, /auth/telegram-link, /auth/telegram-token, /auth/send-welcome
+    ForgotPasswordRequest, ResetPasswordRequest, TelegramLink, TelegramTokenRequest,
+    forgot_password, reset_password, telegram_link, get_telegram_token, send_welcome_email,
+)

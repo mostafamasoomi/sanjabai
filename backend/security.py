@@ -2,6 +2,21 @@
 Security middleware: rate limiting, security headers, input validation,
 account lockout, and session security.
 All rate limits use Redis for persistence across restarts.
+
+MODULE SPLIT (house 500-line cap; this file used to be ~570 lines) --
+security.py is now a namespace facade PLUS the home of the middleware
+classes app.py wires directly (SecurityHeadersMiddleware, CsrfMiddleware,
+RateLimitMiddleware) and the RateLimiter engine backing them: those stayed
+here because app.py imports them by identity and
+tests/test_security_release.py greps this file's literal source for the
+RateLimiter fail-closed line. The account lockout system moved to
+security_lockout.py and concurrent-session tracking moved to
+security_session.py; both re-exported below so `from security import X` and
+`security.<name>` keep resolving exactly as before the split. `_get_redis`
+stays defined here (the pre-split home) and is reached from the split-out
+modules via `security._get_redis()` at call time -- see security_lockout.py
+and security_session.py's docstrings for the full IMPORT/MONKEYPATCH
+CONTRACT (tests monkeypatch `security._get_redis` directly).
 """
 import logging
 import os
@@ -26,149 +41,21 @@ def _get_redis():
     return _rds
 
 
-# ── Account Lockout System ──────────────────────────────────
-
-# Escalating lockout durations (attempt threshold → seconds)
-_LOCKOUT_THRESHOLDS: list[tuple[int, int]] = [
-    (5,  15 * 60),    # 5 failures  → 15 minutes
-    (10, 60 * 60),    # 10 failures → 1 hour
-    (15, 24 * 60 * 60),  # 15 failures → 24 hours
-]
-
-# Redis key prefixes
-_LOCKOUT_KEY = 'lockout:{}'           # lockout:{identifier} → TTL-based lock
-_ATTEMPTS_KEY = 'login_attempts:{}'   # login_attempts:{identifier} → count
-_LOCKOUT_WINDOW = 24 * 60 * 60        # 24h window for counting attempts
-
-
-async def _get_lockout_identifier(request: Request) -> str | None:
-    """Get lockout identifier from request (email or IP-based).
-
-    Only returns an identifier for login-related endpoints.
-    """
-    path = request.url.path
-    if path not in ('/auth/login', '/admin/login'):
-        return None
-    # For /auth/login, try to extract email from request body
-    # For /admin/login, use IP-based identifier
-    if path == '/admin/login':
-        ip = get_real_ip(request)
-        return f'admin_ip:{ip}'
-    # For regular login, use IP as identifier (email extraction is done at the endpoint level)
-    ip = get_real_ip(request)
-    return f'login_ip:{ip}'
-
-
-async def check_lockout(identifier: str) -> bool:
-    """Check if an identifier is currently locked out.
-
-    Returns True if locked, False otherwise.
-    """
-    try:
-        lockout_ttl = await _get_redis().ttl(_LOCKOUT_KEY.format(identifier))
-        return lockout_ttl > 0
-    except Exception as e:
-        logger.warning("Lockout check Redis error: %s", e)
-        return False  # Fail open if Redis is down
-
-
-async def record_failed_attempt(identifier: str) -> None:
-    """Record a failed login attempt and apply lockout if threshold exceeded.
-
-    Escalating lockout:
-      - 5 failures  → 15 minutes
-      - 10 failures → 1 hour
-      - 15 failures → 24 hours
-    """
-    try:
-        key = _ATTEMPTS_KEY.format(identifier)
-        count = await _get_redis().incr(key)
-        if count == 1:
-            await _get_redis().expire(key, _LOCKOUT_WINDOW)
-
-        # Determine lockout duration based on attempt count
-        lockout_seconds = 0
-        for threshold, duration in reversed(_LOCKOUT_THRESHOLDS):
-            if count >= threshold:
-                lockout_seconds = duration
-                break
-
-        if lockout_seconds > 0:
-            lockout_key = _LOCKOUT_KEY.format(identifier)
-            await _get_redis().setex(lockout_key, lockout_seconds, str(count))
-            logger.warning(
-                "Account lockout applied: identifier=%s attempts=%d lockout=%ds",
-                identifier, count, lockout_seconds,
-            )
-            # Send Telegram alert for lockout
-            await _send_lockout_alert(identifier, count, lockout_seconds)
-
-    except Exception as e:
-        logger.warning("Failed to record attempt: %s", e)
-
-
-async def clear_lockout(identifier: str) -> None:
-    """Clear lockout and attempt counter for an identifier (on successful login)."""
-    try:
-        await _get_redis().delete(
-            _LOCKOUT_KEY.format(identifier),
-            _ATTEMPTS_KEY.format(identifier),
-        )
-    except Exception as e:
-        logger.warning("Failed to clear lockout: %s", e)
-
-
-async def get_lockout_info(identifier: str) -> dict:
-    """Get current lockout information for an identifier."""
-    try:
-        lockout_ttl = await _get_redis().ttl(_LOCKOUT_KEY.format(identifier))
-        attempts_raw = await _get_redis().get(_ATTEMPTS_KEY.format(identifier))
-        attempts = int(attempts_raw) if attempts_raw else 0
-        return {
-            'locked': lockout_ttl > 0,
-            'attempts': attempts,
-            'lockout_remaining_seconds': max(0, lockout_ttl),
-        }
-    except Exception:
-        return {'locked': False, 'attempts': 0, 'lockout_remaining_seconds': 0}
-
-
-async def _send_lockout_alert(identifier: str, attempts: int, lockout_seconds: int) -> None:
-    """Send Telegram alert on account lockout (best-effort).
-
-    Credentials come from services/watchdog_settings.py (admin-editable
-    ``app_setting`` rows since migration 0044, falling back to the
-    WATCHDOG_BOT_TOKEN / WATCHDOG_CHAT_ID environment variables this
-    function used to read directly). The resolver never raises, but the
-    lookup is inside the same guard as the send anyway -- an alerting
-    lookup must never be able to break a login path.
-    """
-    try:
-        from services.watchdog_settings import get_watchdog_credentials
-        creds = await get_watchdog_credentials()
-        bot_token, chat_id = creds.as_tuple()
-    except Exception as e:
-        logger.warning("Failed to resolve watchdog credentials: %s", e)
-        return
-    if not bot_token or not chat_id:
-        return
-    try:
-        import httpx
-        duration_label = f"{lockout_seconds // 60}min" if lockout_seconds < 3600 else f"{lockout_seconds // 3600}hr"
-        msg = (
-            f"🔒 Account Lockout Alert\n"
-            f"Identifier: {identifier}\n"
-            f"Failed attempts: {attempts}\n"
-            f"Lockout duration: {duration_label}\n"
-            f"Time: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}"
-        )
-        async with httpx.AsyncClient(timeout=5) as client:
-            await client.post(
-                f'https://api.telegram.org/bot{bot_token}/sendMessage',
-                json={'chat_id': chat_id, 'text': msg, 'parse_mode': 'HTML'},
-            )
-    except Exception as e:
-        logger.warning("Failed to send lockout alert: %s", e)
+# ── Account Lockout System -- moved to security_lockout.py ──
+# Re-exported here so `from security import X` / `security.X` keep working
+# for auth.py, admin_mfa.py, and tests/test_watchdog_settings.py.
+from security_lockout import (  # noqa: F401
+    _LOCKOUT_THRESHOLDS,
+    _LOCKOUT_KEY,
+    _ATTEMPTS_KEY,
+    _LOCKOUT_WINDOW,
+    _get_lockout_identifier,
+    check_lockout,
+    record_failed_attempt,
+    clear_lockout,
+    get_lockout_info,
+    _send_lockout_alert,
+)
 
 
 # ── Rate Limiting ──────────────────────────────────────────
@@ -363,97 +250,16 @@ async def _get_user_plan(uid: int) -> str:
     return await _gup(uid)
 
 
-# ── Session Security ────────────────────────────────────────
-
-MAX_CONCURRENT_SESSIONS = 3
-
-
-async def track_session(token: str, user_id: int, request: Request) -> None:
-    """Track session metadata and enforce the concurrent-session limit.
-
-    Stores session metadata (IP, user-agent, created_at) in Redis.
-    If user exceeds MAX_CONCURRENT_SESSIONS, revokes the oldest session.
-
-    The per-user set is `sessions:{uid}` -- the same one dependencies.py's
-    `_create_session` writes and `/auth/logout-all` reads. This used to keep
-    its own parallel `active_sessions:{uid}` set, which meant revoking a
-    session here removed it from one set but left it in the other, so
-    logout-all still walked a token that no longer existed and the limit was
-    counted against a set nothing else maintained. One set, one truth.
-    """
-    try:
-        metadata = {
-            'user_id': user_id,
-            'ip': get_real_ip(request),
-            'user_agent': request.headers.get('user-agent', '')[:200],
-            'created_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-            'last_seen': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-        }
-        session_key = f'session_meta:{token}'
-        await _get_redis().setex(session_key, 86400 * 7, _json.dumps(metadata))
-
-        user_sessions_key = f'sessions:{user_id}'
-        await _get_redis().sadd(user_sessions_key, token)
-
-        # Enforce concurrent session limit
-        members = await _get_redis().smembers(user_sessions_key)
-        if members and len(members) > MAX_CONCURRENT_SESSIONS:
-            # Find oldest session to revoke
-            oldest_token = None
-            oldest_time = None
-            for tok in members:
-                meta_raw = await _get_redis().get(f'session_meta:{tok}')
-                if meta_raw:
-                    try:
-                        meta = _json.loads(meta_raw)
-                        created = meta.get('created_at', '')
-                        if oldest_time is None or created < oldest_time:
-                            oldest_time = created
-                            oldest_token = tok
-                    except (ValueError, KeyError):
-                        pass
-            if oldest_token and oldest_token != token:
-                await _revoke_session(oldest_token, user_id)
-                logger.info("Revoked oldest session %s for user %d (limit exceeded)", oldest_token[:8], user_id)
-
-    except Exception as e:
-        logger.warning("Session tracking error: %s", e)
-
-
-async def _revoke_session(token: str, user_id: int) -> None:
-    """Revoke a single session and clean up its tracking data.
-
-    Removes the token from `sessions:{uid}` -- the same set _create_session
-    and /auth/logout-all use -- so a revoked session leaves nothing behind.
-    """
-    try:
-        await _get_redis().delete(f'session:{token}', f'session_meta:{token}')
-        await _get_redis().srem(f'sessions:{user_id}', token)
-    except Exception:
-        pass
-
-
-async def update_session_last_seen(token: str) -> None:
-    """Update the last_seen timestamp for a session."""
-    try:
-        meta_raw = await _get_redis().get(f'session_meta:{token}')
-        if meta_raw:
-            meta = _json.loads(meta_raw)
-            meta['last_seen'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-            await _get_redis().setex(f'session_meta:{token}', 86400 * 7, _json.dumps(meta))
-    except Exception:
-        pass
-
-
-async def get_session_info(token: str) -> dict | None:
-    """Get session metadata (IP, user-agent, timestamps)."""
-    try:
-        meta_raw = await _get_redis().get(f'session_meta:{token}')
-        if meta_raw:
-            return _json.loads(meta_raw)
-    except Exception:
-        pass
-    return None
+# ── Session Security -- moved to security_session.py ────────
+# Re-exported here so `from security import X` / `security.X` keep working
+# for auth.py and tests/test_concurrent_session_limit.py.
+from security_session import (  # noqa: F401
+    MAX_CONCURRENT_SESSIONS,
+    track_session,
+    _revoke_session,
+    update_session_last_seen,
+    get_session_info,
+)
 
 
 # ── Security Headers ───────────────────────────────────────

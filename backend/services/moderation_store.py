@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from dataclasses import asdict
 from typing import Any
@@ -222,9 +221,22 @@ async def _send_alert(uid: int, verdict: Verdict) -> None:
     """Telegram, never email: all four outbound SMTP ports are blocked on
     this host, so an email alert would be a silent no-op. Reuses the bot the
     stack already alerts through (security.py's lockout alert, watchdog.py)
-    -- same WATCHDOG_BOT_TOKEN / WATCHDOG_CHAT_ID pair."""
-    bot_token = os.getenv('WATCHDOG_BOT_TOKEN', '')
-    chat_id = os.getenv('WATCHDOG_CHAT_ID', '')
+    -- same WATCHDOG_BOT_TOKEN / WATCHDOG_CHAT_ID pair.
+
+    Since migration 0044 that pair is admin-editable
+    (services/watchdog_settings.py resolves the app_setting rows first and
+    the environment variables second), so an owner can turn alerting on
+    from the panel without a redeploy. The resolver is documented never to
+    raise and to fail open to the environment, but it is wrapped anyway
+    and returns silently on error -- this function is reached from
+    screen_request on the CHAT HOT PATH, so a settings-store hiccup must
+    cost an alert, never a user's message."""
+    try:
+        from services.watchdog_settings import get_watchdog_credentials
+        bot_token, chat_id = (await get_watchdog_credentials()).as_tuple()
+    except Exception as e:
+        logger.warning('moderation: watchdog credential lookup failed: %s', e)
+        return
     if not bot_token or not chat_id:
         return
     icon = '🛠' if verdict.failed else {'block': '⛔'}.get(verdict.decision, '⚠️')

@@ -28,6 +28,7 @@ const PlansSection = dynamic(() => import('./sections/PlansSection'), { ssr: fal
 const SiteControlSection = dynamic(() => import('./sections/SiteControlSection'), { ssr: false })
 const LogicalModelsSection = dynamic(() => import('./sections/LogicalModelsSection'), { ssr: false })
 const ModerationSection = dynamic(() => import('./sections/ModerationSection'), { ssr: false })
+const WatchdogSection = dynamic(() => import('./sections/WatchdogSection'), { ssr: false })
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Sanjabai Admin Panel — Aurora Design System
@@ -52,7 +53,7 @@ export type {
   UserRow, UserDetail, UserDetailTab,
 } from './types'
 
-type Page = 'dashboard' | 'analytics' | 'site-control' | 'logical-models' | 'pricing' | 'markup' | 'exchange-rate' | 'upstream-overhead' | 'image-pricing' | 'packages' | 'plans' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'model-ops' | 'users' | 'security' | 'moderation' | 'monitoring'
+type Page = 'dashboard' | 'analytics' | 'site-control' | 'logical-models' | 'pricing' | 'markup' | 'exchange-rate' | 'upstream-overhead' | 'image-pricing' | 'packages' | 'plans' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'model-ops' | 'users' | 'security' | 'moderation' | 'watchdog' | 'monitoring'
 
 const NAV_ITEMS: { key: Page; label: string; icon: IconName }[] = [
   { key: 'dashboard', label: 'داشبورد', icon: 'dashboard' },
@@ -75,6 +76,7 @@ const NAV_ITEMS: { key: Page; label: string; icon: IconName }[] = [
   { key: 'model-ops', label: 'عملیات کاتالوگ', icon: 'code' },
   { key: 'security', label: 'امنیت', icon: 'lock' },
   { key: 'moderation', label: 'پالایش محتوا', icon: 'warning' },
+  { key: 'watchdog', label: 'هشدارهای تلگرام', icon: 'notification' },
   { key: 'monitoring', label: 'پایش', icon: 'chart' },
 ]
 
@@ -281,6 +283,7 @@ export default function AdminPage() {
           {page === 'packages' && <PackagesSection api={api} />}
           {page === 'analytics' && <AnalyticsSection api={api} />}
           {page === 'site-control' && <SiteControlSection api={api} />}
+          {page === 'watchdog' && <WatchdogSection api={api} />}
           {page === 'logical-models' && <LogicalModelsSection api={api} />}
           {page === 'plans' && <PlansSection api={api} />}
           {page === 'model-ops' && <ModelOpsSection api={api} />}

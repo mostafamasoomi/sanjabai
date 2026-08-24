@@ -134,9 +134,22 @@ async def get_lockout_info(identifier: str) -> dict:
 
 
 async def _send_lockout_alert(identifier: str, attempts: int, lockout_seconds: int) -> None:
-    """Send Telegram alert on account lockout (best-effort)."""
-    bot_token = os.getenv('WATCHDOG_BOT_TOKEN', '')
-    chat_id = os.getenv('WATCHDOG_CHAT_ID', '')
+    """Send Telegram alert on account lockout (best-effort).
+
+    Credentials come from services/watchdog_settings.py (admin-editable
+    ``app_setting`` rows since migration 0044, falling back to the
+    WATCHDOG_BOT_TOKEN / WATCHDOG_CHAT_ID environment variables this
+    function used to read directly). The resolver never raises, but the
+    lookup is inside the same guard as the send anyway -- an alerting
+    lookup must never be able to break a login path.
+    """
+    try:
+        from services.watchdog_settings import get_watchdog_credentials
+        creds = await get_watchdog_credentials()
+        bot_token, chat_id = creds.as_tuple()
+    except Exception as e:
+        logger.warning("Failed to resolve watchdog credentials: %s", e)
+        return
     if not bot_token or not chat_id:
         return
     try:

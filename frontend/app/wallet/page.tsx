@@ -1,309 +1,55 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
-import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
-import { Icon, type IconName } from '@/components/ui/Icon'
-import { faNum, faPrice, toFaDigits } from '@/lib/format'
+import { Icon } from '@/components/ui/Icon'
 import EntitlementPanel from './components/EntitlementPanel'
+import { BalanceSkeleton, TopupSkeleton, TableSkeleton, PackagesSkeleton } from './components/WalletSkeletons'
+import { PaymentBanner } from './components/PaymentBanner'
+import { BalanceCard } from './components/BalanceCard'
+import { TopupCard } from './components/TopupCard'
+import { CreditPackagesSection } from './components/CreditPackagesSection'
+import { LedgerSection } from './components/LedgerSection'
+import { PaymentHistorySection } from './components/PaymentHistorySection'
+import { TopupConfirmModal } from './components/TopupConfirmModal'
+import { useWalletData } from './hooks/useWalletData'
+import { usePaymentBanner } from './hooks/usePaymentBanner'
+import { useTopupFlow } from './hooks/useTopupFlow'
+import type { LedgerFilter } from './walletTypes'
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-type LedgerEntry = {
-  id: number
-  amount: number
-  balance_after: number
-  reason: string
-  created_at: string
-}
+/* ═══════════════════════════════════════════════════════════════════════════
+   Sanjabai Wallet
+   Balance, top-up (preset/custom amount), credit-package purchase, ledger
+   and payment history, and the payment-return banner. State/logic is split
+   across hooks/ (data fetching, payment banner, top-up/purchase flow) and
+   components/ (skeletons, balance card, topup card, section tables, modal)
+   -- this file wires them together and owns only what's genuinely page-wide.
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-type PaymentRecord = {
-  id: number
-  amount: number
-  status: string
-  created_at: string
-}
-
-type CreditPackage = {
-  id: string
-  name_fa: string
-  name_en: string
-  base_amount: number
-  bonus_percent: number
-  total_credits: number
-  model_id: string | null
-}
-
-type LedgerFilter = 'all' | 'credit' | 'debit'
-
-// ─── Constants ──────────────────────────────────────────────────────────────
-const PRESET_AMOUNTS = [
-  { label: '۱۰۰ هزار', value: 100_000 },
-  { label: '۵۰۰ هزار', value: 500_000 },
-  { label: '۱ میلیون', value: 1_000_000 },
-  { label: '۵ میلیون', value: 5_000_000 },
-]
-
-const MIN_TOPUP = 10_000
-const MAX_TOPUP = 100_000_000_000
-
-// ─── Helpers ────────────────────────────────────────────────────────────────
-// Numerals and money go through lib/format so every surface agrees; see the
-// note there on why toLocaleString is not called directly. No page-local
-// money-formatter alias lives here any more -- one used to wrap `faNum`
-// under a name that implied a different currency, and that mismatch is
-// exactly what caused this page's toman/rial mixups. Call `faNum` /
-// `faPrice` from lib/format directly.
-const fmtToman = (n: number) => faPrice(n)
-const fmtDate = (s: string) =>
-  toFaDigits(
-    new Date(s).toLocaleDateString('fa-IR', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }),
-  )
-
-const statusLabel: Record<string, { text: string; badge: string }> = {
-  paid: { text: 'موفق', badge: 'badge-positive' },
-  success: { text: 'موفق', badge: 'badge-positive' },
-  pending: { text: 'در انتظار', badge: 'badge-warning' },
-  failed: { text: 'ناموفق', badge: 'badge-danger' },
-  cancelled: { text: 'لغو شده', badge: 'badge-danger' },
-}
-
-// ─── Skeleton Components ────────────────────────────────────────────────────
-function BalanceSkeleton() {
-  return (
-    <div className="card wallet-balance-card" style={{ minHeight: 200 }}>
-      <div className="skeleton" style={{ width: 100, height: 14, borderRadius: 'var(--radius-sm)', marginBottom: 16 }} />
-      <div className="skeleton" style={{ width: 260, height: 48, borderRadius: 'var(--radius-md)', marginBottom: 12 }} />
-      <div className="skeleton" style={{ width: 140, height: 14, borderRadius: 'var(--radius-sm)' }} />
-    </div>
-  )
-}
-
-function TopupSkeleton() {
-  return (
-    <div className="card" style={{ minHeight: 200 }}>
-      <div className="skeleton" style={{ width: 80, height: 14, borderRadius: 'var(--radius-sm)', marginBottom: 16 }} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="skeleton" style={{ height: 48, borderRadius: 'var(--radius-md)' }} />
-        ))}
-      </div>
-      <div className="skeleton" style={{ width: '100%', height: 44, borderRadius: 'var(--radius-md)', marginTop: 12 }} />
-    </div>
-  )
-}
-
-function TableSkeleton() {
-  return (
-    <div className="card">
-      <div className="skeleton" style={{ width: 120, height: 18, borderRadius: 'var(--radius-sm)', marginBottom: 20 }} />
-      {[1, 2, 3, 4, 5].map((i) => (
-        <div key={i} style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
-          <div className="skeleton" style={{ flex: 1, height: 16, borderRadius: 'var(--radius-sm)' }} />
-          <div className="skeleton" style={{ width: 80, height: 16, borderRadius: 'var(--radius-sm)' }} />
-          <div className="skeleton" style={{ width: 100, height: 16, borderRadius: 'var(--radius-sm)' }} />
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function PackagesSkeleton() {
-  return (
-    <div className="card" style={{ marginBottom: 24 }}>
-      <div className="skeleton" style={{ width: 160, height: 18, borderRadius: 'var(--radius-sm)', marginBottom: 20 }} />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="skeleton" style={{ height: 200, borderRadius: 'var(--radius-md)' }} />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ─── Empty State ────────────────────────────────────────────────────────────
-function EmptyStateIcon({ icon, title, desc }: { icon: string; title: string; desc: string }) {
-  return (
-    <div className="wallet-empty-state">
-      <div className="wallet-empty-icon-wrap">
-        <Icon name={icon as IconName} size={28} className="text-accent" />
-      </div>
-      <p style={{ color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 4, fontSize: 15 }}>{title}</p>
-      <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>{desc}</p>
-    </div>
-  )
-}
-
-// ─── Main Page ──────────────────────────────────────────────────────────────
 export default function WalletPage() {
   const { token, user, loading: authLoading } = useAuth()
-  const searchParams = useSearchParams()
 
-  // Payment-return banner. The gateway callback redirects here with
-  // ?payment=success after a credit is applied, ?payment=failed on a
-  // decline/cancel, and ?payment=error when the callback itself faulted
-  // (backend/payment_endpoints.py + app/api/payment/callback/route.ts).
-  // Nothing used to read these, so a real charge landed with no feedback.
-  const [paymentBanner, setPaymentBanner] = useState<{ ok: boolean; text: string } | null>(null)
+  const { balance, ledger, payments, creditPackages, modelOutputRates, loading, refreshing, fetchData } = useWalletData(token)
+  const { paymentBanner, setPaymentBanner } = usePaymentBanner()
+  const {
+    busy,
+    topupAmount,
+    selectedPreset,
+    showConfirm,
+    setShowConfirm,
+    purchasingPkgId,
+    effectiveAmount,
+    handlePreset,
+    handleCustomAmount,
+    initiateTopup,
+    confirmTopup,
+    handlePurchase,
+  } = useTopupFlow(token)
 
-  // Data state
-  const [balance, setBalance] = useState<number | null>(null)
-  const [ledger, setLedger] = useState<LedgerEntry[]>([])
-  const [payments, setPayments] = useState<PaymentRecord[]>([])
-  const [creditPackages, setCreditPackages] = useState<CreditPackage[]>([])
-
-  // UI state
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [busy, setBusy] = useState(false)
-  const [topupAmount, setTopupAmount] = useState('')
-  const [selectedPreset, setSelectedPreset] = useState<number | null>(100_000)
-  const [ledgerFilter, setLedgerFilter] = useState<LedgerFilter>('all')
-  const [showConfirm, setShowConfirm] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [purchasingPkgId, setPurchasingPkgId] = useState<string | null>(null)
-  // model id -> live output-token rate (Toman per million tokens), for the
-  // "≈ N tokens" estimate on model-labeled credit packages. Server-authoritative:
-  // fetched from /catalog/models, never hardcoded here.
-  const [modelOutputRates, setModelOutputRates] = useState<Record<string, number>>({})
-
-  // ── Data fetching ────────────────────────────────────────────────────────
-  const fetchData = useCallback(
-    async (silent = false) => {
-      if (!token) return
-      if (!silent) setLoading(true)
-      else setRefreshing(true)
-
-      const headers = { Authorization: `Bearer ${token}` }
-      try {
-        const [walletRes, ledgerRes, payRes, pkgRes] = await Promise.all([
-          fetch('/api/wallet', { headers }),
-          fetch('/api/wallet/ledger', { headers }),
-          fetch('/api/payment/history', { headers }),
-          fetch('/api/credit-packages', { headers }),
-        ])
-        const [wallet, ledgerData, payData, pkgData] = await Promise.all([
-          walletRes.ok ? walletRes.json() : null,
-          ledgerRes.ok ? ledgerRes.json() : null,
-          payRes.ok ? payRes.json() : null,
-          pkgRes.ok ? pkgRes.json() : null,
-        ])
-        if (wallet) setBalance(wallet.balance ?? 0)
-        if (ledgerData) setLedger(Array.isArray(ledgerData) ? ledgerData : [])
-        if (payData) setPayments(Array.isArray(payData) ? payData : [])
-        if (pkgData) setCreditPackages(Array.isArray(pkgData) ? pkgData : [])
-
-        try {
-          const catRes = await fetch('/api/catalog/models')
-          if (catRes.ok) {
-            const catData = await catRes.json()
-            const rates: Record<string, number> = {}
-            for (const m of catData.data || []) {
-              const rate = m?.pricing?.outputPerMillion
-              if (typeof rate === 'number' && rate > 0) {
-                if (m.id) rates[m.id] = rate
-                if (m.providerModelId) rates[m.providerModelId] = rate
-              }
-            }
-            setModelOutputRates(rates)
-          }
-        } catch {}
-      } catch {
-        if (!silent) toast('خطا در دریافت اطلاعات', 'error')
-      } finally {
-        setLoading(false)
-        setRefreshing(false)
-      }
-    },
-    [token],
-  )
-
-  useEffect(() => {
-    if (!token) {
-      setLoading(false)
-      return
-    }
-    fetchData()
-  }, [token, fetchData])
-
-  // ── Payment-return feedback ──────────────────────────────────────────────
-  useEffect(() => {
-    const payment = searchParams.get('payment')
-    let banner: { ok: boolean; text: string } | null = null
-    if (payment === 'success') {
-      banner = { ok: true, text: 'پرداخت با موفقیت انجام شد و کیف پول شما شارژ شد.' }
-    } else if (payment === 'failed') {
-      banner = { ok: false, text: 'پرداخت ناموفق بود یا لغو شد. مبلغی از حساب شما کسر نشده است.' }
-    } else if (payment === 'error') {
-      banner = { ok: false, text: 'خطایی در پردازش پرداخت رخ داد. اگر مبلغی کسر شده باشد، به‌زودی بازمی‌گردد.' }
-    }
-    if (banner) {
-      setPaymentBanner(banner)
-      // Strip the param so a refresh does not replay the banner.
-      const url = new URL(window.location.href)
-      url.searchParams.delete('payment')
-      window.history.replaceState(null, '', url.pathname + url.search + url.hash)
-    }
-  }, [searchParams])
-
-  // ── Topup logic ──────────────────────────────────────────────────────────
-  const effectiveAmount = (selectedPreset ?? parseInt(topupAmount)) || 0
-
-  const handlePreset = (val: number) => {
-    setSelectedPreset(val)
-    setTopupAmount('')
-  }
-
-  const handleCustomAmount = (v: string) => {
-    setSelectedPreset(null)
-    setTopupAmount(v)
-  }
-
-  const initiateTopup = () => {
-    const amount = effectiveAmount
-    if (!amount || amount < MIN_TOPUP) return toast(`حداقل مبلغ شارژ ${faNum(MIN_TOPUP)} تومان است`, 'error')
-    if (amount > MAX_TOPUP) return toast(`حداکثر مبلغ شارژ ${faNum(MAX_TOPUP)} تومان است`, 'error')
-    setShowConfirm(true)
-  }
-
-  const confirmTopup = async () => {
-    if (!token) return
-    setShowConfirm(false)
-    setBusy(true)
-    try {
-      // /api/wallet/topup was dead (required a payment_order_id the
-      // frontend never sent and queried a column that no longer exists) and
-      // is being removed. The gateway entry point is /payment/request,
-      // which returns { authority, url, amount } -- not payment_url -- and
-      // there is no synchronous "credit applied" branch: the wallet is only
-      // credited later, atomically, when the gateway calls back
-      // (backend/payment_endpoints.py:26-57, :211).
-      const res = await apiFetch('/api/payment/request', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: effectiveAmount, description: 'شارژ کیف پول' }),
-      })
-      const data = await res.json()
-      if (res.ok && data.url) {
-        toast('در حال انتقال به درگاه پرداخت...', 'info')
-        window.location.href = data.url
-      } else {
-        toast(data.detail || 'خطا در شارژ', 'error')
-      }
-    } catch {
-      toast('خطا در ارتباط با سرور', 'error')
-    } finally {
-      setBusy(false)
-    }
-  }
+  const [ledgerFilter, setLedgerFilter] = useState<LedgerFilter>('all')
 
   // ── Copy balance ─────────────────────────────────────────────────────────
   const copyBalance = () => {
@@ -313,30 +59,6 @@ export default function WalletPage() {
       toast('موجودی کپی شد', 'success')
       setTimeout(() => setCopied(false), 2000)
     })
-  }
-
-  // ── Purchase credit package ────────────────────────────────────────
-  const handlePurchase = async (pkgId: string) => {
-    if (!token || purchasingPkgId) return
-    setPurchasingPkgId(pkgId)
-    try {
-      const res = await apiFetch('/api/credit-package/checkout', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ package_id: pkgId }),
-      })
-      const data = await res.json()
-      if (res.ok && data.url) {
-        toast('در حال انتقال به درگاه پرداخت...', 'info')
-        window.location.href = data.url
-      } else {
-        toast(data.detail || 'خطا در خرید بسته', 'error')
-      }
-    } catch {
-      toast('خطا در ارتباط با سرور', 'error')
-    } finally {
-      setPurchasingPkgId(null)
-    }
   }
 
   // ── Filtered ledger ──────────────────────────────────────────────────────
@@ -411,422 +133,47 @@ export default function WalletPage() {
       </div>
 
       {/* Payment-return banner */}
-      {paymentBanner && (
-        <div
-          role="status"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            padding: '14px 16px',
-            marginBottom: 24,
-            borderRadius: 'var(--radius-md)',
-            border: `1px solid ${paymentBanner.ok ? 'var(--positive)' : 'var(--danger)'}`,
-            background: paymentBanner.ok
-              ? 'color-mix(in srgb, var(--positive) 12%, transparent)'
-              : 'color-mix(in srgb, var(--danger) 12%, transparent)',
-          }}
-        >
-          <span style={{ flexShrink: 0, color: paymentBanner.ok ? 'var(--positive)' : 'var(--danger)' }}>
-            <Icon name={paymentBanner.ok ? 'check' : 'warning'} size={18} />
-          </span>
-          <span style={{ flex: 1, fontSize: 14, color: 'var(--text-primary)' }}>{paymentBanner.text}</span>
-          <button
-            onClick={() => setPaymentBanner(null)}
-            aria-label="بستن"
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'inline-flex' }}
-          >
-            <Icon name="close" size={16} />
-          </button>
-        </div>
-      )}
+      <PaymentBanner banner={paymentBanner} onClose={() => setPaymentBanner(null)} />
 
       {/* Balance + Topup grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 24 }}>
-        {/* ── Balance Hero Card ─────────────────────────────────────── */}
-        <div className="card wallet-balance-card">
-          {/* Glow accent */}
-          <div className="wallet-balance-glow" />
-
-          <div className="relative">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <Icon name="wallet" size={14} className="text-muted" />
-              <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>موجودی فعلی</span>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 8, marginBottom: 4 }}>
-              <span className="wallet-balance-amount">
-                {faNum(balance ?? 0)}
-              </span>
-              <span style={{ fontSize: 14, color: 'var(--text-muted)', fontWeight: 500 }}>تومان</span>
-            </div>
-
-
-
-            <div className="divider" style={{ margin: '12px 0' }} />
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <button
-                className={`btn btn-sm btn-secondary ${copied ? 'wallet-copy-success' : ''}`}
-                onClick={copyBalance}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-              >
-                <Icon name={copied ? 'check' : 'copy'} size={14} />
-                {copied ? 'کپی شد' : 'کپی'}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Topup Card ───────────────────────────────────────────── */}
-        <div className="card wallet-topup-card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
-            <div className="wallet-topup-icon">
-              <Icon name="plus" size={14} className="text-accent" />
-            </div>
-            <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>شارژ حساب</span>
-          </div>
-
-          {/* Preset buttons */}
-          <div className="wallet-preset-grid">
-            {PRESET_AMOUNTS.map((p) => (
-              <button
-                key={p.value}
-                className={`wallet-preset-btn ${selectedPreset === p.value ? 'wallet-preset-active' : ''}`}
-                onClick={() => handlePreset(p.value)}
-              >
-                {p.label}
-                <span className="wallet-preset-sub">
-                  {faNum(p.value)} تومان
-                </span>
-              </button>
-            ))}
-          </div>
-
-          {/* Custom amount input */}
-          <div style={{ position: 'relative', marginBottom: 12 }}>
-            <Icon
-              name="payment"
-              size={16}
-              style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}
-            />
-            <input
-              className="input"
-              type="number"
-              value={topupAmount}
-              onChange={(e) => handleCustomAmount(e.target.value)}
-              placeholder="مبلغ دلخواه (تومان)"
-              min={MIN_TOPUP}
-              max={MAX_TOPUP}
-              style={{
-                paddingRight: 36,
-                fontFeatureSettings: '"tnum"',
-                width: '100%',
-              }}
-            />
-          </div>
-
-          {effectiveAmount > 0 && effectiveAmount < MIN_TOPUP && (
-            <p style={{ fontSize: 11, color: 'var(--danger)', marginBottom: 8 }}>
-              حداقل مبلغ: {faNum(MIN_TOPUP)} تومان
-            </p>
-          )}
-
-          <button
-            className="btn btn-lg btn-primary wallet-topup-btn"
-            onClick={initiateTopup}
-            disabled={busy || effectiveAmount <= 0}
-            style={{
-              width: '100%',
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              opacity: busy || effectiveAmount <= 0 ? 0.5 : 1,
-            }}
-          >
-            <Icon name="send" size={16} />
-            {busy ? 'در حال پردازش...' : `شارژ ${effectiveAmount > 0 ? faNum(effectiveAmount) + ' تومان' : 'حساب'}`}
-          </button>
-        </div>
+        <BalanceCard balance={balance} copied={copied} onCopy={copyBalance} />
+        <TopupCard
+          topupAmount={topupAmount}
+          selectedPreset={selectedPreset}
+          effectiveAmount={effectiveAmount}
+          busy={busy}
+          onPreset={handlePreset}
+          onCustomAmount={handleCustomAmount}
+          onInitiate={initiateTopup}
+        />
       </div>
 
       <EntitlementPanel />
 
-      {/* ── Credit Packages Section ────────────────────────────────── */}
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
-          <Icon name="gift" size={16} className="text-accent" />
-          <h2 className="card-title">بسته‌های اعتباری</h2>
-          {creditPackages.length > 0 && (
-            <span className="badge badge-accent" style={{ marginLeft: 4 }}>{faNum(creditPackages.length)}</span>
-          )}
-        </div>
+      <CreditPackagesSection
+        creditPackages={creditPackages}
+        purchasingPkgId={purchasingPkgId}
+        modelOutputRates={modelOutputRates}
+        onPurchase={handlePurchase}
+      />
 
-        {creditPackages.length === 0 ? (
-          <EmptyStateIcon icon="gift" title="بسته‌ای موجود نیست" desc="در حال حاضر بسته اعتباری برای خرید وجود ندارد." />
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
-            {creditPackages.map((pkg) => {
-              const isPurchasing = purchasingPkgId === pkg.id
-              const baseToman = faNum(pkg.base_amount)
-              const bonusToman = pkg.bonus_percent > 0
-                ? faNum(pkg.total_credits - pkg.base_amount)
-                : null
-              const outputRate = pkg.model_id ? modelOutputRates[pkg.model_id] : undefined
-              const approxTokens = outputRate ? Math.round((pkg.total_credits / outputRate) * 1_000_000) : null
-              return (
-                <div
-                  key={pkg.id}
-                  className="card"
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    padding: 20,
-                    position: 'relative',
-                    overflow: 'hidden',
-                    borderColor: pkg.bonus_percent > 0 ? 'var(--accent)' : undefined,
-                    borderWidth: pkg.bonus_percent > 0 ? 1.5 : undefined,
-                  }}
-                >
-                  {pkg.bonus_percent > 0 && (
-                    <span
-                      style={{
-                        position: 'absolute',
-                        top: 12,
-                        left: 12,
-                        background: 'var(--accent)',
-                        color: 'var(--text-on-accent)',
-                        fontSize: 11,
-                        fontWeight: 700,
-                        padding: '2px 8px',
-                        borderRadius: 'var(--radius-sm)',
-                      }}
-                    >
-                      +{pkg.bonus_percent}% بونوس
-                    </span>
-                  )}
+      <LedgerSection
+        ledger={ledger}
+        filteredLedger={filteredLedger}
+        ledgerFilter={ledgerFilter}
+        onFilterChange={setLedgerFilter}
+      />
 
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
-                    {pkg.name_fa}
-                  </h3>
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: pkg.model_id ? 6 : 16 }}>
-                    {pkg.name_en}
-                  </p>
-                  {pkg.model_id && (
-                    <span
-                      className="badge"
-                      style={{ alignSelf: 'flex-start', marginBottom: 16, fontFamily: 'monospace', fontSize: 11 }}
-                    >
-                      {pkg.model_id}
-                    </span>
-                  )}
+      <PaymentHistorySection payments={payments} />
 
-                  <div className="flex-1">
-                    <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 4, fontFeatureSettings: '"tnum"' }}>
-                      {faNum(pkg.total_credits)} <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)' }}>تومان</span>
-                    </div>
-                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                      شما {baseToman} تومان پرداخت می‌کنید
-                    </p>
-                    {bonusToman && (
-                      <p style={{ fontSize: 12, color: 'var(--positive)', marginBottom: 8 }}>
-                        + {bonusToman} تومان بونوس
-                      </p>
-                    )}
-                    <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                      معادل {fmtToman(pkg.total_credits)}
-                    </p>
-                    {approxTokens !== null && (
-                      <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                        ≈ {faNum(Math.round(approxTokens / 1_000_000))} میلیون توکن {pkg.model_id} (بر اساس نرخ خروجی فعلی)
-                      </p>
-                    )}
-                  </div>
-
-                  <button
-                    className={`btn btn-primary`}
-                    onClick={() => handlePurchase(pkg.id)}
-                    disabled={isPurchasing || purchasingPkgId !== null}
-                    style={{
-                      marginTop: 16,
-                      width: '100%',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 8,
-                      opacity: (isPurchasing || (purchasingPkgId !== null && !isPurchasing)) ? 0.5 : 1,
-                    }}
-                  >
-                    <Icon name={isPurchasing ? 'refresh' : 'payment'} size={14} className={isPurchasing ? 'spin' : ''} />
-                    {isPurchasing ? 'در حال پردازش...' : 'خرید بسته'}
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* ── Ledger Section ─────────────────────────────────────────── */}
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Icon name="history" size={16} className="text-accent" />
-            <h2 className="card-title">تاریخچه تراکنش‌ها</h2>
-            <span className="badge badge-accent" style={{ marginLeft: 4 }}>{faNum(ledger.length)}</span>
-          </div>
-
-          {/* Filter tabs */}
-          <div className="wallet-filter-tabs">
-            {([
-              { key: 'all', label: 'همه' },
-              { key: 'credit', label: 'واریز' },
-              { key: 'debit', label: 'برداشت' },
-            ] as const).map((f) => (
-              <button
-                key={f.key}
-                onClick={() => setLedgerFilter(f.key)}
-                className={`wallet-filter-tab ${ledgerFilter === f.key ? 'wallet-filter-active' : ''}`}
-              >
-                {f.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {filteredLedger.length === 0 ? (
-          <EmptyStateIcon
-            icon="history"
-            title="تراکنشی ثبت نشده"
-            desc={ledgerFilter === 'all' ? 'هنوز هیچ تراکنشی انجام نشده است.' : 'تراکنشی با این فیلتر یافت نشد.'}
-          />
-        ) : (
-          <div className="wallet-table-wrap">
-            <table className="wallet-table">
-              <thead>
-                <tr>
-                  <th>تاریخ</th>
-                  <th>شرح</th>
-                  <th style={{ textAlign: 'left' }}>مبلغ</th>
-                  <th style={{ textAlign: 'left' }}>مانده</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredLedger.map((l, idx) => {
-                  const isCredit = l.amount > 0
-                  return (
-                    <tr key={l.id} className={idx % 2 === 0 ? 'wallet-row-even' : 'wallet-row-odd'}>
-                      <td className="wallet-td-date">
-                        {fmtDate(l.created_at)}
-                      </td>
-                      <td style={{ padding: '12px', color: 'var(--text-primary)', fontWeight: 500 }}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                          <span className={`wallet-amount-dot ${isCredit ? 'positive' : 'negative'}`} />
-                          {l.reason}
-                        </span>
-                      </td>
-                      <td
-                        className={`wallet-td-amount ${isCredit ? 'positive' : 'negative'}`}
-                      >
-                        {isCredit ? '+' : ''}{faNum(l.amount)} <span className="wallet-currency">تومان</span>
-                      </td>
-                      <td className="wallet-td-balance">
-                        {faNum(l.balance_after)}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* ── Payment History Section ────────────────────────────────── */}
-      <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
-          <Icon name="payment" size={16} className="text-accent" />
-          <h2 className="card-title">تاریخچه پرداخت‌ها</h2>
-        </div>
-
-        {payments.length === 0 ? (
-          <EmptyStateIcon icon="payment" title="پرداختی ثبت نشده" desc="هنوز پرداختی انجام نشده است." />
-        ) : (
-          <div className="wallet-table-wrap">
-            <table className="wallet-table">
-              <thead>
-                <tr>
-                  <th>تاریخ</th>
-                  <th>شناسه</th>
-                  <th style={{ textAlign: 'left' }}>مبلغ</th>
-                  <th>وضعیت</th>
-                </tr>
-              </thead>
-              <tbody>
-                {payments.map((p, idx) => {
-                  const st = statusLabel[p.status] || { text: p.status, badge: 'badge-warning' }
-                  return (
-                    <tr key={p.id} className={idx % 2 === 0 ? 'wallet-row-even' : 'wallet-row-odd'}>
-                      <td className="wallet-td-date">
-                        {fmtDate(p.created_at)}
-                      </td>
-                      <td style={{ padding: '12px', color: 'var(--text-secondary)', fontFeatureSettings: '"tnum"', fontSize: 12 }}>
-                        #{p.id}
-                      </td>
-                      <td className="wallet-td-amount text-primary">
-                        {faNum(p.amount)} <span className="wallet-currency">تومان</span>
-                      </td>
-                      <td style={{ padding: '12px' }}>
-                        <span className={`badge ${st.badge}`}>{st.text}</span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* ── Confirmation Modal ─────────────────────────────────────── */}
-      {showConfirm && (
-        <div className="wallet-modal-overlay" onClick={() => setShowConfirm(false)}>
-          <div className="card wallet-modal-card" onClick={(e) => e.stopPropagation()}>
-            <div style={{ textAlign: 'center', marginBottom: 20 }}>
-              <div className="wallet-modal-icon">
-                <Icon name="wallet" size={28} className="text-accent" />
-              </div>
-              <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>تایید شارژ</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 4 }}>
-                آیا از شارژ حساب به مبلغ
-              </p>
-              <p className="wallet-modal-amount">
-                {faNum(effectiveAmount)} تومان
-              </p>
-              <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>اطمینان دارید؟</p>
-            </div>
-
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                className="btn btn-secondary flex-1"
-                onClick={() => setShowConfirm(false)}
-              >
-                انصراف
-              </button>
-              <button
-                className="btn btn-lg btn-primary"
-                onClick={confirmTopup}
-                disabled={busy}
-                style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-              >
-                <Icon name="check" size={16} />
-                {busy ? 'در حال پردازش...' : 'تایید و پرداخت'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <TopupConfirmModal
+        show={showConfirm}
+        effectiveAmount={effectiveAmount}
+        busy={busy}
+        onCancel={() => setShowConfirm(false)}
+        onConfirm={confirmTopup}
+      />
 
       {/* ── Keyframes ──────────────────────────────────────────────── */}
       <style jsx global>{`

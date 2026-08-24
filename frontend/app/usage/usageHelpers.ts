@@ -1,0 +1,41 @@
+import { faPrice, faCompact, faPercent, toFaDigits } from '@/lib/format'
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Helpers
+   Split out of page.tsx verbatim -- no behaviour change.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+export const fmtToman = (n: number) => faPrice(n)
+// No page-local money-formatter alias here -- call `faNum` directly. A
+// same-shaped wrapper named for the wrong currency used to live in this
+// spot, and was one of the two places that habit caused a 10x display bug.
+// Was `1.2M` / `34.0K` — Latin abbreviations that the RTL paragraph reorders
+// away from their number. faCompact gives the Persian equivalent instead.
+export const fmtTokens = (n: number) => faCompact(n)
+export const fmtDate = (s: string | null) => {
+  if (!s) return '—'
+  return toFaDigits(new Date(s).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }))
+}
+// `٪` rather than `%`: the Latin sign is an LTR run that gets pushed away
+// from its number in an RTL paragraph.
+export const fmtPct = (n: number) => faPercent(n * 100, 1)
+
+export const modelDisplayNames: Record<string, string> = {
+  'agnes-2.0-flash': 'Agnes 2.0 Flash',
+  'agnes-2.5-flash': 'Agnes 2.5 Flash',
+  'gemini-3.5-flash': 'Gemini 3.5 Flash',
+  'mimo-v2.5': 'MiMo V2.5',
+  'mimo-v2.5-pro': 'MiMo V2.5 Pro',
+  'mimo-v2.5-pro-ultraspeed': 'MiMo V2.5 Pro Ultra',
+  'mistral-large': 'Mistral Large',
+  'mistral-medium-3-5': 'Mistral Medium 3.5',
+  'tencent-hy3': 'Tencent Hy3',
+}
+
+export const modelColors = [
+  '#7c6df7', '#67e8f9', '#f59e0b', '#34d399', '#f87171',
+  '#e879f9', '#60a5fa', '#fbbf24', '#a78bfa',
+]
+
+export const modelColor = (i: number) => modelColors[i % modelColors.length]
+export const modelName = (m: string) => modelDisplayNames[m] || m

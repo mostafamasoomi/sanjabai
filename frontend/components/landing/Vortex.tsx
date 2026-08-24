@@ -5,334 +5,63 @@
 import * as React from "react";
 import * as THREE from "three";
 
-/** Whether the reader has asked for less movement. Read straight off the media
- *  query rather than through framer-motion: it is one boolean, and the import is
- *  a dependency this component otherwise has no use for. Starts false so the
- *  server and the first client render agree, then corrects on mount. */
-function useReducedMotion() {
-  const [reduced, setReduced] = React.useState(false);
-  React.useEffect(() => {
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const sync = () => setReduced(query.matches);
-    sync();
-    query.addEventListener("change", sync);
-    return () => query.removeEventListener("change", sync);
-  }, []);
-  return reduced;
-}
-
-// One DEFAULTS drives both the destructure fallbacks and the prop defaults.
-// Every slider is a whole number where it can be. The values they actually mean
-// live beside the engine as *_MAX constants and are mapped in one place, below.
-const DEFAULTS = {
-  background: "#000000",
-  topRadius: 380,
-  waistRadius: 53,
-  waistPosition: 50,
-  bottomRadius: 1150,
-  twist: 3,
-  zoom: 75,
-  speed: 10,
-  direction: "right" as "right" | "left",
-  lineOptions: {
-    count: 240,
-    color: "#ffffff",
-    glow: 10,
-  },
-  dots: true,
-  dotOptions: {
-    count: 8000,
-    size: 20,
-    color: "#ffffff",
-    glow: 10,
-    flicker: 10,
-  },
-  comets: true,
-  cometOptions: {
-    count: 10,
-    speed: 6,
-    color: "#F9731A",
-    glow: 6,
-    tail: 19,
-    delay: 8,
-    collide: 6,
-  },
-  repel: false,
-  repelOptions: {
-    radius: 60,
-    strength: 10,
-  },
-};
-
-/* ============================================================ constants */
-
-const TAU = Math.PI * 2;
-
-// The three radii and every other reach read in screen pixels on the panel and
-// world units on the wire. The camera frames the form's full height to the
-// component's height, so at the 600px intrinsic height ten world units span the
-// frame — sixty pixels to the unit. Bottom 900px is the 15 the effect was
-// authored with, waist 30px its 0.5, top 300px its 5.
-const PX_PER_WORLD = 60;
-
-// Samples in each baked curve, and segments along each strand. Neither is worth
-// a control: they only ever trade smoothness for memory, and there is no reason
-// to ship anything but the smooth end.
-const CURVE_SAMPLES = 1024;
-const STRAND_SEGMENTS = 400;
-
-// How far the strands sway off their ideal path, as a share of the local radius.
-const WOBBLE = 0.008;
-// The share of each strand's length that fades out at either end, so the form
-// dissolves rather than stopping on a cut edge.
-const FADE_ZONE = 0.15;
-
-// The form's height in world units. The camera is solved to frame exactly this,
-// so the component's own height is what sizes the vortex.
-const FORM_HEIGHT = 10;
-
-// The zoom the framing is solved for, and the default. Above it we push
-// in, below it the view widens.
-const BASE_ZOOM = 67;
-// zoom prop -> camera FOV. The prop reads as a zoom (higher is closer), which
-// is the inverse of what FOV does, so it is mirrored — around BASE_ZOOM rather
-// than the slider's midpoint, which keeps the tuned default a fixed point.
-const fovForZoom = (zoom: number) => clamp(2 * BASE_ZOOM - zoom, 1, 175);
-
-// 0..10 sliders onto the values their top ends mean.
-const LINE_GLOW_MAX = 1;
-const DOT_GLOW_MAX = 4.2;
-const COMET_SPEED_MAX = 0.15;
-const COMET_GLOW_MAX = 1;
-const DOT_SIZE_SCALE = 1000;
-
-// The ripple. A burst shoves every dot inside its radius, and each dot is then
-// sprung back to where it belongs — position and size on their own springs, so
-// a dot swells as it is pushed and settles as it returns.
-//
-// Reach and force are constants rather than dials: a comet strike is the only
-// thing that throws one now, and it wants the same ripple every time.
-const RIPPLE_RADIUS = 2;
-const RIPPLE_STRENGTH = 0.5;
-const RIPPLE_SPRING = 50;
-const RIPPLE_DAMPING = 9;
-const SCALE_SPRING = 65;
-const SCALE_DAMPING = 11;
-const SCALE_PEAK = 1.8;
-
-// The shockwave that runs out from a burst: a ring travelling at WAVE_SPEED,
-// this wide, fading over DECAY and gone by MAX_LIFE. It moves the STRANDS, not
-// the dots — the dots have their springs.
-const WAVE_SPEED = 5;
-const WAVE_WIDTH = 1.2;
-const WAVE_DECAY = 0.8;
-const WAVE_LIFE = 2.5;
-const WAVE_STRENGTH = 0.04;
-const MAX_WAVES = 16;
-
-// The stretch of a strand a comet runs, and how much of either end it fades
-// over. Turning right it climbs from LOW to HIGH; turning left it starts at
-// HIGH and comes back down, which is the same run read backwards.
-const RUN_LOW = 0.03;
-const RUN_HIGH = 0.95;
-const RUN_FADE = 0.1;
-
-// A comet running into a dot: how close counts, how much faster it goes and for
-// how long, how brightly the dot flashes and how long it stays gone.
-const HIT_RADIUS = 0.8;
-const HIT_BOOST = 1.6;
-const HIT_BOOST_TIME = 0.4;
-const HIT_FLASH = 6;
-const HIT_FADE = 0.6;
-const HIT_POP = 1.3;
-const HIT_RESPAWN = 8;
-
-// Strands are rewritten at this rate rather than every frame. Four hundred
-// points across eighty strands is thirty-two thousand vertices to lay out, and
-// at a flow this slow nobody can tell it from sixty.
-const STRAND_HZ = 1 / 30;
-
-// The layers do not all arrive at once. Seconds from the first frame.
-const ENTRANCE = {
-  strandStart: 0,
-  strandEnd: 2,
-  dotStart: 1.2,
-  dotEnd: 3,
-  cometStart: 3,
-  cometEnd: 5,
-};
-
-// What Repel Strength 100% comes to in NDC.
-const REPEL_MAX_NDC = 0.45;
-
-/* ============================================================ maths */
-
-const clamp = (x: number, a: number, b: number) => Math.min(Math.max(x, a), b);
-
-/** Ease used by the entrance fades — quick off the mark, long tail. */
-function ramp(now: number, from: number, to: number) {
-  if (now <= from) return 0;
-  if (now >= to) return 1;
-  const t = (now - from) / (to - from);
-  return 1 - (1 - t) * (1 - t) * (1 - t);
-}
-
-/**
- * Monotone cubic interpolation through a set of points.
- *
- * Monotone specifically, not a plain spline: the radius profile has a hard pinch
- * at the waist, and an ordinary cubic overshoots either side of a corner like
- * that — the strands would bulge back OUT just before the neck and cross each
- * other doing it. The Fritsch-Carlson limiter below is what stops that.
- */
-function monotone(points: [number, number][]) {
-  const n = points.length;
-  const slope: number[] = [];
-  for (let i = 0; i < n - 1; i++) {
-    slope[i] =
-      (points[i + 1][1] - points[i][1]) / (points[i + 1][0] - points[i][0]);
-  }
-  const m: number[] = [slope[0]];
-  for (let i = 1; i < n - 1; i++) {
-    m[i] = slope[i - 1] * slope[i] <= 0 ? 0 : (slope[i - 1] + slope[i]) / 2;
-  }
-  m[n - 1] = slope[n - 2];
-  for (let i = 0; i < n - 1; i++) {
-    if (Math.abs(slope[i]) < 1e-12) {
-      m[i] = m[i + 1] = 0;
-      continue;
-    }
-    const a = m[i] / slope[i];
-    const b = m[i + 1] / slope[i];
-    const s = a * a + b * b;
-    if (s > 9) {
-      const k = 3 / Math.sqrt(s);
-      m[i] = k * a * slope[i];
-      m[i + 1] = k * b * slope[i];
-    }
-  }
-  return (x: number) => {
-    if (x <= points[0][0]) return points[0][1];
-    if (x >= points[n - 1][0]) return points[n - 1][1];
-    let i = 0;
-    while (i < n - 2 && points[i + 1][0] < x) i++;
-    const h = points[i + 1][0] - points[i][0];
-    const t = (x - points[i][0]) / h;
-    const t2 = t * t;
-    const t3 = t2 * t;
-    return (
-      (2 * t3 - 3 * t2 + 1) * points[i][1] +
-      (t3 - 2 * t2 + t) * h * m[i] +
-      (-2 * t3 + 3 * t2) * points[i + 1][1] +
-      (t3 - t2) * h * m[i + 1]
-    );
-  };
-}
-
-/** Bake a curve to a lookup table — it is read millions of times a second. */
-function bake(fn: (x: number) => number) {
-  const table = new Float32Array(CURVE_SAMPLES);
-  for (let i = 0; i < CURVE_SAMPLES; i++) table[i] = fn(i / (CURVE_SAMPLES - 1));
-  return table;
-}
-
-function sample(table: Float32Array, t: number) {
-  if (t <= 0) return table[0];
-  const last = table.length - 1;
-  if (t >= 1) return table[last];
-  const x = t * last;
-  const i = x | 0;
-  return table[i] + (table[i + 1] - table[i]) * (x - i);
-}
-
-/* ============================================================ shape */
-
-type Shape = ReturnType<typeof makeShape>;
-
-/**
- * The vortex as three curves against distance along a strand: how far out it is,
- * how high, and how far round.
- *
- * The intermediate radius points are placed as fractions of wherever the waist
- * sits rather than at fixed heights. At the middle they land exactly on the
- * numbers the effect was authored with, and anywhere else the profile keeps its
- * shape instead of the control points crossing over each other — which the
- * spline above cannot be built from at all.
- */
-function makeShape(cfg: any) {
-  const w = clamp(cfg.waistAt, 0.08, 0.92);
-  const floor = cfg.floorRadius;
-  const crown = cfg.crownRadius;
-  const turn = cfg.twist * TAU;
-
-  const radius = bake(
-    monotone([
-      [0, floor],
-      [0.24 * w, floor * 0.667],
-      [0.5 * w, floor * 0.3],
-      [0.76 * w, floor * 0.08],
-      [w, cfg.waistRadius],
-      [w + 0.3 * (1 - w), crown * 0.2],
-      [w + 0.6 * (1 - w), crown * 0.44],
-      [1, crown],
-    ])
-  );
-  const height = bake(
-    monotone([
-      [0, 0],
-      [0.1, 0.2],
-      [0.2, 0.8],
-      [0.35, 2],
-      [0.5, FORM_HEIGHT * 0.38],
-      [0.75, FORM_HEIGHT * 0.7],
-      [1, FORM_HEIGHT],
-    ])
-  );
-  const angle = bake(
-    monotone([
-      [0, 0],
-      [0.15, 0.15 * turn],
-      [0.25, 0.25 * turn],
-      [0.45, 0.55 * turn],
-      [0.6, 0.7 * turn],
-      [0.8, 0.88 * turn],
-      [1, turn],
-    ])
-  );
-
-  return {
-    /** Write one point of a strand into `out` at `at`. */
-    writePoint(
-      out: Float32Array,
-      at: number,
-      s: number,
-      lane: number,
-      flow: number,
-      wobble: number,
-      phase: number,
-      time: number
-    ) {
-      const r = sample(radius, s);
-      const y = sample(height, s);
-      const a = sample(angle, s) + lane + flow;
-      // The sway is a share of the local radius, not a fixed distance: a
-      // fixed one is nothing against the floor plate and violent at the
-      // waist, which is exactly where every strand converges.
-      const rr = r + Math.sin(s * 25 + phase + time * 0.3) * wobble * r;
-      out[at] = Math.cos(a) * rr;
-      out[at + 1] = y;
-      out[at + 2] = Math.sin(a) * rr;
-    },
-    lane: (i: number, total: number) => (i / total) * TAU,
-  };
-}
+// Everything below this point is a pure relocation of code that used to live
+// directly in this file: static config/tuning data, pure math helpers, the
+// radius/height/angle shape profile, and shared types. See the sibling
+// modules in ./vortex/. The engine (createVortex) and the component keep all
+// their closures — including the off-screen pause gate — together in this
+// file, per the split's own guidance: that machinery is not safe to break
+// apart across modules.
+import { useReducedMotion } from "./vortex/useReducedMotion";
+import {
+  DEFAULTS,
+  TAU,
+  PX_PER_WORLD,
+  STRAND_SEGMENTS,
+  WOBBLE,
+  FADE_ZONE,
+  FORM_HEIGHT,
+  BASE_ZOOM,
+  fovForZoom,
+  LINE_GLOW_MAX,
+  DOT_GLOW_MAX,
+  COMET_SPEED_MAX,
+  COMET_GLOW_MAX,
+  DOT_SIZE_SCALE,
+  RIPPLE_RADIUS,
+  RIPPLE_STRENGTH,
+  RIPPLE_SPRING,
+  RIPPLE_DAMPING,
+  SCALE_SPRING,
+  SCALE_DAMPING,
+  SCALE_PEAK,
+  WAVE_SPEED,
+  WAVE_WIDTH,
+  WAVE_DECAY,
+  WAVE_LIFE,
+  WAVE_STRENGTH,
+  MAX_WAVES,
+  RUN_LOW,
+  RUN_HIGH,
+  RUN_FADE,
+  HIT_RADIUS,
+  HIT_BOOST,
+  HIT_BOOST_TIME,
+  HIT_FLASH,
+  HIT_FADE,
+  HIT_POP,
+  HIT_RESPAWN,
+  STRAND_HZ,
+  ENTRANCE,
+  REPEL_MAX_NDC,
+  __originkitPresetProps,
+} from "./vortex/constants";
+import { clamp, ramp } from "./vortex/math";
+import { makeShape, type Shape } from "./vortex/shape";
+import type { VortexAPI, VortexProps } from "./vortex/types";
+import { blob } from "./vortex/texture";
 
 /* ============================================================ engine */
-
-type VortexAPI = {
-  rebuild: () => void;
-  dispose: () => void;
-};
 
 /**
  * The engine holds the GL context for as long as the component is mounted, and
@@ -537,22 +266,6 @@ function createVortex(
         );
       }
     }
-  }
-
-  /** A soft round blob on a canvas, for the sprites. */
-  function blob(size: number, stops: [number, string][]) {
-    const c = document.createElement("canvas");
-    c.width = c.height = size;
-    const ctx2d = c.getContext("2d");
-    if (ctx2d) {
-      const g = ctx2d.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-      for (const [at, color] of stops) g.addColorStop(at, color);
-      ctx2d.fillStyle = g;
-      ctx2d.fillRect(0, 0, size, size);
-    }
-    const tex = new THREE.Texture(c);
-    tex.needsUpdate = true;
-    return tex;
   }
 
   /* ---------------------------------------- build */
@@ -1317,26 +1030,6 @@ function createVortex(
 
 /* ============================================================ component */
 
-export interface VortexProps {
-  background?: string;
-  topRadius?: number;
-  waistRadius?: number;
-  waistPosition?: number;
-  bottomRadius?: number;
-  twist?: number;
-  zoom?: number;
-  speed?: number;
-  direction?: "right" | "left";
-  lineOptions?: Partial<typeof DEFAULTS.lineOptions>;
-  dots?: boolean;
-  dotOptions?: Partial<typeof DEFAULTS.dotOptions>;
-  comets?: boolean;
-  cometOptions?: Partial<typeof DEFAULTS.cometOptions>;
-  repel?: boolean;
-  repelOptions?: Partial<typeof DEFAULTS.repelOptions>;
-  style?: React.CSSProperties;
-}
-
 /**
  * Vortex — a particle tornado on a fixed camera. Place it behind a hero section.
  *
@@ -1497,19 +1190,6 @@ function __OriginkitBase_Vortex(props: VortexProps) {
     </div>
   );
 }
-
-const __originkitPresetProps = {
-  "background": "#000000",
-  "topRadius": 230,
-  "waistRadius": 25,
-  "waistPosition": 48,
-  "bottomRadius": 700,
-  "twist": 2,
-  "zoom": 75,
-  "speed": 10,
-  "direction": "right",
-  "comets": true
-};
 
 export default function Vortex(props: Record<string, unknown>) {
   return <__OriginkitBase_Vortex {...(__originkitPresetProps as Record<string, unknown>)} {...props} />;

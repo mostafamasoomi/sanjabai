@@ -1,100 +1,60 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
-import { apiFetch } from '@/lib/apiFetch'
-import { toast, EmptyState } from '@/components/ui'
-import { Icon } from '@/components/ui/Icon'
-import { faDate } from '@/lib/format'
-
-/* ═══════════════════════════════════════════════════════════════
-   Types
-   ═══════════════════════════════════════════════════════════════ */
-
-type Memory = {
-  id: number
-  content: string
-  category: string
-  source: string
-  tags: string[]
-  created_at: string
-  updated_at: string
-}
-
-type Category = { key: string; label: string }
-
-const CATEGORIES: Category[] = [
-  { key: '', label: 'همه' },
-  { key: 'preferences', label: 'ترجیحات' },
-  { key: 'projects', label: 'پروژه‌ها' },
-  { key: 'skills', label: 'مهارت‌ها' },
-  { key: 'personal', label: 'شخصی' },
-  { key: 'other', label: 'سایر' },
-]
-
-const CATEGORY_MAP: Record<string, string> = {
-  '': 'همه',
-  preferences: 'ترجیحات',
-  projects: 'پروژه‌ها',
-  skills: 'مهارت‌ها',
-  personal: 'شخصی',
-  other: 'سایر',
-}
+import { useMemories } from './hooks/useMemories'
+import { MemoryLoginGate } from './components/MemoryLoginGate'
+import { MemoryHeader } from './components/MemoryHeader'
+import { MemorySearchBar } from './components/MemorySearchBar'
+import { CategoryTabs } from './components/CategoryTabs'
+import { AddMemoryForm } from './components/AddMemoryForm'
+import { MemoryInfoCard } from './components/MemoryInfoCard'
+import { MemoryListSection } from './components/MemoryListSection'
 
 /* ═══════════════════════════════════════════════════════════════
    Page
+
+   State/logic is split across hooks/ (fetch/search/add/edit/delete)
+   and components/ (header, search bar, category tabs, add form,
+   info card, list) -- this file wires them together and owns only
+   the auth-gate effect and page-wide layout.
    ═══════════════════════════════════════════════════════════════ */
 
 export default function MemoryPage() {
   const { user, token, loading: authLoading } = useAuth()
   const router = useRouter()
 
-  /* ── State ────────────────────────────────────────────────── */
-  const [memories, setMemories] = useState<Memory[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [activeCategory, setActiveCategory] = useState('')
-  const [showAddForm, setShowAddForm] = useState(false)
-
-  // Add form
-  const [newContent, setNewContent] = useState('')
-  const [newCategory, setNewCategory] = useState('other')
-  const [newTags, setNewTags] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  // Edit state
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [editingContent, setEditingContent] = useState('')
-  const [editingCategory, setEditingCategory] = useState('')
-  const [editingTags, setEditingTags] = useState('')
-
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  /* ── Fetch memories ───────────────────────────────────────── */
-  const fetchMemories = useCallback(async (category?: string, q?: string) => {
-    if (!token) return
-    try {
-      let url = '/api/memories'
-      if (q) {
-        url = `/api/memories/search?q=${encodeURIComponent(q)}`
-      } else if (category) {
-        url = `/api/memories?category=${encodeURIComponent(category)}`
-      }
-
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      if (r.ok) {
-        const data = await r.json()
-        setMemories(data)
-      } else {
-        toast('خطا در دریافت حافظه', 'error')
-      }
-    } catch {
-      toast('خطا در دریافت حافظه', 'error')
-    } finally {
-      setLoading(false)
-    }
-  }, [token])
+  const {
+    memories,
+    loading,
+    searchQuery,
+    activeCategory,
+    showAddForm,
+    setShowAddForm,
+    newContent,
+    setNewContent,
+    newCategory,
+    setNewCategory,
+    newTags,
+    setNewTags,
+    saving,
+    editingId,
+    editingContent,
+    setEditingContent,
+    editingCategory,
+    setEditingCategory,
+    editingTags,
+    setEditingTags,
+    fetchMemories,
+    handleSearch,
+    handleCategory,
+    addMemory,
+    startEdit,
+    saveEdit,
+    cancelEdit,
+    deleteMemory,
+  } = useMemories(token)
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -104,524 +64,51 @@ export default function MemoryPage() {
     if (user) fetchMemories()
   }, [user, authLoading, router, fetchMemories])
 
-  /* ── Search with debounce ─────────────────────────────────── */
-  const handleSearch = (value: string) => {
-    setSearchQuery(value)
-    if (searchTimer.current) clearTimeout(searchTimer.current)
-    searchTimer.current = setTimeout(() => {
-      fetchMemories(activeCategory, value || undefined)
-    }, 400)
-  }
-
-  /* ── Category filter ──────────────────────────────────────── */
-  const handleCategory = (cat: string) => {
-    setActiveCategory(cat)
-    setSearchQuery('')
-    fetchMemories(cat || undefined)
-  }
-
-  /* ── Add memory ───────────────────────────────────────────── */
-  const addMemory = async () => {
-    if (!newContent.trim()) {
-      toast('محتوا را وارد کنید', 'error')
-      return
-    }
-    if (!token) return
-    setSaving(true)
-    try {
-      const r = await apiFetch('/api/memories', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          content: newContent.trim(),
-          category: newCategory,
-          tags: newTags.split(',').map((t) => t.trim()).filter(Boolean),
-        }),
-      })
-      if (r.ok) {
-        toast('حافظه ذخیره شد', 'success')
-        setNewContent('')
-        setNewCategory('other')
-        setNewTags('')
-        setShowAddForm(false)
-        fetchMemories(activeCategory || undefined, searchQuery || undefined)
-      } else {
-        const data = await r.json()
-        toast(data.detail || 'خطا در ذخیره', 'error')
-      }
-    } catch {
-      toast('خطا در ارتباط', 'error')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  /* ── Edit memory ──────────────────────────────────────────── */
-  const startEdit = (m: Memory) => {
-    setEditingId(m.id)
-    setEditingContent(m.content)
-    setEditingCategory(m.category)
-    setEditingTags(m.tags.join(', '))
-  }
-
-  const saveEdit = async () => {
-    if (editingId === null || !token) return
-    try {
-      const r = await apiFetch(`/api/memories/${editingId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          content: editingContent.trim(),
-          category: editingCategory,
-          tags: editingTags.split(',').map((t) => t.trim()).filter(Boolean),
-        }),
-      })
-      if (r.ok) {
-        toast('حافظه به‌روزرسانی شد', 'success')
-        setEditingId(null)
-        fetchMemories(activeCategory || undefined, searchQuery || undefined)
-      } else {
-        toast('خطا در به‌روزرسانی', 'error')
-      }
-    } catch {
-      toast('خطا در ارتباط', 'error')
-    }
-  }
-
-  const cancelEdit = () => setEditingId(null)
-
-  /* ── Delete memory ────────────────────────────────────────── */
-  const deleteMemory = async (id: number) => {
-    if (!token) return
-    try {
-      const r = await apiFetch(`/api/memories/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (r.ok) {
-        toast('حافظه حذف شد', 'success')
-        fetchMemories(activeCategory || undefined, searchQuery || undefined)
-      } else {
-        toast('خطا در حذف', 'error')
-      }
-    } catch {
-      toast('خطا در ارتباط', 'error')
-    }
-  }
-
-  /* ── Helpers ──────────────────────────────────────────────── */
-  const formatDate = (s: string) => faDate(s)
-
-  const isEditing = (id: number) => editingId === id
-
   /* ── Login gate ───────────────────────────────────────────── */
-  // Unlike /skills and /tasks, this page previously had no gate at all and
-  // read the token straight out of localStorage in four places instead of
-  // going through useAuth — a logged-out visitor saw an empty "no memories"
-  // state instead of a login prompt, and every mutating action failed
-  // silently against `Authorization: Bearer null`.
   if (authLoading || (!user && !authLoading)) {
-    return (
-      <div style={{ maxWidth: 800, margin: '0 auto', padding: '0 16px' }}>
-        {authLoading ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="card">
-                <div className="skeleton" style={{ height: 14, width: '70%', marginBottom: 8 }} />
-                <div className="skeleton" style={{ height: 10, width: '40%' }} />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState icon="lock" title="برای مشاهده حافظه وارد شوید" description="ابتدا باید وارد حساب خود شوید." />
-        )}
-      </div>
-    )
+    return <MemoryLoginGate authLoading={authLoading} />
   }
 
   /* ── Render ───────────────────────────────────────────────── */
   return (
     <div style={{ maxWidth: 800, margin: '0 auto', padding: '0 16px' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
-        <div
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: 'var(--radius-lg)',
-            background: 'var(--accent-dim)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Icon name="sparkles" size={20} className="text-accent" />
-        </div>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
-            حافظه هوشمند
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
-            اطلاعات و ترجیحات شما برای چت‌های بهتر
-          </p>
-        </div>
-      </div>
+      <MemoryHeader />
 
-      {/* Search bar */}
-      <div style={{ position: 'relative', marginBottom: 16 }}>
-        <Icon
-          name="search"
-          size={16}
-          style={{
-            position: 'absolute',
-            right: 12,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            color: 'var(--text-muted)',
-          }}
-        />
-        <input
-          value={searchQuery}
-          onChange={(e) => handleSearch(e.target.value)}
-          placeholder="جستجو در حافظه..."
-          className="input"
-          style={{ width: '100%', paddingRight: 36 }}
-        />
-        {searchQuery && (
-          <button
-            onClick={() => handleSearch('')}
-            style={{
-              position: 'absolute',
-              left: 12,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              background: 'none',
-              border: 'none',
-              padding: 4,
-              cursor: 'pointer',
-              display: 'flex',
-            }}
-          >
-            <Icon name="close" size={14} className="text-muted" />
-          </button>
-        )}
-      </div>
+      <MemorySearchBar searchQuery={searchQuery} onSearch={handleSearch} />
 
-      {/* Category tabs */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 6,
-          marginBottom: 20,
-          overflowX: 'auto',
-          paddingBottom: 4,
-        }}
-      >
-        {CATEGORIES.map((cat) => (
-          <button
-            key={cat.key}
-            onClick={() => handleCategory(cat.key)}
-            className={activeCategory === cat.key ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
-            style={{
-              whiteSpace: 'nowrap',
-              fontSize: 13,
-              borderRadius: 'var(--radius-md)',
-            }}
-          >
-            {cat.label}
-          </button>
-        ))}
-      </div>
+      <CategoryTabs activeCategory={activeCategory} onSelect={handleCategory} />
 
-      {/* Add memory button + form */}
-      <div style={{ marginBottom: 20 }}>
-        {!showAddForm ? (
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="btn btn-primary"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          >
-            <Icon name="plus" size={14} />
-            افزودن حافظه
-          </button>
-        ) : (
-          <div
-            className="card"
-            style={{ borderColor: 'var(--accent)', borderWidth: 1 }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Icon name="sparkles" size={16} className="text-accent" />
-                <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-                  حافظه جدید
-                </h3>
-              </div>
-              <button onClick={() => setShowAddForm(false)} className="btn btn-ghost btn-sm" style={{ padding: '2px 6px' }}>
-                <Icon name="close" size={14} />
-              </button>
-            </div>
+      <AddMemoryForm
+        showAddForm={showAddForm}
+        setShowAddForm={setShowAddForm}
+        newContent={newContent}
+        setNewContent={setNewContent}
+        newCategory={newCategory}
+        setNewCategory={setNewCategory}
+        newTags={newTags}
+        setNewTags={setNewTags}
+        saving={saving}
+        onSave={addMemory}
+      />
 
-            <textarea dir="rtl"
-              value={newContent}
-              onChange={(e) => setNewContent(e.target.value)}
-              placeholder="محتوای حافظه (مثلاً: زبان برنامه‌نویسی ترجیحی من Python است)"
-              className="input"
-              rows={3}
-              style={{ width: '100%', resize: 'vertical', marginBottom: 10 }}
-            />
+      <MemoryInfoCard />
 
-            <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-              <select
-                value={newCategory}
-                onChange={(e) => setNewCategory(e.target.value)}
-                className="input"
-                style={{ flex: 1, fontSize: 13 }}
-              >
-                {CATEGORIES.filter((c) => c.key).map((c) => (
-                  <option key={c.key} value={c.key}>{c.label}</option>
-                ))}
-              </select>
-
-              <input
-                value={newTags}
-                onChange={(e) => setNewTags(e.target.value)}
-                placeholder="برچسب‌ها (با کاما جدا کنید)"
-                className="input"
-                style={{ flex: 2, fontSize: 13 }}
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                onClick={addMemory}
-                disabled={saving || !newContent.trim()}
-                className="btn btn-primary btn-sm"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-              >
-                {saving ? (
-                  <span style={{ width: 14, height: 14, border: '2px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 0.6s linear infinite', display: 'inline-block' }} />
-                ) : (
-                  <Icon name="check" size={14} />
-                )}
-                ذخیره
-              </button>
-              <button onClick={() => setShowAddForm(false)} className="btn btn-ghost btn-sm">
-                انصراف
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Info card */}
-      <div
-        className="card"
-        style={{
-          marginBottom: 20,
-          background: 'var(--accent-dim)',
-          borderColor: 'var(--accent)',
-          borderWidth: 1,
-        }}
-      >
-        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-          <Icon name="info" size={16} style={{ color: 'var(--accent)', marginTop: 2, flexShrink: 0 }} />
-          <div>
-            <h4 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>
-              حافظه خودکار
-            </h4>
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-              سیستم به‌صورت خودکار اطلاعات مهم شما را از مکالمات استخراج و ذخیره می‌کند.
-              این اطلاعات در چت‌های آینده برای ارائه پاسخ‌های شخصی‌تر استفاده می‌شود.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Memory list */}
-      {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="card">
-              <div className="skeleton" style={{ height: 14, width: '70%', marginBottom: 8 }} />
-              <div className="skeleton" style={{ height: 10, width: '40%' }} />
-            </div>
-          ))}
-        </div>
-      ) : memories.length === 0 ? (
-        <div
-          className="card"
-          style={{
-            textAlign: 'center',
-            padding: '48px 24px',
-          }}
-        >
-          <div
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: '50%',
-              background: 'var(--bg-surface)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 16px',
-            }}
-          >
-            <Icon name="sparkles" size={28} className="text-muted" />
-          </div>
-          <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
-            هنوز حافظه‌ای ذخیره نشده
-          </p>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-            اولین حافظه خود را اضافه کنید یا اجازه دهید سیستم به‌صورت خودکار اطلاعات شما را یاد بگیرد.
-          </p>
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="btn btn-primary btn-sm"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          >
-            <Icon name="plus" size={14} />
-            افزودن حافظه
-          </button>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {memories.map((m) => (
-            <div key={m.id} className="card" style={{ padding: 16 }}>
-              {isEditing(m.id) ? (
-                /* Edit mode */
-                <div>
-                  <textarea dir="rtl"
-                    value={editingContent}
-                    onChange={(e) => setEditingContent(e.target.value)}
-                    className="input"
-                    rows={3}
-                    style={{ width: '100%', resize: 'vertical', marginBottom: 10 }}
-                  />
-                  <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-                    <select
-                      value={editingCategory}
-                      onChange={(e) => setEditingCategory(e.target.value)}
-                      className="input"
-                      style={{ flex: 1, fontSize: 13 }}
-                    >
-                      {CATEGORIES.filter((c) => c.key).map((c) => (
-                        <option key={c.key} value={c.key}>{c.label}</option>
-                      ))}
-                    </select>
-                    <input
-                      value={editingTags}
-                      onChange={(e) => setEditingTags(e.target.value)}
-                      placeholder="برچسب‌ها (با کاما)"
-                      className="input"
-                      style={{ flex: 2, fontSize: 13 }}
-                    />
-                  </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={saveEdit} className="btn btn-primary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <Icon name="check" size={14} />
-                      ذخیره
-                    </button>
-                    <button onClick={cancelEdit} className="btn btn-ghost btn-sm">
-                      انصراف
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                /* View mode */
-                <div>
-                  <p style={{ fontSize: 14, color: 'var(--text-primary)', lineHeight: 1.7, marginBottom: 12 }}>
-                    {m.content}
-                  </p>
-
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-                    {/* Category badge */}
-                    <span
-                      className="badge badge-accent"
-                      style={{ fontSize: 11, padding: '2px 8px' }}
-                    >
-                      {CATEGORY_MAP[m.category] || m.category}
-                    </span>
-
-                    {/* Source indicator */}
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        fontSize: 11,
-                        color: m.source === 'manual' ? 'var(--positive)' : 'var(--text-muted)',
-                        background: 'var(--bg-surface)',
-                        padding: '2px 8px',
-                        borderRadius: 'var(--radius-sm)',
-                      }}
-                    >
-                      <Icon name={m.source === 'manual' ? 'user' : 'sparkles'} size={10} />
-                      {m.source === 'manual' ? 'دستی' : 'خودکار'}
-                    </span>
-
-                    {/* Tags */}
-                    {m.tags?.map((tag) => (
-                      <span
-                        key={tag}
-                        style={{
-                          fontSize: 11,
-                          color: 'var(--text-secondary)',
-                          background: 'var(--bg-surface)',
-                          padding: '2px 8px',
-                          borderRadius: 'var(--radius-sm)',
-                        }}
-                      >
-                        #{tag}
-                      </span>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)' }}>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        <Icon name="calendar" size={11} />
-                        {formatDate(m.created_at)}
-                      </span>
-                      {m.updated_at !== m.created_at && (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          <Icon name="refresh" size={11} />
-                          ویرایش: {formatDate(m.updated_at)}
-                        </span>
-                      )}
-                    </div>
-
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <button
-                        onClick={() => startEdit(m)}
-                        className="btn btn-ghost btn-sm"
-                        title="ویرایش"
-                        style={{ padding: '4px 8px' }}
-                      >
-                        <Icon name="profile" size={14} />
-                      </button>
-                      <button
-                        onClick={() => deleteMemory(m.id)}
-                        className="btn btn-ghost btn-sm"
-                        title="حذف"
-                        style={{ padding: '4px 8px', color: 'var(--danger)' }}
-                      >
-                        <Icon name="trash" size={14} />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      <MemoryListSection
+        loading={loading}
+        memories={memories}
+        onAddClick={() => setShowAddForm(true)}
+        editingId={editingId}
+        editingContent={editingContent}
+        setEditingContent={setEditingContent}
+        editingCategory={editingCategory}
+        setEditingCategory={setEditingCategory}
+        editingTags={editingTags}
+        setEditingTags={setEditingTags}
+        onSaveEdit={saveEdit}
+        onCancelEdit={cancelEdit}
+        onStartEdit={startEdit}
+        onDelete={deleteMemory}
+      />
 
       {/* Keyframe for spinner */}
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>

@@ -75,7 +75,15 @@ export type ModelHealthEntry = ModelHealth & {
 export type HealthSummary = {
   overall: 'operational' | 'degraded' | 'down'
   counts: Record<HealthStatus, number>
-  upstreams: { name: string; ok: boolean; latencyMs: number; error: string | null }[]
+  /* Aggregate only. This was a named, per-gateway list -- `litellm`,
+     `omniroute`, `ninerouter`, each with its own latency -- served from an
+     ANONYMOUS endpoint, so the supply chain was public on /status. A normal
+     user never learns which upstream serves anything; only an admin does.
+     The named breakdown still exists behind admin auth
+     (backend/admin_monitoring.py::_upstreams_section).
+     Optional because a cached payload written by the previous build can
+     still arrive during the ~20s the summary cache lives. */
+  gateways?: { status: 'operational' | 'degraded' | 'down' | 'unknown' }
   models: ModelHealthEntry[]
   windowMinutes: number
   generatedAt: string

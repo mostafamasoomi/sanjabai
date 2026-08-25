@@ -138,3 +138,88 @@ class TestDegradesHonestly:
         assert body['models'] == []
         assert body['overall'] == 'degraded'
         assert 'kr/' not in json.dumps(body)
+
+
+class TestNoGatewayNamesReachTheWire:
+    """The same "never the provider" rule, applied to the field where it was
+    missed for months.
+
+    This payload used to carry `upstreams`: one entry per configured gateway,
+    each with `name` verbatim -- litellm, omniroute, ninerouter -- plus its
+    own latency. Verified live on production before this change:
+
+        $ curl -s https://sanjabai.com/api/models/health   # no auth
+        upstreams: [{'name': 'litellm', ...}, {'name': 'omniroute', ...},
+                    {'name': 'ninerouter', ...}]
+
+    Model ids on this same endpoint had already been rewritten to `sanjab/*`
+    for exactly this reason; the gateway list simply was not looked at. The
+    named breakdown still exists for admins, behind admin auth, in
+    admin_monitoring._upstreams_section.
+    """
+
+    def _providers(self, *oks):
+        """Fake configured_providers()/upstream_alive() for N gateways with
+        the given ok flags. The names are deliberately the REAL ones -- a
+        test that used placeholder names could not catch a leak of the real
+        ones through a field it forgot to check."""
+        from types import SimpleNamespace
+        names = ['litellm', 'omniroute', 'ninerouter'][:len(oks)]
+        provs = [SimpleNamespace(name=n) for n in names]
+        by_name = dict(zip(names, oks))
+
+        async def _alive(p, timeout=None):
+            return SimpleNamespace(ok=by_name[p.name], latency_ms=120, error=None)
+
+        return provs, _alive
+
+    async def _call_with_gateways(self, *oks):
+        provs, alive = self._providers(*oks)
+        with patch.object(model_health_api, 'configured_providers', lambda: provs), \
+             patch.object(model_health_api, 'upstream_alive', alive), \
+             patch.object(model_health_api, 'health_map', AsyncMock(return_value=STATES)), \
+             patch.object(model_health_api, '_served_models', AsyncMock(return_value=SERVED)), \
+             patch.object(model_health_api.rds, 'get', AsyncMock(return_value=None)), \
+             patch.object(model_health_api.rds, 'setex', AsyncMock()):
+            res = await model_health_api.models_health(None)
+        return json.loads(bytes(res.body))
+
+    @pytest.mark.asyncio
+    async def test_no_gateway_name_appears_anywhere_in_the_payload(self):
+        raw = json.dumps(await self._call_with_gateways(True, True, True), ensure_ascii=False)
+        for name in ('litellm', 'omniroute', 'ninerouter'):
+            assert name not in raw, f'gateway name {name!r} leaked to an anonymous endpoint'
+
+    @pytest.mark.asyncio
+    async def test_the_named_upstreams_list_is_gone_entirely(self):
+        body = await self._call_with_gateways(True, True, True)
+        assert 'upstreams' not in body
+
+    @pytest.mark.asyncio
+    async def test_no_per_gateway_count_either(self):
+        """How many routers we run is the same fact told more quietly, so
+        the aggregate carries a status word and nothing countable."""
+        body = await self._call_with_gateways(True, True, True)
+        assert body['gateways'] == {'status': 'operational'}
+
+    @pytest.mark.asyncio
+    async def test_a_partial_outage_reads_as_degraded(self):
+        body = await self._call_with_gateways(True, False, True)
+        assert body['gateways']['status'] == 'degraded'
+
+    @pytest.mark.asyncio
+    async def test_every_gateway_down_reads_as_down(self):
+        body = await self._call_with_gateways(False, False, False)
+        assert body['gateways']['status'] == 'down'
+
+    @pytest.mark.asyncio
+    async def test_no_configured_gateway_is_unknown_not_operational(self):
+        """An empty provider list must not read as "all healthy" -- that is
+        the direction that hides an outage."""
+        with patch.object(model_health_api, 'configured_providers', lambda: []), \
+             patch.object(model_health_api, 'health_map', AsyncMock(return_value=STATES)), \
+             patch.object(model_health_api, '_served_models', AsyncMock(return_value=SERVED)), \
+             patch.object(model_health_api.rds, 'get', AsyncMock(return_value=None)), \
+             patch.object(model_health_api.rds, 'setex', AsyncMock()):
+            res = await model_health_api.models_health(None)
+        assert json.loads(bytes(res.body))['gateways']['status'] == 'unknown'

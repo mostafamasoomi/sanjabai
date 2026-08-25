@@ -24,6 +24,18 @@ const OVERALL_COPY: Record<HealthSummary['overall'], { label: string; tone: stri
   down: { label: 'اختلال گسترده', tone: 'var(--danger)' },
 }
 
+/** Copy for the model-supply aggregate. Deliberately says nothing about
+ *  WHICH gateway or HOW MANY there are — that is admin-only information. */
+const GATEWAY_COPY: Record<
+  NonNullable<HealthSummary['gateways']>['status'],
+  { label: string; hint: string; dot: string }
+> = {
+  operational: { label: 'برقرار', hint: 'همهٔ مسیرهای تأمین پاسخ می‌دهند', dot: 'var(--positive)' },
+  degraded: { label: 'ناپایدار', hint: 'بخشی از مدل‌ها ممکن است پاسخ ندهند', dot: 'var(--warning)' },
+  down: { label: 'قطع', hint: 'تأمین مدل در دسترس نیست', dot: 'var(--danger)' },
+  unknown: { label: 'نامشخص', hint: 'وضعیت تأمین قابل تشخیص نیست', dot: 'var(--muted, #8b8b8b)' },
+}
+
 const STATUS_ORDER: HealthStatus[] = ['down', 'degraded', 'unknown', 'healthy']
 
 /** Thin wrapper: this page always rounds before formatting. */
@@ -205,34 +217,36 @@ export default function StatusPage() {
             </div>
           </div>
 
-          {/* Upstream gateways. When one of these is down every model behind it
-              reads as broken, so it is worth calling out separately. */}
-          <section className="status-section">
-            <h2 className="aurora-section-title">درگاه‌های بالادست</h2>
-            <div className="status-upstreams">
-              {data.upstreams.map((u) => (
-                <div key={u.name} className="card status-upstream">
+          {/* Model supply, as ONE aggregate.
+              This section used to list each upstream gateway by name with its
+              own latency -- on an anonymous page, which published the supply
+              chain to every visitor. A normal user never learns which
+              upstream serves anything; the named breakdown lives in the admin
+              panel only. What remains is the part a visitor can act on: when
+              supply is degraded, every model behind it reads as broken, and
+              the page should say so without naming anything. */}
+          {data.gateways && (
+            <section className="status-section">
+              <h2 className="aurora-section-title">تأمین مدل‌ها</h2>
+              <div className="status-upstreams">
+                <div className="card status-upstream">
                   <span
                     className="model-health-dot"
-                    style={{ background: u.ok ? 'var(--positive)' : 'var(--danger)' }}
+                    style={{ background: GATEWAY_COPY[data.gateways.status].dot }}
                     aria-hidden
                   />
                   <div className="status-upstream-text">
-                    <span className="status-model-name" dir="ltr">
-                      {u.name}
+                    <span className="status-model-name">
+                      {GATEWAY_COPY[data.gateways.status].label}
                     </span>
                     <span className="status-muted">
-                      {u.ok ? (
-                        <span dir="ltr">{fa(u.latencyMs)} ms</span>
-                      ) : (
-                        u.error || 'در دسترس نیست'
-                      )}
+                      {GATEWAY_COPY[data.gateways.status].hint}
                     </span>
                   </div>
                 </div>
-              ))}
-            </div>
-          </section>
+              </div>
+            </section>
+          )}
 
           <section className="status-section">
             <h2 className="aurora-section-title">مدل‌ها</h2>

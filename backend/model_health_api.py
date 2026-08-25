@@ -190,20 +190,31 @@ async def models_health(request: Request) -> JSONResponse:
         *(upstream_alive(p, timeout=15.0) for p in providers_list),
         return_exceptions=True,
     )
-    upstreams = []
-    for p, r in zip(providers_list, alive_results):
-        if isinstance(r, BaseException):
-            upstreams.append({
-                'name': p.name, 'ok': False, 'latencyMs': None,
-                'error': type(r).__name__,
-            })
-            continue
-        upstreams.append({
-            'name': p.name,
-            'ok': r.ok,
-            'latencyMs': r.latency_ms,
-            'error': r.error,
-        })
+    # AGGREGATE ONLY -- never the gateway names.
+    #
+    # This endpoint is anonymous, and it used to emit one entry per upstream
+    # carrying `name` verbatim: `litellm`, `omniroute`, `ninerouter`, each
+    # with its own latency. That is the supply chain, published to any
+    # visitor of /status. The same rule that renames model ids to `sanjab/*`
+    # above applies here and was simply missed on this one field: a normal
+    # user never learns which upstream serves anything, only an admin does
+    # (admin_monitoring._upstreams_section keeps the full named breakdown,
+    # behind admin auth).
+    #
+    # A per-gateway count is not published either -- how many routers we run
+    # is the same fact told more quietly. The page keeps the one thing a
+    # visitor can act on: whether model supply as a whole is healthy.
+    gateway_ok = sum(
+        1 for r in alive_results if not isinstance(r, BaseException) and r.ok
+    )
+    if not providers_list:
+        gateways_status = 'unknown'
+    elif gateway_ok == len(providers_list):
+        gateways_status = 'operational'
+    elif gateway_ok:
+        gateways_status = 'degraded'
+    else:
+        gateways_status = 'down'
 
     # Overall reads as the worst thing a user would actually notice — so it is
     # computed over served models only. A model parked in maintenance/disabled
@@ -223,7 +234,10 @@ async def models_health(request: Request) -> JSONResponse:
     payload = jsonable_encoder({
         'overall': overall,
         'counts': counts,
-        'upstreams': upstreams,
+        # `upstreams` (a named, per-gateway list) was REMOVED, not renamed --
+        # see above. Anything that still reads it gets undefined, which is
+        # the correct outcome for a field that must not be public.
+        'gateways': {'status': gateways_status},
         'models': models,
         'windowMinutes': int(WINDOW.total_seconds() // 60),
         'generatedAt': datetime.now(timezone.utc),

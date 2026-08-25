@@ -57,7 +57,13 @@ export default function ModelsModule({ tab, onTabChange }: ModelsModuleProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex gap-1 border-b overflow-x-auto" style={{ borderColor: 'var(--border)' }}>
+      <div
+        role="tablist"
+        aria-label="مدل‌ها و قیمت‌گذاری"
+        data-testid="models-tabs"
+        className="flex gap-1 border-b overflow-x-auto"
+        style={{ borderColor: 'var(--border)' }}
+      >
         {MODELS_TABS.map((t, i) => (
           <div key={t.key} className="flex items-center">
             {/* Divider between "what a model is" and "what it costs". */}
@@ -65,6 +71,8 @@ export default function ModelsModule({ tab, onTabChange }: ModelsModuleProps) {
               <span className="mx-2 h-4 w-px shrink-0" style={{ background: 'var(--border)' }} aria-hidden />
             )}
             <button
+              role="tab"
+              aria-selected={active === t.key}
               className={`px-3 py-2 text-xs font-medium whitespace-nowrap transition-colors ${active === t.key ? 'border-b-2' : 'opacity-60 hover:opacity-100'}`}
               style={active === t.key ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : { color: 'var(--text-secondary)' }}
               onClick={() => onTabChange(t.key)}

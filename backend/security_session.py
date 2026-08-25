@@ -52,29 +52,105 @@ async def track_session(token: str, user_id: int, request: Request) -> None:
         user_sessions_key = f'sessions:{user_id}'
         await security._get_redis().sadd(user_sessions_key, token)
 
-        # Enforce concurrent session limit
-        members = await security._get_redis().smembers(user_sessions_key)
-        if members and len(members) > MAX_CONCURRENT_SESSIONS:
-            # Find oldest session to revoke
-            oldest_token = None
-            oldest_time = None
-            for tok in members:
-                meta_raw = await security._get_redis().get(f'session_meta:{tok}')
-                if meta_raw:
-                    try:
-                        meta = _json.loads(meta_raw)
-                        created = meta.get('created_at', '')
-                        if oldest_time is None or created < oldest_time:
-                            oldest_time = created
-                            oldest_token = tok
-                    except (ValueError, KeyError):
-                        pass
-            if oldest_token and oldest_token != token:
-                await _revoke_session(oldest_token, user_id)
-                logger.info("Revoked oldest session %s for user %d (limit exceeded)", oldest_token[:8], user_id)
+        await _enforce_session_limit(user_id, token)
 
     except Exception as e:
         logger.warning("Session tracking error: %s", e)
+
+
+async def _session_age(token: str) -> str | None:
+    """When this session was created, or None if it is not alive.
+
+    Read from `session:{token}` -- the key dependencies._create_session
+    writes and _get_session reads -- because that is the ONE key every live
+    session has. Its payload already carries `created_at`, so nothing extra
+    needs storing. `session_meta:` is only a fallback: it is written by
+    track_session at login and signup, and NOT by _rotate_session, so a
+    rotated session has no meta at all.
+
+    That gap is what broke the limit in production. Measured on the live box
+    2026-08-25: `sessions:1` held 8 members against a cap of 3 -- seven with
+    a live `session:` and no meta, one an outright corpse. The old loop
+    ordered purely by meta, so it could only ever see that single member,
+    picked it every time, and left the other seven untouched. The cap never
+    held, and each login killed the one session it could actually see --
+    which is what "it keeps logging me out" looked like from the outside.
+    """
+    rds = security._get_redis()
+    raw = await rds.get(f'session:{token}')
+    if not raw:
+        return None
+    try:
+        created = _json.loads(raw).get('created_at')
+        if created:
+            return str(created)
+    except (ValueError, TypeError):
+        pass
+    meta_raw = await rds.get(f'session_meta:{token}')
+    if meta_raw:
+        try:
+            created = _json.loads(meta_raw).get('created_at')
+            if created:
+                return str(created)
+        except (ValueError, TypeError):
+            pass
+    return ''
+
+
+async def _enforce_session_limit(user_id: int, keep_token: str) -> None:
+    """Prune dead members, then evict oldest-first until the cap holds.
+
+    Two things the previous version got wrong, both of which let the set
+    grow without bound:
+
+      * It never removed members whose session had already expired. Redis
+        drops `session:{tok}` on its own TTL but nothing SREMs the token
+        from `sessions:{uid}`, so corpses accumulate and inflate the count
+        against the cap forever.
+      * It evicted at most ONE session per login. Once the set had drifted
+        above the cap it could never come back down, no matter how many
+        logins happened.
+
+    `keep_token` is the session that just logged in; it is never the victim.
+    """
+    rds = security._get_redis()
+    key = f'sessions:{user_id}'
+    members = await rds.smembers(key) or set()
+
+    live: list[tuple[str, str]] = []
+    for tok in members:
+        if tok == keep_token:
+            # The session that just logged in is alive by definition and is
+            # never a victim. Exempting it from the liveness probe as well
+            # matters: auth.py creates the session and then calls
+            # track_session, and if that order were ever reversed a strict
+            # probe would prune the caller's own brand-new token and log
+            # them straight back out.
+            live.append(('\uffff', tok))
+            continue
+        age = await _session_age(tok)
+        if age is None:
+            # Expired or revoked elsewhere -- drop it from the set and take
+            # its orphaned metadata with it.
+            await rds.srem(key, tok)
+            await rds.delete(f'session_meta:{tok}')
+            continue
+        live.append((age, tok))
+
+    # Oldest first. An unknown created_at sorts as '' -- i.e. oldest -- so a
+    # session we cannot age is evicted before one we can. That is the safe
+    # direction: the alternative is keeping an unidentifiable session
+    # forever while killing ones we can account for.
+    live.sort(key=lambda pair: pair[0])
+
+    for age, tok in live:
+        if len(live) <= MAX_CONCURRENT_SESSIONS:
+            break
+        if tok == keep_token:
+            continue
+        await _revoke_session(tok, user_id)
+        logger.info("Revoked oldest session %s for user %d (limit exceeded)", tok[:8], user_id)
+        live = [pair for pair in live if pair[1] != tok]
 
 
 async def _revoke_session(token: str, user_id: int) -> None:

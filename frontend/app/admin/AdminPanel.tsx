@@ -201,9 +201,19 @@ export default function AdminPage() {
       <div className="flex">
         {/* ─── Sidebar ─────────────────────────────────────────────────── */}
         <aside
+          /* A flex COLUMN, and the aside itself does not scroll -- the nav
+             does. It used to be one `overflow-y-auto` box with the logout
+             button in an `absolute bottom-0` footer, which resolves against
+             the aside's own screen-height box, not its 1067px of content.
+             Measured live: the aside was 900 tall with 1067 of content, so
+             the button sat at y=848 -- painted on top of the «امنیت» nav
+             item at y=847 -- while the last four entries lived below it and
+             scrolled underneath. Now the nav is the only scroll container
+             and the footer is a normal flow item after it, so the button is
+             always genuinely last and never overlaps a menu row. */
           className={`
             fixed lg:sticky top-0 right-0 z-40 h-screen w-64 shrink-0
-            border-l overflow-y-auto transition-transform duration-200
+            border-l flex flex-col transition-transform duration-200
             lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}
           `}
           style={{
@@ -212,7 +222,7 @@ export default function AdminPage() {
           }}
         >
           {/* Logo */}
-          <div className="p-5 border-b" style={{ borderColor: 'var(--border)' }}>
+          <div className="shrink-0 p-5 border-b" style={{ borderColor: 'var(--border)' }}>
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'var(--accent-dim)' }}>
                 <Icon name="settings" size={18} className="text-accent" />
@@ -229,7 +239,7 @@ export default function AdminPage() {
               of the user and model lists, and the model one always read
               zero because the endpoint it fanned out to (/api/models) does
               not exist. The counts live in their own sections' headers. */}
-          <nav className="p-3 space-y-0.5">
+          <nav className="flex-1 min-h-0 overflow-y-auto p-3 space-y-0.5">
             {NAV_ITEMS.map((item) => (
               <button
                 key={item.key}
@@ -249,8 +259,9 @@ export default function AdminPage() {
             ))}
           </nav>
 
-          {/* Sidebar Footer */}
-          <div className="absolute bottom-0 right-0 left-0 p-3 border-t" style={{ borderColor: 'var(--border)' }}>
+          {/* Sidebar Footer -- a normal flow item, not `absolute bottom-0`.
+              See the aside's comment for what that cost. */}
+          <div className="shrink-0 p-3 border-t" style={{ borderColor: 'var(--border)' }}>
             <button
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-muted"
               onClick={logout}

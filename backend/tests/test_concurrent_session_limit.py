@@ -69,14 +69,31 @@ def fake_redis():
         yield r
 
 
-async def _seed(redis, uid: int, tokens_with_times: list[tuple[str, str]]):
-    """Put pre-existing sessions in the canonical set with known created_at."""
+async def _seed(redis, uid: int, tokens_with_times: list[tuple[str, str]],
+                *, with_meta: bool = True, alive: bool = True):
+    """Put pre-existing sessions in the canonical set with known created_at.
+
+    `session:{tok}` is what makes a session ALIVE -- it is the key
+    dependencies._create_session writes and _get_session reads, and it is
+    the only one every live session has. This helper used to write ONLY
+    `session_meta:`, which no real session-creation path guarantees: it is
+    written at login and signup and not on rotation. That unrealistic
+    fixture is precisely why the suite stayed green while the limit was
+    dead in production, so the default now writes the real key and
+    `with_meta=False` covers the rotated-session case.
+    """
     for tok, created in tokens_with_times:
         redis.sets.setdefault(f'sessions:{uid}', set()).add(tok)
-        redis.kv[f'session_meta:{tok}'] = json.dumps({
-            'user_id': uid, 'ip': '9.9.9.9', 'user_agent': 'old',
-            'created_at': created, 'last_seen': created,
-        })
+        if alive:
+            redis.kv[f'session:{tok}'] = json.dumps({
+                'user_id': uid, 'created_at': created,
+                'expires_at': '2030-01-01T00:00:00Z',
+            })
+        if with_meta:
+            redis.kv[f'session_meta:{tok}'] = json.dumps({
+                'user_id': uid, 'ip': '9.9.9.9', 'user_agent': 'old',
+                'created_at': created, 'last_seen': created,
+            })
 
 
 class TestLimitIsEnforced:
@@ -89,6 +106,8 @@ class TestLimitIsEnforced:
             ('tok_recent', '2026-08-01T00:00:00Z'),
         ])
         # A 4th login pushes the user over MAX_CONCURRENT_SESSIONS (3).
+        fake_redis.kv['session:tok_new'] = json.dumps(
+            {'user_id': uid, 'created_at': '2026-09-01T00:00:00Z'})
         await security.track_session('tok_new', uid, _request())
 
         assert 'session:tok_oldest' in fake_redis.deleted
@@ -102,6 +121,8 @@ class TestLimitIsEnforced:
     async def test_under_the_limit_nothing_is_revoked(self, fake_redis):
         uid = 8
         await _seed(fake_redis, uid, [('tok_a', '2026-01-01T00:00:00Z')])
+        fake_redis.kv['session:tok_b'] = json.dumps(
+            {'user_id': uid, 'created_at': '2026-09-01T00:00:00Z'})
         await security.track_session('tok_b', uid, _request())
         assert not [d for d in fake_redis.deleted if d.startswith('session:')]
         assert fake_redis.sets[f'sessions:{uid}'] == {'tok_a', 'tok_b'}
@@ -135,3 +156,56 @@ class TestNeverRaises:
         broken.setex.side_effect = RuntimeError('redis down')
         with patch.object(security, '_get_redis', lambda: broken):
             await security.track_session('tok_z', 1, _request())  # must not raise
+
+
+class TestTheProductionDriftThatBrokeTheCap:
+    """The two ways `sessions:{uid}` grew past the cap on the live box.
+
+    Measured 2026-08-25 on production: the set held 8 members against a cap
+    of 3 -- seven alive with no `session_meta:` (rotation never writes it)
+    and one outright corpse. The old loop ordered purely by meta, so it saw
+    exactly one candidate, evicted that same live session on every login,
+    and never shrank the set. Both failure modes are pinned here.
+    """
+
+    @pytest.mark.asyncio
+    async def test_expired_members_are_pruned_not_counted(self, fake_redis):
+        uid = 51
+        # Three corpses: still in the set, but their session key is gone.
+        await _seed(fake_redis, uid, [
+            ('dead_1', '2026-01-01T00:00:00Z'),
+            ('dead_2', '2026-01-02T00:00:00Z'),
+            ('dead_3', '2026-01-03T00:00:00Z'),
+        ], alive=False, with_meta=False)
+        await _seed(fake_redis, uid, [('live_a', '2026-07-01T00:00:00Z')])
+
+        fake_redis.kv['session:tok_new'] = json.dumps(
+            {'user_id': uid, 'created_at': '2026-09-01T00:00:00Z'})
+        await security.track_session('tok_new', uid, _request())
+
+        remaining = fake_redis.sets[f'sessions:{uid}']
+        assert remaining == {'live_a', 'tok_new'}, remaining
+        # A corpse must never cost a live session its place.
+        assert 'session:live_a' in fake_redis.kv
+
+    @pytest.mark.asyncio
+    async def test_a_set_far_over_the_cap_is_brought_all_the_way_down(self, fake_redis):
+        uid = 52
+        # Seven live sessions with NO metadata -- exactly the production
+        # shape, because _rotate_session writes `session:` and never
+        # `session_meta:`. The old code evicted at most one per login, so
+        # the set could never converge.
+        await _seed(fake_redis, uid, [
+            (f'rot_{i}', f'2026-0{i}-01T00:00:00Z') for i in range(1, 8)
+        ], with_meta=False)
+
+        fake_redis.kv['session:tok_new'] = json.dumps(
+            {'user_id': uid, 'created_at': '2026-09-01T00:00:00Z'})
+        await security.track_session('tok_new', uid, _request())
+
+        remaining = fake_redis.sets[f'sessions:{uid}']
+        assert len(remaining) == security.MAX_CONCURRENT_SESSIONS, remaining
+        # The just-issued session survives, and the survivors are the newest.
+        assert 'tok_new' in remaining
+        assert remaining == {'tok_new', 'rot_7', 'rot_6'}, remaining
+        assert 'rot_1' not in remaining

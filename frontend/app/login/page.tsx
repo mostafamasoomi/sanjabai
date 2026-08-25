@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { Icon } from '@/components/ui/Icon'
+import { BrandLockup } from '@/components/BrandLockup'
 import Link from 'next/link'
 
 export default function LoginPage() {
@@ -50,14 +51,10 @@ export default function LoginPage() {
       <div className="card w-full max-w-sm" style={{ padding: 'var(--space-8)' }}>
         {/* Header */}
         <div className="text-center mb-6">
-          <div
-            className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-4"
-            style={{
-              background: 'linear-gradient(135deg, var(--accent), var(--accent-purple))',
-              boxShadow: 'var(--shadow-glow)',
-            }}
-          >
-            <Icon name="chat" size={26} className="text-white" />
+          {/* The front door gets the real mark, not a chat glyph in a
+              gradient tile. */}
+          <div className="flex justify-center mb-4">
+            <BrandLockup height={34} />
           </div>
           <h1 className="text-xl font-extrabold mb-1 text-gradient">ورود به حساب</h1>
           <p className="text-sm text-[var(--text-muted)]">به Sanjabai خوش آمدید</p>

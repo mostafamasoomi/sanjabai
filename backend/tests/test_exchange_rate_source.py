@@ -210,4 +210,15 @@ class TestExchangeRateAdminEndpoint:
             resp = self.client.post('/admin/exchange-rate/refresh')
         assert resp.status_code == 200
         assert resp.json() == {'source': 'tgju'}
-        mock_rds.delete.assert_awaited_once_with(content_mod.EXCHANGE_RATE_CACHE_KEY)
+        # This used to assert `delete` was awaited with EXACTLY ONE key --
+        # pinning a real bug in place. «واکشی فوری» busted the rate cache and
+        # nothing else, so the catalog/pricing caches kept serving prices
+        # computed from the OLD rate for up to 10 minutes after the admin had
+        # forced a fresh one. The helper that deletes all six keys was already
+        # defined a few lines above this endpoint; refresh just wasn't using it.
+        busted = set(mock_rds.delete.await_args.args)
+        assert {'cache:catalog:models', 'cache:catalog:pricing', 'cache:api:pricing'} <= busted, (
+            'a forced rate refresh must invalidate the price caches too, or the '
+            'new rate is invisible until the old TTL expires'
+        )
+        assert content_mod.EXCHANGE_RATE_CACHE_KEY in busted

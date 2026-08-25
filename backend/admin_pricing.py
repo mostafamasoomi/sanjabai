@@ -22,14 +22,15 @@ from database import async_session, rds
 from models import Pricing
 import admin
 from dependencies import _write_audit_log
-from services import margin
+from services import margin, probe_gate
 
 router = APIRouter()
 
 # MONKEYPATCH CONTRACT (second one, see the module docstring for the first):
 # the guard is reached as `margin.refuse_if_loss_making`, never imported by
 # name, so tests/test_margin_guard.py can patch the one symbol on
-# services.margin and have every call site here follow it.
+# services.margin and have every call site here follow it. Same contract
+# for the probe guard, reached as `probe_gate.refuse_if_unprobed`.
 
 # Money law: the internal unit is ALWAYS integer Toman, everywhere; a Rial
 # conversion happens only inside the payment-gateway adapter (payment.py).
@@ -52,6 +53,24 @@ async def _refuse_loss_making(session, model_ids, request, **kwargs) -> JSONResp
         return None
     await _write_audit_log('admin.margin.refused', target_type='model_catalog',
                            target_id=refusal.model_id, details=refusal.audit, request=request)
+    return JSONResponse({'detail': refusal.detail}, status_code=400)
+
+
+async def _refuse_unprobed(session, model_ids, request) -> JSONResponse | None:
+    """400 + audit when any id lacks a confirmed live probe, else None.
+
+    «مدل فقط بعد از پروب زنده موفق به کاربر ارائه می‌شود» -- see
+    services/probe_gate.py for why this is not the same thing as
+    model_catalog.last_verified_at. Same audit-then-400 shape as
+    `_refuse_loss_making` above, distinct event name so the two refusal
+    reasons (margin vs. honest-labelling) are distinguishable in
+    audit_log.
+    """
+    refusal = await probe_gate.refuse_if_unprobed(session, model_ids)
+    if refusal is None:
+        return None
+    await _write_audit_log('admin.model.probe_refused', target_type='model_catalog',
+                           target_id=None, details=refusal.audit, request=request)
     return JSONResponse({'detail': refusal.detail}, status_code=400)
 
 
@@ -193,9 +212,14 @@ async def toggle_model(request: Request, model_id: str) -> JSONResponse:
                 'نکرده ممنوع است -- برای تغییر وضعیت از تب «عملیات کاتالوگ» استفاده کنید.'
             )}, status_code=400)
         new_avail = 'disabled' if row.availability == 'available' else 'available'
-        # Withdrawing a model can never be loss-making; only the flip that
-        # puts it back on sale is a margin decision.
+        # Withdrawing a model can never be loss-making or dishonest; only
+        # the flip that puts it back on sale is a margin decision AND an
+        # honest-labelling decision (it must already have a confirmed live
+        # probe -- see services/probe_gate.py).
         if new_avail == 'available':
+            refused = await _refuse_unprobed(session, [model_id], request)
+            if refused is not None:
+                return refused
             refused = await _refuse_loss_making(session, [model_id], request)
             if refused is not None:
                 return refused

@@ -84,21 +84,35 @@ async def get_exchange_rate_admin(request: Request) -> JSONResponse:
 async def refresh_exchange_rate_admin(request: Request) -> JSONResponse:
     """Bust the cached rate and re-resolve it immediately.
 
-    Deletes the same Redis key `_get_exchange_rate()` reads/writes
-    (`content.EXCHANGE_RATE_CACHE_KEY`), so the very next read (this
-    request's own call to `get_exchange_rate_meta()`) is a forced cache
-    miss and re-runs the full resolver (db_override -> tgju -> configured
-    sources -> er_api -> hardcoded_fallback).
+    Uses `_invalidate_exchange_rate_caches()` -- the same six-key helper
+    every other write in this file already calls -- instead of the old
+    single-key `content.EXCHANGE_RATE_CACHE_KEY` delete. The bug that fixed:
+    that lone key covers `_get_exchange_rate()`'s own cache, but not
+    `cache:catalog:models` / `cache:catalog:pricing` / `cache:api:pricing`
+    -- the pre-computed price payloads every catalog/pricing endpoint
+    actually serves from. An admin who forced a fresh USD rate here kept
+    getting prices computed from the OLD rate out of those three keys for
+    up to their own TTL (up to 10 minutes -- see CLAUDE.md's Redis-
+    invalidation rule), i.e. «واکشی فوری» was not actually immediate.
+
+    Order matters: bust FIRST, then resolve. `get_exchange_rate_meta()` ->
+    `_get_exchange_rate()` re-fills `content.EXCHANGE_RATE_CACHE_KEY` with
+    the freshly-resolved rate as a side effect of this same call, so by the
+    time this request returns, that key already holds the fresh value.
+
+    Not run a second time AFTER resolve: `get_exchange_rate_meta()` never
+    writes `cache:catalog:models` / `cache:catalog:pricing` /
+    `cache:api:pricing` itself -- those three are populated lazily, by
+    whatever catalog/pricing endpoint next reads them on a cache miss, and
+    that miss is already guaranteed by the invalidation above. A second
+    call after resolve would only re-delete keys nothing repopulated in
+    between, i.e. a no-op that just doubles the Redis round-trip.
     """
     if not await admin_required(request):
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
 
     import content
-    if rds:
-        try:
-            await rds.delete(content.EXCHANGE_RATE_CACHE_KEY)
-        except Exception:
-            pass
+    await _invalidate_exchange_rate_caches()
 
     meta = await content.get_exchange_rate_meta()
     await _write_audit_log('admin.exchange_rate.refresh', target_type='exchange_rate', target_id=None,

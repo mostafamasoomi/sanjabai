@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
+import sqlalchemy
 from fastapi import APIRouter, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
@@ -238,13 +239,36 @@ async def set_proxy(request: Request, payload: dict[str, Any]) -> JSONResponse:
 
 @router.post('/admin/org-default-model')
 async def set_org_default_model(request: Request, payload: dict[str, Any]) -> JSONResponse:
-    """Admin: set org-wide default model."""
+    """Admin: set org-wide default model.
+
+    ``default_model`` used to be written verbatim, with no check that the
+    id even exists -- one typo here and every new chat silently pointed at
+    a dead model. Empty string stays legal on purpose: the frontend offers
+    it explicitly to mean "no default, use the first model in the list",
+    so it must not be forced through the model_catalog lookup below. Any
+    non-empty value must name a row that both exists AND is currently
+    `availability = 'available'` -- pointing the org default at a
+    maintenance/disabled/degraded row would silently break every new chat
+    started against it.
+    """
     if not await admin.admin_required(request):
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     model_id = payload.get('default_model', '')
     if async_session is None:
         return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
+        if model_id:
+            res = await session.execute(sqlalchemy.text(
+                'SELECT availability FROM model_catalog WHERE id = :id'
+            ), {'id': model_id})
+            row = res.fetchone()
+            if row is None:
+                return JSONResponse({'detail': f'مدل «{model_id}» در کاتالوگ یافت نشد'}, status_code=400)
+            if row.availability != 'available':
+                return JSONResponse({'detail': (
+                    f'مدل «{model_id}» فعال نیست و نمی‌تواند پیش‌فرض سازمان باشد '
+                    '(فقط مدلی که وضعیت آن «فعال» است مجاز است).'
+                )}, status_code=400)
         res = await session.execute(ProxyConfig.__table__.select())
         row = res.fetchone()
         if not row:

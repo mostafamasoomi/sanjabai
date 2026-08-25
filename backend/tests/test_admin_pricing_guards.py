@@ -34,6 +34,8 @@ from unittest.mock import patch, AsyncMock
 
 import pytest
 
+from services import probe_gate as probe_gate_mod
+
 import admin_pricing as admin_pricing_mod
 from tests.conftest import make_result, make_row
 
@@ -43,6 +45,22 @@ def admin_ok():
     with patch('admin.admin_required', new=AsyncMock(return_value=True)):
         yield
 
+
+
+@pytest.fixture(autouse=True)
+def _probe_gate_allows():
+    """Isolate the margin guard from the probe gate.
+
+    Both gates now run on the endpoints this file exercises, and the probe
+    gate runs FIRST (services/probe_gate.py -- «مدل فقط بعد از پروب زنده
+    موفق ارائه می‌شود»). Without this, every test here that expects a
+    margin refusal gets a probe refusal instead: right status, wrong
+    reason, wrong audit event. The probe gate has its own file --
+    tests/test_admin_probe_gate.py -- so here it always says yes.
+    """
+    allow = AsyncMock(return_value=None)
+    with patch.object(probe_gate_mod, 'refuse_if_unprobed', new=allow):
+        yield
 
 class TestCurrencyIsLockedToToman:
     """POST /admin/pricing -- the «واحد پول» field."""

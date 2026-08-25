@@ -22,14 +22,15 @@ from fastapi.responses import JSONResponse
 
 from database import async_session, rds
 from dependencies import admin_required, _write_audit_log
-from services import margin
+from services import margin, probe_gate
 
 router = APIRouter()
 
 # MONKEYPATCH CONTRACT: the margin guard is reached as
 # `margin.refuse_if_loss_making`, never imported by name, so
 # tests/test_margin_guard.py can patch the one symbol on services.margin
-# and have every call site here follow it.
+# and have every call site here follow it. Same contract for the probe
+# guard, reached as `probe_gate.refuse_if_unprobed`.
 
 
 async def _refuse_loss_making(session, model_ids, request, **kwargs) -> JSONResponse | None:
@@ -44,6 +45,24 @@ async def _refuse_loss_making(session, model_ids, request, **kwargs) -> JSONResp
         return None
     await _write_audit_log('admin.margin.refused', target_type='model_catalog',
                            target_id=refusal.model_id, details=refusal.audit, request=request)
+    return JSONResponse({'detail': refusal.detail}, status_code=400)
+
+
+async def _refuse_unprobed(session, model_ids, request) -> JSONResponse | None:
+    """400 + audit when any id lacks a confirmed live probe, else None.
+
+    «مدل فقط بعد از پروب زنده موفق به کاربر ارائه می‌شود» -- see
+    services/probe_gate.py for why this is not the same thing as
+    model_catalog.last_verified_at. Same audit-then-400 shape as
+    `_refuse_loss_making` above, distinct event name so the two refusal
+    reasons (margin vs. honest-labelling) are distinguishable in
+    audit_log.
+    """
+    refusal = await probe_gate.refuse_if_unprobed(session, model_ids)
+    if refusal is None:
+        return None
+    await _write_audit_log('admin.model.probe_refused', target_type='model_catalog',
+                           target_id=None, details=refusal.audit, request=request)
     return JSONResponse({'detail': refusal.detail}, status_code=400)
 
 
@@ -155,11 +174,15 @@ async def bulk_set_availability(request: Request, payload: dict[str, Any]) -> JS
 
     str_ids = [str(i) for i in ids]
     async with async_session() as session:
-        # Only the transition that puts models ON SALE is a margin decision;
-        # withdrawing them (disabled/maintenance/degraded) never is. The whole
-        # batch is refused rather than partially applied, so the admin never
-        # has to work out which half of a bulk enable actually landed.
+        # Only the transition that puts models ON SALE is a margin decision
+        # / an honest-labelling decision; withdrawing them (disabled/
+        # maintenance/degraded) never is either. The whole batch is refused
+        # rather than partially applied, so the admin never has to work out
+        # which half of a bulk enable actually landed.
         if availability == 'available':
+            refused = await _refuse_unprobed(session, str_ids, request)
+            if refused is not None:
+                return refused
             refused = await _refuse_loss_making(session, str_ids, request)
             if refused is not None:
                 return refused
@@ -188,6 +211,18 @@ async def bulk_set_availability(request: Request, payload: dict[str, Any]) -> JS
 # rejected everywhere -- the product rule is that no request may ever be
 # loss-making, and the DB CHECK constraint backs this up as a second line
 # of defense.
+#
+# There is also an upper cap. Nothing enforced one before this: an admin
+# who fat-fingers 700 instead of 7 silently multiplies every listed price
+# on that model by ~8x -- no CHECK constraint, no loss-making guard catches
+# it (a too-HIGH price is never loss-making). 1000 (i.e. 10x, +1000%) is
+# chosen as the ceiling: it is comfortably above any markup this product
+# has ever actually charged (single/low-double-digit percentages), so it
+# never blocks a legitimate business decision, but it still catches the
+# fat-finger case (a stray extra digit, a % sign typed as a raw multiplier,
+# etc.) before it reaches a live price.
+_MARKUP_PCT_MAX = 1000
+
 
 def _parse_markup_pct(raw: Any, *, allow_null: bool) -> tuple[float | None, str | None]:
     """Validate a markup_pct payload value. Returns (value, error_detail)."""
@@ -201,6 +236,8 @@ def _parse_markup_pct(raw: Any, *, allow_null: bool) -> tuple[float | None, str 
         return None, 'درصد نامعتبر است'
     if pct < 0:
         return None, 'درصد سود نمی‌تواند منفی باشد (هیچ درخواستی نباید ضررده باشد)'
+    if pct > _MARKUP_PCT_MAX:
+        return None, f'درصد سود بیش از حد مجاز است (سقف {_MARKUP_PCT_MAX:,}٪) -- احتمالاً اشتباه تایپی است'
     return pct, None
 
 

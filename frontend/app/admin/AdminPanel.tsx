@@ -8,25 +8,19 @@ import { Field } from './sections/shared'
 import { api, setAdminToken, setUnauthorizedHandler } from './api'
 import DashboardSection from './sections/DashboardSection'
 import UsersSection from './sections/UsersSection'
-import PricingSection from './sections/PricingSection'
 import FeaturesSection from './sections/FeaturesSection'
 import DiscountsSection from './sections/DiscountsSection'
 import AboutSection from './sections/AboutSection'
 import ProxySection from './sections/ProxySection'
-import ModelsSection from './sections/ModelsSection'
 import SecuritySection from './sections/SecuritySection'
+import { tabFromSearch, type ModelsTab } from './sections/modelsTabs'
 
 const MonitoringTab = dynamic(() => import('./components/MonitoringTab'), { ssr: false })
-const MarkupSection = dynamic(() => import('./sections/MarkupSection'), { ssr: false })
-const ExchangeRateSection = dynamic(() => import('./sections/ExchangeRateSection'), { ssr: false })
-const UpstreamOverheadSection = dynamic(() => import('./sections/UpstreamOverheadSection'), { ssr: false })
-const ImagePricingSection = dynamic(() => import('./sections/ImagePricingSection'), { ssr: false })
 const PackagesSection = dynamic(() => import('./sections/PackagesSection'), { ssr: false })
 const AnalyticsSection = dynamic(() => import('./sections/AnalyticsSection'), { ssr: false })
-const ModelOpsSection = dynamic(() => import('./sections/ModelOpsSection'), { ssr: false })
 const PlansSection = dynamic(() => import('./sections/PlansSection'), { ssr: false })
 const SiteControlSection = dynamic(() => import('./sections/SiteControlSection'), { ssr: false })
-const LogicalModelsSection = dynamic(() => import('./sections/LogicalModelsSection'), { ssr: false })
+const ModelsModule = dynamic(() => import('./sections/ModelsModule'), { ssr: false })
 const ModerationSection = dynamic(() => import('./sections/ModerationSection'), { ssr: false })
 const WatchdogSection = dynamic(() => import('./sections/WatchdogSection'), { ssr: false })
 const FreeTierSection = dynamic(() => import('./sections/FreeTierSection'), { ssr: false })
@@ -54,27 +48,25 @@ export type {
   UserRow, UserDetail, UserDetailTab,
 } from './types'
 
-type Page = 'dashboard' | 'analytics' | 'site-control' | 'logical-models' | 'pricing' | 'markup' | 'exchange-rate' | 'upstream-overhead' | 'image-pricing' | 'packages' | 'plans' | 'features' | 'discounts' | 'about' | 'proxy' | 'models' | 'model-ops' | 'users' | 'security' | 'moderation' | 'watchdog' | 'free-tier' | 'monitoring'
+type Page = 'dashboard' | 'analytics' | 'site-control' | 'models' | 'packages' | 'plans' | 'features' | 'discounts' | 'about' | 'proxy' | 'users' | 'security' | 'moderation' | 'watchdog' | 'free-tier' | 'monitoring'
 
+/* Eight of these used to be separate entries -- مدل‌ها, عملیات کاتالوگ,
+   مدل‌های منطقی, توکن تزریقی بالادست, تعرفه‌ها, قیمت‌گذاری تصویر, نرخ ارز,
+   درصد سود -- scattered down the sidebar, each opening its own list of the
+   same models from a different endpoint. They are now sub-tabs of one
+   ModelsModule entry. */
 const NAV_ITEMS: { key: Page; label: string; icon: IconName }[] = [
   { key: 'dashboard', label: 'داشبورد', icon: 'dashboard' },
   { key: 'analytics', label: 'تحلیل و درآمد', icon: 'chart' },
   { key: 'site-control', label: 'کنترل سایت', icon: 'settings' },
-  { key: 'logical-models', label: 'مدل‌های منطقی', icon: 'code' },
+  { key: 'models', label: 'مدل‌ها و قیمت‌گذاری', icon: 'code' },
   { key: 'users', label: 'کاربران', icon: 'profile' },
-  { key: 'pricing', label: 'تعرفه‌ها', icon: 'pricing' },
-  { key: 'markup', label: 'درصد سود', icon: 'chart' },
-  { key: 'exchange-rate', label: 'نرخ ارز', icon: 'globe' },
-  { key: 'upstream-overhead', label: 'توکن تزریقی بالادست', icon: 'chart' },
-  { key: 'image-pricing', label: 'قیمت‌گذاری تصویر', icon: 'camera' },
   { key: 'packages', label: 'بسته‌ها', icon: 'wallet' },
   { key: 'plans', label: 'پلن و اشتراک', icon: 'wallet' },
   { key: 'features', label: 'امکانات', icon: 'models' },
   { key: 'discounts', label: 'تخفیف‌ها', icon: 'wallet' },
   { key: 'about', label: 'درباره ما', icon: 'notification' },
   { key: 'proxy', label: 'پروکسی', icon: 'security' },
-  { key: 'models', label: 'مدل‌ها', icon: 'code' },
-  { key: 'model-ops', label: 'عملیات کاتالوگ', icon: 'code' },
   { key: 'security', label: 'امنیت', icon: 'lock' },
   { key: 'moderation', label: 'پالایش محتوا', icon: 'warning' },
   { key: 'watchdog', label: 'هشدارهای تلگرام', icon: 'notification' },
@@ -82,12 +74,51 @@ const NAV_ITEMS: { key: Page; label: string; icon: IconName }[] = [
   { key: 'monitoring', label: 'پایش', icon: 'chart' },
 ]
 
+const PAGE_KEYS = new Set<string>(NAV_ITEMS.map((n) => n.key))
+
+function currentSearch(): string {
+  return typeof window === 'undefined' ? '' : window.location.search
+}
+
+/** The section named by `?page=`, or the dashboard. A URL naming one of the
+ *  seven retired top-level keys (`pricing`, `model-ops`, ...) is not a valid
+ *  page any more; it falls through to the dashboard rather than rendering
+ *  nothing. */
+function pageFromSearch(search: string): Page {
+  const raw = new URLSearchParams(search).get('page') || ''
+  return PAGE_KEYS.has(raw) ? (raw as Page) : 'dashboard'
+}
+
 export default function AdminPage() {
   const [authed, setAuthed] = useState(false)
   const [tokenInput, setTokenInput] = useState('')
   const [loggingIn, setLoggingIn] = useState(false)
-  const [page, setPage] = useState<Page>('dashboard')
+  // Seeded from the URL, lazily. Safe as an initialiser rather than a mount
+  // effect because page.tsx loads this component with `ssr: false` -- it only
+  // ever renders on the client, so there is no server pass to mismatch.
+  //
+  // Worth having even though the admin token deliberately never survives a
+  // reload (see api.ts): the URL does. Refresh, retype the token, and you are
+  // back on the sub-tab you were working in instead of on the dashboard.
+  const [page, setPage] = useState<Page>(() => pageFromSearch(currentSearch()))
+  const [modelsTab, setModelsTab] = useState<ModelsTab>(() => tabFromSearch(currentSearch()))
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const sp = new URLSearchParams(window.location.search)
+    sp.set('page', page)
+    // `tab` belongs to the models module alone; leaving it behind on other
+    // pages would put a stale sub-tab in every link the admin copies.
+    if (page === 'models') sp.set('tab', modelsTab)
+    else sp.delete('tab')
+    const next = `${window.location.pathname}?${sp.toString()}`
+    if (next !== window.location.pathname + window.location.search) {
+      // replaceState, not push: the sidebar is not browser history, and a
+      // back button that walks 23 sections one at a time is worse than none.
+      window.history.replaceState(null, '', next)
+    }
+  }, [page, modelsTab])
 
   // Any 401 from any section drops the whole panel back to the login screen.
   // Before this, `api()` threw the `unauthorized` sentinel and no caller
@@ -281,26 +312,19 @@ export default function AdminPage() {
         <main className="admin-main flex-1 min-w-0 p-4 lg:p-8 overflow-y-auto" style={{ background: 'var(--bg-base)' }}>
           {page === 'dashboard' && <DashboardSection />}
           {page === 'users' && <UsersSection />}
-          {page === 'pricing' && <PricingSection />}
           {page === 'features' && <FeaturesSection />}
           {page === 'discounts' && <DiscountsSection />}
           {page === 'about' && <AboutSection />}
           {page === 'proxy' && <ProxySection />}
-          {page === 'models' && <ModelsSection />}
+          {page === 'models' && <ModelsModule tab={modelsTab} onTabChange={setModelsTab} />}
           {page === 'security' && <SecuritySection />}
           {page === 'moderation' && <ModerationSection />}
-          {page === 'markup' && <MarkupSection api={api} />}
-          {page === 'exchange-rate' && <ExchangeRateSection api={api} />}
-          {page === 'upstream-overhead' && <UpstreamOverheadSection api={api} />}
-          {page === 'image-pricing' && <ImagePricingSection api={api} />}
           {page === 'packages' && <PackagesSection api={api} />}
           {page === 'analytics' && <AnalyticsSection api={api} />}
           {page === 'site-control' && <SiteControlSection api={api} />}
           {page === 'watchdog' && <WatchdogSection api={api} />}
           {page === 'free-tier' && <FreeTierSection api={api} />}
-          {page === 'logical-models' && <LogicalModelsSection api={api} />}
           {page === 'plans' && <PlansSection api={api} />}
-          {page === 'model-ops' && <ModelOpsSection api={api} />}
           {page === 'monitoring' && <MonitoringTab api={api} />}
         </main>
       </div>

@@ -111,6 +111,11 @@ def _public_ids_enabled() -> bool:
 # one into the other.
 USD_IRT_FLAT_MARKUP = float(os.getenv('USD_IRT_FLAT_MARKUP', '2000'))
 
+# 2026-08-25: now admin-editable (was env-var-only). The getter,
+# get_flat_markup_toman(), lives in services/exchange_sources.py (this file
+# is at the 500-line cap) -- see its docstring for the cache/DB shape and
+# why its fail-open value is this constant, never 0.
+
 
 # ── Markup (profit percentage) ─────────────────────────────────
 #
@@ -239,9 +244,23 @@ async def _compute_exchange_rate() -> tuple[float, int, str]:
     Order of resolution (the returned `source` records which tier won):
       1. A manual DB override (exchange_rate_overrides) if present -> 'db_override'.
       2. Live tgju.org market rate (authoritative for IRT) -> 'tgju'.
+      2b. Admin-configured sources (Bonbast.com + any admin-added custom
+          source, migrations/0047_exchange_sources.sql) -> the source's own
+          `source_key`, e.g. 'bonbast'. See services/exchange_sources.py.
       3. Fallback to open.er-api.com -> 'er_api'.
       4. Hardcoded fallback constant -> 'hardcoded_fallback'.
+
+    Tiers 2, 2b, and 3 are each passed through
+    services.exchange_sources.is_plausible_usd_irt_toman() before being
+    trusted -- an order-of-magnitude sanity band that rejects a scrape gone
+    wrong (garbage number, or a Rial/Toman mixup) rather than ever letting
+    it reach the catalogue. Tier 1 (an explicit admin override) and tier 4
+    (a fixed code constant) are not run through the band: an override is
+    already a deliberate human decision, and the hardcoded constant cannot
+    itself be "a bad scrape".
     """
+    from services.exchange_sources import is_plausible_usd_irt_toman, resolve_configured_sources
+
     markup_pct = await get_global_markup_pct()
     rate_irr = None
 
@@ -264,6 +283,15 @@ async def _compute_exchange_rate() -> tuple[float, int, str]:
     # 2. Live tgju.org
     rate_irr = await _fetch_tgju_rate()
     source = 'tgju'
+    if rate_irr is not None and not is_plausible_usd_irt_toman(rate_irr / 10):
+        logger.warning("tgju USD rate %s Toman failed the sanity band, ignoring", rate_irr / 10)
+        rate_irr = None
+
+    # 2b. Admin-configured sources (Bonbast.com + any custom source)
+    if rate_irr is None:
+        configured_rate, configured_source = await resolve_configured_sources()
+        if configured_rate is not None:
+            return configured_rate, markup_pct, configured_source
 
     # 3. Fallback to open.er-api.com
     if rate_irr is None:
@@ -271,7 +299,11 @@ async def _compute_exchange_rate() -> tuple[float, int, str]:
         try:
             resp2 = await _http.get('https://open.er-api.com/v6/latest/USD', follow_redirects=True, timeout=10)
             resp2.raise_for_status()
-            rate_irr = float(resp2.json()['rates']['IRR'])
+            candidate_irr = float(resp2.json()['rates']['IRR'])
+            if is_plausible_usd_irt_toman(candidate_irr / 10):
+                rate_irr = candidate_irr
+            else:
+                logger.warning("er_api USD rate %s Toman failed the sanity band, ignoring", candidate_irr / 10)
         except Exception:
             pass
 
@@ -292,13 +324,23 @@ async def _get_exchange_rate() -> tuple[float, int]:
     what made the first page load after login take 15 seconds. A negative result
     is cached too (for a shorter window) so an upstream outage cannot turn every
     request into a fresh timeout.
+
+    The flat Toman markup is resolved via get_flat_markup_toman() (own Redis
+    cache key, DB-backed, admin-editable) FIRST -- before this function's own
+    EXCHANGE_RATE_CACHE_KEY read/write -- purely so its own cache traffic
+    never sits between this function's cache read and its cache write; the
+    public 2-tuple contract and the EXCHANGE_RATE_CACHE_KEY payload shape
+    are both unchanged.
     """
+    from services.exchange_sources import get_flat_markup_toman
+    flat_markup = await get_flat_markup_toman()
+
     try:
         cached = await rds.get(EXCHANGE_RATE_CACHE_KEY)
         if cached:
             payload = json.loads(cached)
             base = float(payload["rate_irt"])
-            return base + USD_IRT_FLAT_MARKUP, int(payload.get("markup_pct", 0))
+            return base + flat_markup, int(payload.get("markup_pct", 0))
     except Exception as e:
         logger.warning("exchange rate cache read failed: %s", e)
 
@@ -321,7 +363,7 @@ async def _get_exchange_rate() -> tuple[float, int]:
 
     # Redis holds the bare market rate; the margin is added on the way out so a
     # markup change takes effect on the next call instead of waiting out the TTL.
-    return rate_irt + USD_IRT_FLAT_MARKUP, markup_pct
+    return rate_irt + flat_markup, markup_pct
 
 
 async def get_exchange_rate_meta() -> dict:
@@ -329,8 +371,10 @@ async def get_exchange_rate_meta() -> dict:
     resolution/cache-fill (no extra network call), then re-reads the raw cache
     entry for `source`/`fetched_at` -- missing on an old pre-deploy cache
     entry, reported as 'unknown'/None rather than raised."""
+    from services.exchange_sources import get_flat_markup_toman
     rate_irt_effective, markup_pct = await _get_exchange_rate()
-    bare = rate_irt_effective - USD_IRT_FLAT_MARKUP
+    flat_markup = await get_flat_markup_toman()  # own 300s cache, cheap on a repeat call
+    bare = rate_irt_effective - flat_markup
     source, fetched_at, ttl_remaining = 'unknown', None, None
     try:
         cached = await rds.get(EXCHANGE_RATE_CACHE_KEY)
@@ -347,8 +391,8 @@ async def get_exchange_rate_meta() -> dict:
 
     return {
         "rate_irt_bare": bare,
-        "flat_markup_irt": USD_IRT_FLAT_MARKUP,
-        "rate_irt_effective": bare + USD_IRT_FLAT_MARKUP,
+        "flat_markup_irt": flat_markup,
+        "rate_irt_effective": bare + flat_markup,
         "markup_pct": markup_pct,
         "source": source,
         "fetched_at": fetched_at,

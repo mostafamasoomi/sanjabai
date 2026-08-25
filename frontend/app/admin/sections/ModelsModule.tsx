@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { getLang } from '@/components/LanguageToggle'
+import { useLang } from '@/components/LanguageToggle'
 import { api } from '../api'
 import { t as label } from '../adminLabels'
 import { MODELS_TABS, DEFAULT_MODELS_TAB, isModelsTab, type ModelsTab } from './modelsTabs'
@@ -57,11 +57,10 @@ export default function ModelsModule({ tab, onTabChange }: ModelsModuleProps) {
 
   const active: ModelsTab = isModelsTab(tab) ? tab : DEFAULT_MODELS_TAB
 
-  // Read once, lazily, like AdminPanel.tsx does -- safe for the same reason:
-  // this module is mounted with `dynamic(..., { ssr: false })`, so there is
-  // no server pass for getLang()'s client-only read to mismatch against.
-  // LanguageToggle reloads the page on flip, so this never has to react.
-  const [lang] = useState(getLang)
+  // Subscribed, like AdminPanel.tsx -- see the note there. The language flip
+  // no longer reloads the page, so reading it once at mount would leave these
+  // eight sub-tabs stuck in whichever language they first rendered in.
+  const lang = useLang()
 
   return (
     <div className="space-y-6">

@@ -130,7 +130,7 @@ export function useBulkLiveTest({ api, onResults, onDone }: UseBulkLiveTestArgs)
 
 export function BulkLiveTestProgress({ state, onCancel }: { state: BulkTestState; onCancel: () => void }) {
   return (
-    <div className="admin-card flex flex-wrap items-center gap-3"
+    <div className="admin-card admin-row gap-3"
          style={{ borderRight: '3px solid var(--accent, #6366f1)' }}>
       <span className="w-4 h-4 border-2 rounded-full animate-spin inline-block shrink-0"
             style={{ borderColor: 'var(--border)', borderTopColor: 'var(--accent, #6366f1)' }} />

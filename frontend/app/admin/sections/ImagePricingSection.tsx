@@ -133,7 +133,7 @@ export default function ImagePricingSection({ api }: ImagePricingSectionProps) {
       />
 
       {unpricedCount > 0 && !loading && (
-        <div className="admin-card flex items-center gap-3" style={{ borderRight: '3px solid var(--warning)' }}>
+        <div className="admin-card admin-row gap-3" style={{ borderRight: '3px solid var(--warning)' }}>
           <Icon name="notification" size={18} style={{ color: 'var(--warning)' }} />
           <span className="text-sm" style={{ color: 'var(--warning)' }}>
             {faNum(unpricedCount)} مدل تصویری بدون قیمت — تا قیمت‌گذاری نشوند قابل ارائه نیستند

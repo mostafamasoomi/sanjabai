@@ -173,7 +173,7 @@ function ConsumptionVsRevenueChart({
 
 function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div className="admin-card flex items-center justify-between gap-4 flex-wrap" style={{ borderRight: '3px solid var(--danger)' }}>
+    <div className="admin-card admin-row justify-between gap-4" style={{ borderRight: '3px solid var(--danger)' }}>
       <div className="flex items-center gap-3">
         <Icon name="warning" size={20} style={{ color: 'var(--danger)' }} />
         <span className="text-sm text-primary">{message}</span>

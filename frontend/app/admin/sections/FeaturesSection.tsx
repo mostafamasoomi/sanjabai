@@ -87,7 +87,7 @@ export default function FeaturesSection() {
             </div>
           )}
           {list.map((f) => (
-            <div key={f.id} className="admin-card flex items-center justify-between">
+            <div key={f.id} className="admin-card admin-row justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm" style={{ background: 'var(--bg-elevated)' }}>
                   {f.icon || '—'}

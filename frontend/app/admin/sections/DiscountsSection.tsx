@@ -84,7 +84,7 @@ export default function DiscountsSection() {
             </div>
           )}
           {list.map((d) => (
-            <div key={d.id} className="admin-card flex items-center justify-between">
+            <div key={d.id} className="admin-card admin-row justify-between">
               <div className="flex items-center gap-3">
                 <div className="px-3 py-1.5 rounded-lg font-mono text-sm font-bold" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
                   {d.code}

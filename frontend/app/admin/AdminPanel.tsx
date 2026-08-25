@@ -15,7 +15,7 @@ import AboutSection from './sections/AboutSection'
 import ProxySection from './sections/ProxySection'
 import SecuritySection from './sections/SecuritySection'
 import { tabFromSearch, type ModelsTab } from './sections/modelsTabs'
-import { getLang, LanguageToggle } from '@/components/LanguageToggle'
+import { useLang, LanguageToggle } from '@/components/LanguageToggle'
 import { t, ADMIN_CHROME } from './adminLabels'
 
 const MonitoringTab = dynamic(() => import('./components/MonitoringTab'), { ssr: false })
@@ -100,13 +100,12 @@ export default function AdminPage() {
   const [authed, setAuthed] = useState(false)
   const [tokenInput, setTokenInput] = useState('')
   const [loggingIn, setLoggingIn] = useState(false)
-  // Read once, lazily, from the same `localStorage` key the user-facing
-  // LanguageToggle owns -- safe as an initialiser for the same reason as
-  // `page` below: page.tsx mounts this component with `ssr: false`, so
-  // there is no server pass to mismatch against `getLang()`'s client-only
-  // read. `<LanguageToggle />` itself reloads the page on flip, so this
-  // never needs to react to an in-place change.
-  const [lang] = useState(() => getLang())
+  // Subscribed, not read-once. It used to be `useState(() => getLang())`,
+  // which was only correct while <LanguageToggle> reloaded the page on every
+  // flip -- and that reload was itself the bug: the admin token lives in
+  // memory only, so reloading logged the admin out. The toggle now publishes
+  // the change instead, and this re-renders on it.
+  const lang = useLang()
   // Seeded from the URL, lazily. Safe as an initialiser rather than a mount
   // effect because page.tsx loads this component with `ssr: false` -- it only
   // ever renders on the client, so there is no server pass to mismatch.

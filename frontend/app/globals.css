@@ -214,9 +214,22 @@ img, svg, video, canvas {
 
   /* Motion */
   --motion-fast: 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Tell the browser which palette to paint NATIVE widgets in.
+     Without this the UA assumes light no matter what our own tokens say, so
+     every browser-drawn control — the <input type=number> spinner, scrollbars,
+     the <select> popup, date pickers, autofill — rendered as a pale box
+     stamped onto a dark surface. The number spinner was the visible one: a
+     light-grey rounded rectangle around the two arrows.
+     `color-scheme` is the property that actually fixes this; painting over
+     the spinner with ::-webkit-inner-spin-button only hides one symptom of it
+     and cannot reach the popup or the scrollbars at all. */
+  color-scheme: dark;
 }
 
 [data-theme='light'] {
+  color-scheme: light;
+
   --bg-base: #faf6f0;
   --bg-surface: #ffffff;
   --bg-secondary: #f3ece2;
@@ -320,6 +333,23 @@ img, svg, video, canvas {
 .input::placeholder { color: var(--text-dim); }
 .input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
 .input:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* Number spinner: the arrows, not the chrome around them.
+   `color-scheme` (see :root) already stops the UA drawing a pale box on our
+   dark surface; this is the second half — the arrows sit quietly until the
+   field is actually in use, so a form full of number inputs is not a column
+   of little widgets competing with its own labels. Not `appearance: none`:
+   that deletes the arrows, and they are the part worth keeping.
+   Unprefixed selectors do not exist for this control, so this is
+   Chromium/WebKit only; Firefox already draws no box. */
+input[type='number']::-webkit-inner-spin-button,
+input[type='number']::-webkit-outer-spin-button {
+  background: transparent;
+  opacity: 0.45;
+  transition: opacity var(--motion-fast);
+}
+input[type='number']:hover::-webkit-inner-spin-button,
+input[type='number']:focus::-webkit-inner-spin-button { opacity: 1; }
 
 /* ── Card (generic app container) ────────────────────────────────────────── */
 .card {
@@ -1128,6 +1158,21 @@ img, svg, video, canvas {
 .admin-layout { display: flex; gap: var(--space-6); align-items: flex-start; }
 .admin-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-6); }
 .admin-card { display: flex; flex-direction: column; gap: var(--space-3); }
+
+/* A card whose children are a control strip, not a stack.
+   This modifier exists because Tailwind's `flex-row` CANNOT do it: the
+   utilities are emitted by `@tailwind utilities` at the top of this file, so
+   `.admin-card`'s `flex-direction: column` — same specificity (0,1,0), later
+   in the cascade — wins over `.flex-row` no matter what the class attribute
+   says. Seven cards were written as `admin-card flex flex-wrap items-center`
+   expecting a row and every one of them rendered as a centred column: the
+   filter bar and the bulk-action bar of «عملیات کاتالوگ مدل‌ها» among them.
+   Two classes (0,2,0) beat both rules outright, which is the point. */
+.admin-card.admin-row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+}
 
 /* Thirteen call sites decorate a card with a coloured status bar via an inline
    `borderRight: '3px solid var(--accent|--danger|--warning)'` (StatCard,

@@ -64,7 +64,7 @@ export default function CatalogFilterBar({
   onReload, loading, matched, total, counts, probeCounts,
 }: CatalogFilterBarProps) {
   return (
-    <div className="admin-card flex flex-wrap items-center gap-3" dir="rtl">
+    <div className="admin-card admin-row gap-3" dir="rtl">
       <input
         className="input"
         placeholder="جستجو در نام، شناسه، تأمین‌کننده…"

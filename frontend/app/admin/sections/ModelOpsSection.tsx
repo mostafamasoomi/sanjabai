@@ -315,7 +315,7 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
         counts={counts} probeCounts={probeCounts}
       />
 
-      <div className="admin-card flex flex-wrap items-center gap-3">
+      <div className="admin-card admin-row gap-3">
         <span className="text-sm font-medium text-primary">{faNum(selected.size)} مدل انتخاب شده</span>
         <button className="btn btn-sm" onClick={selectAllFiltered}>انتخاب همهٔ {faNum(filtered.length)} مورد فیلترشده</button>
         <button className="btn btn-sm" onClick={togglePageAll}>{pageAllSelected ? 'لغو انتخاب این صفحه' : 'انتخاب این صفحه'}</button>

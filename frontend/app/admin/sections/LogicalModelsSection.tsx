@@ -5,6 +5,7 @@ import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
 import { faNum, faPrice, Num } from '@/lib/format'
 import { SectionHeader, StatCard } from './shared'
+import { availabilityLabel, AVAILABILITY_FA } from './availability'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Logical Models — Phase C, part 3. A "logical model" (`logical_model`) is
@@ -97,9 +98,6 @@ interface LogicalModelsSectionProps {
   api: (path: string, opts?: RequestInit) => Promise<Response>
 }
 
-const AVAILABILITY_FA: Record<string, string> = {
-  available: 'در دسترس', degraded: 'کاهش‌یافته', maintenance: 'در حال تعمیر', disabled: 'غیرفعال',
-}
 const ROUTING_FA: Record<string, string> = {
   cheapest_healthy: 'ارزان‌ترین سالم', priority: 'بر اساس اولویت', pinned: 'پین‌شده',
 }
@@ -272,7 +270,7 @@ export default function LogicalModelsSection({ api }: LogicalModelsSectionProps)
                         <div className="text-xs font-mono text-muted">{r.key}</div>
                       </td>
                       <td className="p-3 text-xs text-muted">{r.vendor || '—'}</td>
-                      <td className="p-3"><span className="badge">{AVAILABILITY_FA[r.availability] || r.availability}</span></td>
+                      <td className="p-3"><span className="badge">{availabilityLabel(r.availability)}</span></td>
                       <td className="p-3 text-xs text-muted">{ROUTING_FA[r.routing_policy] || r.routing_policy}</td>
                       <td className="p-3 text-xs">
                         <span style={{ color: r.candidate_counts.proposed > 0 ? STATE_COLOR.proposed : 'var(--text-muted)' }}>{faNum(r.candidate_counts.proposed)}</span>
@@ -401,7 +399,7 @@ function CandidatesPanel({
                     <div className="font-mono text-muted">{c.catalog_id}</div>
                     <div className="text-muted">{c.catalog.provider}</div>
                   </td>
-                  <td className="p-2">{AVAILABILITY_FA[c.catalog.availability] || c.catalog.availability}</td>
+                  <td className="p-2">{availabilityLabel(c.catalog.availability)}</td>
                   <td className="p-2">
                     <div>ورودی: {faPrice(c.catalog.input_per_million)}</div>
                     <div>خروجی: {faPrice(c.catalog.output_per_million)}</div>

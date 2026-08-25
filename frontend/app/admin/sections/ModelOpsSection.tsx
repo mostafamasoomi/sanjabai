@@ -5,11 +5,13 @@ import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
 import { faNum, faPrice, faDate } from '@/lib/format'
 import { SectionHeader, StatCard } from './shared'
+import { errMessage } from '../api'
+import { AVAILABILITY_OPTIONS, AVAILABILITY_FA, AVAILABILITY_COLOR, TOGGLEABLE, type Availability } from './availability'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    ModelOps — catalog-wide availability operations. Distinct from the
-   existing ./ModelsSection.tsx (the org default-model picker + <ModelsTab />,
-   which lists only the *working* models an end user can pick) and from
+   existing ./ModelsSection.tsx (now just the org default-model picker; the
+   duplicate catalog table it used to embed has been deleted) and from
    ./MarkupSection.tsx (profit percentage only). This section is the only
    frontend consumer of the admin_catalog.py endpoints that operate on the
    FULL model_catalog (1,100+ rows, most `maintenance`/never probed) rather
@@ -49,6 +51,11 @@ import { SectionHeader, StatCard } from './shared'
    be served to real users after a successful *live* probe. Bulk-availability
    does not probe anything itself -- it is a raw availability flip -- so this
    UI never lets "available" be applied without a visible warning.
+
+   DOM size: the table only ever maps over `pageRows` (filtered.slice at
+   PAGE_SIZE=50), never over `rows`/`filtered` directly -- the tbody node
+   count is bounded by the visible page (~50 rows), not by the catalog's
+   ~1,196. Already windowed before this pass; nothing to fix here.
 
    Model ids: encodeURIComponent(id) is used for every :path route below.
    admin_catalog.py's own docstring says a `%2F` "never reaches Starlette's
@@ -90,22 +97,17 @@ interface ModelOpsSectionProps {
   api: (path: string, opts?: RequestInit) => Promise<Response>
 }
 
-const AVAILABILITY_OPTIONS = ['available', 'degraded', 'maintenance', 'disabled'] as const
-type Availability = (typeof AVAILABILITY_OPTIONS)[number]
 
-const AVAILABILITY_LABEL: Record<Availability, string> = {
-  available: 'در دسترس', degraded: 'کاهش‌یافته', maintenance: 'در تعمیر', disabled: 'غیرفعال',
-}
-const AVAILABILITY_COLOR: Record<Availability, string> = {
-  available: 'var(--success, #22c55e)', degraded: 'var(--warning, #f59e0b)',
-  maintenance: 'var(--muted, #8b8b8b)', disabled: 'var(--danger, #ef4444)',
-}
+// POST /admin/models/{id}/toggle (admin.py) only flips between these two --
+// it 400s on 'degraded'/'maintenance'. Same set PricingSection.tsx enforces
+// for the same endpoint; a clickable button on a row this call rejects
+// used to be a guaranteed failed request on 1,155 of 1,200 live rows.
 
 const PAGE_SIZE = 50
 
 export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
   const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [rows, setRows] = useState<CatalogModelRow[]>([])
 
   const [search, setSearch] = useState('')
@@ -127,13 +129,13 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    setLoadError(false)
+    setLoadError(null)
     try {
       const res = await api('/api/admin/catalog/models')
       const data: CatalogModelRow[] = await res.json()
       setRows(Array.isArray(data) ? data : [])
-    } catch {
-      setLoadError(true)
+    } catch (err) {
+      setLoadError(errMessage(err, 'خطا در دریافت فهرست کاتالوگ — اتصال یا سرور مشکل دارد.'))
     } finally {
       setLoading(false)
     }
@@ -198,12 +200,16 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
         body: JSON.stringify({ ids: Array.from(selected), availability: bulkTarget }),
       })
       const body = await res.json()
-      toast(`وضعیت ${faNum(body.updated ?? selected.size)} مدل به «${AVAILABILITY_LABEL[bulkTarget]}» تغییر کرد`, 'success')
+      toast(`وضعیت ${faNum(body.updated ?? selected.size)} مدل به «${AVAILABILITY_FA[bulkTarget]}» تغییر کرد`, 'success')
       setBulkConfirming(false)
       clearSelection()
       await load()
-    } catch {
-      toast('اعمال گروهی ناموفق بود', 'error')
+    } catch (err) {
+      // The server now refuses any transition to 'available' for a model
+      // that has never had a successful live probe, and names the rejected
+      // model ids in the 400 `detail` -- errMessage surfaces that verbatim
+      // instead of a generic "failed" toast that hides which models to fix.
+      toast(errMessage(err, 'اعمال گروهی ناموفق بود'), 'error')
     } finally {
       setBulkSubmitting(false)
     }
@@ -215,8 +221,8 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
       await api(`/api/admin/models/${encodeURIComponent(id)}/toggle`, { method: 'POST' })
       toast('وضعیت مدل تغییر کرد', 'success')
       await load()
-    } catch {
-      toast('تغییر وضعیت ناموفق بود', 'error')
+    } catch (err) {
+      toast(errMessage(err, 'تغییر وضعیت ناموفق بود'), 'error')
     } finally {
       setBusyId(null)
     }
@@ -229,8 +235,8 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
       const body = await res.json()
       setTestResults((prev) => ({ ...prev, [id]: { ok: !!body.ok, latency_ms: body.latency_ms ?? null, error: body.error ?? null, status_code: body.status_code ?? null } }))
       toast(body.ok ? `تست موفق — تأخیر ${faNum(body.latency_ms)} میلی‌ثانیه` : `تست ناموفق: ${body.error || 'خطای نامشخص'}`, body.ok ? 'success' : 'error')
-    } catch {
-      toast('اجرای تست انجام نشد (خطای شبکه یا سرور)', 'error')
+    } catch (err) {
+      toast(errMessage(err, 'اجرای تست انجام نشد (خطای شبکه یا سرور)'), 'error')
     } finally {
       setTestingId(null)
     }
@@ -246,8 +252,8 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
       toast('upstream این مدل تغییر کرد', 'success')
       setUpstreamEditId(null)
       await load()
-    } catch {
-      toast('تغییر upstream ناموفق بود — نام باید یکی از تأمین‌کننده‌های پیکربندی‌شده باشد', 'error')
+    } catch (err) {
+      toast(errMessage(err, 'تغییر upstream ناموفق بود — نام باید یکی از تأمین‌کننده‌های پیکربندی‌شده باشد'), 'error')
     } finally {
       setUpstreamSaving(false)
     }
@@ -269,8 +275,8 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
 
       <div className="admin-card" style={{ borderRight: '3px solid var(--warning, #f59e0b)' }}>
         <p className="text-xs" style={{ color: 'var(--warning, #f59e0b)' }}>
-          <Icon name="warning" size={12} /> طبق قاعدهٔ محصول، مدلی که هویتش با «تست زنده» موفق تأیید نشده نباید به کاربر عادی ارائه شود.
-          این صفحه فقط وضعیت را در دیتابیس تغییر می‌دهد و خودش تستی اجرا نمی‌کند — پیش از «در دسترس» کردن مدل‌های جدید، دکمهٔ «تست زنده» را برای هرکدام بزنید.
+          <Icon name="warning" size={12} /> سرور اجازهٔ «در دسترس» کردن مدلی که هرگز «تست زنده» موفق نداشته را نمی‌دهد و این درخواست را با نام همان مدل‌ها رد می‌کند.
+          پیش از تلاش برای «در دسترس» کردن مدل‌های جدید، دکمهٔ «تست زنده» را برای هرکدام بزنید تا رد نشوند.
         </p>
       </div>
 
@@ -278,7 +284,7 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
         <input className="input" placeholder="جستجو در نام، شناسه، تأمین‌کننده…" value={search} onChange={(e) => setSearch(e.target.value)} style={{ minWidth: 220 }} />
         <select className="input" value={availFilter} onChange={(e) => setAvailFilter(e.target.value as 'all' | Availability)} style={{ maxWidth: 170 }}>
           <option value="all">همهٔ وضعیت‌ها</option>
-          {AVAILABILITY_OPTIONS.map((a) => <option key={a} value={a}>{AVAILABILITY_LABEL[a]}</option>)}
+          {AVAILABILITY_OPTIONS.map((a) => <option key={a} value={a}>{AVAILABILITY_FA[a]}</option>)}
         </select>
         <button className="btn btn-sm" onClick={load} disabled={loading}>
           <Icon name="refresh" size={14} /> بازخوانی
@@ -293,7 +299,7 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
         <button className="btn btn-sm" onClick={clearSelection} disabled={selected.size === 0}>پاک کردن انتخاب</button>
         <span className="text-xs text-muted">تغییر گروهی وضعیت به:</span>
         <select className="input" value={bulkTarget} onChange={(e) => setBulkTarget(e.target.value as Availability)} style={{ maxWidth: 160 }}>
-          {AVAILABILITY_OPTIONS.map((a) => <option key={a} value={a}>{AVAILABILITY_LABEL[a]}</option>)}
+          {AVAILABILITY_OPTIONS.map((a) => <option key={a} value={a}>{AVAILABILITY_FA[a]}</option>)}
         </select>
         <button className="btn btn-sm" onClick={openBulkConfirm} disabled={selected.size === 0}>
           <Icon name="check" size={14} /> اعمال گروهی
@@ -321,7 +327,7 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
               ) : loadError ? (
                 <tr>
                   <td colSpan={8} className="p-6 text-center text-sm" style={{ color: 'var(--danger, #ef4444)' }}>
-                    خطا در دریافت فهرست کاتالوگ — اتصال یا سرور مشکل دارد.{' '}
+                    {loadError}{' '}
                     <button className="underline" onClick={load}>تلاش دوباره</button>
                   </td>
                 </tr>
@@ -340,11 +346,17 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
                       </td>
                       <td className="p-3">
                         <span className="text-xs px-2 py-1 rounded-full" style={{ background: `${AVAILABILITY_COLOR[avail]}15`, color: AVAILABILITY_COLOR[avail] }}>
-                          {AVAILABILITY_LABEL[avail]}
+                          {AVAILABILITY_FA[avail]}
                         </span>
-                        <button className="btn btn-sm mt-1" style={{ display: 'block' }} onClick={() => toggleOne(r.id)} disabled={busyId === r.id}>
-                          {busyId === r.id ? '...' : (avail === 'available' ? 'غیرفعال کن' : 'در دسترس کن')}
-                        </button>
+                        {TOGGLEABLE.has(avail) ? (
+                          <button className="btn btn-sm mt-1" style={{ display: 'block' }} onClick={() => toggleOne(r.id)} disabled={busyId === r.id}>
+                            {busyId === r.id ? '...' : (avail === 'available' ? 'غیرفعال کن' : 'در دسترس کن')}
+                          </button>
+                        ) : (
+                          <div className="text-xs text-muted mt-1" title="این کلید سریع فقط بین «در دسترس» و «غیرفعال» جابه‌جا می‌کند">
+                            برای این وضعیت، از «تغییر گروهی» در بالای صفحه استفاده کنید
+                          </div>
+                        )}
                       </td>
                       <td className="p-3">
                         <div className="text-xs text-muted" dir="ltr">{r.provider || '—'}</div>
@@ -413,11 +425,11 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
               <button className="btn btn-icon btn-sm" onClick={() => setBulkConfirming(false)} disabled={bulkSubmitting}><Icon name="close" size={16} /></button>
             </div>
             <p className="text-sm">
-              وضعیت <span className="font-bold">{faNum(selected.size)}</span> مدل به «<span className="font-bold">{AVAILABILITY_LABEL[bulkTarget]}</span>» تغییر می‌کند.
+              وضعیت <span className="font-bold">{faNum(selected.size)}</span> مدل به «<span className="font-bold">{AVAILABILITY_FA[bulkTarget]}</span>» تغییر می‌کند.
             </p>
             {bulkTarget === 'available' && (
               <p className="text-xs mt-2 flex items-center gap-1" style={{ color: 'var(--warning, #f59e0b)' }}>
-                <Icon name="warning" size={12} /> این عملیات تست زنده انجام نمی‌دهد — قبل از تأیید مطمئن شوید مدل‌های انتخابی از قبل با «تست زنده» تأیید شده‌اند.
+                <Icon name="warning" size={12} /> سرور مدل‌هایی که «تست زنده» موفق نداشته‌اند را رد می‌کند — اگر برخی از انتخاب‌ها هنوز تست نشده باشند، این عملیات با خطا و نام همان مدل‌ها برمی‌گردد.
               </p>
             )}
             <div className="flex gap-2 mt-5">

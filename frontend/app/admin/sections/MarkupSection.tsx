@@ -1,10 +1,12 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
-import { faNum, faPrice, faPercent } from '@/lib/format'
+import { faNum, faPrice } from '@/lib/format'
+import { errMessage } from '../api'
 import { SectionHeader, Field } from './shared'
+import MarkupModelsTable from './MarkupModelsTable'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Markup — profit percentage, global + per-model override (owner request,
@@ -32,9 +34,18 @@ import { SectionHeader, Field } from './shared'
    endpoints will actually serve after saving -- but the server value is
    always authoritative; this component reloads from it after every write
    rather than trusting its own arithmetic.
+
+   2026-08-25 (measured live: GET /api/admin/markup/models = 165,178 bytes,
+   21,668 DOM nodes -- the worst tab in the panel, ~1,196 catalog rows all
+   mounted at once). The table itself was split out to ./MarkupModelsTable.tsx,
+   which windows it: only one page of rows is ever in the DOM, while search
+   still runs over the full fetched array (see that file's header comment
+   for the paging/selection contract). This file keeps the data fetch/save
+   plumbing and the global + bulk-edit cards, which are small and fixed-size
+   regardless of catalog size.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-interface ModelMarkupRow {
+export interface ModelMarkupRow {
   id: string
   display_name: string
   input_per_million: number | null
@@ -47,9 +58,58 @@ interface MarkupSectionProps {
 }
 
 /** Client-side preview only -- mirrors content.apply_markup()'s
-    round-to-nearest-toman rule. The server recomputes and is authoritative. */
-function previewPrice(base: number | null | undefined, pct: number): number {
+    round-to-nearest-toman rule. The server recomputes and is authoritative.
+    A percent is not money: dividing pct by 100 here is ordinary arithmetic,
+    not a violation of the toman-integer rule (which governs the `base`
+    money value, never touched by /10 or *10). */
+export function previewPrice(base: number | null | undefined, pct: number): number {
   return Math.round((base || 0) * (1 + pct / 100))
+}
+
+/** Verified against backend/admin_catalog.py's _parse_markup_pct in this
+    same change wave: it now rejects pct < 0 (existing) AND pct > 1000 (new).
+    Mirrored here so a fat-fingered "700" instead of "7" is stopped before
+    the round trip, not just before the server's Persian refusal comes back.
+    Keep this in sync with the server if the cap ever moves -- it is
+    deliberately not imported from anywhere because there is nowhere shared
+    to import it from across the fetch boundary. */
+export const MARKUP_PCT_MAX = 1000
+
+/** Matches the server's exact wording (backend/admin_catalog.py) so the
+    negative-percent refusal reads the same whether it was caught here or
+    echoed back from the API. */
+export function validateMarkupPct(pct: number): string | null {
+  if (!Number.isFinite(pct) || pct < 0) return 'درصد سود نمی‌تواند منفی باشد (هیچ درخواستی نباید ضررده باشد)'
+  if (pct > MARKUP_PCT_MAX) return `درصد سود نمی‌تواند بیش از ${faNum(MARKUP_PCT_MAX)}٪ باشد`
+  return null
+}
+
+/** A bare <input type=number> never says whether "7" means 7% or 0.07 --
+    the unit lived only in a preview line an admin can miss. The "٪" sits
+    next to every percent input now, not just in the price-preview text. */
+export function PercentInput({ value, onChange, placeholder, maxWidth = 110, disabled }: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  maxWidth?: number
+  disabled?: boolean
+}) {
+  return (
+    <div className="flex items-center gap-1.5" style={{ maxWidth }}>
+      <input
+        className="input"
+        type="number"
+        min={0}
+        max={MARKUP_PCT_MAX}
+        step="0.1"
+        placeholder={placeholder}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <span className="text-sm text-muted" aria-hidden="true">٪</span>
+    </div>
+  )
 }
 
 export default function MarkupSection({ api }: MarkupSectionProps) {
@@ -69,7 +129,6 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkInput, setBulkInput] = useState('0')
   const [bulkSaving, setBulkSaving] = useState(false)
-  const [filter, setFilter] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -91,7 +150,7 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
       for (const r of m) next[r.id] = r.markup_pct == null ? '' : String(r.markup_pct)
       setRowInputs(next)
     } catch (err) {
-      const msg = err instanceof Error && err.message !== 'unauthorized' ? err.message : 'خطا در دریافت اطلاعات درصد سود'
+      const msg = errMessage(err, 'خطا در دریافت اطلاعات درصد سود')
       setLoadError(msg)
       toast(msg, 'error')
     } finally {
@@ -103,17 +162,15 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
 
   const saveGlobal = async () => {
     const pct = Number(globalInput)
-    if (!Number.isFinite(pct) || pct < 0) {
-      toast('درصد سود نمی‌تواند منفی باشد', 'error')
-      return
-    }
+    const err = validateMarkupPct(pct)
+    if (err) { toast(err, 'error'); return }
     setSavingGlobal(true)
     try {
       await api('/api/admin/markup/global', { method: 'POST', body: JSON.stringify({ markup_pct: pct }) })
       toast('درصد سراسری ذخیره شد', 'success')
       await load()
     } catch (err) {
-      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'ذخیره درصد سراسری ناموفق بود', 'error')
+      toast(errMessage(err, 'ذخیره درصد سراسری ناموفق بود'), 'error')
     } finally {
       setSavingGlobal(false)
     }
@@ -122,9 +179,9 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
   const saveRowOverride = async (id: string) => {
     const raw = (rowInputs[id] ?? '').trim()
     const pct = raw === '' ? null : Number(raw)
-    if (pct !== null && (!Number.isFinite(pct) || pct < 0)) {
-      toast('درصد سود نمی‌تواند منفی باشد', 'error')
-      return
+    if (pct !== null) {
+      const err = validateMarkupPct(pct)
+      if (err) { toast(err, 'error'); return }
     }
     setSavingRow(id)
     try {
@@ -134,7 +191,7 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
       toast(pct === null ? 'override پاک شد — این مدل درصد سراسری را دارد' : 'override این مدل ذخیره شد', 'success')
       await load()
     } catch (err) {
-      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'ذخیره ناموفق بود', 'error')
+      toast(errMessage(err, 'ذخیره ناموفق بود'), 'error')
     } finally {
       setSavingRow(null)
     }
@@ -149,12 +206,14 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
     })
   }
 
-  const toggleSelectAllVisible = (ids: string[]) => {
+  /** Used both by "select this page" and by the explicit "select every
+      row matching the search, across all pages" action in the table --
+      the caller decides which id list to pass. */
+  const setManySelected = (ids: string[], select: boolean) => {
     setSelected((prev) => {
-      const allSelected = ids.every((id) => prev.has(id))
       const next = new Set(prev)
-      if (allSelected) ids.forEach((id) => next.delete(id))
-      else ids.forEach((id) => next.add(id))
+      if (select) ids.forEach((id) => next.add(id))
+      else ids.forEach((id) => next.delete(id))
       return next
     })
   }
@@ -167,10 +226,8 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
     let pct: number | null = null
     if (!clear) {
       pct = Number(bulkInput)
-      if (!Number.isFinite(pct) || pct < 0) {
-        toast('درصد سود نمی‌تواند منفی باشد', 'error')
-        return
-      }
+      const err = validateMarkupPct(pct)
+      if (err) { toast(err, 'error'); return }
     }
     setBulkSaving(true)
     try {
@@ -183,20 +240,11 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
       setSelected(new Set())
       await load()
     } catch (err) {
-      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'اعمال گروهی ناموفق بود', 'error')
+      toast(errMessage(err, 'اعمال گروهی ناموفق بود'), 'error')
     } finally {
       setBulkSaving(false)
     }
   }
-
-  const visibleRows = useMemo(() => {
-    const q = filter.trim()
-    if (!q) return rows
-    return rows.filter((r) => r.id.includes(q) || (r.display_name || '').includes(q))
-  }, [rows, filter])
-
-  const visibleIds = useMemo(() => visibleRows.map((r) => r.id), [visibleRows])
-  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id))
 
   return (
     <div className="space-y-6">
@@ -209,19 +257,11 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
       <div className="admin-card">
         <h3 className="font-semibold text-sm mb-1 text-primary">درصد سراسری</h3>
         <p className="text-xs text-muted mb-4">
-          روی همهٔ مدل‌هایی که override اختصاصی ندارند اعمال می‌شود. مقدار فعلی: {faPercent(globalPct)}
+          روی همهٔ مدل‌هایی که override اختصاصی ندارند اعمال می‌شود.
         </p>
         <div className="flex items-end gap-4 flex-wrap">
           <Field label="درصد سود سراسری">
-            <input
-              className="input w-full"
-              type="number"
-              min={0}
-              step="0.1"
-              value={globalInput}
-              onChange={(e) => setGlobalInput(e.target.value)}
-              style={{ maxWidth: 160 }}
-            />
+            <PercentInput value={globalInput} onChange={setGlobalInput} maxWidth={140} />
           </Field>
           <button className="btn" onClick={saveGlobal} disabled={savingGlobal}>
             {savingGlobal ? (
@@ -242,15 +282,7 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
         </p>
         <div className="flex items-end gap-4 flex-wrap">
           <Field label="درصد سود برای مدل‌های انتخاب‌شده">
-            <input
-              className="input w-full"
-              type="number"
-              min={0}
-              step="0.1"
-              value={bulkInput}
-              onChange={(e) => setBulkInput(e.target.value)}
-              style={{ maxWidth: 160 }}
-            />
+            <PercentInput value={bulkInput} onChange={setBulkInput} maxWidth={140} />
           </Field>
           <button className="btn" onClick={() => bulkApply(false)} disabled={bulkSaving || selected.size === 0}>
             {bulkSaving ? (
@@ -270,107 +302,21 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
         </div>
       </div>
 
-      {/* Per-model table */}
-      <div className="admin-card">
-        <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
-          <h3 className="font-semibold text-sm text-primary">درصد به ازای هر مدل</h3>
-          <input
-            className="input"
-            placeholder="جستجوی مدل…"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            style={{ maxWidth: 220 }}
-          />
-        </div>
-        <div className="overflow-x-auto">
-          <table className="admin-table w-full text-sm">
-            <thead>
-              <tr>
-                <th className="text-right p-3">
-                  <input
-                    type="checkbox"
-                    checked={allVisibleSelected}
-                    onChange={() => toggleSelectAllVisible(visibleIds)}
-                    aria-label="انتخاب همه"
-                  />
-                </th>
-                <th className="text-right p-3">مدل</th>
-                <th className="text-right p-3">قیمت پایه ورودی</th>
-                <th className="text-right p-3">قیمت پایه خروجی</th>
-                <th className="text-right p-3">درصد مؤثر</th>
-                <th className="text-right p-3">قیمت ورودی پس از سود</th>
-                <th className="text-right p-3">override این مدل</th>
-                <th className="text-right p-3">عملیات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">در حال بارگذاری…</td></tr>
-              ) : loadError ? (
-                <tr><td colSpan={8} className="p-6 text-center text-sm" style={{ color: 'var(--danger, #ef4444)' }}>
-                  {loadError} — <button className="underline" onClick={load}>تلاش دوباره</button>
-                </td></tr>
-              ) : visibleRows.length === 0 ? (
-                <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">مدلی یافت نشد</td></tr>
-              ) : (
-                visibleRows.map((r) => {
-                  const effectivePct = r.markup_pct ?? globalPct
-                  const draft = rowInputs[r.id] ?? ''
-                  return (
-                    <tr key={r.id}>
-                      <td className="p-3">
-                        <input
-                          type="checkbox"
-                          checked={selected.has(r.id)}
-                          onChange={() => toggleSelected(r.id)}
-                          aria-label={`انتخاب ${r.display_name}`}
-                        />
-                      </td>
-                      <td className="p-3">
-                        <div className="text-sm font-medium text-primary">{r.display_name}</div>
-                        <div className="text-xs font-mono text-muted">{r.id}</div>
-                      </td>
-                      <td className="p-3 text-xs">{faNum(r.input_per_million)}</td>
-                      <td className="p-3 text-xs">{faNum(r.output_per_million)}</td>
-                      <td className="p-3">
-                        <span className="badge" title={r.markup_pct == null ? 'ارث‌برده از درصد سراسری' : 'override اختصاصی این مدل'}>
-                          {faPercent(effectivePct)}
-                          {r.markup_pct == null && <span className="text-muted"> (سراسری)</span>}
-                        </span>
-                      </td>
-                      <td className="p-3 text-xs">{faPrice(previewPrice(r.input_per_million, effectivePct))}</td>
-                      <td className="p-3">
-                        <input
-                          className="input"
-                          type="number"
-                          min={0}
-                          step="0.1"
-                          placeholder="سراسری"
-                          value={draft}
-                          onChange={(e) => setRowInputs((prev) => ({ ...prev, [r.id]: e.target.value }))}
-                          style={{ maxWidth: 110 }}
-                        />
-                      </td>
-                      <td className="p-3">
-                        <button
-                          className="btn btn-sm"
-                          onClick={() => saveRowOverride(r.id)}
-                          disabled={savingRow === r.id}
-                          title={draft.trim() === '' ? 'خالی = پاک کردن override' : 'ذخیره override'}
-                        >
-                          {savingRow === r.id ? (
-                            <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-                          ) : <Icon name="check" size={14} />}
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Per-model table -- windowed, see MarkupModelsTable.tsx header comment */}
+      <MarkupModelsTable
+        rows={rows}
+        rowInputs={rowInputs}
+        onRowInputChange={(id, v) => setRowInputs((prev) => ({ ...prev, [id]: v }))}
+        savingRow={savingRow}
+        onSaveRow={saveRowOverride}
+        selected={selected}
+        onToggleSelected={toggleSelected}
+        onSetManySelected={setManySelected}
+        globalPct={globalPct}
+        loading={loading}
+        loadError={loadError}
+        onRetry={load}
+      />
     </div>
   )
 }

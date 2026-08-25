@@ -5,6 +5,7 @@ import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
 import { faNum, faPrice, faPercent } from '@/lib/format'
 import { SectionHeader, Field } from './shared'
+import { availabilityLabel } from './availability'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Image pricing — per-model base Toman price for POST /v1/images/generations
@@ -50,13 +51,6 @@ interface ImagePricingSectionProps {
     round-to-nearest-toman rule. The server recomputes and is authoritative. */
 function previewPrice(base: number | null | undefined, pct: number | null): number {
   return Math.round((base || 0) * (1 + (pct || 0) / 100))
-}
-
-const AVAILABILITY_FA: Record<string, string> = {
-  available: 'در دسترس',
-  degraded: 'کاهش‌یافته',
-  maintenance: 'در حال تعمیر',
-  disabled: 'غیرفعال',
 }
 
 export default function ImagePricingSection({ api }: ImagePricingSectionProps) {
@@ -165,7 +159,15 @@ export default function ImagePricingSection({ api }: ImagePricingSectionProps) {
                 <th className="text-right p-3">مدل</th>
                 <th className="text-right p-3">وضعیت</th>
                 <th className="text-right p-3">قیمت پایه (تومان)</th>
-                <th className="text-right p-3">درصد سود</th>
+                {/* Read-only here. The column is `model_catalog.markup_pct`, written
+                    only from the «درصد سود» sub-tab -- an admin looking at a wrong
+                    final price on this screen has no way to know which control
+                    produced it unless the screen says so. Same reason PricingSection
+                    points at «عملیات کاتالوگ» for the availability it cannot change. */}
+                <th className="text-right p-3">
+                  درصد سود
+                  <span className="block text-[10px] font-normal text-muted">از تب «درصد سود»</span>
+                </th>
                 <th className="text-right p-3">قیمت نهایی هر تصویر</th>
                 <th className="text-right p-3">قیمت جدید</th>
                 <th className="text-right p-3">عملیات</th>
@@ -193,7 +195,7 @@ export default function ImagePricingSection({ api }: ImagePricingSectionProps) {
                         <div className="text-xs font-mono text-muted">{r.id}</div>
                       </td>
                       <td className="p-3">
-                        <span className="badge">{AVAILABILITY_FA[r.availability] || r.availability}</span>
+                        <span className="badge">{availabilityLabel(r.availability)}</span>
                       </td>
                       <td className="p-3 text-xs">
                         {r.image_price_per_unit == null ? (

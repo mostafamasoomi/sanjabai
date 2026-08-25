@@ -1,14 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
 import { faNum } from '@/lib/format'
-import { SectionHeader, Field } from './shared'
+import { SectionHeader } from './shared'
 import { ErrorCard, RefreshButton, CardSkeleton } from './LoadState'
 import { api, errMessage } from '../api'
 import { useAdminResource } from '../useAdminResource'
 import type { PricingRow, ModelTestResult } from '../types'
+import { availabilityLabel, AVAILABILITY_BADGE, TOGGLEABLE } from './availability'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Pricing — per-model tariffs: GET/POST /admin/pricing, plus the per-model
@@ -20,24 +21,39 @@ import type { PricingRow, ModelTestResult } from '../types'
    loss-path validation that POST /admin/packages runs — two admin screens
    writing the same table, one of them able to publish a package that sells
    at a loss. بسته‌ها (PackagesSection) is now the only writer.
+
+   Price editing is now INLINE, per row, instead of a name-typed form at the
+   bottom of the page. The old form let an admin type any string into a
+   "model name" text field and gated Save on a client-side `knownModel`
+   lookup, because POST /admin/pricing only UPDATEs an existing
+   model_catalog row (admin_pricing.py's set_pricing 404s on rowcount 0) —
+   it never INSERTs. Editing the row itself removes that whole class of bug
+   by construction: there is no name field, so there is nothing to typo.
+
+   Rows are windowed (plain array slicing, PAGE_SIZE below) instead of all
+   ~1,200 being mounted at once. The unwindowed table measured 18,064 DOM
+   nodes in <main> against 150-1,456 for every other tab in this module and
+   added ~900ms of pure render/layout time on top of a 67ms-fast fetch.
+   Filtering still runs over the full fetched dataset -- only the *rendered*
+   window is capped, so a search never misses a match that happens to be on
+   another page.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-// Every state model_catalog.availability actually takes (admin_catalog.py's
-// _VALID_AVAILABILITY). Labels/classes match ModelsTab.tsx's own
-// AVAILABILITY_FA/AVAILABILITY_BADGE so a model reads the same status here
-// as it does there.
-const AVAILABILITY_FA: Record<string, string> = {
-  available: 'فعال', degraded: 'کاهش‌یافته', maintenance: 'تعمیرات', disabled: 'غیرفعال',
-}
-const AVAILABILITY_BADGE: Record<string, string> = {
-  available: 'badge-positive', degraded: 'badge-warning', maintenance: 'badge-accent', disabled: 'badge-danger',
-}
+// Labels and badge classes come from ./availability.ts. They used to be a
+// local literal carrying a comment that claimed it was hand-synced with the
+// other tabs' copies; it was not -- this file rendered «فعال»/«تعمیرات»
+// where the catalog tab rendered «در دسترس»/«در تعمیر» for the same row.
 // POST /admin/models/{id}/toggle (admin_pricing.py) only flips between
 // these two -- it 400s on anything else. Rendering it as a clickable toggle
 // on a 'maintenance'/'degraded' row used to look identical to a real
 // available/disabled row and, on a free upstream, would silently put an
 // unprobed model up for sale on one misclick.
-const TOGGLEABLE = new Set(['available', 'disabled'])
+
+// Same page size ModelOpsSection.tsx already uses for the same ~1,200-row
+// model_catalog table -- keeping it identical means the two tabs behave the
+// same way for the same dataset instead of one paginating tighter than the
+// other for no reason.
+const PAGE_SIZE = 50
 
 /** Never show a raw currency code -- every other screen that renders this
  *  same model_catalog.currency column (onboardingHelpers.ts, pricing/page.tsx)
@@ -45,6 +61,24 @@ const TOGGLEABLE = new Set(['available', 'disabled'])
  *  didn't. */
 function faCurrency(code: string): string {
   return code === 'IRT' ? 'تومان' : code === 'IRR' ? 'ریال' : code
+}
+
+type PriceFieldResult = { ok: true; value: number } | { ok: false; message: string }
+
+// The bug this closes: `+pzIn || 0` turned an empty box, "abc", or any other
+// non-numeric junk into a silent 0 that got POSTed straight to the server --
+// no error, no confirmation, a model just started billing at zero toman.
+// `0` itself stays a legal, deliberate value; only empty/garbage/negative/
+// fractional input is rejected. Prices are integer toman per million tokens
+// -- there is no smaller unit to express a fraction of a toman in.
+function validatePriceField(raw: string, label: string): PriceFieldResult {
+  const trimmed = raw.trim()
+  if (trimmed === '') return { ok: false, message: `قیمت ${label} نمی‌تواند خالی باشد` }
+  const n = Number(trimmed)
+  if (!Number.isFinite(n)) return { ok: false, message: `قیمت ${label} باید یک عدد باشد` }
+  if (n < 0) return { ok: false, message: `قیمت ${label} نمی‌تواند منفی باشد` }
+  if (!Number.isInteger(n)) return { ok: false, message: `قیمت ${label} باید عدد صحیح (تومان) باشد` }
+  return { ok: true, value: n }
 }
 
 export default function PricingSection() {
@@ -55,41 +89,71 @@ export default function PricingSection() {
   )
 
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
 
-  const [pzModel, setPzModel] = useState('')
-  const [pzIn, setPzIn] = useState('')
-  const [pzOut, setPzOut] = useState('')
-  const [saving, setSaving] = useState(false)
+  const [editingModel, setEditingModel] = useState<string | null>(null)
+  const [editIn, setEditIn] = useState('')
+  const [editOut, setEditOut] = useState('')
+  const [editError, setEditError] = useState<string | null>(null)
+  const [savingEdit, setSavingEdit] = useState(false)
 
   const [togglingModel, setTogglingModel] = useState<string | null>(null)
   const [testingModel, setTestingModel] = useState<string | null>(null)
   const [testResults, setTestResults] = useState<Record<string, ModelTestResult>>({})
 
-  const resetForm = () => { setPzModel(''); setPzIn(''); setPzOut('') }
+  // Client-side only -- the catalog is ~1,200 rows in one GET (same as
+  // ModelOpsSection's own read of this table). Runs over the full fetched
+  // array, not the current page, so a match on page 9 is still found while
+  // only the matching subset gets windowed for render below.
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return prices || []
+    return (prices || []).filter((p) => {
+      const displayName = String((p as { display_name?: string }).display_name || '')
+      return p.model.toLowerCase().includes(q) || displayName.toLowerCase().includes(q)
+    })
+  }, [prices, search])
 
-  // POST /admin/pricing only UPDATEs an existing model_catalog row (see
-  // admin_pricing.py's set_pricing -- it 404s when rowcount is 0); it never
-  // INSERTs. New catalog rows come only from model_discovery.py. So this
-  // form can only ever edit a model already in `prices`, never "add" one --
-  // enforced here instead of round-tripping to the 404 the backend already
-  // returns.
-  const knownModel = !!prices?.some((p) => p.model === pzModel.trim())
+  useEffect(() => { setPage(1) }, [search])
 
-  const savePricing = async () => {
-    if (!knownModel) return
-    setSaving(true)
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const pageStart = filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
+  const pageEnd = Math.min(page * PAGE_SIZE, filtered.length)
+
+  const startEdit = (p: PricingRow) => {
+    setEditingModel(p.model)
+    setEditIn(String(p.input_per_million))
+    setEditOut(String(p.output_per_million))
+    setEditError(null)
+  }
+  const cancelEdit = () => {
+    setEditingModel(null)
+    setEditIn('')
+    setEditOut('')
+    setEditError(null)
+  }
+
+  const saveEdit = async (model: string) => {
+    const inRes = validatePriceField(editIn, 'ورودی')
+    if (!inRes.ok) { setEditError(inRes.message); return }
+    const outRes = validatePriceField(editOut, 'خروجی')
+    if (!outRes.ok) { setEditError(outRes.message); return }
+
+    setEditError(null)
+    setSavingEdit(true)
     try {
       await api('/api/admin/pricing', {
         method: 'POST',
-        body: JSON.stringify({ model: pzModel.trim(), input_per_million: +pzIn || 0, output_per_million: +pzOut || 0, currency: 'IRT' }),
+        body: JSON.stringify({ model, input_per_million: inRes.value, output_per_million: outRes.value, currency: 'IRT' }),
       })
       toast('تعرفه ذخیره شد', 'success')
-      resetForm()
-      reload()
+      setData((prev) => (prev || []).map((p) => (p.model === model ? { ...p, input_per_million: inRes.value, output_per_million: outRes.value } : p)))
+      cancelEdit()
     } catch (err) {
-      toast(errMessage(err, 'خطا در ذخیره تعرفه'), 'error')
+      setEditError(errMessage(err, 'خطا در ذخیره تعرفه'))
     } finally {
-      setSaving(false)
+      setSavingEdit(false)
     }
   }
 
@@ -124,16 +188,6 @@ export default function PricingSection() {
     }
   }
 
-  // Client-side only -- the catalog is ~1,200 rows in one GET (same as
-  // ModelOpsSection's own read of this table) and there was previously no
-  // way to find one model among them short of scrolling the whole table.
-  const q = search.trim().toLowerCase()
-  const filtered = (prices || []).filter((p) => {
-    if (!q) return true
-    const displayName = String((p as { display_name?: string }).display_name || '')
-    return p.model.toLowerCase().includes(q) || displayName.toLowerCase().includes(q)
-  })
-
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
@@ -161,8 +215,8 @@ export default function PricingSection() {
             <thead>
               <tr>
                 <th className="text-right p-3">مدل</th>
-                <th className="text-right p-3">ورودی</th>
-                <th className="text-right p-3">خروجی</th>
+                <th className="text-right p-3">ورودی (تومان/میلیون)</th>
+                <th className="text-right p-3">خروجی (تومان/میلیون)</th>
                 <th className="text-right p-3">واحد</th>
                 <th className="text-right p-3">وضعیت</th>
                 <th className="text-right p-3">تست</th>
@@ -170,23 +224,45 @@ export default function PricingSection() {
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {pageRows.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="p-6 text-center text-sm text-muted">
                     {prices.length === 0 ? 'تعرفه‌ای ثبت نشده' : 'موردی با این جستجو یافت نشد'}
                   </td>
                 </tr>
               ) : (
-                filtered.map((p) => {
+                pageRows.map((p) => {
+                  const isEditing = editingModel === p.model
                   const testResult = testResults[p.model]
                   const avail = p.availability || 'maintenance'
                   const badgeClass = `badge ${AVAILABILITY_BADGE[avail] || 'badge-accent'}`
-                  const badgeLabel = AVAILABILITY_FA[avail] || avail
+                  const badgeLabel = availabilityLabel(avail)
                   return (
                     <tr key={p.model}>
                       <td className="p-3 text-sm font-mono font-medium text-primary">{p.model}</td>
-                      <td className="p-3 text-xs">{faNum(p.input_per_million)}</td>
-                      <td className="p-3 text-xs">{faNum(p.output_per_million)}</td>
+                      {isEditing ? (
+                        <>
+                          <td className="p-3">
+                            <input
+                              className="input w-28" type="number" value={editIn}
+                              onChange={(e) => setEditIn(e.target.value)}
+                              placeholder="تومان/میلیون" aria-label={`قیمت ورودی ${p.model} به تومان بر میلیون توکن`}
+                            />
+                          </td>
+                          <td className="p-3">
+                            <input
+                              className="input w-28" type="number" value={editOut}
+                              onChange={(e) => setEditOut(e.target.value)}
+                              placeholder="تومان/میلیون" aria-label={`قیمت خروجی ${p.model} به تومان بر میلیون توکن`}
+                            />
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="p-3 text-xs">{faNum(p.input_per_million)}</td>
+                          <td className="p-3 text-xs">{faNum(p.output_per_million)}</td>
+                        </>
+                      )}
                       <td className="p-3"><span className="badge">{faCurrency(p.currency)}</span></td>
                       <td className="p-3">
                         {TOGGLEABLE.has(avail) ? (
@@ -218,9 +294,27 @@ export default function PricingSection() {
                         )}
                       </td>
                       <td className="p-3">
-                        <button className="btn btn-sm" onClick={() => { setPzModel(p.model); setPzIn(String(p.input_per_million)); setPzOut(String(p.output_per_million)) }}>
-                          <Icon name="settings" size={14} />
-                        </button>
+                        {isEditing ? (
+                          <div>
+                            <div className="flex gap-1">
+                              <button className="btn btn-sm" onClick={() => saveEdit(p.model)} disabled={savingEdit}>
+                                {savingEdit ? (
+                                  <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
+                                ) : <Icon name="check" size={14} />}
+                              </button>
+                              <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={cancelEdit} disabled={savingEdit}>
+                                انصراف
+                              </button>
+                            </div>
+                            {editError && (
+                              <p className="text-xs mt-1" style={{ color: 'var(--danger, #e35d5d)' }}>{editError}</p>
+                            )}
+                          </div>
+                        ) : (
+                          <button className="btn btn-sm" title="ویرایش تعرفه" onClick={() => startEdit(p)}>
+                            <Icon name="settings" size={14} />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   )
@@ -228,55 +322,18 @@ export default function PricingSection() {
               )}
             </tbody>
           </table>
-        </div>
-      )}
 
-      <div className="admin-card">
-        <h3 className="font-semibold text-sm mb-4 text-primary">
-          {pzModel ? `ویرایش ${pzModel}` : 'ویرایش تعرفه یک مدل موجود'}
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Field label="نام مدل">
-            <input
-              className="input w-full"
-              list="pricing-model-options"
-              value={pzModel}
-              onChange={(e) => setPzModel(e.target.value)}
-              placeholder="جستجوی مدل موجود در کاتالوگ…"
-            />
-            <datalist id="pricing-model-options">
-              {(prices || []).map((p) => <option key={p.model} value={p.model} />)}
-            </datalist>
-          </Field>
-          <Field label="ورودی / میلیون توکن">
-            <input className="input w-full" type="number" value={pzIn} onChange={(e) => setPzIn(e.target.value)} placeholder="0" />
-          </Field>
-          <Field label="خروجی / میلیون توکن">
-            <input className="input w-full" type="number" value={pzOut} onChange={(e) => setPzOut(e.target.value)} placeholder="0" />
-          </Field>
-          <Field label="واحد پول">
-            <input className="input w-full" value="تومان" disabled />
-          </Field>
-        </div>
-        {pzModel.trim() && !knownModel && (
-          <p className="text-xs mt-2" style={{ color: 'var(--danger, #e35d5d)' }}>
-            این مدل هنوز در کاتالوگ نیست. این فرم فقط قیمت مدل‌های موجود را ویرایش می‌کند؛ مدل تازه فقط از
-            فرآیند شناسایی خودکار وارد کاتالوگ می‌شود.
-          </p>
-        )}
-        <div className="flex gap-2 mt-4">
-          <button className="btn" onClick={savePricing} disabled={saving || !knownModel}>
-            {saving ? (
-              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-            ) : (<><Icon name="check" size={16} /><span>ذخیره</span></>)}
-          </button>
-          {pzModel && (
-            <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={resetForm}>
-              انصراف
-            </button>
+          {filtered.length > 0 && (
+            <div className="flex items-center justify-between p-3 text-xs text-muted">
+              <span>{faNum(pageStart)}–{faNum(pageEnd)} از {faNum(filtered.length)} مدل — صفحهٔ {faNum(page)} از {faNum(totalPages)}</span>
+              <div className="flex gap-2">
+                <button className="btn btn-sm" onClick={() => setPage((n) => Math.max(1, n - 1))} disabled={page <= 1}>قبلی</button>
+                <button className="btn btn-sm" onClick={() => setPage((n) => Math.min(totalPages, n + 1))} disabled={page >= totalPages}>بعدی</button>
+              </div>
+            </div>
           )}
         </div>
-      </div>
+      )}
 
       <p className="text-xs text-muted">
         برای ساخت و ویرایش بسته‌های اعتباری از صفحه «بسته‌ها» استفاده کنید؛ تنها آن صفحه پیش از انتشار، ضررده نبودن بسته را بررسی می‌کند.

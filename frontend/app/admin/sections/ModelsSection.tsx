@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import dynamic from 'next/dynamic'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
 import { faNum } from '@/lib/format'
@@ -9,12 +8,18 @@ import { SectionHeader, Field } from './shared'
 import { ErrorCard, RefreshButton } from './LoadState'
 import { api, errMessage } from '../api'
 
-const ModelsTab = dynamic(() => import('../components/ModelsTab'), { ssr: false })
-
 /* ═══════════════════════════════════════════════════════════════════════════
-   Models — the org default-model card plus the already-extracted
-   <ModelsTab />. Self-contained now; the card used to be driven by
-   AdminPanel's loadAll().
+   Models — just the org default-model picker card. Self-contained; the card
+   used to be driven by AdminPanel's loadAll().
+
+   This used to also mount <ModelsTab /> (the full catalog table — search,
+   bulk enable/disable, per-row upstream/pricing edit). That was a straight
+   duplicate of ./ModelOpsSection.tsx's «کاتالوگ و عملیات» tab down to the
+   same admin_catalog.py endpoints, plus a third copy of PricingSection's
+   price editor. Deleted (see components/ModelsTab.tsx, removed) — it cost
+   this tab an extra GET /api/admin/catalog/models fetch (full 1,196-row
+   catalog, ~525KB, admin-only fields the picker below never needs) for a
+   screen whose only job is choosing one default model from a dropdown.
 
    The dropdown is fed by GET /catalog/models, not the /api/models the shell
    used to call: that path has no backend route (verified — it 404s), so the
@@ -110,8 +115,6 @@ export default function ModelsSection() {
           </Field>
         </div>
       )}
-
-      <ModelsTab api={api} />
     </div>
   )
 }

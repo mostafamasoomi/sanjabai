@@ -26,7 +26,8 @@ import { AVAILABILITY_OPTIONS, AVAILABILITY_FA, AVAILABILITY_COLOR, TOGGLEABLE, 
               availability, provenance, context_window, currency,
               input_per_million, output_per_million,
               usd_input_per_million, usd_output_per_million,
-              last_verified_at, markup_pct }]
+              last_verified_at, markup_pct, public_id, audience,
+              last_ok_at, health_status, health_last_error }]
        No query params -- the backend returns the entire catalog in one
        response. Pagination below is client-side over this single fetch;
        the table only ever *renders* one page of rows at a time.
@@ -91,6 +92,16 @@ interface CatalogModelRow {
   usd_output_per_million: number | null
   last_verified_at: string | null
   markup_pct: number | null
+  public_id: string | null
+  audience: string[] | null
+  // Joined from model_health_state. `last_ok_at` is the ONLY truthful
+  // "has this model ever answered" signal: last_verified_at above is NOT
+  // NULL DEFAULT now() and every rollup touches it, so it reads as a
+  // recent date for all ~1,200 rows including the never-probed ones.
+  // services/probe_gate.py gates on last_ok_at, so the table shows it.
+  last_ok_at: string | null
+  health_status: string | null
+  health_last_error: string | null
 }
 
 interface TestResult {
@@ -147,6 +158,9 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
 
   const [search, setSearch] = useState('')
   const [availFilter, setAvailFilter] = useState<'all' | Availability>('all')
+  // «سالم ولی پارک‌شده» is the view this whole pass exists to make possible:
+  // rows with a confirmed live probe that are still not being served.
+  const [probeFilter, setProbeFilter] = useState<'all' | 'confirmed' | 'unprobed' | 'ready'>('all')
   const [page, setPage] = useState(1)
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -181,12 +195,27 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
   }, [api])
 
   useEffect(() => { load() }, [load])
-  useEffect(() => { setPage(1) }, [search, availFilter])
+  useEffect(() => { setPage(1) }, [search, availFilter, probeFilter])
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { available: 0, degraded: 0, maintenance: 0, disabled: 0 }
     for (const r of rows) c[r.availability] = (c[r.availability] || 0) + 1
     return c
+  }, [rows])
+
+  /* The number the owner actually needs and could not see anywhere: how
+     many models have a confirmed live probe, and how many of those are
+     healthy-but-parked. A live sweep of the parked catalog on 2026-08-25
+     found 192 of 1,155 answering — against 28 being served. */
+  const probeCounts = useMemo(() => {
+    let confirmed = 0, parkedConfirmed = 0, ready = 0
+    for (const r of rows) {
+      if (!r.last_ok_at) continue
+      confirmed += 1
+      if (r.availability !== 'available') parkedConfirmed += 1
+      if ((r.input_per_million || 0) > 0 && r.public_id) ready += 1
+    }
+    return { confirmed, parkedConfirmed, ready }
   }, [rows])
 
   const upstreamSuggestions = useMemo(
@@ -198,6 +227,12 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
     const q = search.trim().toLowerCase()
     return rows.filter((r) => {
       if (availFilter !== 'all' && r.availability !== availFilter) return false
+      if (probeFilter === 'confirmed' && !r.last_ok_at) return false
+      if (probeFilter === 'unprobed' && r.last_ok_at) return false
+      // «آمادهٔ ارائه»: everything the server checks before a model can
+      // actually reach a user -- a confirmed probe, a price, and a public_id.
+      // A row can be «در دسترس» and still be invisible without the last one.
+      if (probeFilter === 'ready' && !(r.last_ok_at && (r.input_per_million || 0) > 0 && r.public_id)) return false
       if (!q) return true
       return (
         r.id.toLowerCase().includes(q) ||
@@ -207,7 +242,7 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
         (r.upstream || '').toLowerCase().includes(q)
       )
     })
-  }, [rows, search, availFilter])
+  }, [rows, search, availFilter, probeFilter])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageRows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -370,6 +405,12 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
         <StatCard icon="close" label="غیرفعال" value={faNum(counts.disabled || 0)} color={AVAILABILITY_COLOR.disabled} />
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <StatCard icon="check" label="پروب زندهٔ تأییدشده" value={faNum(probeCounts.confirmed)} color={AVAILABILITY_COLOR.available} />
+        <StatCard icon="clock" label="سالم ولی ارائه‌نشده" value={faNum(probeCounts.parkedConfirmed)} color={AVAILABILITY_COLOR.degraded} />
+        <StatCard icon="chart" label="آمادهٔ ارائه" value={faNum(probeCounts.ready)} color={AVAILABILITY_COLOR.available} />
+      </div>
+
       <div className="admin-card" style={{ borderRight: '3px solid var(--warning, #f59e0b)' }}>
         <p className="text-xs" style={{ color: 'var(--warning, #f59e0b)' }}>
           <Icon name="warning" size={12} /> سرور اجازهٔ «در دسترس» کردن مدلی که هرگز «تست زنده» موفق نداشته را نمی‌دهد و این درخواست را با نام همان مدل‌ها رد می‌کند.
@@ -382,6 +423,12 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
         <select className="input" value={availFilter} onChange={(e) => setAvailFilter(e.target.value as 'all' | Availability)} style={{ maxWidth: 170 }}>
           <option value="all">همهٔ وضعیت‌ها</option>
           {AVAILABILITY_OPTIONS.map((a) => <option key={a} value={a}>{AVAILABILITY_FA[a]}</option>)}
+        </select>
+        <select className="input" value={probeFilter} onChange={(e) => setProbeFilter(e.target.value as typeof probeFilter)} style={{ maxWidth: 190 }}>
+          <option value="all">همهٔ مدل‌ها</option>
+          <option value="confirmed">پروب تأییدشده</option>
+          <option value="unprobed">بدون پروب موفق</option>
+          <option value="ready">آمادهٔ ارائه (پروب + قیمت + شناسهٔ عمومی)</option>
         </select>
         <button className="btn btn-sm" onClick={load} disabled={loading}>
           <Icon name="refresh" size={14} /> بازخوانی
@@ -445,7 +492,13 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
                 <th className="text-right p-3">تأمین‌کننده / upstream</th>
                 <th className="text-right p-3">پنجرهٔ متن</th>
                 <th className="text-right p-3">قیمت (ورودی / خروجی هر میلیون)</th>
-                <th className="text-right p-3">آخرین تأیید زنده</th>
+                {/* Was `last_verified_at`, which showed a recent date for
+                    every row in the catalog including the ~1,155 that had
+                    never been probed once -- the column is NOT NULL DEFAULT
+                    now() and the rollup touches it every pass. This one
+                    reads model_health_state.last_ok_at, the same column
+                    the server's enable-gate checks. */}
+                <th className="text-right p-3">پروب زندهٔ موفق</th>
                 <th className="text-right p-3">عملیات</th>
               </tr>
             </thead>
@@ -508,7 +561,32 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
                         <div>{faPrice(r.input_per_million)}</div>
                         <div className="text-muted">{faPrice(r.output_per_million)}</div>
                       </td>
-                      <td className="p-3 text-xs">{r.last_verified_at ? faDate(r.last_verified_at) : 'هرگز'}</td>
+                      <td className="p-3 text-xs">
+                        {r.last_ok_at ? (
+                          <>
+                            <span style={{ color: AVAILABILITY_COLOR.available }}>{faDate(r.last_ok_at)}</span>
+                            {r.availability !== 'available' && (
+                              <div className="text-[10px] text-muted">سالم ولی ارائه‌نشده</div>
+                            )}
+                            {!r.public_id && (
+                              <div className="text-[10px] text-muted">بدون شناسهٔ عمومی — برای کاربر دیده نمی‌شود</div>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-muted">هرگز</span>
+                            {/* The reason, not just the verdict: 298 of the
+                                failures in the last full sweep were "no
+                                active credentials for provider", which is
+                                an upstream account problem the owner can
+                                fix -- and looks identical to a dead model
+                                if only the verdict is shown. */}
+                            {r.health_last_error && (
+                              <div className="text-[10px] font-mono text-muted" dir="ltr">{r.health_last_error}</div>
+                            )}
+                          </>
+                        )}
+                      </td>
                       <td className="p-3">
                         <button className="btn btn-sm" onClick={() => testOne(r.id)} disabled={testingId === r.id}>
                           {testingId === r.id ? (

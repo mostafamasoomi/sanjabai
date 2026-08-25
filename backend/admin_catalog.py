@@ -81,6 +81,19 @@ async def list_catalog_models(request: Request) -> JSONResponse:
     Includes `provider` and `upstream`, which the user-facing catalog
     endpoints (`/v1/models`, `/catalog/models` in content.py) must not
     expose. This route is admin-only; keep it that way.
+
+    `last_ok_at` and `health_status` are joined in from model_health_state
+    because `last_verified_at` cannot answer the one question that decides
+    whether a row can be enabled at all. That column is NOT NULL DEFAULT
+    now() and is touched by every rollup pass, so all ~1,200 rows carry a
+    recent date whether or not the model has ever answered — the admin table
+    was showing "آخرین تأیید زنده: امروز" for models that had never been
+    probed once. services/probe_gate.py gates on `last_ok_at`, so that is
+    what the table has to show.
+
+    `public_id` and `audience` come along for the same reason: a healthy,
+    priced row with no public_id is invisible to users no matter what its
+    availability says, and nothing in the panel used to reveal that.
     """
     if not await admin_required(request):
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
@@ -88,11 +101,19 @@ async def list_catalog_models(request: Request) -> JSONResponse:
         return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
     async with async_session() as session:
         res = await session.execute(sqlalchemy.text(
-            "SELECT id, provider_model_id, provider, upstream, display_name, "
-            "availability, provenance, context_window, currency, "
-            "input_per_million, output_per_million, "
-            "usd_input_per_million, usd_output_per_million, last_verified_at, markup_pct "
-            "FROM model_catalog ORDER BY display_name, id"
+            "SELECT c.id, c.provider_model_id, c.provider, c.upstream, c.display_name, "
+            "c.availability, c.provenance, c.context_window, c.currency, "
+            "c.input_per_million, c.output_per_million, "
+            "c.usd_input_per_million, c.usd_output_per_million, c.last_verified_at, "
+            "c.markup_pct, c.public_id, c.audience, "
+            "s.last_ok_at, s.status AS health_status, s.last_error AS health_last_error "
+            "FROM model_catalog c "
+            # Either key: the background sweep records under provider_model_id,
+            # the admin's «تست زنده» under the catalog id (same string for all
+            # but one row today, but the join must not depend on that).
+            "LEFT JOIN model_health_state s "
+            "  ON s.model_id = c.id OR s.model_id = c.provider_model_id "
+            "ORDER BY c.display_name, c.id"
         ))
         rows = [dict(r._mapping) for r in res.fetchall()]
     return JSONResponse(jsonable_encoder(rows))

@@ -373,3 +373,40 @@ class TestOrgDefaultModelValidation:
         mock_async_session.execute = _execute
         client.post('/admin/org-default-model', json={'default_model': 'nope/nope'})
         assert not any('proxy_config' in sql.lower() for sql in executed)
+
+
+class TestCatalogListingExposesTheTruthfulProbeColumn:
+    """`last_verified_at` cannot answer "has this model ever answered".
+    It is NOT NULL DEFAULT now() and the health rollup touches it every
+    pass, so the admin table showed a recent date for all ~1,200 rows --
+    including the 1,155 that had never been probed once. The listing now
+    joins model_health_state so the panel can show, and filter on, the
+    same column services/probe_gate.py actually gates enabling against."""
+
+    def _sql(self):
+        import inspect
+        import admin_catalog
+        return inspect.getsource(admin_catalog.list_catalog_models)
+
+    def test_it_selects_last_ok_at_from_the_health_table(self):
+        sql = self._sql()
+        assert 'model_health_state' in sql
+        assert 's.last_ok_at' in sql
+
+    def test_it_joins_on_either_id_column(self):
+        """Same reason as the gate: the sweep records under
+        provider_model_id, «تست زنده» under the catalog id."""
+        sql = self._sql()
+        assert 's.model_id = c.id' in sql
+        assert 's.model_id = c.provider_model_id' in sql
+
+    def test_the_join_is_a_left_join(self):
+        """1,155 rows have no health row at all. An inner join would drop
+        them from the admin table entirely -- the exact models this whole
+        change exists to make visible."""
+        assert 'LEFT JOIN model_health_state' in self._sql()
+
+    def test_it_exposes_public_id_so_invisible_rows_can_be_spotted(self):
+        """A healthy, priced, `available` row with no public_id is served
+        to nobody, and nothing in the panel used to say so."""
+        assert 'c.public_id' in self._sql()

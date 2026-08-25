@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { useCatalog } from '@/lib/useCatalog'
 import { Skeleton } from '@/components/ui'
+import { BrandLockup } from '@/components/BrandLockup'
 import { markOnboarded, isOnboarded, displayName } from '@/lib/onboarding'
 import { GOALS } from './constants'
 import { recommendFor, saveFavorites } from './onboardingHelpers'
@@ -101,12 +102,10 @@ export default function OnboardingPage() {
       <div className="relative min-h-full flex flex-col">
         {/* ── Top bar: brand + step progress ───────────────────────────────── */}
         <div className="flex items-center justify-between px-5 sm:px-8 py-4 max-w-3xl w-full mx-auto">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-[var(--accent)] flex items-center justify-center">
-              <span className="text-white text-sm font-bold">M</span>
-            </div>
-            <span className="text-base font-bold text-gradient tracking-tight">Sanjabai</span>
-          </div>
+          {/* The real lockup. This corner was still a rounded tile with the
+              letter «M» in it -- a leftover mark from before the rebrand --
+              next to "Sanjabai" set in the page font. */}
+          <BrandLockup height={26} />
           <span className="badge badge-accent">تنظیمات اولیه</span>
         </div>
 

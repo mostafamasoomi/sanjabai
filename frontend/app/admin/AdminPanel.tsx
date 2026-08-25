@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Icon, type IconName } from '@/components/ui/Icon'
+import { BrandLockup } from '@/components/BrandLockup'
 import { toast } from '@/components/ui'
 import dynamic from 'next/dynamic'
 import { Field } from './sections/shared'
@@ -169,11 +170,11 @@ export default function AdminPage() {
       <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--bg-base)' }}>
         <div className="card w-full max-w-sm">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4" style={{ background: 'var(--accent-dim)' }}>
-              <Icon name="settings" size={28} className="text-accent" />
+            <div className="flex justify-center mb-5">
+              <BrandLockup height={38} />
             </div>
             <h1 className="text-xl font-bold text-primary">پنل مدیریت</h1>
-            <p className="text-sm mt-1 text-muted">داشبورد مدیریت Sanjabai</p>
+            <p className="text-sm mt-1 text-muted">ورود با توکن ادمین</p>
           </div>
 
           <div className="space-y-4">
@@ -252,17 +253,16 @@ export default function AdminPage() {
             borderColor: 'var(--border)',
           }}
         >
-          {/* Logo */}
+          {/* Logo -- the real lockup, same component the app shell and the
+              landing header use. The gear-in-a-box placeholder that stood
+              here spelled "Sanjabai" in the page font, which is not the
+              wordmark. `Admin Panel` became Persian: it is the only text
+              left in this corner and every other label in the panel is
+              Persian. The lockup already carries the name, so it is not
+              repeated underneath. */}
           <div className="shrink-0 p-5 border-b" style={{ borderColor: 'var(--border)' }}>
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'var(--accent-dim)' }}>
-                <Icon name="settings" size={18} className="text-accent" />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold text-primary">Sanjabai</h2>
-                <p className="text-[10px] text-muted">Admin Panel</p>
-              </div>
-            </div>
+            <BrandLockup height={28} />
+            <p className="text-[10px] text-muted mt-2">پنل مدیریت</p>
           </div>
 
           {/* Navigation — the کاربران/مدل‌ها count badges are gone with the

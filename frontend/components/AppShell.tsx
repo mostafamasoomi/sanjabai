@@ -408,7 +408,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between px-4 py-3.5 border-b border-[var(--border)]">
-              <span className="font-bold text-gradient">Sanjabai</span>
+              <BrandLockup height={24} />
               <button onClick={() => setSidebarOpen(false)} className="btn btn-ghost btn-icon topbar-menu-btn">
                 <Icon name="close" size={18} />
               </button>

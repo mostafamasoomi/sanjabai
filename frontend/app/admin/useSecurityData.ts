@@ -13,13 +13,21 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import { useLang } from '@/components/LanguageToggle'
 import { api, errMessage } from './api'
 import type { SecurityStats, AuditLog } from './types'
+import { useSecurityDataStrings } from './useSecurityData.strings'
 
 export const AUDIT_PAGE_SIZE = 50
 const REFRESH_MS = 30_000
 
 export function useSecurityData() {
+  // useSecurityData is itself a hook (called from SecuritySection), so it is
+  // safe for it to read the language directly rather than take it as a
+  // parameter -- see the note in the i18n spec on hook files.
+  const lang = useLang()
+  const s = useSecurityDataStrings(lang)
+
   const [stats, setStats] = useState<SecurityStats | null>(null)
   const [statsError, setStatsError] = useState<string | null>(null)
   const [logs, setLogs] = useState<AuditLog[]>([])
@@ -44,7 +52,7 @@ export function useSecurityData() {
       // Previously swallowed, which left the four stat cards on their
       // skeleton forever — indistinguishable from a slow load.
       setStats(null)
-      setStatsError(errMessage(statsRes.reason, 'خطا در دریافت آمار امنیتی'))
+      setStatsError(errMessage(statsRes.reason, s.statsError))
     }
 
     if (logsRes.status === 'fulfilled') {
@@ -58,11 +66,11 @@ export function useSecurityData() {
     } else {
       setLogs([])
       setTotal(0)
-      setLogsError(errMessage(logsRes.reason, 'خطا در دریافت لاگ عملیات ادمین'))
+      setLogsError(errMessage(logsRes.reason, s.logsError))
     }
 
     setLoading(false)
-  }, [page, actionFilter])
+  }, [page, actionFilter, s])
 
   useEffect(() => { load() }, [load])
 

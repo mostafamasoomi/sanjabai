@@ -1,17 +1,14 @@
-/* Bilingual label dictionary for the admin panel shell.
+/* Bilingual labels for the admin panel SHELL -- the sidebar nav, the sub-tab
+ * table, the login screen and its toasts.
  *
- * The rest of the panel's 30+ section files are Persian-only by design --
- * out of scope here. This file only covers what AdminPanel.tsx itself owns:
- * the sidebar nav labels, the models/pricing sub-tab labels, and the small
- * amount of chrome text (login screen, sidebar caption, toasts) that lives
- * directly in AdminPanel.tsx.
+ * This is the older of the panel's two translation shapes and it stays for
+ * what it is good at: a list of items that already existed as objects
+ * (`{ key, label, icon }`) and only needed a sibling field. Section bodies
+ * use the other shape, `dict(FA, EN)` from lib/adminI18n.ts, which is what
+ * to reach for when translating free-standing strings -- it makes a missing
+ * key a compile error, which a `labelEn` field cannot do.
  *
- * Shape: every bilingual entry keeps its existing `label` field as the
- * Persian string (unchanged, so files outside this task's scope that already
- * read `.label` -- e.g. ModelsModule.tsx reading `MODELS_TABS[i].label` --
- * keep compiling and rendering exactly as before) and adds a sibling
- * `labelEn` field. `t()` picks whichever the active language calls for and
- * falls back to Persian for an unknown or absent language, matching
+ * `t()` falls back to Persian for an unknown or absent language, matching
  * LanguageToggle's own default.
  */
 

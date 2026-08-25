@@ -90,10 +90,11 @@ describe('admin card row modifier', () => {
   })
 
   it('applies the modifier at the two «عملیات کاتالوگ مدل‌ها» bars', () => {
-    const filterBar = code('app/admin/sections/CatalogFilterBar.tsx')
-    const ops = code('app/admin/sections/ModelOpsSection.tsx')
-    expect(filterBar).toContain('admin-card admin-row')
-    expect(ops).toContain('admin-card admin-row')
+    // The bulk bar moved out of ModelOpsSection.tsx when that file crossed
+    // the 500-line cap; it lives in ModelOpsBulkControls.tsx now. The
+    // assertion follows the markup, not the old address.
+    expect(code('app/admin/sections/CatalogFilterBar.tsx')).toContain('admin-card admin-row')
+    expect(code('app/admin/sections/ModelOpsBulkControls.tsx')).toContain('admin-card admin-row')
   })
 })
 

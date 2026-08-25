@@ -3,8 +3,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/adminI18n'
 import { Field } from './shared'
 import type { PackagesSectionProps } from './PackagesTypes'
+import { packagesPremiumThresholdStrings } from './PackagesPremiumThreshold.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    The "expensive model" price threshold that decides which requests count
@@ -27,6 +30,10 @@ interface ThresholdData {
 }
 
 export default function PackagesPremiumThreshold({ api }: PackagesSectionProps) {
+  const lang = useLang()
+  const s = packagesPremiumThresholdStrings(lang)
+  const f = fmt(lang)
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<ThresholdData | null>(null)
@@ -40,18 +47,18 @@ export default function PackagesPremiumThreshold({ api }: PackagesSectionProps) 
       const res = await api('/api/admin/premium-threshold')
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        throw new Error(body.detail || `خطای سرور (${res.status})`)
+        throw new Error(body.detail || s.serverErrorGeneric(f.num(res.status)))
       }
       const body: ThresholdData = await res.json()
       setData(body)
       setDraft(String(body.value))
     } catch (e) {
-      setError(e instanceof Error && e.message !== 'unauthorized' ? e.message : 'خطا در دریافت آستانهٔ مدل گران')
+      setError(e instanceof Error && e.message !== 'unauthorized' ? e.message : s.loadError)
       setData(null)
     } finally {
       setLoading(false)
     }
-  }, [api])
+  }, [api, s, f])
 
   useEffect(() => { load() }, [load])
 
@@ -69,13 +76,13 @@ export default function PackagesPremiumThreshold({ api }: PackagesSectionProps) 
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        toast(body.detail || 'ذخیره ناموفق بود', 'error')
+        toast(body.detail || s.saveErrorGeneric, 'error')
         return
       }
-      toast('آستانهٔ مدل گران ذخیره شد', 'success')
+      toast(s.saved, 'success')
       await load()
     } catch {
-      toast('ذخیره ناموفق بود', 'error')
+      toast(s.saveErrorGeneric, 'error')
     } finally {
       setSaving(false)
     }
@@ -86,12 +93,12 @@ export default function PackagesPremiumThreshold({ api }: PackagesSectionProps) 
       <div className="admin-card" style={{ borderRight: '3px solid var(--danger, #ef4444)' }}>
         <div className="flex items-center gap-2 mb-2">
           <Icon name="warning" size={18} style={{ color: 'var(--danger, #ef4444)' }} />
-          <h3 className="font-semibold text-sm text-primary">دریافت آستانهٔ مدل گران ناموفق بود</h3>
+          <h3 className="font-semibold text-sm text-primary">{s.loadFailedTitle}</h3>
         </div>
         <p className="text-xs text-muted mb-4">{error}</p>
         <button className="btn btn-sm" onClick={load}>
           <Icon name="refresh" size={14} />
-          <span>تلاش دوباره</span>
+          <span>{s.retry}</span>
         </button>
       </div>
     )
@@ -100,12 +107,12 @@ export default function PackagesPremiumThreshold({ api }: PackagesSectionProps) 
   return (
     <div className="admin-card">
       {loading ? (
-        <p className="text-sm text-muted">در حال بارگذاری…</p>
+        <p className="text-sm text-muted">{s.loading}</p>
       ) : !data ? (
-        <p className="text-sm text-muted">اطلاعاتی یافت نشد</p>
+        <p className="text-sm text-muted">{s.noData}</p>
       ) : (
         <>
-          <Field label="مدل گران یعنی قیمت ورودی بیشتر از">
+          <Field label={s.fieldLabel}>
             <div className="flex items-center gap-2">
               <input
                 type="text" inputMode="numeric" className="input" dir="ltr"
@@ -113,18 +120,18 @@ export default function PackagesPremiumThreshold({ api }: PackagesSectionProps) 
                 value={draft} disabled={saving}
                 onChange={(e) => setDraft(e.target.value)}
               />
-              <span className="text-xs text-muted">تومان بر میلیون توکن</span>
+              <span className="text-xs text-muted">{s.unit}</span>
               {data.value !== data.default && (
-                <span className="text-xs text-muted">(پیش‌فرض: {data.default})</span>
+                <span className="text-xs text-muted">{s.defaultNote(f.num(data.default))}</span>
               )}
             </div>
           </Field>
           <p className="text-xs text-muted mt-1">
-            مدلی که قیمت ورودی‌اش بیشتر از این عدد باشد «گران» شمرده می‌شود و فقط سهمیهٔ ستون «از این، روی مدل گران» را مصرف می‌کند.
+            {s.explain}
           </p>
           {invalid && (
             <p className="text-xs mt-1" style={{ color: 'var(--danger, #ef4444)' }}>
-              مقدار باید یک عدد صحیح نامنفی باشد.
+              {s.invalid}
             </p>
           )}
           <div className="flex items-center gap-3 flex-wrap mt-3">
@@ -134,21 +141,21 @@ export default function PackagesPremiumThreshold({ api }: PackagesSectionProps) 
               ) : (
                 <>
                   <Icon name="check" size={14} />
-                  <span>ذخیره</span>
+                  <span>{s.save}</span>
                 </>
               )}
             </button>
             {dirty && !saving && (
               <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }}
                 onClick={() => data && setDraft(String(data.value))}>
-                انصراف
+                {s.cancel}
               </button>
             )}
-            {!dirty && !invalid && <span className="text-xs text-muted">تغییری برای ذخیره وجود ندارد</span>}
+            {!dirty && !invalid && <span className="text-xs text-muted">{s.noChanges}</span>}
           </div>
           {data.row_missing && (
             <p className="text-xs text-muted mt-2">
-              این تنظیم هنوز در پایگاه داده ساخته نشده — مقدار پیش‌فرض به‌کار می‌رود و اولین ذخیره ردیف را می‌سازد.
+              {s.rowMissing}
             </p>
           )}
         </>

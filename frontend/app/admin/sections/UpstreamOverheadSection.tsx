@@ -3,8 +3,10 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
-import { faNum, faDate, faTime } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/adminI18n'
 import { SectionHeader, StatCard } from './shared'
+import { upstreamOverheadStrings } from './UpstreamOverheadSection.strings'
 import {
   parseOverheadResponse,
   elapsedParts,
@@ -65,15 +67,24 @@ interface UpstreamOverheadSectionProps {
 
 /** `۴۲ ثانیه` under a minute, `۱ دقیقه و ۵ ثانیه` past it — so a 40s
  *  measurement reads as "still going" rather than looking hung. Digits go
- *  through `faNum` (the math itself lives in elapsedParts, see the import
- *  above) — this is the one place in the app allowed to render a number. */
-function formatElapsedSeconds(ms: number): string {
+ *  through `f.num` (the math itself lives in elapsedParts, see the import
+ *  above) — this is the one place in the app allowed to render a number.
+ *  `s`/`f` are the resolved strings/formatters, passed in by the component:
+ *  this is a plain helper, not a component, so it cannot call `useLang`. */
+function formatElapsedSeconds(
+  ms: number,
+  s: ReturnType<typeof upstreamOverheadStrings>,
+  f: ReturnType<typeof fmt>,
+): string {
   const { minutes, seconds } = elapsedParts(ms)
-  if (minutes === 0) return `${faNum(seconds)} ثانیه`
-  return seconds === 0 ? `${faNum(minutes)} دقیقه` : `${faNum(minutes)} دقیقه و ${faNum(seconds)} ثانیه`
+  if (minutes === 0) return s.elapsedSeconds(f.num(seconds))
+  return seconds === 0 ? s.elapsedMinutes(f.num(minutes)) : s.elapsedMinutesSeconds(f.num(minutes), f.num(seconds))
 }
 
 export default function UpstreamOverheadSection({ api }: UpstreamOverheadSectionProps) {
+  const lang = useLang()
+  const s = upstreamOverheadStrings(lang)
+  const f = fmt(lang)
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<ParsedOverhead | null>(null)
   // Distinct from a plain fetch failure: the request succeeded but the body
@@ -92,11 +103,11 @@ export default function UpstreamOverheadSection({ api }: UpstreamOverheadSection
     try {
       const res = await api('/api/admin/upstream-overhead')
       const body = await res.json()
-      setData(parseOverheadResponse(body))
+      setData(parseOverheadResponse(body, lang))
     } catch (err) {
       setData(null)
-      setParseError(err instanceof Error ? err.message : 'خطا در دریافت اطلاعات سربار پروایدرها')
-      toast('خطا در دریافت اطلاعات سربار پروایدرها', 'error')
+      setParseError(err instanceof Error ? err.message : s.loadErrorToast)
+      toast(s.loadErrorToast, 'error')
     } finally {
       setLoading(false)
     }
@@ -104,6 +115,10 @@ export default function UpstreamOverheadSection({ api }: UpstreamOverheadSection
 
   useEffect(() => {
     load()
+    // Deliberately mount-only, same as before translation: a language
+    // toggle re-renders the already-parsed data through `s`/`f`, it does
+    // not need a fresh network round-trip. `load` (and the `lang` it
+    // closes over) is always current on the reload/measure code paths.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -135,14 +150,12 @@ export default function UpstreamOverheadSection({ api }: UpstreamOverheadSection
       await load()
       toast(
         measuredCount != null
-          ? `اندازه‌گیری زنده تمام شد — ${faNum(measuredCount)} مسیر اندازه‌گیری شد${
-              skippedCount ? `، ${faNum(skippedCount)} مسیر رد شد` : ''
-            }`
-          : 'اندازه‌گیری زنده سربار به‌روزرسانی شد',
+          ? s.measureDoneWithCounts(f.num(measuredCount), skippedCount ? f.num(skippedCount) : null)
+          : s.measureDoneGeneric,
         'success',
       )
     } catch (err) {
-      toast(err instanceof Error && err.message ? err.message : 'اندازه‌گیری سربار ناموفق بود', 'error')
+      toast(err instanceof Error && err.message ? err.message : s.measureFailedToast, 'error')
     } finally {
       setMeasuring(false)
       measureStart.current = null
@@ -163,34 +176,29 @@ export default function UpstreamOverheadSection({ api }: UpstreamOverheadSection
 
   return (
     <div className="space-y-6">
-      <SectionHeader
-        title="سربار پروایدرهای بالادست"
-        subtitle="مقدار توکنی که هر مسیر بالادست (بدون درخواست کاربر) به هر پیام اضافه می‌کند — کاربر امروز بابت همهٔ این توکن‌ها هزینه می‌دهد"
-      />
+      <SectionHeader title={s.title} subtitle={s.subtitle} />
 
       <div className="admin-card">
         <div className="flex items-center justify-between gap-4 flex-wrap mb-2">
-          <h3 className="font-semibold text-sm text-primary">اندازه‌گیری زنده</h3>
+          <h3 className="font-semibold text-sm text-primary">{s.liveMeasurementTitle}</h3>
           <button className="btn btn-sm" onClick={runMeasure} disabled={measuring}>
             {measuring ? (
               <>
                 <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-                <span>در حال اندازه‌گیری… ({formatElapsedSeconds(elapsedMs)})</span>
+                <span>{s.measuring(formatElapsedSeconds(elapsedMs, s, f))}</span>
               </>
             ) : (
               <>
                 <Icon name="refresh" size={14} />
-                <span>اندازه‌گیری زنده</span>
+                <span>{s.measureButton}</span>
               </>
             )}
           </button>
         </div>
-        <p className="text-xs text-muted leading-6">
-          این اندازه‌گیری درخواست واقعی به مسیرهای بالادست می‌زند و ممکن است بیش از یک دقیقه طول بکشد — تا پایان صبر کنید، قطع نشده.
-        </p>
+        <p className="text-xs text-muted leading-6">{s.measureHint}</p>
         {data?.storedUpdatedAt && (
           <p className="text-xs text-muted">
-            آخرین ذخیره‌سازی: {faDate(data.storedUpdatedAt)} — {faTime(data.storedUpdatedAt)}
+            {s.lastSaved(f.date(data.storedUpdatedAt), f.time(data.storedUpdatedAt))}
           </p>
         )}
       </div>
@@ -211,19 +219,16 @@ export default function UpstreamOverheadSection({ api }: UpstreamOverheadSection
           <div className="flex items-center gap-2">
             <Icon name="warning" size={16} className="text-[var(--danger)]" />
             <p className="text-sm" style={{ fontWeight: 700, color: 'var(--danger)' }}>
-              پاسخ سرور با قرارداد مورد انتظار مطابقت ندارد
+              {s.contractMismatchTitle}
             </p>
           </div>
           <p className="text-xs" style={{ color: 'var(--danger)' }}>
             {parseError}
           </p>
-          <p className="text-xs text-muted leading-6">
-            این با «هنوز چیزی اندازه‌گیری نشده» فرق دارد — یعنی ساختار پاسخ backend عوض شده و این صفحه نمی‌تواند آن را بخواند. قبل از
-            اعتماد به هر عددی در جدول زیر، این را برطرف کنید.
-          </p>
+          <p className="text-xs text-muted leading-6">{s.contractMismatchHint}</p>
           <button className="btn btn-sm" style={{ alignSelf: 'flex-start' }} onClick={load}>
             <Icon name="refresh" size={14} />
-            تلاش دوباره
+            {s.retry}
           </button>
         </div>
       )}
@@ -231,23 +236,21 @@ export default function UpstreamOverheadSection({ api }: UpstreamOverheadSection
       {/* ── Stat summary — from perProviderStats7d, not per-route ── */}
       {!loading && data && data.providerStats.length > 0 && (
         <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-          <StatCard icon="compare" label="مسیرهای دارای اندازه‌گیری اختصاصی" value={faNum(data.entries.length)} color="var(--accent, #6366f1)" />
-          <StatCard icon="chart" label="درخواست ۷ روز اخیر (مجموع پروایدرها)" value={faNum(totalRequests7d)} color="var(--warning, #eab308)" />
-          <StatCard icon="cpu" label="توکن کسرشده ۷ روز اخیر (مجموع)" value={faNum(totalTokensDiscounted7d)} color="var(--success, #22c55e)" />
+          <StatCard icon="compare" label={s.statMeasuredRoutes} value={f.num(data.entries.length)} color="var(--accent, #6366f1)" />
+          <StatCard icon="chart" label={s.statRequests7d} value={f.num(totalRequests7d)} color="var(--warning, #eab308)" />
+          <StatCard icon="cpu" label={s.statTokensDiscounted7d} value={f.num(totalTokensDiscounted7d)} color="var(--success, #22c55e)" />
         </div>
       )}
 
       {/* ── Measured entries table ── */}
       <div className="admin-card">
-        <h3 className="font-semibold text-sm mb-1 text-primary">مسیرهای اندازه‌گیری‌شده — overhead اختصاصی</h3>
-        <p className="text-xs text-muted mb-2">
-          هر ردیف مستقیماً اندازه‌گیری شده — عدد سربار آن از پیش‌فرض هیچ پروایدری ارث نمی‌برد.
-        </p>
+        <h3 className="font-semibold text-sm mb-1 text-primary">{s.measuredEntriesTitle}</h3>
+        <p className="text-xs text-muted mb-2">{s.measuredEntriesSubtitle}</p>
 
         {loading ? (
-          <div className="p-6 text-center text-sm text-muted">در حال بارگذاری…</div>
+          <div className="p-6 text-center text-sm text-muted">{s.loading}</div>
         ) : !data ? (
-          <div className="p-6 text-center text-sm text-muted">اطلاعاتی در دسترس نیست</div>
+          <div className="p-6 text-center text-sm text-muted">{s.noData}</div>
         ) : data.isInert ? (
           <div
             style={{
@@ -259,29 +262,24 @@ export default function UpstreamOverheadSection({ api }: UpstreamOverheadSection
               background: 'var(--bg-hover)',
             }}
           >
-            <p className="text-sm text-primary" style={{ fontWeight: 600 }}>
-              نقشهٔ سربار هنوز خالی است — این حالت پیش‌فرض همان چیزی است که با آن منتشر شده‌ایم.
-            </p>
-            <p className="text-xs text-muted leading-6">
-              یعنی کسر سربار هنوز غیرفعال است و فعلاً هیچ کاربری بابت سربار مسیر بالادست هزینهٔ اضافه نمی‌دهد. برای پر شدن این جدول و
-              فعال شدن کسر واقعی، روی «اندازه‌گیری زنده» بزنید.
-            </p>
+            <p className="text-sm text-primary" style={{ fontWeight: 600 }}>{s.inertTitle}</p>
+            <p className="text-xs text-muted leading-6">{s.inertBody}</p>
           </div>
         ) : data.entries.length === 0 ? (
           <div className="p-6 text-center text-sm text-muted">
-            آخرین اندازه‌گیری ({data.measuredAt ? `${faDate(data.measuredAt)} — ${faTime(data.measuredAt)}` : '—'}) هیچ مسیری را با موفقیت ثبت نکرد.
+            {s.noRouteRecorded(data.measuredAt ? `${f.date(data.measuredAt)} — ${f.time(data.measuredAt)}` : '—')}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="admin-table w-full text-sm">
               <thead>
                 <tr>
-                  <th className="text-right p-3">مسیر</th>
-                  <th className="text-right p-3">پروایدر</th>
-                  <th className="text-right p-3">سربار (توکن)</th>
-                  <th className="text-right p-3">مدل نمونه</th>
-                  <th className="text-right p-3">زمان اندازه‌گیری</th>
-                  <th className="text-right p-3">جزئیات</th>
+                  <th className="text-right p-3">{s.colRoute}</th>
+                  <th className="text-right p-3">{s.colProvider}</th>
+                  <th className="text-right p-3">{s.colOverheadTokens}</th>
+                  <th className="text-right p-3">{s.colSampleModel}</th>
+                  <th className="text-right p-3">{s.colMeasuredAt}</th>
+                  <th className="text-right p-3">{s.colDetails}</th>
                 </tr>
               </thead>
               <tbody>
@@ -290,34 +288,32 @@ export default function UpstreamOverheadSection({ api }: UpstreamOverheadSection
                   return (
                     <Fragment key={r.route_key}>
                       <tr>
-                        <td className="p-3 font-mono text-xs text-primary">{r.route_key}</td>
+                        <td className="p-3 font-mono text-xs text-primary" dir="ltr">{r.route_key}</td>
                         <td className="p-3 text-xs">{r.provider}</td>
                         <td className="p-3">
-                          <span className="badge">{faNum(r.overhead_tokens)}</span>
+                          <span className="badge">{f.num(r.overhead_tokens)}</span>
                         </td>
                         <td className="p-3 text-xs">{r.sample_model || '—'}</td>
                         <td className="p-3 text-xs">
-                          {r.measured_at ? `${faDate(r.measured_at)} — ${faTime(r.measured_at)}` : '—'}
+                          {r.measured_at ? `${f.date(r.measured_at)} — ${f.time(r.measured_at)}` : '—'}
                         </td>
                         <td className="p-3">
                           <button className="btn btn-sm" onClick={() => toggleExpanded(r.route_key)} disabled={!r.has_measurement}>
                             <Icon name={isExpanded ? 'close' : 'search'} size={13} />
-                            <span>{isExpanded ? 'بستن' : r.has_measurement ? 'نحوهٔ محاسبه' : 'بدون جزئیات'}</span>
+                            <span>{isExpanded ? s.close : r.has_measurement ? s.howComputed : s.noDetails}</span>
                           </button>
                         </td>
                       </tr>
                       {isExpanded && r.has_measurement && (
                         <tr>
                           <td colSpan={6} className="p-3" style={{ background: 'var(--bg-hover)' }}>
-                            <p className="text-xs text-muted mb-2">
-                              اعداد خامی که سربار از روی آن‌ها محاسبه شده — یک عدد بدون این‌ها، یعنی معلوم نیست چرا مبلغ هر کاربر تغییر کرده.
-                            </p>
+                            <p className="text-xs text-muted mb-2">{s.rawNumbersHint}</p>
                             <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))' }}>
-                              <div><p className="text-xs text-muted mb-1">p۱</p><p className="text-sm text-primary font-mono">{r.p1 != null ? faNum(r.p1) : '—'}</p></div>
-                              <div><p className="text-xs text-muted mb-1">p۲</p><p className="text-sm text-primary font-mono">{r.p2 != null ? faNum(r.p2) : '—'}</p></div>
-                              <div><p className="text-xs text-muted mb-1">c۱</p><p className="text-sm text-primary font-mono">{r.c1 != null ? faNum(r.c1) : '—'}</p></div>
-                              <div><p className="text-xs text-muted mb-1">c۲</p><p className="text-sm text-primary font-mono">{r.c2 != null ? faNum(r.c2) : '—'}</p></div>
-                              <div><p className="text-xs text-muted mb-1">شیب (slope)</p><p className="text-sm text-primary font-mono">{r.slope != null ? faNum(r.slope, { decimals: 3 }) : '—'}</p></div>
+                              <div><p className="text-xs text-muted mb-1">{s.labelP1}</p><p className="text-sm text-primary font-mono">{r.p1 != null ? f.num(r.p1) : '—'}</p></div>
+                              <div><p className="text-xs text-muted mb-1">{s.labelP2}</p><p className="text-sm text-primary font-mono">{r.p2 != null ? f.num(r.p2) : '—'}</p></div>
+                              <div><p className="text-xs text-muted mb-1">{s.labelC1}</p><p className="text-sm text-primary font-mono">{r.c1 != null ? f.num(r.c1) : '—'}</p></div>
+                              <div><p className="text-xs text-muted mb-1">{s.labelC2}</p><p className="text-sm text-primary font-mono">{r.c2 != null ? f.num(r.c2) : '—'}</p></div>
+                              <div><p className="text-xs text-muted mb-1">{s.labelSlope}</p><p className="text-sm text-primary font-mono">{r.slope != null ? f.num(r.slope, { decimals: 3 }) : '—'}</p></div>
                             </div>
                           </td>
                         </tr>
@@ -334,16 +330,14 @@ export default function UpstreamOverheadSection({ api }: UpstreamOverheadSection
       {/* ── Provider-default fallback table — kept separate on purpose, see header comment ── */}
       {!loading && data && data.providerDefaults.length > 0 && (
         <div className="admin-card">
-          <h3 className="font-semibold text-sm mb-1 text-primary">پیش‌فرض هر پروایدر — fallback برای مسیرهای اندازه‌گیری‌نشده</h3>
-          <p className="text-xs text-muted mb-2">
-            این عدد فقط برای پیشوندی از این پروایدر که در جدول بالا اندازه‌گیری اختصاصی ندارد اعمال می‌شود — با overhead اختصاصی هر مسیر یکی نیست.
-          </p>
+          <h3 className="font-semibold text-sm mb-1 text-primary">{s.providerDefaultsTitle}</h3>
+          <p className="text-xs text-muted mb-2">{s.providerDefaultsSubtitle}</p>
           <div className="overflow-x-auto">
             <table className="admin-table w-full text-sm">
               <thead>
                 <tr>
-                  <th className="text-right p-3">پروایدر</th>
-                  <th className="text-right p-3">سربار پیش‌فرض (توکن)</th>
+                  <th className="text-right p-3">{s.colProvider}</th>
+                  <th className="text-right p-3">{s.colDefaultOverheadTokens}</th>
                 </tr>
               </thead>
               <tbody>
@@ -351,7 +345,7 @@ export default function UpstreamOverheadSection({ api }: UpstreamOverheadSection
                   <tr key={d.provider}>
                     <td className="p-3 text-xs">{d.provider}</td>
                     <td className="p-3">
-                      <span className="badge">{faNum(d.overhead_tokens)}</span>
+                      <span className="badge">{f.num(d.overhead_tokens)}</span>
                     </td>
                   </tr>
                 ))}
@@ -364,25 +358,23 @@ export default function UpstreamOverheadSection({ api }: UpstreamOverheadSection
       {/* ── 7-day per-provider stats — kept separate on purpose, see header comment ── */}
       {!loading && data && data.providerStats.length > 0 && (
         <div className="admin-card">
-          <h3 className="font-semibold text-sm mb-1 text-primary">آمار ۷ روز اخیر به تفکیک پروایدر</h3>
-          <p className="text-xs text-muted mb-2">
-            این آمار به ازای پروایدر است، نه هر مسیر — چند مسیر می‌توانند یک ردیف آماری مشترک داشته باشند.
-          </p>
+          <h3 className="font-semibold text-sm mb-1 text-primary">{s.statsTitle}</h3>
+          <p className="text-xs text-muted mb-2">{s.statsSubtitle}</p>
           <div className="overflow-x-auto">
             <table className="admin-table w-full text-sm">
               <thead>
                 <tr>
-                  <th className="text-right p-3">پروایدر</th>
-                  <th className="text-right p-3">درخواست ۷ روز</th>
-                  <th className="text-right p-3">توکن کسرشده ۷ روز</th>
+                  <th className="text-right p-3">{s.colProvider}</th>
+                  <th className="text-right p-3">{s.colRequests7d}</th>
+                  <th className="text-right p-3">{s.colTokensDiscounted7d}</th>
                 </tr>
               </thead>
               <tbody>
-                {data.providerStats.map((s) => (
-                  <tr key={s.provider}>
-                    <td className="p-3 text-xs">{s.provider}</td>
-                    <td className="p-3 text-xs">{faNum(s.requests_7d)}</td>
-                    <td className="p-3 text-xs">{faNum(s.tokens_discounted_7d)}</td>
+                {data.providerStats.map((row) => (
+                  <tr key={row.provider}>
+                    <td className="p-3 text-xs">{row.provider}</td>
+                    <td className="p-3 text-xs">{f.num(row.requests_7d)}</td>
+                    <td className="p-3 text-xs">{f.num(row.tokens_discounted_7d)}</td>
                   </tr>
                 ))}
               </tbody>

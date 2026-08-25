@@ -1,0 +1,78 @@
+import { dict } from '@/lib/adminI18n'
+
+/* See CatalogFilterBar.strings.ts for why FA has no `as const` and EN is
+   annotated `typeof FA` -- that is the whole completeness check. */
+
+const FA = {
+  title: 'مدیریت کاربران',
+  // Interpolated rather than concatenated: word order between the two
+  // numbers is not the same in both languages.
+  subtitleShown: (shown: string, total: string) => `نمایش ${shown} کاربر از ${total} کاربر ثبت‌نام شده`,
+  subtitleTotal: (total: string) => `${total} کاربر ثبت‌نام شده`,
+  fetchError: 'خطا در دریافت فهرست کاربران',
+  banSuccess: 'کاربر مسدود شد',
+  unbanSuccess: 'کاربر رفع مسدودیت شد',
+  banError: 'خطا در تغییر وضعیت مسدودیت',
+  editSuccess: 'کاربر ویرایش شد',
+  editError: 'خطا در ویرایش کاربر',
+  searchPlaceholder: 'جستجو: ایمیل، موبایل، شناسه...',
+  colId: 'شناسه',
+  colEmail: 'ایمیل',
+  colPhone: 'موبایل',
+  colBalance: 'موجودی',
+  colReserved: 'در رزرو',
+  colUsedToday: 'مصرف امروز',
+  colStatus: 'وضعیت',
+  colActions: 'عملیات',
+  noUsersFound: 'کاربری یافت نشد',
+  ledgerMismatch: 'ناهمخوان با دفتر کل',
+  ledgerMismatchTitle: (sum: string) => `مجموع دفتر کل: ${sum}`,
+  statusBanned: 'مسدود',
+  statusActive: 'فعال',
+  editTitle: 'ویرایش',
+  detailsTitle: 'جزئیات',
+  unbanTitle: 'رفع مسدودیت',
+  banTitle: 'مسدودسازی',
+  editModalTitle: 'ویرایش کاربر',
+  emailLabel: 'ایمیل',
+  phoneLabel: 'موبایل',
+  save: 'ذخیره',
+  cancel: 'انصراف',
+}
+
+const EN: typeof FA = {
+  title: 'User management',
+  subtitleShown: (shown, total) => `Showing ${shown} of ${total} registered users`,
+  subtitleTotal: (total) => `${total} registered users`,
+  fetchError: 'Error loading the user list',
+  banSuccess: 'User banned',
+  unbanSuccess: 'User unbanned',
+  banError: 'Error changing ban status',
+  editSuccess: 'User updated',
+  editError: 'Error updating user',
+  searchPlaceholder: 'Search: email, phone, id...',
+  colId: 'ID',
+  colEmail: 'Email',
+  colPhone: 'Phone',
+  colBalance: 'Balance',
+  colReserved: 'Reserved',
+  colUsedToday: 'Used today',
+  colStatus: 'Status',
+  colActions: 'Actions',
+  noUsersFound: 'No users found',
+  ledgerMismatch: 'Mismatched with ledger',
+  ledgerMismatchTitle: (sum) => `Ledger total: ${sum}`,
+  statusBanned: 'Banned',
+  statusActive: 'Active',
+  editTitle: 'Edit',
+  detailsTitle: 'Details',
+  unbanTitle: 'Unban',
+  banTitle: 'Ban',
+  editModalTitle: 'Edit user',
+  emailLabel: 'Email',
+  phoneLabel: 'Phone',
+  save: 'Save',
+  cancel: 'Cancel',
+}
+
+export const usersSectionStrings = dict(FA, EN)

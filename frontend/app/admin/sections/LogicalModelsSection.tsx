@@ -3,9 +3,11 @@
 import { Fragment, useState, useEffect, useCallback } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
-import { faNum, faPrice, Num } from '@/lib/format'
+import { useLang, type Lang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/adminI18n'
 import { SectionHeader, StatCard } from './shared'
-import { availabilityLabel, AVAILABILITY_FA } from './availability'
+import { AVAILABILITY_OPTIONS, availabilityLabel } from './availability'
+import { logicalModelsStrings } from './LogicalModelsSection.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Logical Models — Phase C, part 3. A "logical model" (`logical_model`) is
@@ -98,10 +100,6 @@ interface LogicalModelsSectionProps {
   api: (path: string, opts?: RequestInit) => Promise<Response>
 }
 
-const ROUTING_FA: Record<string, string> = {
-  cheapest_healthy: 'ارزان‌ترین سالم', priority: 'بر اساس اولویت', pinned: 'پین‌شده',
-}
-const STATE_FA: Record<string, string> = { proposed: 'بررسی‌نشده', approved: 'تأییدشده', rejected: 'ردشده' }
 const STATE_COLOR: Record<string, string> = { proposed: 'var(--warning, #f59e0b)', approved: '#22c55e', rejected: 'var(--danger, #ef4444)' }
 
 function errMsg(e: unknown, fallback: string) {
@@ -109,6 +107,9 @@ function errMsg(e: unknown, fallback: string) {
 }
 
 export default function LogicalModelsSection({ api }: LogicalModelsSectionProps) {
+  const lang = useLang()
+  const s = logicalModelsStrings(lang)
+  const f = fmt(lang)
   const [rows, setRows] = useState<LogicalModelListItem[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -138,11 +139,11 @@ export default function LogicalModelsSection({ api }: LogicalModelsSectionProps)
       setTotal(body.total || 0)
       setPage(body.page || p)
     } catch (e) {
-      toast(errMsg(e, 'خطا در دریافت فهرست مدل‌های منطقی'), 'error')
+      toast(errMsg(e, s.loadListError), 'error')
     } finally {
       setLoading(false)
     }
-  }, [api, q, pendingOnly, availFilter, page])
+  }, [api, q, pendingOnly, availFilter, page, s.loadListError])
 
   useEffect(() => { load(1) }, [q, pendingOnly, availFilter]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -152,12 +153,12 @@ export default function LogicalModelsSection({ api }: LogicalModelsSectionProps)
       const res = await api(`/api/admin/logical-models/${encodeURIComponent(key)}`)
       setDetail(await res.json())
     } catch (e) {
-      toast(errMsg(e, 'خطا در دریافت جزئیات مدل'), 'error')
+      toast(errMsg(e, s.loadDetailError), 'error')
       setDetail(null)
     } finally {
       setDetailLoading(false)
     }
-  }, [api])
+  }, [api, s.loadDetailError])
 
   const toggleExpand = (key: string) => {
     if (expanded === key) { setExpanded(null); setDetail(null); return }
@@ -180,7 +181,7 @@ export default function LogicalModelsSection({ api }: LogicalModelsSectionProps)
       toast(okMsg, 'success')
       await refreshAfterMutation(key)
     } catch (e) {
-      toast(errMsg(e, 'ذخیره ناموفق بود'), 'error')
+      toast(errMsg(e, s.saveFailed), 'error')
     } finally {
       setBusy(null)
     }
@@ -188,31 +189,31 @@ export default function LogicalModelsSection({ api }: LogicalModelsSectionProps)
 
   const setCandidateState = (key: string, id: number, state: string) =>
     runAction(`c${id}-state`, `/api/admin/logical-models/${key}/candidates/${id}`, { state },
-      state === 'approved' ? 'گزینه تأیید شد' : 'گزینه رد شد', key)
+      state === 'approved' ? s.candidateApproved : s.candidateRejected, key)
 
   const toggleCandidateEnabled = (key: string, id: number, enabled: boolean) =>
     runAction(`c${id}-enabled`, `/api/admin/logical-models/${key}/candidates/${id}`, { enabled },
-      enabled ? 'گزینه فعال شد' : 'گزینه غیرفعال شد', key)
+      enabled ? s.candidateEnabled : s.candidateDisabled, key)
 
   const savePriority = (key: string, id: number, priority: number) =>
     runAction(`c${id}-priority`, `/api/admin/logical-models/${key}/candidates/${id}`, { priority },
-      'اولویت ذخیره شد', key)
+      s.prioritySaved, key)
 
   const pinCandidate = (key: string, catalogId: string) =>
     runAction(`pin-${catalogId}`, `/api/admin/logical-models/${key}/routing`,
-      { pinned_candidate_id: catalogId, routing_policy: 'pinned' }, 'گزینه پین شد', key)
+      { pinned_candidate_id: catalogId, routing_policy: 'pinned' }, s.candidatePinned, key)
 
   const unpin = (key: string) =>
     runAction('unpin', `/api/admin/logical-models/${key}/routing`,
-      { pinned_candidate_id: null, routing_policy: 'cheapest_healthy' }, 'پین برداشته شد', key)
+      { pinned_candidate_id: null, routing_policy: 'cheapest_healthy' }, s.pinRemoved, key)
 
   const setRoutingPolicy = (key: string, routing_policy: string) =>
     runAction('routing', `/api/admin/logical-models/${key}/routing`, { routing_policy },
-      'سیاست مسیریابی ذخیره شد', key)
+      s.routingSaved, key)
 
   const setAvailability = (key: string, availability: string) =>
     runAction('availability', `/api/admin/logical-models/${key}/availability`, { availability },
-      'وضعیت در دسترس‌بودن ذخیره شد', key)
+      s.availabilitySaved, key)
 
   const pendingModelsCount = rows.filter((r) => r.candidate_counts.proposed > 0).length
   const totalPages = Math.max(1, Math.ceil(total / limit))
@@ -220,27 +221,27 @@ export default function LogicalModelsSection({ api }: LogicalModelsSectionProps)
   return (
     <div className="space-y-6">
       <SectionHeader
-        title="مدل‌های منطقی"
-        subtitle="بررسی و تأیید گزینه‌های فیزیکی هر مدل منطقی — صف کار: مدل‌هایی که گزینهٔ بررسی‌نشده دارند"
+        title={s.title}
+        subtitle={s.subtitle}
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard icon="models" label="کل مدل‌های منطقی" value={faNum(total)} color="var(--accent)" />
-        <StatCard icon="warning" label="در این صفحه، دارای گزینهٔ بررسی‌نشده" value={faNum(pendingModelsCount)} color="var(--warning, #f59e0b)" />
-        <StatCard icon="check" label="کل گزینه‌های تأییدشده (نمونه‌گیری صفحه)" value={faNum(rows.reduce((s, r) => s + r.candidate_counts.approved, 0))} color="#22c55e" />
+        <StatCard icon="models" label={s.statTotal} value={f.num(total)} color="var(--accent)" />
+        <StatCard icon="warning" label={s.statPending} value={f.num(pendingModelsCount)} color="var(--warning, #f59e0b)" />
+        <StatCard icon="check" label={s.statApproved} value={f.num(rows.reduce((acc, r) => acc + r.candidate_counts.approved, 0))} color="#22c55e" />
       </div>
 
       <div className="admin-card">
         <div className="flex items-center gap-3 flex-wrap mb-4">
-          <input className="input" placeholder="جستجوی کلید یا نام نمایشی…" value={q}
+          <input className="input" placeholder={s.searchPlaceholder} value={q}
             onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 240 }} />
           <select className="input" value={availFilter} onChange={(e) => setAvailFilter(e.target.value)} style={{ maxWidth: 160 }}>
-            <option value="">همهٔ وضعیت‌ها</option>
-            {Object.entries(AVAILABILITY_FA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            <option value="">{s.allAvailability}</option>
+            {AVAILABILITY_OPTIONS.map((a) => <option key={a} value={a}>{availabilityLabel(a, lang)}</option>)}
           </select>
           <label className="flex items-center gap-2 text-sm text-secondary cursor-pointer">
             <input type="checkbox" checked={pendingOnly} onChange={(e) => setPendingOnly(e.target.checked)} />
-            فقط مدل‌های دارای گزینهٔ بررسی‌نشده (صف کار)
+            {s.pendingOnlyLabel}
           </label>
         </div>
 
@@ -248,19 +249,19 @@ export default function LogicalModelsSection({ api }: LogicalModelsSectionProps)
           <table className="admin-table w-full text-sm">
             <thead>
               <tr>
-                <th className="text-right p-3">مدل منطقی</th>
-                <th className="text-right p-3">فروشنده</th>
-                <th className="text-right p-3">وضعیت</th>
-                <th className="text-right p-3">سیاست مسیریابی</th>
-                <th className="text-right p-3">گزینه‌ها (بررسی‌نشده / تأیید / رد)</th>
-                <th className="text-right p-3">عملیات</th>
+                <th className="text-right p-3">{s.colLogicalModel}</th>
+                <th className="text-right p-3">{s.colVendor}</th>
+                <th className="text-right p-3">{s.colStatus}</th>
+                <th className="text-right p-3">{s.colRoutingPolicy}</th>
+                <th className="text-right p-3">{s.colCandidateCounts}</th>
+                <th className="text-right p-3">{s.colActions}</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} className="p-6 text-center text-sm text-muted">در حال بارگذاری…</td></tr>
+                <tr><td colSpan={6} className="p-6 text-center text-sm text-muted">{s.loadingRow}</td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={6} className="p-6 text-center text-sm text-muted">موردی یافت نشد</td></tr>
+                <tr><td colSpan={6} className="p-6 text-center text-sm text-muted">{s.noneFound}</td></tr>
               ) : (
                 rows.map((r) => (
                   <Fragment key={r.key}>
@@ -270,16 +271,16 @@ export default function LogicalModelsSection({ api }: LogicalModelsSectionProps)
                         <div className="text-xs font-mono text-muted">{r.key}</div>
                       </td>
                       <td className="p-3 text-xs text-muted">{r.vendor || '—'}</td>
-                      <td className="p-3"><span className="badge">{availabilityLabel(r.availability)}</span></td>
-                      <td className="p-3 text-xs text-muted">{ROUTING_FA[r.routing_policy] || r.routing_policy}</td>
+                      <td className="p-3"><span className="badge">{availabilityLabel(r.availability, lang)}</span></td>
+                      <td className="p-3 text-xs text-muted">{s.routing[r.routing_policy as keyof typeof s.routing] || r.routing_policy}</td>
                       <td className="p-3 text-xs">
-                        <span style={{ color: r.candidate_counts.proposed > 0 ? STATE_COLOR.proposed : 'var(--text-muted)' }}>{faNum(r.candidate_counts.proposed)}</span>
-                        {' / '}<span style={{ color: STATE_COLOR.approved }}>{faNum(r.candidate_counts.approved)}</span>
-                        {' / '}<span style={{ color: STATE_COLOR.rejected }}>{faNum(r.candidate_counts.rejected)}</span>
+                        <span style={{ color: r.candidate_counts.proposed > 0 ? STATE_COLOR.proposed : 'var(--text-muted)' }}>{f.num(r.candidate_counts.proposed)}</span>
+                        {' / '}<span style={{ color: STATE_COLOR.approved }}>{f.num(r.candidate_counts.approved)}</span>
+                        {' / '}<span style={{ color: STATE_COLOR.rejected }}>{f.num(r.candidate_counts.rejected)}</span>
                       </td>
                       <td className="p-3">
                         <button className="btn btn-sm" onClick={() => toggleExpand(r.key)}>
-                          {expanded === r.key ? 'بستن' : 'بررسی'}
+                          {expanded === r.key ? s.close : s.review}
                         </button>
                       </td>
                     </tr>
@@ -287,6 +288,7 @@ export default function LogicalModelsSection({ api }: LogicalModelsSectionProps)
                       <tr>
                         <td colSpan={6} className="p-3" style={{ background: 'var(--bg-elevated)' }}>
                           <CandidatesPanel
+                            lang={lang}
                             detail={detail} loading={detailLoading} busy={busy}
                             onApprove={(id) => setCandidateState(r.key, id, 'approved')}
                             onReject={(id) => setCandidateState(r.key, id, 'rejected')}
@@ -309,10 +311,10 @@ export default function LogicalModelsSection({ api }: LogicalModelsSectionProps)
         </div>
 
         <div className="flex items-center justify-between mt-4 text-xs text-muted">
-          <span>{faNum(total)} مدل — صفحهٔ {faNum(page)} از {faNum(totalPages)}</span>
+          <span>{s.footer(f.num(total), f.num(page), f.num(totalPages))}</span>
           <div className="flex gap-2">
-            <button className="btn btn-sm" disabled={page <= 1 || loading} onClick={() => load(page - 1)}>قبلی</button>
-            <button className="btn btn-sm" disabled={page >= totalPages || loading} onClick={() => load(page + 1)}>بعدی</button>
+            <button className="btn btn-sm" disabled={page <= 1 || loading} onClick={() => load(page - 1)}>{s.prev}</button>
+            <button className="btn btn-sm" disabled={page >= totalPages || loading} onClick={() => load(page + 1)}>{s.next}</button>
           </div>
         </div>
       </div>
@@ -323,10 +325,11 @@ export default function LogicalModelsSection({ api }: LogicalModelsSectionProps)
 /* ── Candidate review panel (rendered inline under an expanded row) ────── */
 
 function CandidatesPanel({
-  detail, loading, busy,
+  lang, detail, loading, busy,
   onApprove, onReject, onReset, onToggleEnabled, onSavePriority,
   onPin, onUnpin, onSetRoutingPolicy, onSetAvailability,
 }: {
+  lang: Lang
   detail: LogicalModelDetail | null
   loading: boolean
   busy: string | null
@@ -340,34 +343,36 @@ function CandidatesPanel({
   onSetRoutingPolicy: (policy: string) => void
   onSetAvailability: (availability: string) => void
 }) {
+  const s = logicalModelsStrings(lang)
+  const f = fmt(lang)
   const [priorityDrafts, setPriorityDrafts] = useState<Record<number, string>>({})
 
   if (loading || !detail) {
-    return <p className="text-xs text-muted p-2">در حال بارگذاری جزئیات…</p>
+    return <p className="text-xs text-muted p-2">{s.loadingDetail}</p>
   }
 
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-4 flex-wrap p-2 rounded" style={{ background: 'var(--bg-base)' }}>
         <div className="text-xs">
-          <span className="text-muted">سیاست مسیریابی: </span>
+          <span className="text-muted">{s.routingPolicyLabel}</span>
           <select className="input" value={detail.routing_policy} disabled={busy === 'routing'}
             onChange={(e) => onSetRoutingPolicy(e.target.value)} style={{ maxWidth: 150, display: 'inline-block' }}>
-            {Object.entries(ROUTING_FA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            {Object.entries(s.routing).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </div>
         <div className="text-xs">
-          <span className="text-muted">وضعیت در دسترس‌بودن: </span>
+          <span className="text-muted">{s.availabilityLabel}</span>
           <select className="input" value={detail.availability} disabled={busy === 'availability'}
             onChange={(e) => onSetAvailability(e.target.value)} style={{ maxWidth: 130, display: 'inline-block' }}>
-            {Object.entries(AVAILABILITY_FA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            {AVAILABILITY_OPTIONS.map((a) => <option key={a} value={a}>{availabilityLabel(a, lang)}</option>)}
           </select>
         </div>
         <div className="text-xs text-muted">
-          پین فعلی: {detail.pinned_candidate_id
+          {s.currentPinLabel}{detail.pinned_candidate_id
             ? <><span className="font-mono">{detail.pinned_candidate_id}</span>{' '}
-                <button className="text-xs underline" onClick={onUnpin} disabled={busy === 'unpin'}>برداشتن پین</button></>
-            : 'ندارد'}
+                <button className="text-xs underline" onClick={onUnpin} disabled={busy === 'unpin'}>{s.removePin}</button></>
+            : s.noPin}
         </div>
       </div>
 
@@ -375,19 +380,19 @@ function CandidatesPanel({
         <table className="admin-table w-full text-xs">
           <thead>
             <tr>
-              <th className="text-right p-2">مدل فیزیکی</th>
-              <th className="text-right p-2">وضعیت پروایدر</th>
-              <th className="text-right p-2">قیمت (تومان / میلیون توکن)</th>
-              <th className="text-right p-2">برآورد دلاری</th>
-              <th className="text-right p-2">وضعیت گزینه</th>
-              <th className="text-right p-2">فعال</th>
-              <th className="text-right p-2">اولویت</th>
-              <th className="text-right p-2">عملیات</th>
+              <th className="text-right p-2">{s.colPhysicalModel}</th>
+              <th className="text-right p-2">{s.colProviderStatus}</th>
+              <th className="text-right p-2">{s.colPriceTomanMillion}</th>
+              <th className="text-right p-2">{s.colUsdEstimate}</th>
+              <th className="text-right p-2">{s.colCandidateState}</th>
+              <th className="text-right p-2">{s.colEnabled}</th>
+              <th className="text-right p-2">{s.colPriority}</th>
+              <th className="text-right p-2">{s.colActions}</th>
             </tr>
           </thead>
           <tbody>
             {detail.candidates.length === 0 ? (
-              <tr><td colSpan={8} className="p-4 text-center text-muted">گزینه‌ای ثبت نشده است</td></tr>
+              <tr><td colSpan={8} className="p-4 text-center text-muted">{s.noCandidates}</td></tr>
             ) : detail.candidates.map((c) => {
               const eligible = c.state === 'approved' && c.enabled
               const isPinned = detail.pinned_candidate_id === c.catalog_id
@@ -399,17 +404,17 @@ function CandidatesPanel({
                     <div className="font-mono text-muted">{c.catalog_id}</div>
                     <div className="text-muted">{c.catalog.provider}</div>
                   </td>
-                  <td className="p-2">{availabilityLabel(c.catalog.availability)}</td>
+                  <td className="p-2">{availabilityLabel(c.catalog.availability, lang)}</td>
                   <td className="p-2">
-                    <div>ورودی: {faPrice(c.catalog.input_per_million)}</div>
-                    <div>خروجی: {faPrice(c.catalog.output_per_million)}</div>
+                    <div>{s.inputLabel}{f.price(c.catalog.input_per_million)}</div>
+                    <div>{s.outputLabel}{f.price(c.catalog.output_per_million)}</div>
                   </td>
                   <td className="p-2">
-                    <div><Num value={c.catalog.usd_input_per_million} unit="$" decimals={3} /> / M in</div>
-                    <div><Num value={c.catalog.usd_output_per_million} unit="$" decimals={3} /> / M out</div>
+                    <div><span className="num" dir="ltr">{f.num(c.catalog.usd_input_per_million, { decimals: 3 })} $</span> {s.perMillionIn}</div>
+                    <div><span className="num" dir="ltr">{f.num(c.catalog.usd_output_per_million, { decimals: 3 })} $</span> {s.perMillionOut}</div>
                   </td>
                   <td className="p-2">
-                    <span style={{ color: STATE_COLOR[c.state] }}>{STATE_FA[c.state]}</span>
+                    <span style={{ color: STATE_COLOR[c.state] }}>{s.state[c.state]}</span>
                   </td>
                   <td className="p-2">
                     <input type="checkbox" checked={c.enabled} disabled={busy === `c${c.id}-enabled`}
@@ -426,24 +431,24 @@ function CandidatesPanel({
                   <td className="p-2">
                     <div className="flex items-center gap-1 flex-wrap">
                       {c.state !== 'approved' && (
-                        <button className="btn btn-sm" disabled={busy === `c${c.id}-state`} onClick={() => onApprove(c.id)} title="تأیید">
+                        <button className="btn btn-sm" disabled={busy === `c${c.id}-state`} onClick={() => onApprove(c.id)} title={s.approveTitle}>
                           <Icon name="check" size={12} />
                         </button>
                       )}
                       {c.state !== 'rejected' && (
-                        <button className="btn btn-sm" disabled={busy === `c${c.id}-state`} onClick={() => onReject(c.id)} title="رد">
+                        <button className="btn btn-sm" disabled={busy === `c${c.id}-state`} onClick={() => onReject(c.id)} title={s.rejectTitle}>
                           <Icon name="close" size={12} />
                         </button>
                       )}
                       {c.state !== 'proposed' && (
-                        <button className="btn btn-sm" disabled={busy === `c${c.id}-state`} onClick={() => onReset(c.id)} title="بازگردانی به بررسی‌نشده">
+                        <button className="btn btn-sm" disabled={busy === `c${c.id}-state`} onClick={() => onReset(c.id)} title={s.resetTitle}>
                           <Icon name="refresh" size={12} />
                         </button>
                       )}
                       <button className="btn btn-sm" disabled={!eligible || isPinned || busy?.startsWith('pin-')}
                         onClick={() => onPin(c.catalog_id)}
-                        title={eligible ? 'پین کردن این گزینه' : 'فقط گزینهٔ تأییدشده و فعال قابل پین است'}>
-                        {isPinned ? 'پین‌شده' : 'پین'}
+                        title={eligible ? s.pinEligibleTitle : s.pinIneligibleTitle}>
+                        {isPinned ? s.pinned : s.pin}
                       </button>
                     </div>
                   </td>

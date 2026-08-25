@@ -1,0 +1,61 @@
+import { dict } from '@/lib/adminI18n'
+
+const FA = {
+  title: 'کنترل سایت',
+  subtitle: 'سوییچ‌های سراسری برای روشن/خاموش کردن بخش‌های سایت، بدون نیاز به ری‌استارت',
+  loadFailedTitle: 'دریافت تنظیمات ناموفق بود',
+  unknownStateWarning:
+    'وضعیت واقعی سوییچ‌ها نامشخص است -- تا رفع خطا هیچ سوییچی در این صفحه نمایش داده نمی‌شود، چون نمایش نادرست می‌تواند باعث تصمیم اشتباه شود.',
+  retry: 'تلاش دوباره',
+  totalSwitches: 'مجموع سوییچ‌ها',
+  activeCount: 'فعال',
+  unwiredCount: 'هنوز وصل‌نشده',
+  loading: 'در حال بارگذاری…',
+  noSwitches: 'سوییچی تعریف نشده است',
+  notWiredYet: 'هنوز وصل نشده',
+  defaultValueUnsaved: '(مقدار پیش‌فرض -- هنوز در پایگاه داده ذخیره نشده)',
+  active: 'فعال',
+  disabled: 'غیرفعال',
+  toggleAria: (label: string) => `تغییر وضعیت ${label}`,
+  enable: 'فعال کردن',
+  disable: 'غیرفعال کردن',
+  notWiredDialogWarning: 'توجه: این سوییچ هنوز به هیچ رفتاری وصل نشده -- فقط مقدار در پایگاه داده ذخیره می‌شود.',
+  globalChangeConfirm: 'این یک تغییر سراسری روی کل سایت است. مطمئن هستید که می‌خواهید ادامه دهید؟',
+  cancel: 'انصراف',
+  confirmApply: 'تأیید و اعمال',
+  toggleSuccess: (label: string, state: string) => `«${label}» ${state} شد`,
+  saveError: 'ذخیره ناموفق بود',
+  serverError: (status: string) => `خطای سرور (${status})`,
+  genericLoadError: 'خطا در دریافت تنظیمات سایت',
+}
+
+const EN: typeof FA = {
+  title: 'Site control',
+  subtitle: 'Global switches to turn parts of the site on/off, no restart required',
+  loadFailedTitle: 'Failed to load settings',
+  unknownStateWarning:
+    'The real state of the switches is unknown -- no switch is shown on this page until the error is fixed, because an incorrect display could lead to a wrong decision.',
+  retry: 'Retry',
+  totalSwitches: 'Total switches',
+  activeCount: 'Active',
+  unwiredCount: 'Not yet wired',
+  loading: 'Loading…',
+  noSwitches: 'No switches defined',
+  notWiredYet: 'Not yet wired',
+  defaultValueUnsaved: '(default value -- not yet stored in the database)',
+  active: 'Active',
+  disabled: 'Disabled',
+  toggleAria: (label) => `Toggle ${label}`,
+  enable: 'Enable',
+  disable: 'Disable',
+  notWiredDialogWarning: 'Note: this switch is not wired to any behavior yet -- only the value is stored in the database.',
+  globalChangeConfirm: 'This is a site-wide change. Are you sure you want to continue?',
+  cancel: 'Cancel',
+  confirmApply: 'Confirm and apply',
+  toggleSuccess: (label, state) => `"${label}" was ${state}`,
+  saveError: 'Save failed',
+  serverError: (status) => `Server error (${status})`,
+  genericLoadError: 'Failed to load site settings',
+}
+
+export const siteControlStrings = dict(FA, EN)

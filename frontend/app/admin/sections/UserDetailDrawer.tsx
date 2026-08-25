@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
-import { faNum, faPrice, faDate } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt, dirFor } from '@/lib/adminI18n'
 import { StatCard, Field } from './shared'
 import UserWalletOps from './UserWalletOps'
 import type { UserDetail } from '../AdminPanel'
@@ -12,6 +13,7 @@ import {
   type TabState, type LedgerPayload, type PaymentsPayload,
   type UsagePayload, type ConversationsPayload,
 } from './UserDetailTabs'
+import { userDetailDrawerStrings } from './UserDetailDrawer.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    UserDetailDrawer — side drawer for a single user, opened from a row click
@@ -58,10 +60,6 @@ import {
 type ApiFn = (path: string, opts?: RequestInit) => Promise<Response>
 type DrawerTab = 'overview' | 'wallet' | 'payments' | 'usage' | 'conversations' | 'actions'
 
-const TAB_LABEL: Record<DrawerTab, string> = {
-  overview: 'نمای کلی', wallet: 'کیف پول', payments: 'پرداخت‌ها',
-  usage: 'مصرف', conversations: 'گفتگوها', actions: 'اقدامات',
-}
 const TAB_ORDER: DrawerTab[] = ['overview', 'wallet', 'payments', 'usage', 'conversations', 'actions']
 
 function idleState<T>(): TabState<T> {
@@ -84,6 +82,15 @@ interface UserDetailDrawerProps {
 }
 
 export default function UserDetailDrawer({ api, uid, onClose, onBanToggled }: UserDetailDrawerProps) {
+  const lang = useLang()
+  const s = userDetailDrawerStrings(lang)
+  const f = fmt(lang)
+
+  const TAB_LABEL: Record<DrawerTab, string> = {
+    overview: s.tabOverview, wallet: s.tabWallet, payments: s.tabPayments,
+    usage: s.tabUsage, conversations: s.tabConversations, actions: s.tabActions,
+  }
+
   const [detail, setDetail] = useState<UserDetail | null>(null)
   const [detailStatus, setDetailStatus] = useState<'loading' | 'error' | 'ready'>('loading')
   const [detailError, setDetailError] = useState('')
@@ -123,9 +130,9 @@ export default function UserDetailDrawer({ api, uid, onClose, onBanToggled }: Us
     } catch (e) {
       if (uidRef.current !== requestedUid) return
       setDetailStatus('error')
-      setDetailError(errMessage(e, 'خطا در دریافت اطلاعات کاربر'))
+      setDetailError(errMessage(e, s.fetchError))
     }
-  }, [api, uid])
+  }, [api, uid, s])
 
   // Reset everything and reload whenever a different user is opened.
   useEffect(() => {
@@ -165,16 +172,16 @@ export default function UserDetailDrawer({ api, uid, onClose, onBanToggled }: Us
   const openTab = (t: DrawerTab) => {
     setTab(t)
     if (t === 'wallet' && ledgerState.status === 'idle') {
-      loadTab<LedgerPayload>('ledger', setLedgerState, (j) => ({ items: j.items || [], total: j.total || 0 }), 'خطا در دریافت تراکنش‌ها')
+      loadTab<LedgerPayload>('ledger', setLedgerState, (j) => ({ items: j.items || [], total: j.total || 0 }), s.ledgerFetchError)
     }
     if (t === 'payments' && paymentsState.status === 'idle') {
-      loadTab<PaymentsPayload>('payments', setPaymentsState, (j) => ({ payments: j.payments || [], subscriptions: j.subscriptions || [] }), 'خطا در دریافت پرداخت‌ها')
+      loadTab<PaymentsPayload>('payments', setPaymentsState, (j) => ({ payments: j.payments || [], subscriptions: j.subscriptions || [] }), s.paymentsFetchError)
     }
     if (t === 'usage' && usageState.status === 'idle') {
-      loadTab<UsagePayload>('usage', setUsageState, (j) => ({ by_model: j.by_model || [], daily: j.daily || [] }), 'خطا در دریافت مصرف')
+      loadTab<UsagePayload>('usage', setUsageState, (j) => ({ by_model: j.by_model || [], daily: j.daily || [] }), s.usageFetchError)
     }
     if (t === 'conversations' && convState.status === 'idle') {
-      loadTab<ConversationsPayload>('conversations', setConvState, (j) => ({ items: j.items || [], total: j.total || 0 }), 'خطا در دریافت گفتگوها')
+      loadTab<ConversationsPayload>('conversations', setConvState, (j) => ({ items: j.items || [], total: j.total || 0 }), s.conversationsFetchError)
     }
   }
 
@@ -213,22 +220,22 @@ export default function UserDetailDrawer({ api, uid, onClose, onBanToggled }: Us
     if (dl !== '') {
       const n = Number(dl)
       if (!Number.isFinite(n) || n < 0) {
-        toast('سقف روزانه باید عدد صحیح و غیرمنفی باشد', 'error')
+        toast(s.dailyLimitInvalid, 'error')
         return
       }
       if (!detail.quota || n !== detail.quota.daily_limit) body.daily_limit = Math.trunc(n)
     }
     if (Object.keys(body).length === 0) {
-      toast('تغییری برای ذخیره وجود ندارد', 'info')
+      toast(s.noChangesToSave, 'info')
       return
     }
     setEditSaving(true)
     try {
       await api(`/api/admin/users/${uid}`, { method: 'PUT', body: JSON.stringify(body) })
-      toast('اطلاعات کاربر بروزرسانی شد', 'success')
+      toast(s.saveSuccess, 'success')
       await loadDetail()
     } catch (e) {
-      toast(errMessage(e, 'خطا در ذخیره اطلاعات کاربر'), 'error')
+      toast(errMessage(e, s.saveError), 'error')
     } finally {
       setEditSaving(false)
     }
@@ -237,7 +244,7 @@ export default function UserDetailDrawer({ api, uid, onClose, onBanToggled }: Us
   const u = detail?.user
 
   return (
-    <div className="fixed inset-0 z-50" dir="rtl">
+    <div className="fixed inset-0 z-50" dir={dirFor(lang)}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div
         className="card absolute top-0 bottom-0 flex flex-col fade-in"
@@ -251,16 +258,16 @@ export default function UserDetailDrawer({ api, uid, onClose, onBanToggled }: Us
               {(u?.display_name || u?.email || '?')[0]?.toUpperCase()}
             </div>
             <div className="min-w-0">
-              <h2 className="font-bold text-primary truncate">{u?.display_name || u?.email || `کاربر #${faNum(uid)}`}</h2>
-              <p className="text-xs text-muted truncate">{u?.email || '—'} · شناسه {faNum(uid)}</p>
+              <h2 className="font-bold text-primary truncate">{u?.display_name || u?.email || s.userFallback(f.num(uid))}</h2>
+              <p className="text-xs text-muted truncate">{u?.email || '—'} · {s.idPrefix(f.num(uid))}</p>
             </div>
             {u && (
               <span className={u.banned ? 'badge badge-danger' : 'badge badge-positive'}>
-                {u.banned ? 'مسدود' : 'فعال'}
+                {u.banned ? s.statusBanned : s.statusActive}
               </span>
             )}
           </div>
-          <button className="btn btn-icon btn-sm flex-shrink-0" onClick={onClose} aria-label="بستن">
+          <button className="btn btn-icon btn-sm flex-shrink-0" onClick={onClose} aria-label={s.close}>
             <Icon name="close" size={16} />
           </button>
         </div>
@@ -268,8 +275,8 @@ export default function UserDetailDrawer({ api, uid, onClose, onBanToggled }: Us
         {detailStatus === 'loading' && <div className="skeleton h-40 w-full rounded mt-4" />}
         {detailStatus === 'error' && (
           <div className="mt-4 space-y-2">
-            <p className="text-sm text-danger">{detailError || 'خطا در دریافت اطلاعات کاربر'}</p>
-            <button className="btn btn-sm" onClick={loadDetail}>تلاش دوباره</button>
+            <p className="text-sm text-danger">{detailError || s.fetchError}</p>
+            <button className="btn btn-sm" onClick={loadDetail}>{s.retry}</button>
           </div>
         )}
 
@@ -293,34 +300,34 @@ export default function UserDetailDrawer({ api, uid, onClose, onBanToggled }: Us
               {tab === 'overview' && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-3">
-                    <StatCard icon="wallet" label="موجودی کیف پول" value={faPrice(detail.wallet.balance)} color="#22c55e" />
-                    <StatCard icon="lock" label="رزرو شده" value={faPrice(detail.wallet.reserved)} color="#f59e0b" />
-                    <StatCard icon="chat" label="گفتگوها" value={faNum(detail.stats.conversation_count)} color="#a855f7" />
-                    <StatCard icon="pricing" label="هزینه کل" value={faPrice(detail.stats.total_cost)} color="#f59e0b" />
-                    <StatCard icon="wallet" label="پرداخت‌های تایید شده" value={faPrice(detail.stats.total_payments)} color="#06b6d4" />
-                    <StatCard icon="models" label="توکن مصرفی" value={faNum(detail.stats.total_tokens)} color="#3b82f6" />
+                    <StatCard icon="wallet" label={s.statWalletBalance} value={f.price(detail.wallet.balance)} color="#22c55e" />
+                    <StatCard icon="lock" label={s.statReserved} value={f.price(detail.wallet.reserved)} color="#f59e0b" />
+                    <StatCard icon="chat" label={s.statConversations} value={f.num(detail.stats.conversation_count)} color="#a855f7" />
+                    <StatCard icon="pricing" label={s.statTotalCost} value={f.price(detail.stats.total_cost)} color="#f59e0b" />
+                    <StatCard icon="wallet" label={s.statVerifiedPayments} value={f.price(detail.stats.total_payments)} color="#06b6d4" />
+                    <StatCard icon="models" label={s.statTotalTokens} value={f.num(detail.stats.total_tokens)} color="#3b82f6" />
                   </div>
                   <div className="admin-card">
                     <div className="grid grid-cols-2 gap-3 text-xs">
-                      <div><span className="text-muted">نام</span><p className="font-medium">{u.display_name || '—'}</p></div>
-                      <div><span className="text-muted">ایمیل</span><p className="font-medium">{u.email || '—'}</p></div>
-                      <div><span className="text-muted">تلفن</span><p className="font-medium">{u.phone || '—'}</p></div>
-                      <div><span className="text-muted">تلگرام</span><p className="font-medium">{u.telegram_id || '—'}</p></div>
-                      <div><span className="text-muted">سقف روزانه</span><p className="font-medium">{detail.quota ? faNum(detail.quota.daily_limit) : '—'}</p></div>
-                      <div><span className="text-muted">مصرف امروز</span><p className="font-medium">{detail.quota ? faNum(detail.quota.used_today) : '۰'}</p></div>
-                      <div><span className="text-muted">تاریخ عضویت</span><p className="font-medium">{faDate(u.created_at)}</p></div>
+                      <div><span className="text-muted">{s.fieldName}</span><p className="font-medium">{u.display_name || '—'}</p></div>
+                      <div><span className="text-muted">{s.fieldEmail}</span><p className="font-medium">{u.email || '—'}</p></div>
+                      <div><span className="text-muted">{s.fieldPhone}</span><p className="font-medium">{u.phone || '—'}</p></div>
+                      <div><span className="text-muted">{s.fieldTelegram}</span><p className="font-medium">{u.telegram_id || '—'}</p></div>
+                      <div><span className="text-muted">{s.fieldDailyLimit}</span><p className="font-medium">{detail.quota ? f.num(detail.quota.daily_limit) : '—'}</p></div>
+                      <div><span className="text-muted">{s.fieldUsedToday}</span><p className="font-medium">{detail.quota ? f.num(detail.quota.used_today) : f.num(0)}</p></div>
+                      <div><span className="text-muted">{s.fieldJoinedAt}</span><p className="font-medium">{f.date(u.created_at)}</p></div>
                       <div>
-                        <span className="text-muted">پنل</span>
+                        <span className="text-muted">{s.fieldPanel}</span>
                         {/* There is no `role` column on users (see
                             backend/admin_user_ops.py's comment) -- the
                             closest analog is this preferences.panel flag,
-                            changed from the کیف پول tab. */}
-                        <p className="font-medium">{String(u.preferences?.panel || '') === 'developer' ? 'توسعه‌دهنده' : 'مصرف‌کننده'}</p>
+                            changed from the wallet tab. */}
+                        <p className="font-medium">{String(u.preferences?.panel || '') === 'developer' ? s.panelDeveloper : s.panelConsumer}</p>
                       </div>
                     </div>
                     {String(u.preferences?.ai_personality || '') && (
                       <div className="mt-3 p-3 rounded-lg text-xs" style={{ background: 'var(--bg-elevated)' }}>
-                        <span className="font-bold text-accent">شخصیت هوش مصنوعی: </span>
+                        <span className="font-bold text-accent">{s.aiPersonalityLabel}</span>
                         <span className="text-secondary">{String(u.preferences.ai_personality)}</span>
                       </div>
                     )}
@@ -337,7 +344,7 @@ export default function UserDetailDrawer({ api, uid, onClose, onBanToggled }: Us
                     onChanged={loadDetail}
                   />
                   <div className="admin-card">
-                    <h3 className="text-sm font-bold text-primary mb-2">تاریخچه تراکنش‌های کیف پول</h3>
+                    <h3 className="text-sm font-bold text-primary mb-2">{s.walletHistoryTitle}</h3>
                     <LedgerTab state={ledgerState} />
                   </div>
                 </div>
@@ -350,7 +357,7 @@ export default function UserDetailDrawer({ api, uid, onClose, onBanToggled }: Us
               {tab === 'actions' && (
                 <div className="space-y-5">
                   <div className="admin-card">
-                    <h3 className="text-sm font-bold text-primary mb-3">مسدودسازی</h3>
+                    <h3 className="text-sm font-bold text-primary mb-3">{s.banSectionTitle}</h3>
                     <div className="flex items-center gap-3">
                       <button
                         className={`btn btn-sm ${u.banned ? '' : 'btn-danger'}`}
@@ -358,39 +365,39 @@ export default function UserDetailDrawer({ api, uid, onClose, onBanToggled }: Us
                         onClick={toggleBan}
                       >
                         <Icon name="security" size={14} />
-                        {u.banned ? 'رفع مسدودیت' : 'مسدود کردن کاربر'}
+                        {u.banned ? s.unbanUser : s.banUser}
                       </button>
                       <span className="text-xs text-muted">
-                        وضعیت فعلی: {u.banned ? 'مسدود' : 'فعال'}
+                        {s.currentStatus(u.banned ? s.statusBanned : s.statusActive)}
                       </span>
                     </div>
                   </div>
 
                   <div className="admin-card">
-                    <h3 className="text-sm font-bold text-primary mb-3">ویرایش اطلاعات کاربر</h3>
+                    <h3 className="text-sm font-bold text-primary mb-3">{s.editInfoTitle}</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <Field label="ایمیل">
+                      <Field label={s.emailField}>
                         <input className="input w-full" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} dir="ltr" />
                       </Field>
-                      <Field label="تلفن">
+                      <Field label={s.phoneField}>
                         <input className="input w-full" value={editPhone} onChange={(e) => setEditPhone(e.target.value)} dir="ltr" />
                       </Field>
-                      <Field label="سقف روزانه (تعداد درخواست)">
+                      <Field label={s.dailyLimitField}>
                         <input className="input w-full" inputMode="numeric" value={editDailyLimit} onChange={(e) => setEditDailyLimit(e.target.value)} />
                       </Field>
                     </div>
                     <p className="text-xs text-muted mt-2">
-                      ویرایش مستقیم موجودی کیف پول از این فرم ممکن نیست — از تب «کیف پول» استفاده کنید.
+                      {s.walletEditNote}
                     </p>
                     <button className="btn btn-sm mt-3" onClick={saveEdit} disabled={editSaving}>
-                      {editSaving ? 'در حال ذخیره...' : 'ذخیره تغییرات'}
+                      {editSaving ? s.savingLabel : s.saveChanges}
                     </button>
                   </div>
 
                   <div className="admin-card">
-                    <h3 className="text-sm font-bold text-primary mb-2">جابه‌جایی پنل</h3>
+                    <h3 className="text-sm font-bold text-primary mb-2">{s.panelMoveTitle}</h3>
                     <p className="text-xs text-muted">
-                      انتقال بین پنل مصرف‌کننده و توسعه‌دهنده از تب «کیف پول» انجام می‌شود.
+                      {s.panelMoveNote}
                     </p>
                   </div>
                 </div>

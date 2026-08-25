@@ -3,9 +3,11 @@
 import { useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
-import { faPrice } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt, dirFor } from '@/lib/adminI18n'
 import { Field } from './shared'
 import { api } from '../AdminPanel'
+import { userWalletOpsStrings } from './UserWalletOps.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    UserWalletOps — admin wallet credit/debit + consumer/developer panel move.
@@ -52,9 +54,12 @@ function genIdempotencyKey(): string {
   return `admin_wallet_${Date.now()}_${Math.random().toString(36).slice(2)}`
 }
 
-const DIRECTION_LABEL: Record<Direction, string> = { credit: 'شارژ (افزایش)', debit: 'کسر (کاهش)' }
-
 export default function UserWalletOps({ uid, balance, panel, onChanged }: UserWalletOpsProps) {
+  const lang = useLang()
+  const s = userWalletOpsStrings(lang)
+  const f = fmt(lang)
+  const DIRECTION_LABEL: Record<Direction, string> = { credit: s.creditLabel, debit: s.debitLabel }
+
   const [amountInput, setAmountInput] = useState('')
   const [direction, setDirection] = useState<Direction>('credit')
   const [reason, setReason] = useState('')
@@ -71,8 +76,8 @@ export default function UserWalletOps({ uid, balance, panel, onChanged }: UserWa
 
   const openConfirm = () => {
     if (!canSubmit) {
-      if (!amountValid) toast('مبلغ باید عدد صحیح و بزرگ‌تر از صفر باشد', 'error')
-      else if (!reasonValid) toast('ذکر دلیل الزامی است', 'error')
+      if (!amountValid) toast(s.amountInvalid, 'error')
+      else if (!reasonValid) toast(s.reasonRequired, 'error')
       return
     }
     setPendingKey(genIdempotencyKey())
@@ -92,14 +97,14 @@ export default function UserWalletOps({ uid, balance, panel, onChanged }: UserWa
           idempotency_key: pendingKey,
         }),
       })
-      toast(direction === 'credit' ? 'کیف پول شارژ شد' : 'از کیف پول کسر شد', 'success')
+      toast(direction === 'credit' ? s.creditSuccess : s.debitSuccess, 'success')
       setAmountInput('')
       setReason('')
       setConfirming(false)
       setPendingKey(null)
       onChanged()
     } catch (err) {
-      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'خطا در ثبت تراکنش کیف پول', 'error')
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : s.walletError, 'error')
     } finally {
       setSubmitting(false)
     }
@@ -113,55 +118,55 @@ export default function UserWalletOps({ uid, balance, panel, onChanged }: UserWa
         method: 'POST',
         body: JSON.stringify({ panel: next }),
       })
-      toast(next === 'developer' ? 'کاربر به پنل توسعه‌دهنده منتقل شد' : 'کاربر به پنل مصرف‌کننده منتقل شد', 'success')
+      toast(next === 'developer' ? s.toDeveloperSuccess : s.toConsumerSuccess, 'success')
       onChanged()
     } catch (err) {
-      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'خطا در جابه‌جایی پنل', 'error')
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : s.panelError, 'error')
     } finally {
       setPanelSaving(false)
     }
   }
 
   return (
-    <div className="admin-card space-y-5" dir="rtl">
+    <div className="admin-card space-y-5">
       <div>
-        <h3 className="text-sm font-bold text-primary mb-3">شارژ / کسر کیف پول</h3>
+        <h3 className="text-sm font-bold text-primary mb-3">{s.sectionTitle}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <Field label="مبلغ (تومان)">
+          <Field label={s.amountLabel}>
             <input
               className="input w-full"
               inputMode="numeric"
-              placeholder="مثلاً 50000"
+              placeholder={s.amountPlaceholder}
               value={amountInput}
               onChange={(e) => setAmountInput(e.target.value)}
             />
           </Field>
-          <Field label="نوع تراکنش">
+          <Field label={s.txTypeLabel}>
             <select
               className="input w-full"
               value={direction}
               onChange={(e) => setDirection(e.target.value as Direction)}
             >
-              <option value="credit">شارژ (افزایش)</option>
-              <option value="debit">کسر (کاهش)</option>
+              <option value="credit">{s.creditLabel}</option>
+              <option value="debit">{s.debitLabel}</option>
             </select>
           </Field>
-          <Field label="دلیل (الزامی)">
+          <Field label={s.reasonLabel}>
             <input
               className="input w-full"
-              placeholder="مثلاً جبران خطای فنی"
+              placeholder={s.reasonPlaceholder}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
             />
           </Field>
         </div>
         <button className="btn btn-sm mt-3" onClick={openConfirm} disabled={submitting}>
-          <Icon name="wallet" size={14} /> ثبت درخواست
+          <Icon name="wallet" size={14} /> {s.submitRequest}
         </button>
       </div>
 
       <div className="pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
-        <h3 className="text-sm font-bold text-primary mb-3">پنل کاربر</h3>
+        <h3 className="text-sm font-bold text-primary mb-3">{s.panelSectionTitle}</h3>
         <div className="flex items-center gap-2">
           <button
             className="btn btn-sm"
@@ -169,7 +174,7 @@ export default function UserWalletOps({ uid, balance, panel, onChanged }: UserWa
             style={panel !== 'developer' ? { background: 'var(--accent-dim)', color: 'var(--accent)' } : undefined}
             onClick={() => setPanel('consumer')}
           >
-            مصرف‌کننده
+            {s.consumerLabel}
           </button>
           <button
             className="btn btn-sm"
@@ -177,10 +182,10 @@ export default function UserWalletOps({ uid, balance, panel, onChanged }: UserWa
             style={panel === 'developer' ? { background: 'var(--accent-dim)', color: 'var(--accent)' } : undefined}
             onClick={() => setPanel('developer')}
           >
-            توسعه‌دهنده
+            {s.developerLabel}
           </button>
           <span className="text-xs text-muted">
-            وضعیت فعلی: {panel === 'developer' ? 'توسعه‌دهنده' : 'مصرف‌کننده'}
+            {s.currentStatus(panel === 'developer' ? s.developerLabel : s.consumerLabel)}
           </span>
         </div>
       </div>
@@ -188,28 +193,28 @@ export default function UserWalletOps({ uid, balance, panel, onChanged }: UserWa
       {confirming && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => !submitting && setConfirming(false)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="card relative w-full max-w-md" dir="rtl" onClick={(e) => e.stopPropagation()}>
+          <div className="card relative w-full max-w-md" dir={dirFor(lang)} onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-primary">تأیید تراکنش کیف پول</h3>
+              <h3 className="font-bold text-primary">{s.confirmTitle}</h3>
               <button className="btn btn-icon btn-sm" onClick={() => setConfirming(false)} disabled={submitting}>
                 <Icon name="close" size={16} />
               </button>
             </div>
             <div className="space-y-2 text-sm">
               <p>
-                نوع: <span className="font-bold">{DIRECTION_LABEL[direction]}</span>
+                {s.typeLabel} <span className="font-bold">{DIRECTION_LABEL[direction]}</span>
               </p>
               <p>
-                مبلغ: <span className="font-bold">{faPrice(Number(amountInput.trim()))}</span>
+                {s.confirmAmountLabel} <span className="font-bold">{f.price(Number(amountInput.trim()))}</span>
               </p>
               <p>
-                موجودی فعلی: <span className="font-bold">{faPrice(balance)}</span>
+                {s.currentBalanceLabel} <span className="font-bold">{f.price(balance)}</span>
               </p>
-              <p className="text-secondary">دلیل: {reason.trim()}</p>
+              <p className="text-secondary">{s.confirmReasonLabel} {reason.trim()}</p>
             </div>
             <div className="flex gap-2 mt-5">
               <button className="btn flex-1" onClick={submit} disabled={submitting}>
-                {submitting ? 'در حال ثبت...' : 'تأیید و اعمال'}
+                {submitting ? s.submitting : s.confirmSubmit}
               </button>
               <button
                 className="btn btn-sm"
@@ -217,7 +222,7 @@ export default function UserWalletOps({ uid, balance, panel, onChanged }: UserWa
                 onClick={() => setConfirming(false)}
                 disabled={submitting}
               >
-                انصراف
+                {s.cancel}
               </button>
             </div>
           </div>

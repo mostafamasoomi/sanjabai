@@ -26,7 +26,7 @@ describe('audit-log details wiring', () => {
   const src = readFileSync(SECTION, 'utf8')
 
   it('renders the details cell through formatAuditDetails', () => {
-    expect(src).toContain('formatAuditDetails(log.details)')
+    expect(src).toMatch(/formatAuditDetails\(log\.details(,\s*lang)?\)/)
   })
 
   it('imports the formatter it renders with', () => {

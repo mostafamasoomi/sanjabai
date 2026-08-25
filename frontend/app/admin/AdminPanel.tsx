@@ -232,8 +232,9 @@ export default function AdminPage() {
   // hard-coded dir="rtl" overrode that for everything inside it -- so
   // switching to English produced English labels in a right-to-left shell,
   // sidebar on the wrong side, every icon mirrored away from its text.
-  // Section bodies keep their own dir="rtl": their content is still Persian,
-  // and only the chrome is translated.
+  // Sections inherit this. A section that still pins dir="rtl" of its own is
+  // now a bug rather than a deliberate exception -- that attribute was only
+  // ever right while section bodies were Persian regardless of the toggle.
   return (
     <div className="admin-layout min-h-screen" dir={lang === 'en' ? 'ltr' : 'rtl'}>
       {/* Mobile Header */}

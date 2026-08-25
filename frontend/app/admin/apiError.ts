@@ -13,9 +13,22 @@
  * nothing else.
  */
 
-/** The generic fallback shown when the response carries no usable message. */
+import { getLang } from '@/components/LanguageToggle'
+
+/** The generic fallback shown when the response carries no usable message.
+ *
+ *  Reads the language with `getLang()` rather than the `useLang()` hook: this
+ *  runs inside `api()`, in an async request path, not during a render. It is
+ *  a plain localStorage read and is legal anywhere.
+ *
+ *  NOTE the honest limit here. The *backend's* own refusals are Persian
+ *  (FastAPI `detail`, e.g. «upstream نامعتبر، گزینه‌های معتبر: …») and this
+ *  function deliberately prefers them — that sentence is the only thing that
+ *  says what actually went wrong. So an English panel still surfaces a
+ *  Persian message when the server explains itself. Translating those means
+ *  translating the API, which is a backend change and not this one. */
 export function genericError(status: number): string {
-  return `خطای سرور (${status})`
+  return getLang() === 'en' ? `Server error (${status})` : `خطای سرور (${status})`
 }
 
 /** Best available human-readable Persian message for a failed response.

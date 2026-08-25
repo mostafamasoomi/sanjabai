@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
+import { useLang } from '@/components/LanguageToggle'
 import { SectionHeader, Field } from './shared'
 import { ErrorCard, RefreshButton } from './LoadState'
 import { api, errMessage } from '../api'
+import { proxyStrings } from './ProxySection.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Proxy — GET/POST /admin/proxy (backend/admin_content.py).
@@ -16,6 +18,8 @@ import { api, errMessage } from '../api'
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function ProxySection() {
+  const lang = useLang()
+  const s = proxyStrings(lang)
   const [status, setStatus] = useState<'loading' | 'error' | 'ready'>('loading')
   const [loadError, setLoadError] = useState('')
   const [activeNow, setActiveNow] = useState(false)
@@ -36,10 +40,10 @@ export default function ProxySection() {
       setPxActive(d?.active !== false)
       setStatus('ready')
     } catch (err) {
-      setLoadError(errMessage(err, 'خطا در دریافت تنظیمات پروکسی'))
+      setLoadError(errMessage(err, s.loadError))
       setStatus('error')
     }
-  }, [])
+  }, [s.loadError])
 
   useEffect(() => { load() }, [load])
 
@@ -48,10 +52,10 @@ export default function ProxySection() {
     setSaving(true)
     try {
       await api('/api/admin/proxy', { method: 'POST', body: JSON.stringify({ proxy_type: pxType, proxy_url: pxUrl, active: pxActive }) })
-      toast('تنظیمات پروکسی ذخیره شد', 'success')
+      toast(s.saveSuccess, 'success')
       await load()
     } catch (err) {
-      toast(errMessage(err, 'خطا در ذخیره پروکسی'), 'error')
+      toast(errMessage(err, s.saveError), 'error')
     } finally {
       setSaving(false)
     }
@@ -60,7 +64,7 @@ export default function ProxySection() {
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
-        <SectionHeader title="تنظیمات پروکسی" subtitle="مدیریت تونل و پروکسی اتصال" />
+        <SectionHeader title={s.title} subtitle={s.subtitle} />
         <RefreshButton onClick={load} busy={status === 'loading'} />
       </div>
 
@@ -78,31 +82,31 @@ export default function ProxySection() {
           <div className="flex items-center gap-3 mb-4 p-3 rounded-lg" style={{ background: activeNow ? 'var(--positive)' + '15' : 'var(--warning)' + '15' }}>
             <Icon name={activeNow ? 'check' : 'notification'} size={18} style={{ color: activeNow ? 'var(--positive)' : 'var(--warning)' }} />
             <span className="text-sm font-medium" style={{ color: activeNow ? 'var(--positive)' : 'var(--warning)' }}>
-              {activeNow ? 'تونل فعال است' : 'تونل غیرفعال است'}
+              {activeNow ? s.tunnelActive : s.tunnelInactive}
             </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Field label="نوع پروکسی">
+            <Field label={s.proxyType}>
               <select className="input w-full" value={pxType} onChange={(e) => setPxType(e.target.value)}>
                 <option value="socks5">SOCKS5</option>
                 <option value="http">HTTP</option>
               </select>
             </Field>
-            <Field label="آدرس پروکسی">
+            <Field label={s.proxyUrl}>
               <input className="input w-full" dir="ltr" value={pxUrl} onChange={(e) => setPxUrl(e.target.value)} placeholder="socks5://user:pass@host:port" />
             </Field>
-            <Field label="وضعیت">
+            <Field label={s.status}>
               <select className="input w-full" value={String(pxActive)} onChange={(e) => setPxActive(e.target.value === 'true')}>
-                <option value="true">فعال</option>
-                <option value="false">غیرفعال</option>
+                <option value="true">{s.active}</option>
+                <option value="false">{s.disabled}</option>
               </select>
             </Field>
           </div>
           <button className="btn mt-4" onClick={saveProxy} disabled={saving}>
             {saving ? (
               <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-            ) : (<><Icon name="check" size={16} /><span>ذخیره و اعمال</span></>)}
+            ) : (<><Icon name="check" size={16} /><span>{s.saveApply}</span></>)}
           </button>
         </div>
       )}

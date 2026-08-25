@@ -3,13 +3,15 @@
 import { useState, useMemo, useEffect } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
-import { faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/adminI18n'
 import { SectionHeader } from './shared'
 import { ErrorCard, RefreshButton, CardSkeleton } from './LoadState'
 import { api, errMessage } from '../api'
 import { useAdminResource } from '../useAdminResource'
 import type { PricingRow, ModelTestResult } from '../types'
 import { availabilityLabel, AVAILABILITY_BADGE, TOGGLEABLE } from './availability'
+import { pricingStrings } from './PricingSection.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Pricing — per-model tariffs: GET/POST /admin/pricing, plus the per-model
@@ -57,10 +59,10 @@ const PAGE_SIZE = 50
 
 /** Never show a raw currency code -- every other screen that renders this
  *  same model_catalog.currency column (onboardingHelpers.ts, pricing/page.tsx)
- *  translates IRT/IRR to Persian before display; this was the one place that
- *  didn't. */
-function faCurrency(code: string): string {
-  return code === 'IRT' ? 'تومان' : code === 'IRR' ? 'ریال' : code
+ *  translates IRT/IRR to a display currency before rendering; this was the
+ *  one place that didn't. */
+function currencyLabel(code: string, s: ReturnType<typeof pricingStrings>): string {
+  return code === 'IRT' ? s.currencyIrt : code === 'IRR' ? s.currencyIrr : code
 }
 
 type PriceFieldResult = { ok: true; value: number } | { ok: false; message: string }
@@ -71,21 +73,25 @@ type PriceFieldResult = { ok: true; value: number } | { ok: false; message: stri
 // `0` itself stays a legal, deliberate value; only empty/garbage/negative/
 // fractional input is rejected. Prices are integer toman per million tokens
 // -- there is no smaller unit to express a fraction of a toman in.
-function validatePriceField(raw: string, label: string): PriceFieldResult {
+function validatePriceField(raw: string, label: string, s: ReturnType<typeof pricingStrings>): PriceFieldResult {
   const trimmed = raw.trim()
-  if (trimmed === '') return { ok: false, message: `قیمت ${label} نمی‌تواند خالی باشد` }
+  if (trimmed === '') return { ok: false, message: s.priceEmpty(label) }
   const n = Number(trimmed)
-  if (!Number.isFinite(n)) return { ok: false, message: `قیمت ${label} باید یک عدد باشد` }
-  if (n < 0) return { ok: false, message: `قیمت ${label} نمی‌تواند منفی باشد` }
-  if (!Number.isInteger(n)) return { ok: false, message: `قیمت ${label} باید عدد صحیح (تومان) باشد` }
+  if (!Number.isFinite(n)) return { ok: false, message: s.priceNotNumber(label) }
+  if (n < 0) return { ok: false, message: s.priceNegative(label) }
+  if (!Number.isInteger(n)) return { ok: false, message: s.priceNotInteger(label) }
   return { ok: true, value: n }
 }
 
 export default function PricingSection() {
+  const lang = useLang()
+  const s = pricingStrings(lang)
+  const f = fmt(lang)
+
   const { data: prices, error, loading, reload, setData } = useAdminResource<PricingRow[]>(
     '/api/admin/pricing',
     (raw) => (Array.isArray(raw) ? raw : raw?.pricing || []),
-    'خطا در دریافت تعرفه‌ها',
+    s.genericError,
   )
 
   const [search, setSearch] = useState('')
@@ -135,9 +141,9 @@ export default function PricingSection() {
   }
 
   const saveEdit = async (model: string) => {
-    const inRes = validatePriceField(editIn, 'ورودی')
+    const inRes = validatePriceField(editIn, s.fieldInput, s)
     if (!inRes.ok) { setEditError(inRes.message); return }
-    const outRes = validatePriceField(editOut, 'خروجی')
+    const outRes = validatePriceField(editOut, s.fieldOutput, s)
     if (!outRes.ok) { setEditError(outRes.message); return }
 
     setEditError(null)
@@ -147,11 +153,11 @@ export default function PricingSection() {
         method: 'POST',
         body: JSON.stringify({ model, input_per_million: inRes.value, output_per_million: outRes.value, currency: 'IRT' }),
       })
-      toast('تعرفه ذخیره شد', 'success')
+      toast(s.saveOk, 'success')
       setData((prev) => (prev || []).map((p) => (p.model === model ? { ...p, input_per_million: inRes.value, output_per_million: outRes.value } : p)))
       cancelEdit()
     } catch (err) {
-      setEditError(errMessage(err, 'خطا در ذخیره تعرفه'))
+      setEditError(errMessage(err, s.saveError))
     } finally {
       setSavingEdit(false)
     }
@@ -162,10 +168,10 @@ export default function PricingSection() {
     try {
       const r = await api(`/api/admin/models/${encodeURIComponent(model)}/toggle`, { method: 'POST' })
       const data = await r.json()
-      toast(data.availability === 'available' ? `${model} فعال شد` : `${model} غیرفعال شد`, 'success')
+      toast(data.availability === 'available' ? s.modelEnabled(model) : s.modelDisabled(model), 'success')
       setData((prev) => (prev || []).map((p) => (p.model === model ? { ...p, availability: data.availability } : p)))
     } catch (err) {
-      toast(errMessage(err, 'خطا در تغییر وضعیت مدل'), 'error')
+      toast(errMessage(err, s.toggleError), 'error')
     } finally {
       setTogglingModel(null)
     }
@@ -178,11 +184,11 @@ export default function PricingSection() {
       const data: ModelTestResult = await r.json()
       setTestResults((prev) => ({ ...prev, [model]: data }))
       toast(
-        data.ok ? `${model} پاسخ داد (${faNum(data.latency_ms)}ms)` : `${model} پاسخ نداد: ${data.error || 'نامشخص'}`,
+        data.ok ? s.testResponded(model, f.num(data.latency_ms)) : s.testFailed(model, data.error || s.testUnknownReason),
         data.ok ? 'success' : 'error',
       )
     } catch (err) {
-      toast(errMessage(err, 'خطا در تست مدل'), 'error')
+      toast(errMessage(err, s.testModelError), 'error')
     } finally {
       setTestingModel(null)
     }
@@ -191,7 +197,7 @@ export default function PricingSection() {
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
-        <SectionHeader title="مدیریت تعرفه‌ها" subtitle="قیمت‌گذاری مدل‌ها به ازای هر میلیون توکن" />
+        <SectionHeader title={s.title} subtitle={s.subtitle} />
         <RefreshButton onClick={reload} busy={loading} />
       </div>
 
@@ -205,29 +211,29 @@ export default function PricingSection() {
               className="input w-full sm:w-72"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="جستجوی مدل…"
+              placeholder={s.searchPlaceholder}
             />
             <span className="text-xs text-muted">
-              {faNum(filtered.length)} از {faNum(prices.length)} مدل
+              {s.matched(f.num(filtered.length), f.num(prices.length))}
             </span>
           </div>
           <table className="admin-table w-full text-sm">
             <thead>
               <tr>
-                <th className="text-right p-3">مدل</th>
-                <th className="text-right p-3">ورودی (تومان/میلیون)</th>
-                <th className="text-right p-3">خروجی (تومان/میلیون)</th>
-                <th className="text-right p-3">واحد</th>
-                <th className="text-right p-3">وضعیت</th>
-                <th className="text-right p-3">تست</th>
-                <th className="text-right p-3">عملیات</th>
+                <th className="text-right p-3">{s.colModel}</th>
+                <th className="text-right p-3">{s.colInput}</th>
+                <th className="text-right p-3">{s.colOutput}</th>
+                <th className="text-right p-3">{s.colUnit}</th>
+                <th className="text-right p-3">{s.colStatus}</th>
+                <th className="text-right p-3">{s.colTest}</th>
+                <th className="text-right p-3">{s.colActions}</th>
               </tr>
             </thead>
             <tbody>
               {pageRows.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="p-6 text-center text-sm text-muted">
-                    {prices.length === 0 ? 'تعرفه‌ای ثبت نشده' : 'موردی با این جستجو یافت نشد'}
+                    {prices.length === 0 ? s.noPricing : s.noMatch}
                   </td>
                 </tr>
               ) : (
@@ -236,7 +242,7 @@ export default function PricingSection() {
                   const testResult = testResults[p.model]
                   const avail = p.availability || 'maintenance'
                   const badgeClass = `badge ${AVAILABILITY_BADGE[avail] || 'badge-accent'}`
-                  const badgeLabel = availabilityLabel(avail)
+                  const badgeLabel = availabilityLabel(avail, lang)
                   return (
                     <tr key={p.model}>
                       <td className="p-3 text-sm font-mono font-medium text-primary">{p.model}</td>
@@ -246,24 +252,24 @@ export default function PricingSection() {
                             <input
                               className="input w-28" type="number" value={editIn}
                               onChange={(e) => setEditIn(e.target.value)}
-                              placeholder="تومان/میلیون" aria-label={`قیمت ورودی ${p.model} به تومان بر میلیون توکن`}
+                              placeholder={s.inputPlaceholder} aria-label={s.inputAriaLabel(p.model)}
                             />
                           </td>
                           <td className="p-3">
                             <input
                               className="input w-28" type="number" value={editOut}
                               onChange={(e) => setEditOut(e.target.value)}
-                              placeholder="تومان/میلیون" aria-label={`قیمت خروجی ${p.model} به تومان بر میلیون توکن`}
+                              placeholder={s.inputPlaceholder} aria-label={s.outputAriaLabel(p.model)}
                             />
                           </td>
                         </>
                       ) : (
                         <>
-                          <td className="p-3 text-xs">{faNum(p.input_per_million)}</td>
-                          <td className="p-3 text-xs">{faNum(p.output_per_million)}</td>
+                          <td className="p-3 text-xs">{f.num(p.input_per_million)}</td>
+                          <td className="p-3 text-xs">{f.num(p.output_per_million)}</td>
                         </>
                       )}
-                      <td className="p-3"><span className="badge">{faCurrency(p.currency)}</span></td>
+                      <td className="p-3"><span className="badge">{currencyLabel(p.currency, s)}</span></td>
                       <td className="p-3">
                         {TOGGLEABLE.has(avail) ? (
                           <button
@@ -271,12 +277,12 @@ export default function PricingSection() {
                             style={{ cursor: 'pointer' }}
                             disabled={togglingModel === p.model}
                             onClick={() => toggleModel(p.model)}
-                            title="کلیک برای تغییر وضعیت"
+                            title={s.toggleTitle}
                           >
                             {togglingModel === p.model ? '...' : badgeLabel}
                           </button>
                         ) : (
-                          <span className={badgeClass} title="برای تغییر وضعیت این مدل از تب «عملیات کاتالوگ» استفاده کنید">
+                          <span className={badgeClass} title={s.toggleDisabledTitle}>
                             {badgeLabel}
                           </span>
                         )}
@@ -285,11 +291,11 @@ export default function PricingSection() {
                         <button className="btn btn-sm" disabled={testingModel === p.model} onClick={() => testModel(p.model)}>
                           {testingModel === p.model ? (
                             <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-                          ) : 'تست'}
+                          ) : s.test}
                         </button>
                         {testResult && (
                           <span className="text-xs mr-2" style={{ color: testResult.ok ? 'var(--success, #4ade80)' : 'var(--danger, #e35d5d)' }}>
-                            {testResult.ok ? `${faNum(testResult.latency_ms)}ms` : (testResult.error || 'خطا')}
+                            {testResult.ok ? `${f.num(testResult.latency_ms)}ms` : (testResult.error || s.testError)}
                           </span>
                         )}
                       </td>
@@ -303,7 +309,7 @@ export default function PricingSection() {
                                 ) : <Icon name="check" size={14} />}
                               </button>
                               <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={cancelEdit} disabled={savingEdit}>
-                                انصراف
+                                {s.cancel}
                               </button>
                             </div>
                             {editError && (
@@ -311,7 +317,7 @@ export default function PricingSection() {
                             )}
                           </div>
                         ) : (
-                          <button className="btn btn-sm" title="ویرایش تعرفه" onClick={() => startEdit(p)}>
+                          <button className="btn btn-sm" title={s.editTitle} onClick={() => startEdit(p)}>
                             <Icon name="settings" size={14} />
                           </button>
                         )}
@@ -325,10 +331,10 @@ export default function PricingSection() {
 
           {filtered.length > 0 && (
             <div className="flex items-center justify-between p-3 text-xs text-muted">
-              <span>{faNum(pageStart)}–{faNum(pageEnd)} از {faNum(filtered.length)} مدل — صفحهٔ {faNum(page)} از {faNum(totalPages)}</span>
+              <span>{s.pageRange(f.num(pageStart), f.num(pageEnd), f.num(filtered.length), f.num(page), f.num(totalPages))}</span>
               <div className="flex gap-2">
-                <button className="btn btn-sm" onClick={() => setPage((n) => Math.max(1, n - 1))} disabled={page <= 1}>قبلی</button>
-                <button className="btn btn-sm" onClick={() => setPage((n) => Math.min(totalPages, n + 1))} disabled={page >= totalPages}>بعدی</button>
+                <button className="btn btn-sm" onClick={() => setPage((n) => Math.max(1, n - 1))} disabled={page <= 1}>{s.prev}</button>
+                <button className="btn btn-sm" onClick={() => setPage((n) => Math.min(totalPages, n + 1))} disabled={page >= totalPages}>{s.next}</button>
               </div>
             </div>
           )}
@@ -336,7 +342,7 @@ export default function PricingSection() {
       )}
 
       <p className="text-xs text-muted">
-        برای ساخت و ویرایش بسته‌های اعتباری از صفحه «بسته‌ها» استفاده کنید؛ تنها آن صفحه پیش از انتشار، ضررده نبودن بسته را بررسی می‌کند.
+        {s.footerNote}
       </p>
     </div>
   )

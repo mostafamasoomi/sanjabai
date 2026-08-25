@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config'
+import { fileURLToPath } from 'node:url'
 
 // The app's tsconfig.json sets "jsx": "preserve" (Next.js handles the JSX
 // transform itself via SWC), but that setting also makes Vite/esbuild leave
@@ -9,6 +10,15 @@ import { defineConfig } from 'vitest/config'
 // used by `npx vitest run` -- it has no effect on `next build` or `tsc`,
 // which read tsconfig.json directly and are unaffected by this file.
 export default defineConfig({
+  resolve: {
+    // tsconfig.json maps `@/*` -> `./*`, and vitest does not read tsconfig
+    // paths. It went unnoticed for a long time because the only `@/` imports
+    // reachable from a test were `import type` -- erased before runtime, so
+    // nothing ever had to resolve them. The first VALUE import of `@/lib/...`
+    // from a module under test turned that latent gap into
+    // "Cannot find package '@/components/LanguageToggle'".
+    alias: [{ find: /^@\//, replacement: fileURLToPath(new URL('./', import.meta.url)) }],
+  },
   // Vite 8 defaults to its oxc-based transformer instead of esbuild; disable
   // it so the `esbuild.jsx` override below actually takes effect (otherwise
   // oxc silently wins and still honors tsconfig's "preserve").

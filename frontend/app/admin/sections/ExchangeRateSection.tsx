@@ -3,8 +3,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
-import { faNum, faPrice, faDate, faTime } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/adminI18n'
 import { SectionHeader, StatCard, Field, NumInput } from './shared'
+import { exchangeRateSectionStrings } from './ExchangeRateSection.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    نرخ ارز — نمایش نرخ زندهٔ دلار به تومان، منبع تأمین آن، زمان آخرین
@@ -74,25 +76,34 @@ interface ExchangeRateSectionProps {
   api: (path: string, opts?: RequestInit) => Promise<Response>
 }
 
-const SOURCE_META: Record<string, { label: string; color: string; healthy: boolean }> = {
-  db_override: { label: 'override دستی در پایگاه داده', color: 'var(--accent, #6366f1)', healthy: true },
-  tgju: { label: 'بازار زنده — tgju.org', color: 'var(--success, #22c55e)', healthy: true },
-  bonbast: { label: 'بازار زنده — Bonbast.com', color: 'var(--success, #22c55e)', healthy: true },
-  er_api: { label: 'پشتیبان — open.er-api.com', color: 'var(--warning, #eab308)', healthy: true },
-  hardcoded_fallback: { label: 'مقدار ثابت پشتیبان (کد)', color: 'var(--danger, #ef4444)', healthy: false },
-  unknown: { label: 'نامشخص — کش قدیمی', color: 'var(--danger, #ef4444)', healthy: false },
+/** Built from the resolved strings rather than a module-level Persian
+ *  literal map, so the label follows the language. `source` (the enum key)
+ *  itself is data from the backend and stays untranslated. */
+function sourceMetaTable(s: ReturnType<typeof exchangeRateSectionStrings>): Record<string, { label: string; color: string; healthy: boolean }> {
+  return {
+    db_override: { label: s.sourceDbOverride, color: 'var(--accent, #6366f1)', healthy: true },
+    tgju: { label: s.sourceTgju, color: 'var(--success, #22c55e)', healthy: true },
+    bonbast: { label: s.sourceBonbast, color: 'var(--success, #22c55e)', healthy: true },
+    er_api: { label: s.sourceErApi, color: 'var(--warning, #eab308)', healthy: true },
+    hardcoded_fallback: { label: s.sourceHardcodedFallback, color: 'var(--danger, #ef4444)', healthy: false },
+    unknown: { label: s.sourceUnknown, color: 'var(--danger, #ef4444)', healthy: false },
+  }
 }
 
-function sourceMeta(source: string, configured: ConfiguredSource[]) {
-  if (SOURCE_META[source]) return SOURCE_META[source]
+function sourceMeta(source: string, configured: ConfiguredSource[], s: ReturnType<typeof exchangeRateSectionStrings>) {
+  const table = sourceMetaTable(s)
+  if (table[source]) return table[source]
   const row = configured.find((c) => c.source_key === source)
-  if (row) return { label: `منبع سفارشی — ${row.display_name}`, color: 'var(--success, #22c55e)', healthy: true }
+  if (row) return { label: s.sourceCustom(row.display_name), color: 'var(--success, #22c55e)', healthy: true }
   return { label: source, color: 'var(--danger, #ef4444)', healthy: false }
 }
 
 const emptyNewSource = { source_key: '', display_name: '', url: '', unit: 'toman', extract_regex: '', priority: '100', timeout_s: '5' }
 
 export default function ExchangeRateSection({ api }: ExchangeRateSectionProps) {
+  const lang = useLang()
+  const s = exchangeRateSectionStrings(lang)
+  const f = fmt(lang)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [meta, setMeta] = useState<ExchangeRateMeta | null>(null)
@@ -128,13 +139,13 @@ export default function ExchangeRateSection({ api }: ExchangeRateSectionProps) {
       setBuiltin(sourcesBody.builtin || [])
       setConfigured(sourcesBody.configured || [])
     } catch (err) {
-      const msg = err instanceof Error && err.message !== 'unauthorized' ? err.message : 'خطا در دریافت نرخ ارز'
+      const msg = err instanceof Error && err.message !== 'unauthorized' ? err.message : s.loadErrorFallback
       setLoadError(msg)
       toast(msg, 'error')
     } finally {
       setLoading(false)
     }
-  }, [api])
+  }, [api, s.loadErrorFallback])
 
   useEffect(() => { load() }, [load])
 
@@ -144,9 +155,9 @@ export default function ExchangeRateSection({ api }: ExchangeRateSectionProps) {
       const res = await api('/api/admin/exchange-rate/refresh', { method: 'POST' })
       const body: ExchangeRateMeta = await res.json()
       setMeta(body)
-      toast('نرخ ارز به‌روزرسانی شد', 'success')
+      toast(s.refreshedToast, 'success')
     } catch (err) {
-      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'به‌روزرسانی نرخ ارز ناموفق بود', 'error')
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : s.refreshFailedToast, 'error')
     } finally {
       setRefreshing(false)
     }
@@ -155,16 +166,16 @@ export default function ExchangeRateSection({ api }: ExchangeRateSectionProps) {
   const saveFlatMarkup = async () => {
     const v = Number(flatMarkupInput)
     if (!Number.isFinite(v) || v < 0) {
-      toast('مارک‌آپ نمی‌تواند منفی باشد', 'error')
+      toast(s.flatMarkupNegativeToast, 'error')
       return
     }
     setSavingFlatMarkup(true)
     try {
       await api('/api/admin/exchange-rate/flat-markup', { method: 'POST', body: JSON.stringify({ flat_markup_toman: v }) })
-      toast('مارک‌آپ ثابت ذخیره شد', 'success')
+      toast(s.flatMarkupSavedToast, 'success')
       await load()
     } catch (err) {
-      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'ذخیرهٔ مارک‌آپ ناموفق بود', 'error')
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : s.flatMarkupSaveFailedToast, 'error')
     } finally {
       setSavingFlatMarkup(false)
     }
@@ -176,21 +187,21 @@ export default function ExchangeRateSection({ api }: ExchangeRateSectionProps) {
       await api(`/api/admin/exchange-rate/sources/${encodeURIComponent(key)}`, { method: 'PATCH', body: JSON.stringify(body) })
       await load()
     } catch (err) {
-      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'به‌روزرسانی منبع ناموفق بود', 'error')
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : s.sourceUpdateFailedToast, 'error')
     } finally {
       setRowSaving(null)
     }
   }
 
   const deleteSource = async (key: string) => {
-    if (!confirm(`منبع «${key}» حذف شود؟`)) return
+    if (!confirm(s.confirmDeleteSource(key))) return
     setRowSaving(key)
     try {
       await api(`/api/admin/exchange-rate/sources/${encodeURIComponent(key)}`, { method: 'DELETE' })
-      toast('منبع حذف شد', 'success')
+      toast(s.sourceDeletedToast, 'success')
       await load()
     } catch (err) {
-      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'حذف منبع ناموفق بود', 'error')
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : s.sourceDeleteFailedToast, 'error')
     } finally {
       setRowSaving(null)
     }
@@ -200,15 +211,15 @@ export default function ExchangeRateSection({ api }: ExchangeRateSectionProps) {
     const priority = Number(newSource.priority)
     const timeout_s = Number(newSource.timeout_s)
     if (!newSource.source_key.trim() || !newSource.display_name.trim() || !newSource.url.trim() || !newSource.extract_regex.trim()) {
-      toast('همهٔ فیلدها به‌جز اولویت و مهلت زمانی الزامی‌اند', 'error')
+      toast(s.newSourceRequiredFieldsToast, 'error')
       return
     }
     if (!Number.isFinite(priority) || priority <= 0) {
-      toast('اولویت باید عددی مثبت باشد', 'error')
+      toast(s.priorityMustBePositiveToast, 'error')
       return
     }
     if (!Number.isFinite(timeout_s) || timeout_s <= 0 || timeout_s > 10) {
-      toast('مهلت زمانی باید بین ۰ تا ۱۰ ثانیه باشد', 'error')
+      toast(s.timeoutRangeToast, 'error')
       return
     }
     setCreatingSource(true)
@@ -217,140 +228,136 @@ export default function ExchangeRateSection({ api }: ExchangeRateSectionProps) {
         method: 'POST',
         body: JSON.stringify({ ...newSource, priority, timeout_s }),
       })
-      toast('منبع جدید افزوده شد', 'success')
+      toast(s.sourceAddedToast, 'success')
       setNewSource(emptyNewSource)
       await load()
     } catch (err) {
-      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'افزودن منبع ناموفق بود', 'error')
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : s.sourceAddFailedToast, 'error')
     } finally {
       setCreatingSource(false)
     }
   }
 
-  const sm = meta ? sourceMeta(meta.source, configured) : null
+  const sm = meta ? sourceMeta(meta.source, configured, s) : null
 
   return (
     <div className="space-y-6">
-      <SectionHeader
-        title="نرخ ارز"
-        subtitle="نرخ زندهٔ دلار به تومان که قیمت همهٔ مدل‌ها بر اساس آن محاسبه می‌شود — نرخ بازار، مارک‌آپ ثابت قابل‌ویرایش، و منابع تأمین (tgju، Bonbast، و هر مرجع دیگری که اضافه کنید)"
-      />
+      <SectionHeader title={s.title} subtitle={s.subtitle} />
 
       {loading ? (
-        <div className="admin-card p-6 text-center text-sm text-muted">در حال بارگذاری…</div>
+        <div className="admin-card p-6 text-center text-sm text-muted">{s.loading}</div>
       ) : loadError ? (
         <div className="admin-card p-6 text-center text-sm" style={{ color: 'var(--danger, #ef4444)' }}>
           {loadError}
           <div className="mt-2">
             <button className="btn btn-sm" onClick={load}>
               <Icon name="refresh" size={14} />
-              تلاش دوباره
+              {s.retry}
             </button>
           </div>
         </div>
       ) : !meta ? (
-        <div className="admin-card p-6 text-center text-sm text-muted">اطلاعاتی یافت نشد</div>
+        <div className="admin-card p-6 text-center text-sm text-muted">{s.noData}</div>
       ) : (
         <>
           <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-            <StatCard icon="chart" label="نرخ بازار (بدون مارک‌آپ)" value={faPrice(Math.round(meta.rate_irt_bare))} color="var(--accent, #6366f1)" />
-            <StatCard icon="plus" label="مارک‌آپ ثابت" value={faPrice(Math.round(meta.flat_markup_irt))} color="var(--warning, #eab308)" />
-            <StatCard icon="wallet" label="نرخ مؤثر (سرو شده به کاربر)" value={faPrice(Math.round(meta.rate_irt_effective))} color="var(--success, #22c55e)" />
+            <StatCard icon="chart" label={s.statBareRate} value={f.price(Math.round(meta.rate_irt_bare))} color="var(--accent, #6366f1)" />
+            <StatCard icon="plus" label={s.statFlatMarkup} value={f.price(Math.round(meta.flat_markup_irt))} color="var(--warning, #eab308)" />
+            <StatCard icon="wallet" label={s.statEffectiveRate} value={f.price(Math.round(meta.rate_irt_effective))} color="var(--success, #22c55e)" />
           </div>
 
           <div className="admin-card">
             <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
-              <h3 className="font-semibold text-sm text-primary">منبع و زمان به‌روزرسانی</h3>
+              <h3 className="font-semibold text-sm text-primary">{s.sourceAndTimingTitle}</h3>
               <button className="btn btn-sm" onClick={refresh} disabled={refreshing}>
                 {refreshing ? (
                   <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-                ) : (<><Icon name="refresh" size={14} /><span>واکشی فوری</span></>)}
+                ) : (<><Icon name="refresh" size={14} /><span>{s.refreshNow}</span></>)}
               </button>
             </div>
 
             <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
               <div>
-                <p className="text-xs text-muted mb-1">منبع نرخ</p>
+                <p className="text-xs text-muted mb-1">{s.sourceLabel}</p>
                 <span
                   className="badge"
-                  title={sm && !sm.healthy ? 'وضعیت سالم نیست — این نرخ از یک کش قدیمی یا مقدار ثابت پشتیبان می‌آید، نه بازار زنده' : undefined}
+                  title={sm && !sm.healthy ? s.unhealthyTooltip : undefined}
                   style={{ color: sm?.color, borderColor: sm?.color }}
                 >
                   {sm?.label}
                 </span>
                 {sm && !sm.healthy && (
                   <p className="text-xs mt-1" style={{ color: sm.color }}>
-                    ⚠ این وضعیت سالم نیست — نرخ واقعی بازار تأمین نشده
+                    {s.unhealthyWarning}
                   </p>
                 )}
               </div>
               <div>
-                <p className="text-xs text-muted mb-1">آخرین واکشی</p>
+                <p className="text-xs text-muted mb-1">{s.lastFetchLabel}</p>
                 <p className="text-sm text-primary">
-                  {meta.fetched_at ? `${faDate(meta.fetched_at)} — ${faTime(meta.fetched_at)}` : '—'}
+                  {meta.fetched_at ? `${f.date(meta.fetched_at)} — ${f.time(meta.fetched_at)}` : '—'}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted mb-1">اعتبار کش</p>
+                <p className="text-xs text-muted mb-1">{s.cacheTtlLabel}</p>
                 <p className="text-sm text-primary">
-                  {meta.cache_ttl_remaining_s != null ? `${faNum(meta.cache_ttl_remaining_s)} ثانیهٔ دیگر` : '—'}
+                  {meta.cache_ttl_remaining_s != null ? s.cacheTtlValue(f.num(meta.cache_ttl_remaining_s)) : '—'}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted mb-1">درصد سود سراسری فعلی</p>
-                <p className="text-sm text-primary">{faNum(meta.markup_pct)}٪</p>
+                <p className="text-xs text-muted mb-1">{s.globalMarkupPctLabel}</p>
+                <p className="text-sm text-primary">{f.percent(meta.markup_pct)}</p>
               </div>
             </div>
           </div>
 
           <div className="admin-card">
             <p className="text-xs text-muted leading-6">
-              نرخ سرو شده به کاربر همیشه برابر است با «نرخ بازار + مارک‌آپ ثابت»: {faPrice(Math.round(meta.rate_irt_bare))} + {faPrice(Math.round(meta.flat_markup_irt))} = {faPrice(Math.round(meta.rate_irt_effective))}.
-              این عدد جدا از درصد سود هر مدل است که روی قیمت پایهٔ همان مدل اعمال می‌شود.
+              {s.effectiveRateExplanation(
+                f.price(Math.round(meta.rate_irt_bare)),
+                f.price(Math.round(meta.flat_markup_irt)),
+                f.price(Math.round(meta.rate_irt_effective)),
+              )}
             </p>
           </div>
 
           {/* Flat markup edit */}
           <div className="admin-card">
-            <h3 className="font-semibold text-sm text-primary mb-1">مارک‌آپ ثابت (تومان)</h3>
-            <p className="text-xs text-muted mb-4">
-              این عدد به نرخ خام بازار اضافه می‌شود تا نرخ مؤثر ساخته شود — مقدار پیش‌فرض {faPrice(flatMarkupDefault)}. صفر مجاز است (یعنی بدون مارک‌آپ ثابت)؛ عدد منفی رد می‌شود چون به فروش زیر نرخ بازار می‌انجامد.
-            </p>
+            <h3 className="font-semibold text-sm text-primary mb-1">{s.flatMarkupTitle}</h3>
+            <p className="text-xs text-muted mb-4">{s.flatMarkupDescription(f.price(flatMarkupDefault))}</p>
             <div className="flex items-end gap-3 flex-wrap">
-              <Field label="مارک‌آپ ثابت (تومان)">
+              <Field label={s.flatMarkupFieldLabel}>
                 <NumInput value={flatMarkupInput} onChange={setFlatMarkupInput} width={160} />
               </Field>
               <button className="btn btn-sm btn-primary" onClick={saveFlatMarkup} disabled={savingFlatMarkup}>
-                {savingFlatMarkup ? '…' : (<><Icon name="check" size={14} /><span>ذخیره</span></>)}
+                {savingFlatMarkup ? '…' : (<><Icon name="check" size={14} /><span>{s.save}</span></>)}
               </button>
             </div>
           </div>
 
           {/* Sources */}
           <div className="admin-card">
-            <h3 className="font-semibold text-sm text-primary mb-1">منابع نرخ ارز</h3>
-            <p className="text-xs text-muted mb-4">
-              ترتیب تلاش برای واکشی نرخ: override دستی، سپس tgju.org، سپس منابع فعال زیر بر اساس اولویت (عدد کوچک‌تر زودتر امتحان می‌شود)، سپس open.er-api.com، و در نهایت مقدار ثابت در کد.
-            </p>
+            <h3 className="font-semibold text-sm text-primary mb-1">{s.sourcesTitle}</h3>
+            <p className="text-xs text-muted mb-4">{s.sourcesDescription}</p>
 
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-right text-xs text-muted border-b border-line">
-                    <th className="py-2 pl-2">منبع</th>
-                    <th className="py-2 pl-2">نوع</th>
-                    <th className="py-2 pl-2">اولویت</th>
-                    <th className="py-2 pl-2">وضعیت</th>
-                    <th className="py-2 pl-2">عملیات</th>
+                    <th className="py-2 pl-2">{s.colSource}</th>
+                    <th className="py-2 pl-2">{s.colKind}</th>
+                    <th className="py-2 pl-2">{s.colPriority}</th>
+                    <th className="py-2 pl-2">{s.colStatus}</th>
+                    <th className="py-2 pl-2">{s.colActions}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {builtin.map((b) => (
                     <tr key={b.source_key} className="border-b border-line/50">
                       <td className="py-2 pl-2">{b.display_name}</td>
-                      <td className="py-2 pl-2 text-xs text-muted">کد ثابت</td>
+                      <td className="py-2 pl-2 text-xs text-muted">{s.hardcodedKind}</td>
                       <td className="py-2 pl-2 text-xs text-muted">—</td>
-                      <td className="py-2 pl-2 text-xs text-muted" title={b.note}>غیرقابل‌ویرایش</td>
+                      <td className="py-2 pl-2 text-xs text-muted" title={b.note}>{s.notEditable}</td>
                       <td className="py-2 pl-2 text-xs text-muted">—</td>
                     </tr>
                   ))}
@@ -358,9 +365,11 @@ export default function ExchangeRateSection({ api }: ExchangeRateSectionProps) {
                     <tr key={c.source_key} className="border-b border-line/50">
                       <td className="py-2 pl-2">
                         {c.display_name}
-                        {c.is_builtin && <span className="text-xs text-muted"> (پایه)</span>}
+                        {c.is_builtin && <span className="text-xs text-muted">{s.builtinSuffix}</span>}
                       </td>
-                      <td className="py-2 pl-2 text-xs text-muted">{c.kind === 'bonbast' ? 'Bonbast' : `سفارشی (${c.unit === 'rial' ? 'ریال' : 'تومان'})`}</td>
+                      <td className="py-2 pl-2 text-xs text-muted">
+                        {c.kind === 'bonbast' ? s.kindBonbast : s.kindCustom(c.unit === 'rial' ? s.unitRial : s.unitToman)}
+                      </td>
                       <td className="py-2 pl-2">
                         <input
                           className="input" type="number" min={1} defaultValue={c.priority}
@@ -377,12 +386,12 @@ export default function ExchangeRateSection({ api }: ExchangeRateSectionProps) {
                           style={{ color: c.enabled ? 'var(--success, #22c55e)' : 'var(--danger, #ef4444)', borderColor: c.enabled ? 'var(--success, #22c55e)' : 'var(--danger, #ef4444)' }}
                           onClick={() => patchSource(c.source_key, { enabled: !c.enabled })}
                         >
-                          {c.enabled ? 'فعال' : 'غیرفعال'}
+                          {c.enabled ? s.enabled : s.disabled}
                         </button>
                       </td>
                       <td className="py-2 pl-2">
                         {c.deletable && (
-                          <button className="btn btn-sm" disabled={rowSaving === c.source_key} onClick={() => deleteSource(c.source_key)} title="حذف">
+                          <button className="btn btn-sm" disabled={rowSaving === c.source_key} onClick={() => deleteSource(c.source_key)} title={s.deleteTitle}>
                             <Icon name="trash" size={14} />
                           </button>
                         )}
@@ -395,40 +404,38 @@ export default function ExchangeRateSection({ api }: ExchangeRateSectionProps) {
 
             {/* Add new source */}
             <div className="mt-6 pt-4 border-t border-line">
-              <h4 className="font-semibold text-xs text-primary mb-3">افزودن منبع جدید</h4>
-              <p className="text-xs text-muted mb-3">
-                نشانی باید https باشد و به شبکهٔ داخلی سرور اشاره نکند. الگوی استخراج یک عبارت باقاعده با دقیقاً یک گروه () است که عدد نرخ را می‌گیرد — چیزی اجرا نمی‌شود، فقط یک عدد از متن صفحه استخراج می‌شود.
-              </p>
+              <h4 className="font-semibold text-xs text-primary mb-3">{s.addSourceTitle}</h4>
+              <p className="text-xs text-muted mb-3">{s.addSourceDescription}</p>
               <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-                <Field label="کلید (انگلیسی، یکتا)">
-                  <input className="input" value={newSource.source_key} onChange={(e) => setNewSource((s) => ({ ...s, source_key: e.target.value.trim().toLowerCase() }))} placeholder="example_site" />
+                <Field label={s.fieldKey}>
+                  <input className="input" value={newSource.source_key} onChange={(e) => setNewSource((prev) => ({ ...prev, source_key: e.target.value.trim().toLowerCase() }))} placeholder="example_site" />
                 </Field>
-                <Field label="نام نمایشی">
-                  <input className="input" value={newSource.display_name} onChange={(e) => setNewSource((s) => ({ ...s, display_name: e.target.value }))} placeholder="Example Site" />
+                <Field label={s.fieldDisplayName}>
+                  <input className="input" value={newSource.display_name} onChange={(e) => setNewSource((prev) => ({ ...prev, display_name: e.target.value }))} placeholder="Example Site" />
                 </Field>
-                <Field label="واحد">
-                  <select className="input" value={newSource.unit} onChange={(e) => setNewSource((s) => ({ ...s, unit: e.target.value }))}>
-                    <option value="toman">تومان</option>
-                    <option value="rial">ریال</option>
+                <Field label={s.fieldUnit}>
+                  <select className="input" value={newSource.unit} onChange={(e) => setNewSource((prev) => ({ ...prev, unit: e.target.value }))}>
+                    <option value="toman">{s.unitToman}</option>
+                    <option value="rial">{s.unitRial}</option>
                   </select>
                 </Field>
-                <Field label="اولویت">
-                  <NumInput value={newSource.priority} onChange={(v) => setNewSource((s) => ({ ...s, priority: v }))} width={100} />
+                <Field label={s.fieldPriority}>
+                  <NumInput value={newSource.priority} onChange={(v) => setNewSource((prev) => ({ ...prev, priority: v }))} width={100} />
                 </Field>
-                <Field label="مهلت زمانی (ثانیه، حداکثر ۱۰)">
-                  <NumInput value={newSource.timeout_s} onChange={(v) => setNewSource((s) => ({ ...s, timeout_s: v }))} width={100} />
+                <Field label={s.fieldTimeout}>
+                  <NumInput value={newSource.timeout_s} onChange={(v) => setNewSource((prev) => ({ ...prev, timeout_s: v }))} width={100} />
                 </Field>
               </div>
               <div className="grid gap-3 mt-3" style={{ gridTemplateColumns: '1fr' }}>
-                <Field label="نشانی (https)">
-                  <input className="input w-full" value={newSource.url} onChange={(e) => setNewSource((s) => ({ ...s, url: e.target.value }))} placeholder="https://example.com/usd-rate" />
+                <Field label={s.fieldUrl}>
+                  <input className="input w-full" value={newSource.url} onChange={(e) => setNewSource((prev) => ({ ...prev, url: e.target.value }))} placeholder="https://example.com/usd-rate" />
                 </Field>
-                <Field label="الگوی استخراج (regex با یک گروه)">
-                  <input className="input w-full" dir="ltr" value={newSource.extract_regex} onChange={(e) => setNewSource((s) => ({ ...s, extract_regex: e.target.value }))} placeholder={'USD\\s*=\\s*([\\d,]+)'} />
+                <Field label={s.fieldExtractRegex}>
+                  <input className="input w-full" dir="ltr" value={newSource.extract_regex} onChange={(e) => setNewSource((prev) => ({ ...prev, extract_regex: e.target.value }))} placeholder={'USD\\s*=\\s*([\\d,]+)'} />
                 </Field>
               </div>
               <button className="btn btn-sm btn-primary mt-3" onClick={createSource} disabled={creatingSource}>
-                {creatingSource ? '…' : (<><Icon name="plus" size={14} /><span>افزودن منبع</span></>)}
+                {creatingSource ? '…' : (<><Icon name="plus" size={14} /><span>{s.addSource}</span></>)}
               </button>
             </div>
           </div>

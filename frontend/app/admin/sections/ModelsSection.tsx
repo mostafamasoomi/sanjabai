@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
-import { faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/adminI18n'
 import { SectionHeader, Field } from './shared'
 import { ErrorCard, RefreshButton } from './LoadState'
 import { api, errMessage } from '../api'
+import { modelsSectionStrings } from './ModelsSection.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Models — just the org default-model picker card. Self-contained; the card
@@ -30,6 +32,9 @@ import { api, errMessage } from '../api'
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function ModelsSection() {
+  const lang = useLang()
+  const s = modelsSectionStrings(lang)
+  const f = fmt(lang)
   const [status, setStatus] = useState<'loading' | 'error' | 'ready'>('loading')
   const [loadError, setLoadError] = useState('')
   const [models, setModels] = useState<string[]>([])
@@ -50,10 +55,10 @@ export default function ModelsSection() {
       setOrgDefaultModel(current?.default_model || '')
       setStatus('ready')
     } catch (err) {
-      setLoadError(errMessage(err, 'خطا در دریافت فهرست مدل‌ها'))
+      setLoadError(errMessage(err, s.loadError))
       setStatus('error')
     }
-  }, [])
+  }, [s.loadError])
 
   useEffect(() => { load() }, [load])
 
@@ -65,9 +70,9 @@ export default function ModelsSection() {
         method: 'POST',
         body: JSON.stringify({ default_model: orgDefaultModel || null }),
       })
-      toast('مدل پیشفرض سازمان ذخیره شد', 'success')
+      toast(s.saveSuccess, 'success')
     } catch (err) {
-      toast(errMessage(err, 'خطا در ذخیره مدل پیشفرض'), 'error')
+      toast(errMessage(err, s.saveError), 'error')
     } finally {
       setSaving(false)
     }
@@ -76,7 +81,7 @@ export default function ModelsSection() {
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
-        <SectionHeader title="مدل‌های فعال" subtitle={`${faNum(models.length)} مدل در دسترس`} />
+        <SectionHeader title={s.title} subtitle={s.subtitle(f.num(models.length))} />
         <RefreshButton onClick={load} busy={status === 'loading'} />
       </div>
 
@@ -89,11 +94,11 @@ export default function ModelsSection() {
               <Icon name="models" size={16} className="text-accent" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-primary">مدل پیشفرض سازمان</h3>
-              <p className="text-xs text-muted">مدلی که کاربران جدید به‌صورت پیشفرض استفاده می‌کنند</p>
+              <h3 className="text-sm font-bold text-primary">{s.cardTitle}</h3>
+              <p className="text-xs text-muted">{s.cardSubtitle}</p>
             </div>
           </div>
-          <Field label="مدل">
+          <Field label={s.fieldLabel}>
             <div className="flex items-center gap-3">
               <select
                 className="input flex-1"
@@ -101,7 +106,7 @@ export default function ModelsSection() {
                 disabled={status !== 'ready'}
                 onChange={(e) => setOrgDefaultModel(e.target.value)}
               >
-                <option value="">بدون مدل پیشفرض (اولین مدل لیست)</option>
+                <option value="">{s.noDefaultOption}</option>
                 {models.map((m) => (
                   <option key={m} value={m}>{m}</option>
                 ))}
@@ -109,7 +114,7 @@ export default function ModelsSection() {
               <button className="btn" onClick={saveOrgDefaultModel} disabled={saving || status !== 'ready'}>
                 {saving ? (
                   <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-                ) : 'ذخیره'}
+                ) : s.save}
               </button>
             </div>
           </Field>

@@ -1,9 +1,16 @@
+import type { Lang } from '@/components/LanguageToggle'
+import { moderationTypesStrings } from './moderationTypes.strings'
+
 /* Response shapes and shared label maps for the moderation review queue
  * (Phase J — owner: «اگه یه یوزر چیزای ممنوعه بیاد سرچ کنه ما باید بفهمیم»).
  *
  * Mirrors the contract frozen for this build (backend/admin_moderation.py,
  * landing alongside this file) — do not add a field here the contract does
  * not name, and do not guess at ones it left out.
+ *
+ * Not a component, so no `useLang()` here. Every label helper below takes
+ * `lang` as a parameter and must be called from a component that already
+ * resolved it via `useLang()`.
  */
 
 export type ModerationDecision = 'allow' | 'flag' | 'block'
@@ -55,25 +62,34 @@ export type ModerationUserAction = 'warn' | 'restrict' | 'suspend'
    substring). These four are the values the backend agent confirmed it
    writes; an unrecognised value still renders fine everywhere — every call
    site falls back to the raw string via `?? severity` — it just won't carry
-   a colour or a Persian label. */
-/** Single source for the four severities: the labels map IS the enum.
- * Hand-typed option arrays in each component drifted from it. */
-export const SEVERITY_LABEL: Record<string, string> = {
-  low: 'پایین', medium: 'متوسط', high: 'بالا', critical: 'بحرانی',
-}
+   a colour or a Persian/English label. */
 
-export const SEVERITY_ORDER = Object.keys(SEVERITY_LABEL)
+/** The four severities in display order — the FA side of the dictionary IS
+ *  the enum. Hand-typed option arrays in each component drifted from it, so
+ *  this is the single source; language-independent since it only reads
+ *  keys (always resolved against 'fa', which carries every key). */
+export const SEVERITY_ORDER = Object.keys(moderationTypesStrings('fa').severity)
+
 export const SEVERITY_COLOR: Record<string, string> = {
   low: '#22c55e', medium: '#eab308', high: '#f97316', critical: '#ef4444',
 }
 
-export const DECISION_LABEL: Record<ModerationDecision, string> = {
-  allow: 'مجاز', flag: 'پرچم‌گذاری', block: 'مسدود',
+/** Severity label for a language, falling back to the raw value for an
+ *  unrecognised severity — same fallback every call site relied on before. */
+export function severityLabel(severity: string, lang: Lang): string {
+  return moderationTypesStrings(lang).severity[severity] ?? severity
 }
+
 export const DECISION_BADGE: Record<ModerationDecision, string> = {
   allow: 'badge-positive', flag: 'badge-warning', block: 'badge-danger',
 }
 
-export const ACTION_LABEL: Record<ModerationUserAction, string> = {
-  warn: 'هشدار', restrict: 'محدودسازی', suspend: 'تعلیق',
+/** Decision label for a language, falling back to the raw value — same
+ *  fallback every call site relied on before. */
+export function decisionLabel(decision: ModerationDecision | string, lang: Lang): string {
+  return moderationTypesStrings(lang).decision[decision] ?? decision
+}
+
+export function actionLabel(action: ModerationUserAction, lang: Lang): string {
+  return moderationTypesStrings(lang).action[action]
 }

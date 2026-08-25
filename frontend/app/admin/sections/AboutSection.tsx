@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
+import { useLang } from '@/components/LanguageToggle'
 import { SectionHeader, Field } from './shared'
 import { ErrorCard, RefreshButton } from './LoadState'
 import { api, errMessage } from '../api'
+import { aboutStrings } from './AboutSection.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    About — GET/POST /admin/about (backend/admin_content.py).
@@ -21,6 +23,8 @@ import { api, errMessage } from '../api'
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function AboutSection() {
+  const lang = useLang()
+  const s = aboutStrings(lang)
   const [status, setStatus] = useState<'loading' | 'error' | 'ready'>('loading')
   const [loadError, setLoadError] = useState('')
   const [abTitle, setAbTitle] = useState('')
@@ -37,10 +41,10 @@ export default function AboutSection() {
       setAbBody(typeof d?.body === 'string' ? d.body : '')
       setStatus('ready')
     } catch (err) {
-      setLoadError(errMessage(err, 'خطا در دریافت محتوای درباره ما'))
+      setLoadError(errMessage(err, s.loadError))
       setStatus('error')
     }
-  }, [])
+  }, [s.loadError])
 
   useEffect(() => { load() }, [load])
 
@@ -51,10 +55,10 @@ export default function AboutSection() {
     setSaving(true)
     try {
       await api('/api/admin/about', { method: 'POST', body: JSON.stringify({ title: abTitle, body: abBody }) })
-      toast('درباره ما ذخیره شد', 'success')
+      toast(s.saveSuccess, 'success')
       await load()
     } catch (err) {
-      toast(errMessage(err, 'خطا در ذخیره درباره ما'), 'error')
+      toast(errMessage(err, s.saveError), 'error')
     } finally {
       setSaving(false)
     }
@@ -63,7 +67,7 @@ export default function AboutSection() {
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
-        <SectionHeader title="درباره ما" subtitle="محتوای صفحه درباره ما" />
+        <SectionHeader title={s.title} subtitle={s.subtitle} />
         <RefreshButton onClick={load} busy={status === 'loading'} />
       </div>
 
@@ -80,23 +84,27 @@ export default function AboutSection() {
 
       {status === 'ready' && (
         <div className="admin-card">
+          {/* abTitle/abBody are the live درباره‌ما page copy, fetched from and
+              saved back to the server — content, not UI chrome, so it is
+              deliberately not translated by this component. The placeholder
+              hints below are example content in Persian for the same reason. */}
           <div className="space-y-4">
-            <Field label="عنوان">
-              <input className="input w-full" value={abTitle} onChange={(e) => setAbTitle(e.target.value)} placeholder="درباره Sanjabai" />
+            <Field label={s.titleLabel}>
+              <input className="input w-full" value={abTitle} onChange={(e) => setAbTitle(e.target.value)} placeholder={s.titlePlaceholder} />
             </Field>
-            <Field label="متن">
+            <Field label={s.bodyLabel}>
               <textarea
                 className="input w-full min-h-[200px] resize-y leading-relaxed"
                 value={abBody}
                 onChange={(e) => setAbBody(e.target.value)}
-                placeholder="متن درباره ما به فارسی..."
+                placeholder={s.bodyPlaceholder}
               />
             </Field>
           </div>
           <button className="btn mt-4" onClick={saveAbout} disabled={saving}>
             {saving ? (
               <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-            ) : (<><Icon name="check" size={16} /><span>ذخیره</span></>)}
+            ) : (<><Icon name="check" size={16} /><span>{s.save}</span></>)}
           </button>
         </div>
       )}

@@ -3,8 +3,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
-import { faNum, faPrice } from '@/lib/format'
+import { useLang, type Lang } from '@/components/LanguageToggle'
+import { fmt, type Formatters } from '@/lib/adminI18n'
+import { toFaDigits } from '@/lib/format'
 import { SectionHeader, StatCard } from './shared'
+import { analyticsStrings } from './AnalyticsSection.strings'
+
+type AnalyticsStrings = ReturnType<typeof analyticsStrings>
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Analytics — wires up four admin endpoints that had zero frontend
@@ -74,13 +79,15 @@ interface AnalyticsSectionProps {
 const SVG_W = 600
 const SVG_H = 140
 
-/** Short day label from a `YYYY-MM-DD` string, e.g. "۲۱ مرداد". */
-function dayLabel(dateStr: string): string {
+/** Short day label from a `YYYY-MM-DD` string, e.g. "۲۱ مرداد" (fa) or
+ *  "21 Aug" (en). */
+function dayLabel(dateStr: string, lang: Lang): string {
   const d = new Date(dateStr)
   if (Number.isNaN(d.getTime())) return dateStr
-  return d
-    .toLocaleDateString('fa-IR', { month: 'short', day: 'numeric' })
-    .replace(/[0-9]/g, (c) => '۰۱۲۳۴۵۶۷۸۹'[Number(c)])
+  if (lang === 'en') {
+    return d.toLocaleDateString('en-GB', { month: 'short', day: 'numeric' })
+  }
+  return toFaDigits(d.toLocaleDateString('fa-IR', { month: 'short', day: 'numeric' }))
 }
 
 /** Builds an SVG polyline `points` string, normalizing against a shared
@@ -108,12 +115,18 @@ function buildSharedPoints(values: number[], sharedMax: number): string {
 function ConsumptionVsRevenueChart({
   consumption,
   gatewayRevenue,
+  s,
+  f,
+  lang,
 }: {
   consumption: DailyAmount[]
   gatewayRevenue: DailyAmount[]
+  s: AnalyticsStrings
+  f: Formatters
+  lang: Lang
 }) {
   if (!consumption || consumption.length === 0) {
-    return <div className="text-center text-sm text-muted py-8">داده‌ای برای رسم نمودار ثبت نشده است</div>
+    return <div className="text-center text-sm text-muted py-8">{s.noChartData}</div>
   }
   const gatewayByDay = new Map(gatewayRevenue.map((d) => [d.day, d.amount]))
   const consumptionValues = consumption.map((d) => d.amount)
@@ -130,16 +143,15 @@ function ConsumptionVsRevenueChart({
       <div className="flex flex-wrap items-center gap-4 mb-3">
         <span className="flex items-center gap-1 text-xs">
           <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--accent)', display: 'inline-block' }} />
-          مصرف کاربران (charged_amount) — مجموع {faPrice(consumptionTotal)}
+          {s.consumptionLegend(f.price(consumptionTotal))}
         </span>
         <span className="flex items-center gap-1 text-xs">
           <span style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--positive, #16a34a)', display: 'inline-block' }} />
-          درآمد واقعی درگاه (پرداخت‌های تکمیل‌شده) — مجموع {faPrice(gatewayTotal)}
+          {s.gatewayLegend(f.price(gatewayTotal))}
         </span>
       </div>
       <p className="text-xs text-muted mb-3">
-        مصرف یعنی چه مبلغی بابت استفاده از مدل‌ها از کاربران کسر شده — نه لزوماً پولی که وارد درگاه شده. برای
-        {faNum(consumption.length)} روز اخیر، این دو عدد آگاهانه جدا از هم رسم شده‌اند تا با هم اشتباه گرفته نشوند.
+        {s.chartExplainer(f.num(consumption.length))}
       </p>
       <div dir="ltr">
         <svg
@@ -164,14 +176,14 @@ function ConsumptionVsRevenueChart({
         </svg>
       </div>
       <div className="flex justify-between mt-2">
-        <span className="text-[10px] text-muted">{dayLabel(consumption[0].day)}</span>
-        <span className="text-[10px] text-muted">{dayLabel(consumption[consumption.length - 1].day)}</span>
+        <span className="text-[10px] text-muted">{dayLabel(consumption[0].day, lang)}</span>
+        <span className="text-[10px] text-muted">{dayLabel(consumption[consumption.length - 1].day, lang)}</span>
       </div>
     </div>
   )
 }
 
-function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+function ErrorState({ message, onRetry, retryLabel }: { message: string; onRetry: () => void; retryLabel: string }) {
   return (
     <div className="admin-card admin-row justify-between gap-4" style={{ borderRight: '3px solid var(--danger)' }}>
       <div className="flex items-center gap-3">
@@ -180,7 +192,7 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
       </div>
       <button className="btn btn-sm" onClick={onRetry}>
         <Icon name="refresh" size={14} />
-        <span>تلاش دوباره</span>
+        <span>{retryLabel}</span>
       </button>
     </div>
   )
@@ -191,6 +203,7 @@ async function downloadCsv(
   path: string,
   filename: string,
   onDone: () => void,
+  downloadErrorMsg: string,
 ) {
   try {
     const res = await api(path)
@@ -204,13 +217,17 @@ async function downloadCsv(
     a.remove()
     URL.revokeObjectURL(url)
   } catch {
-    toast('دریافت فایل خروجی ناموفق بود', 'error')
+    toast(downloadErrorMsg, 'error')
   } finally {
     onDone()
   }
 }
 
 export default function AnalyticsSection({ api }: AnalyticsSectionProps) {
+  const lang = useLang()
+  const s = analyticsStrings(lang)
+  const f = fmt(lang)
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [stats, setStats] = useState<AdminStats | null>(null)
@@ -236,14 +253,14 @@ export default function AnalyticsSection({ api }: AnalyticsSectionProps) {
     } catch {
       // Deliberately no fallback to zero/empty here -- a failed fetch must
       // render as an error, never as a stat card silently showing ۰.
-      setError('دریافت اطلاعات تحلیلی ناموفق بود')
+      setError(s.loadError)
       setStats(null)
       setDailyConsumption(null)
       setDailyGatewayRevenue(null)
     } finally {
       setLoading(false)
     }
-  }, [api])
+  }, [api, s.loadError])
 
   useEffect(() => {
     load()
@@ -252,14 +269,14 @@ export default function AnalyticsSection({ api }: AnalyticsSectionProps) {
   return (
     <div className="space-y-6">
       <SectionHeader
-        title="تحلیل و درآمد"
-        subtitle="درآمد واقعیِ واردشده از درگاه پرداخت، جدا از اعتبارهایی که ادمین دستی شارژ کرده — دو عدد، دو کارت، بدون قاطی‌شدن"
+        title={s.title}
+        subtitle={s.subtitle}
       />
 
-      {error && <ErrorState message={error} onRetry={load} />}
+      {error && <ErrorState message={error} onRetry={load} retryLabel={s.retry} />}
 
       {loading && !error && (
-        <div className="admin-card text-center text-sm text-muted py-8">در حال بارگذاری…</div>
+        <div className="admin-card text-center text-sm text-muted py-8">{s.loading}</div>
       )}
 
       {!loading && !error && stats && (
@@ -267,38 +284,44 @@ export default function AnalyticsSection({ api }: AnalyticsSectionProps) {
           <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
             <StatCard
               icon="payment"
-              label="درآمد واقعی (پرداخت‌های تکمیل‌شدهٔ درگاه)"
-              value={faPrice(stats.total_revenue)}
+              label={s.totalRevenue}
+              value={f.price(stats.total_revenue)}
               color="var(--positive, #16a34a)"
             />
             <StatCard
               icon="gift"
-              label="اعتبار دستی ادمین (غیر از درگاه)"
-              value={faPrice(stats.total_admin_credit)}
+              label={s.totalAdminCredit}
+              value={f.price(stats.total_admin_credit)}
               color="var(--warning, #d97706)"
             />
-            <StatCard icon="user" label="تعداد کاربران" value={faNum(stats.total_users)} color="var(--accent)" />
-            <StatCard icon="chat" label="تعداد گفتگوها" value={faNum(stats.total_conversations)} color="var(--accent)" />
+            <StatCard icon="user" label={s.totalUsers} value={f.num(stats.total_users)} color="var(--accent)" />
+            <StatCard icon="chat" label={s.totalConversations} value={f.num(stats.total_conversations)} color="var(--accent)" />
           </div>
 
           <div className="admin-card">
             <h3 className="font-semibold text-sm mb-1 text-primary flex items-center gap-2">
               <Icon name="chart" size={16} />
-              روند ۳۰ روز اخیر
+              {s.trend30d}
             </h3>
-            <ConsumptionVsRevenueChart consumption={dailyConsumption ?? []} gatewayRevenue={dailyGatewayRevenue ?? []} />
+            <ConsumptionVsRevenueChart
+              consumption={dailyConsumption ?? []}
+              gatewayRevenue={dailyGatewayRevenue ?? []}
+              s={s}
+              f={f}
+              lang={lang}
+            />
           </div>
 
           <div className="admin-card">
-            <h3 className="font-semibold text-sm mb-1 text-primary">خروجی داده</h3>
-            <p className="text-xs text-muted mb-4">دانلود کامل دفتر تراکنش‌ها (ledger) یا فهرست کاربران به صورت CSV</p>
+            <h3 className="font-semibold text-sm mb-1 text-primary">{s.exportTitle}</h3>
+            <p className="text-xs text-muted mb-4">{s.exportSubtitle}</p>
             <div className="flex gap-3 flex-wrap">
               <button
                 className="btn btn-sm"
                 disabled={exportingLedger}
                 onClick={() => {
                   setExportingLedger(true)
-                  downloadCsv(api, '/api/admin/export/ledger', 'ledger_export.csv', () => setExportingLedger(false))
+                  downloadCsv(api, '/api/admin/export/ledger', 'ledger_export.csv', () => setExportingLedger(false), s.downloadError)
                 }}
               >
                 {exportingLedger ? (
@@ -306,14 +329,14 @@ export default function AnalyticsSection({ api }: AnalyticsSectionProps) {
                 ) : (
                   <Icon name="file" size={14} />
                 )}
-                <span>خروجی دفتر تراکنش‌ها</span>
+                <span>{s.exportLedger}</span>
               </button>
               <button
                 className="btn btn-sm"
                 disabled={exportingUsers}
                 onClick={() => {
                   setExportingUsers(true)
-                  downloadCsv(api, '/api/admin/export/users', 'users_export.csv', () => setExportingUsers(false))
+                  downloadCsv(api, '/api/admin/export/users', 'users_export.csv', () => setExportingUsers(false), s.downloadError)
                 }}
               >
                 {exportingUsers ? (
@@ -321,7 +344,7 @@ export default function AnalyticsSection({ api }: AnalyticsSectionProps) {
                 ) : (
                   <Icon name="file" size={14} />
                 )}
-                <span>خروجی کاربران</span>
+                <span>{s.exportUsers}</span>
               </button>
             </div>
           </div>

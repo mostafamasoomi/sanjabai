@@ -3,12 +3,14 @@
 import { useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
-import { faNum, faPercent } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/adminI18n'
 import { SectionHeader, Field } from './shared'
 import { ErrorCard, RefreshButton, CardSkeleton } from './LoadState'
 import { api, errMessage } from '../api'
 import { useAdminResource } from '../useAdminResource'
 import type { DiscountRow } from '../types'
+import { discountsStrings } from './DiscountsSection.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Discounts — self-contained. GET/POST /admin/discounts, DELETE
@@ -16,10 +18,14 @@ import type { DiscountRow } from '../types'
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function DiscountsSection() {
+  const lang = useLang()
+  const s = discountsStrings(lang)
+  const f = fmt(lang)
+
   const { data: discounts, error, loading, reload } = useAdminResource<DiscountRow[]>(
     '/api/admin/discounts',
     (raw) => (Array.isArray(raw) ? raw : raw?.discounts || []),
-    'خطا در دریافت کدهای تخفیف',
+    s.loadError,
   )
 
   const [dcId, setDcId] = useState('')
@@ -44,11 +50,11 @@ export default function DiscountsSection() {
         method: 'POST',
         body: JSON.stringify({ id: dcId ? +dcId : undefined, code: dcCode, percent: +dcPercent || 0, active: dcActive }),
       })
-      toast(dcId ? 'تخفیف ویرایش شد' : 'تخفیف اضافه شد', 'success')
+      toast(dcId ? s.saveEditSuccess : s.saveAddSuccess, 'success')
       resetDiscountForm()
       reload()
     } catch (err) {
-      toast(errMessage(err, 'خطا در ذخیره تخفیف'), 'error')
+      toast(errMessage(err, s.saveError), 'error')
     } finally {
       setSaving(false)
     }
@@ -57,10 +63,10 @@ export default function DiscountsSection() {
   const delDiscount = async (id: number) => {
     try {
       await api('/api/admin/discounts/' + id, { method: 'DELETE' })
-      toast('تخفیف حذف شد', 'success')
+      toast(s.deleteSuccess, 'success')
       reload()
     } catch (err) {
-      toast(errMessage(err, 'خطا در حذف تخفیف'), 'error')
+      toast(errMessage(err, s.deleteError), 'error')
     }
   }
 
@@ -69,7 +75,7 @@ export default function DiscountsSection() {
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
-        <SectionHeader title="کدهای تخفیف" subtitle={`${faNum(list.length)} کد تخفیف ثبت شده`} />
+        <SectionHeader title={s.title} subtitle={s.subtitle(f.num(list.length))} />
         <RefreshButton onClick={reload} busy={loading} />
       </div>
 
@@ -80,20 +86,21 @@ export default function DiscountsSection() {
         <div className="space-y-2">
           {list.length === 0 && (
             <div className="admin-card text-center py-8 text-muted">
-              کد تخفیفی ثبت نشده
+              {s.noneRegistered}
             </div>
           )}
+          {/* d.code is a server-issued discount code, not a UI label. */}
           {list.map((d) => (
             <div key={d.id} className="admin-card admin-row justify-between">
               <div className="flex items-center gap-3">
                 <div className="px-3 py-1.5 rounded-lg font-mono text-sm font-bold" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
                   {d.code}
                 </div>
-                <span className="text-sm text-primary">{faPercent(d.percent)}</span>
+                <span className="text-sm text-primary">{f.percent(d.percent)}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className={d.active ? 'badge badge-positive' : 'badge badge-warning'}>
-                  {d.active ? 'فعال' : 'غیرفعال'}
+                  {d.active ? s.active : s.disabled}
                 </span>
                 <button className="btn btn-sm" onClick={() => editDiscount(d)}>
                   <Icon name="settings" size={14} />
@@ -109,19 +116,19 @@ export default function DiscountsSection() {
 
       <div className="admin-card">
         <h3 className="font-semibold text-sm mb-4 text-primary">
-          {dcId ? 'ویرایش کد تخفیف' : 'افزودن کد تخفیف'}
+          {dcId ? s.editTitle : s.addTitle}
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Field label="کد تخفیف">
+          <Field label={s.codeField}>
             <input className="input w-full" value={dcCode} onChange={(e) => setDcCode(e.target.value)} placeholder="WELCOME10" />
           </Field>
-          <Field label="درصد تخفیف">
+          <Field label={s.percentField}>
             <input className="input w-full" type="number" value={dcPercent} onChange={(e) => setDcPercent(e.target.value)} />
           </Field>
-          <Field label="وضعیت">
+          <Field label={s.statusField}>
             <select className="input w-full" value={String(dcActive)} onChange={(e) => setDcActive(e.target.value === 'true')}>
-              <option value="true">فعال</option>
-              <option value="false">غیرفعال</option>
+              <option value="true">{s.active}</option>
+              <option value="false">{s.disabled}</option>
             </select>
           </Field>
         </div>
@@ -129,11 +136,11 @@ export default function DiscountsSection() {
           <button className="btn" onClick={saveDiscount} disabled={saving}>
             {saving ? (
               <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-            ) : (<><Icon name="check" size={16} /><span>{dcId ? 'بروزرسانی' : 'افزودن'}</span></>)}
+            ) : (<><Icon name="check" size={16} /><span>{dcId ? s.update : s.add}</span></>)}
           </button>
           {dcId && (
             <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={resetDiscountForm}>
-              انصراف
+              {s.cancel}
             </button>
           )}
         </div>

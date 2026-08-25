@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Icon } from '@/components/ui/Icon'
-import { faNum, faPercent, faPrice, faTime } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/adminI18n'
 import { TrafficBars, LatencyChart, VolumeBars } from './MonitoringCharts'
 import type { TrafficHour, VolumeDay } from './MonitoringCharts'
+import { monitoringTabStrings } from './MonitoringTab.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Monitoring tab — read-only operator dashboard over GET /admin/monitoring.
@@ -88,19 +90,18 @@ interface MonitoringData {
 
 const POLL_MS = 60_000
 
-const STATUS_FA: Record<ModelStatus, string> = { healthy: 'سالم', degraded: 'کاهش‌یافته', down: 'قطع', unknown: 'نامشخص' }
 const STATUS_BADGE: Record<ModelStatus, string> = { healthy: 'badge-positive', degraded: 'badge-warning', down: 'badge-danger', unknown: 'badge-accent' }
 const STATUS_ORDER: Record<ModelStatus, number> = { down: 0, degraded: 1, unknown: 2, healthy: 3 }
 
-function ErrorChip() {
-  return <span className="badge badge-danger" style={{ fontSize: '0.68rem' }}>خطا در این بخش</span>
+function ErrorChip({ label }: { label: string }) {
+  return <span className="badge badge-danger" style={{ fontSize: '0.68rem' }}>{label}</span>
 }
 
-function SectionTitle({ children, error }: { children: React.ReactNode; error?: boolean }) {
+function SectionTitle({ children, error, errorLabel }: { children: React.ReactNode; error?: boolean; errorLabel: string }) {
   return (
     <div className="flex items-center justify-between mb-3">
       <h3 className="font-semibold text-sm text-primary">{children}</h3>
-      {error && <ErrorChip />}
+      {error && <ErrorChip label={errorLabel} />}
     </div>
   )
 }
@@ -122,6 +123,9 @@ function num(v: string | null): number | null {
 }
 
 export default function MonitoringTab({ api }: { api: (path: string, opts?: RequestInit) => Promise<Response> }) {
+  const lang = useLang()
+  const s = monitoringTabStrings(lang)
+  const f = fmt(lang)
   const [data, setData] = useState<MonitoringData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -135,11 +139,11 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
       const d = await r.json()
       setData(d)
     } catch {
-      setError('خطا در بارگذاری اطلاعات پایش')
+      setError(s.loadError)
     } finally {
       setLoading(false)
     }
-  }, [api])
+  }, [api, s.loadError])
 
   useEffect(() => { load() }, [load])
 
@@ -176,23 +180,23 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
       <div className="admin-card">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
-            <h2 className="font-semibold text-primary">پایش سامانه</h2>
-            <p className="text-xs text-muted">وضعیت زنده درگاه‌های بالادست، مدل‌ها، ترافیک و صورتحساب</p>
+            <h2 className="font-semibold text-primary">{s.headerTitle}</h2>
+            <p className="text-xs text-muted">{s.headerSubtitle}</p>
           </div>
           <button className="btn btn-ghost btn-sm" onClick={() => load()} disabled={loading}>
             <Icon name="refresh" size={14} />
-            <span>بازخوانی</span>
+            <span>{s.reload}</span>
           </button>
         </div>
       </div>
 
       {loading && !data ? (
-        <div className="admin-card"><p className="text-center text-sm text-muted py-8">در حال بارگذاری...</p></div>
+        <div className="admin-card"><p className="text-center text-sm text-muted py-8">{s.loading}</p></div>
       ) : error && !data ? (
         <div className="admin-card">
           <p className="text-center text-sm text-danger py-4">{error}</p>
           <div className="flex justify-center">
-            <button className="btn btn-sm" onClick={() => load()}>تلاش مجدد</button>
+            <button className="btn btn-sm" onClick={() => load()}>{s.retry}</button>
           </div>
         </div>
       ) : data && kpis ? (
@@ -200,28 +204,28 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
           {/* ─── KPI row ─── */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <Kpi
-              label="درگاه‌های بالادست فعال"
-              value={<span dir="ltr">{faNum(kpis.aliveCount)}/{faNum(kpis.upstreamCount)}</span>}
+              label={s.kpiUpstreamsAlive}
+              value={<span dir="ltr">{f.num(kpis.aliveCount)}/{f.num(kpis.upstreamCount)}</span>}
               tone={kpis.aliveCount === kpis.upstreamCount ? 'positive' : 'danger'}
             />
-            <Kpi label="مدل‌های قطع" value={faNum(kpis.downModels)} tone={kpis.downModels > 0 ? 'danger' : 'positive'} />
+            <Kpi label={s.kpiModelsDown} value={f.num(kpis.downModels)} tone={kpis.downModels > 0 ? 'danger' : 'positive'} />
             <Kpi
-              label="پایش بیرونی (Kuma)"
-              value={data.kuma.monitoringUp ? 'فعال' : 'قطع'}
+              label={s.kpiKumaLabel}
+              value={data.kuma.monitoringUp ? s.active : s.down}
               tone={!data.kuma.monitoringUp ? 'danger' : data.kuma.stale ? 'warning' : 'positive'}
             />
             <Kpi
-              label="نرخ خطا (۲۴ ساعت)"
-              value={faPercent(kpis.errorRate != null ? kpis.errorRate * 100 : null, 1)}
+              label={s.kpiErrorRate}
+              value={f.percent(kpis.errorRate != null ? kpis.errorRate * 100 : null, 1)}
               tone={kpis.errorRate != null && kpis.errorRate > 0.05 ? 'danger' : 'positive'}
             />
           </div>
 
           {/* ─── Upstreams ─── */}
           <div className="admin-card">
-            <SectionTitle error={sectionFailed('upstreams')}>درگاه‌های بالادست</SectionTitle>
+            <SectionTitle error={sectionFailed('upstreams')} errorLabel={s.sectionError}>{s.upstreamsTitle}</SectionTitle>
             {data.upstreams.length === 0 ? (
-              <p className="text-xs text-muted">موردی یافت نشد</p>
+              <p className="text-xs text-muted">{s.noItems}</p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {data.upstreams.map((u) => (
@@ -229,7 +233,7 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
                     <div className="flex items-center justify-between">
                       <span dir="ltr" className="text-sm font-mono text-primary">{u.name}</span>
                       <span
-                        title={u.alive ? 'زنده' : 'قطع'}
+                        title={u.alive ? s.live : s.down}
                         style={{
                           width: 9, height: 9, borderRadius: '50%',
                           background: u.alive ? 'var(--positive)' : 'var(--danger)',
@@ -238,14 +242,14 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
                       />
                     </div>
                     <p className="text-xs text-muted">
-                      تأخیر: {u.latencyMs != null ? <span dir="ltr">{faNum(u.latencyMs)} ms</span> : '—'}
+                      {s.latencyPrefix} {u.latencyMs != null ? <span dir="ltr">{f.num(u.latencyMs)} ms</span> : '—'}
                     </p>
                     {u.error && <p className="text-xs text-danger">{u.error}</p>}
                     <div className="flex flex-wrap gap-1.5">
-                      {(Object.keys(STATUS_FA) as ModelStatus[]).map((s) => {
-                        const n = u.modelStatusCounts[s]
+                      {(Object.keys(s.status) as ModelStatus[]).map((st) => {
+                        const n = u.modelStatusCounts[st]
                         if (!n) return null
-                        return <span key={s} className={`badge ${STATUS_BADGE[s]}`}>{STATUS_FA[s]}: {faNum(n)}</span>
+                        return <span key={st} className={`badge ${STATUS_BADGE[st]}`}>{s.status[st]}: {f.num(n)}</span>
                       })}
                     </div>
                   </div>
@@ -256,20 +260,20 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
 
           {/* ─── Models ─── */}
           <div className="admin-card overflow-x-auto">
-            <SectionTitle error={sectionFailed('models')}>مدل‌ها</SectionTitle>
+            <SectionTitle error={sectionFailed('models')} errorLabel={s.sectionError}>{s.modelsTitle}</SectionTitle>
             {sortedModels.length === 0 ? (
-              <p className="text-xs text-muted">موردی یافت نشد</p>
+              <p className="text-xs text-muted">{s.noItems}</p>
             ) : (
               <table className="admin-table w-full text-sm">
                 <thead>
                   <tr>
-                    <th className="text-right p-2">مدل</th>
-                    <th className="text-right p-2">وضعیت</th>
-                    <th className="text-right p-2">نرخ موفقیت</th>
-                    <th className="text-right p-2">P50</th>
-                    <th className="text-right p-2">P95</th>
-                    <th className="text-right p-2">نمونه‌ها</th>
-                    <th className="text-right p-2">آخرین وضعیت</th>
+                    <th className="text-right p-2">{s.colModel}</th>
+                    <th className="text-right p-2">{s.colStatus}</th>
+                    <th className="text-right p-2">{s.colSuccessRate}</th>
+                    <th className="text-right p-2">{s.colP50}</th>
+                    <th className="text-right p-2">{s.colP95}</th>
+                    <th className="text-right p-2">{s.colSamples}</th>
+                    <th className="text-right p-2">{s.colLastStatus}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -281,13 +285,13 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
                           <div className="text-primary">{m.displayName}</div>
                           <div className="font-mono text-muted" title={m.id}>{m.id}</div>
                         </td>
-                        <td className="p-2"><span className={`badge ${STATUS_BADGE[m.status]}`}>{STATUS_FA[m.status]}</span></td>
-                        <td className="p-2 text-xs">{faPercent(rate, 0)}</td>
-                        <td className="p-2 text-xs">{m.latencyP50Ms != null ? <span dir="ltr">{faNum(m.latencyP50Ms)} ms</span> : '—'}</td>
-                        <td className="p-2 text-xs">{m.latencyP95Ms != null ? <span dir="ltr">{faNum(m.latencyP95Ms)} ms</span> : '—'}</td>
-                        <td className="p-2 text-xs">{faNum(m.sampleCount)}</td>
+                        <td className="p-2"><span className={`badge ${STATUS_BADGE[m.status]}`}>{s.status[m.status]}</span></td>
+                        <td className="p-2 text-xs">{f.percent(rate, 0)}</td>
+                        <td className="p-2 text-xs">{m.latencyP50Ms != null ? <span dir="ltr">{f.num(m.latencyP50Ms)} ms</span> : '—'}</td>
+                        <td className="p-2 text-xs">{m.latencyP95Ms != null ? <span dir="ltr">{f.num(m.latencyP95Ms)} ms</span> : '—'}</td>
+                        <td className="p-2 text-xs">{f.num(m.sampleCount)}</td>
                         <td className="p-2 text-xs text-muted">
-                          {m.lastError ? <span className="text-danger">{m.lastError}</span> : m.lastOkAt ? faTime(m.lastOkAt) : '—'}
+                          {m.lastError ? <span className="text-danger">{m.lastError}</span> : m.lastOkAt ? f.time(m.lastOkAt) : '—'}
                         </td>
                       </tr>
                     )
@@ -299,9 +303,9 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
 
           {/* ─── Traffic ─── */}
           <div className="admin-card">
-            <SectionTitle error={data.traffic.error}>ترافیک (۲۴ ساعت اخیر)</SectionTitle>
+            <SectionTitle error={data.traffic.error} errorLabel={s.sectionError}>{s.trafficTitle}</SectionTitle>
             {data.traffic.hours.length === 0 ? (
-              <p className="text-xs text-muted">داده‌ای موجود نیست</p>
+              <p className="text-xs text-muted">{s.noData}</p>
             ) : (
               <div className="space-y-4">
                 <TrafficBars hours={data.traffic.hours} />
@@ -312,9 +316,9 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
 
           {/* ─── Volume ─── */}
           <div className="admin-card">
-            <SectionTitle error={data.volume.error}>حجم (۷ روز اخیر)</SectionTitle>
+            <SectionTitle error={data.volume.error} errorLabel={s.sectionError}>{s.volumeTitle}</SectionTitle>
             {data.volume.days.length === 0 ? (
-              <p className="text-xs text-muted">داده‌ای موجود نیست</p>
+              <p className="text-xs text-muted">{s.noData}</p>
             ) : (
               <VolumeBars days={data.volume.days} />
             )}
@@ -322,34 +326,34 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
 
           {/* ─── Billing: shortfall ─── */}
           <div className="admin-card overflow-x-auto">
-            <SectionTitle error={data.billing.shortfall.error}>صورتحساب — کسری</SectionTitle>
+            <SectionTitle error={data.billing.shortfall.error} errorLabel={s.sectionError}>{s.shortfallTitle}</SectionTitle>
             <div className="flex gap-4 mb-2">
-              <span className="text-xs text-muted">تعداد: <span className="text-primary">{faNum(data.billing.shortfall.count)}</span></span>
-              <span className="text-xs text-muted">مجموع کسری: <span className="text-danger">{faPrice(data.billing.shortfall.sum)}</span></span>
+              <span className="text-xs text-muted">{s.countLabel} <span className="text-primary">{f.num(data.billing.shortfall.count)}</span></span>
+              <span className="text-xs text-muted">{s.shortfallSumLabel} <span className="text-danger">{f.price(data.billing.shortfall.sum)}</span></span>
             </div>
             {data.billing.shortfall.recent.length === 0 ? (
-              <p className="text-xs" style={{ color: 'var(--positive)' }}>موردی یافت نشد</p>
+              <p className="text-xs" style={{ color: 'var(--positive)' }}>{s.noItems}</p>
             ) : (
               <table className="admin-table w-full text-sm">
                 <thead>
                   <tr>
-                    <th className="text-right p-2">کاربر</th>
-                    <th className="text-right p-2">مدل</th>
-                    <th className="text-right p-2">مبلغ دریافتی</th>
-                    <th className="text-right p-2">هزینه فهرست‌شده</th>
-                    <th className="text-right p-2">کسری</th>
-                    <th className="text-right p-2">زمان</th>
+                    <th className="text-right p-2">{s.colUser}</th>
+                    <th className="text-right p-2">{s.colModel}</th>
+                    <th className="text-right p-2">{s.colChargedAmount}</th>
+                    <th className="text-right p-2">{s.colListedCost}</th>
+                    <th className="text-right p-2">{s.colShortfall}</th>
+                    <th className="text-right p-2">{s.colTime}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.billing.shortfall.recent.map((row, i) => (
                     <tr key={i}>
-                      <td className="p-2 text-xs">{faNum(row.userId)}</td>
+                      <td className="p-2 text-xs">{f.num(row.userId)}</td>
                       <td className="p-2 text-xs font-mono">{row.model}</td>
-                      <td className="p-2 text-xs">{faPrice(row.chargedAmount)}</td>
-                      <td className="p-2 text-xs">{faPrice(num(row.listedCost))}</td>
-                      <td className="p-2 text-xs text-danger">{faPrice(num(row.shortfall))}</td>
-                      <td className="p-2 text-xs text-muted">{faTime(row.createdAt)}</td>
+                      <td className="p-2 text-xs">{f.price(row.chargedAmount)}</td>
+                      <td className="p-2 text-xs">{f.price(num(row.listedCost))}</td>
+                      <td className="p-2 text-xs text-danger">{f.price(num(row.shortfall))}</td>
+                      <td className="p-2 text-xs text-muted">{f.time(row.createdAt)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -359,30 +363,30 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
 
           {/* ─── Billing: estimated ─── */}
           <div className="admin-card overflow-x-auto">
-            <SectionTitle error={data.billing.estimated.error}>صورتحساب — تخمینی</SectionTitle>
+            <SectionTitle error={data.billing.estimated.error} errorLabel={s.sectionError}>{s.estimatedTitle}</SectionTitle>
             <div className="flex gap-4 mb-2">
-              <span className="text-xs text-muted">۲۴ ساعت اخیر: <span className="text-primary">{faNum(data.billing.estimated.count24h)}</span></span>
-              <span className="text-xs text-muted">۳۰ روز اخیر: <span className="text-primary">{faNum(data.billing.estimated.count30d)}</span></span>
+              <span className="text-xs text-muted">{s.last24hLabel} <span className="text-primary">{f.num(data.billing.estimated.count24h)}</span></span>
+              <span className="text-xs text-muted">{s.last30dLabel} <span className="text-primary">{f.num(data.billing.estimated.count30d)}</span></span>
             </div>
             {data.billing.estimated.recent.length === 0 ? (
-              <p className="text-xs" style={{ color: 'var(--positive)' }}>موردی یافت نشد</p>
+              <p className="text-xs" style={{ color: 'var(--positive)' }}>{s.noItems}</p>
             ) : (
               <table className="admin-table w-full text-sm">
                 <thead>
                   <tr>
-                    <th className="text-right p-2">کاربر</th>
-                    <th className="text-right p-2">مدل</th>
-                    <th className="text-right p-2">مبلغ دریافتی</th>
-                    <th className="text-right p-2">زمان</th>
+                    <th className="text-right p-2">{s.colUser}</th>
+                    <th className="text-right p-2">{s.colModel}</th>
+                    <th className="text-right p-2">{s.colChargedAmount}</th>
+                    <th className="text-right p-2">{s.colTime}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.billing.estimated.recent.map((row, i) => (
                     <tr key={i}>
-                      <td className="p-2 text-xs">{faNum(row.userId)}</td>
+                      <td className="p-2 text-xs">{f.num(row.userId)}</td>
                       <td className="p-2 text-xs font-mono">{row.model}</td>
-                      <td className="p-2 text-xs">{faPrice(row.chargedAmount)}</td>
-                      <td className="p-2 text-xs text-muted">{faTime(row.createdAt)}</td>
+                      <td className="p-2 text-xs">{f.price(row.chargedAmount)}</td>
+                      <td className="p-2 text-xs text-muted">{f.time(row.createdAt)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -392,22 +396,22 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
 
           {/* ─── Wallet ─── */}
           <div className="admin-card overflow-x-auto">
-            <SectionTitle error={data.wallet.negativeBalancesError}>کیف پول — موجودی منفی</SectionTitle>
+            <SectionTitle error={data.wallet.negativeBalancesError} errorLabel={s.sectionError}>{s.negBalanceTitle}</SectionTitle>
             {data.wallet.negativeBalances.length === 0 ? (
-              <p className="text-xs" style={{ color: 'var(--positive)' }}>موردی یافت نشد</p>
+              <p className="text-xs" style={{ color: 'var(--positive)' }}>{s.noItems}</p>
             ) : (
               <table className="admin-table w-full text-sm">
                 <thead>
                   <tr>
-                    <th className="text-right p-2">کاربر</th>
-                    <th className="text-right p-2">موجودی</th>
+                    <th className="text-right p-2">{s.colUser}</th>
+                    <th className="text-right p-2">{s.colBalance}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.wallet.negativeBalances.map((row) => (
                     <tr key={row.userId}>
-                      <td className="p-2 text-xs">{faNum(row.userId)}</td>
-                      <td className="p-2 text-xs text-danger">{faPrice(row.balance)}</td>
+                      <td className="p-2 text-xs">{f.num(row.userId)}</td>
+                      <td className="p-2 text-xs text-danger">{f.price(row.balance)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -416,26 +420,26 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
           </div>
 
           <div className="admin-card overflow-x-auto">
-            <SectionTitle error={data.wallet.ledgerMismatchesError}>کیف پول — ناهماهنگی دفتر کل</SectionTitle>
+            <SectionTitle error={data.wallet.ledgerMismatchesError} errorLabel={s.sectionError}>{s.ledgerMismatchTitle}</SectionTitle>
             {data.wallet.ledgerMismatches.length === 0 ? (
-              <p className="text-xs" style={{ color: 'var(--positive)' }}>موردی یافت نشد</p>
+              <p className="text-xs" style={{ color: 'var(--positive)' }}>{s.noItems}</p>
             ) : (
               <table className="admin-table w-full text-sm">
                 <thead>
                   <tr>
-                    <th className="text-right p-2">کاربر</th>
-                    <th className="text-right p-2">موجودی کیف پول</th>
-                    <th className="text-right p-2">موجودی دفتر کل</th>
-                    <th className="text-right p-2">اختلاف</th>
+                    <th className="text-right p-2">{s.colUser}</th>
+                    <th className="text-right p-2">{s.colWalletBalance}</th>
+                    <th className="text-right p-2">{s.colLedgerBalance}</th>
+                    <th className="text-right p-2">{s.colDelta}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.wallet.ledgerMismatches.map((row) => (
                     <tr key={row.userId}>
-                      <td className="p-2 text-xs">{faNum(row.userId)}</td>
-                      <td className="p-2 text-xs">{faPrice(row.walletBalance)}</td>
-                      <td className="p-2 text-xs">{faPrice(row.ledgerBalance)}</td>
-                      <td className="p-2 text-xs text-danger">{faPrice(row.delta)}</td>
+                      <td className="p-2 text-xs">{f.num(row.userId)}</td>
+                      <td className="p-2 text-xs">{f.price(row.walletBalance)}</td>
+                      <td className="p-2 text-xs">{f.price(row.ledgerBalance)}</td>
+                      <td className="p-2 text-xs text-danger">{f.price(row.delta)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -445,7 +449,7 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
 
           {/* ─── Kuma ─── */}
           <div className="admin-card" style={{ maxWidth: 420 }}>
-            <SectionTitle error={sectionFailed('kuma') || data.kuma.error}>پایش بیرونی (Kuma)</SectionTitle>
+            <SectionTitle error={sectionFailed('kuma') || data.kuma.error} errorLabel={s.sectionError}>{s.kumaTitle}</SectionTitle>
             <div className="flex items-center gap-2">
               <span
                 style={{
@@ -454,18 +458,18 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
                   display: 'inline-block', flexShrink: 0,
                 }}
               />
-              <span className="text-sm text-primary">{data.kuma.monitoringUp ? 'فعال' : 'قطع'}</span>
-              {data.kuma.stale && <span className="badge badge-warning">داده قدیمی</span>}
+              <span className="text-sm text-primary">{data.kuma.monitoringUp ? s.active : s.down}</span>
+              {data.kuma.stale && <span className="badge badge-warning">{s.kumaStale}</span>}
             </div>
             <p className="text-xs text-muted">
-              منبع: {data.kuma.source === 'cache' ? 'حافظه نهان' : data.kuma.source === 'last_good' ? 'آخرین وضعیت سالم' : '—'}
+              {s.kumaSourceLabel} {data.kuma.source === 'cache' ? s.kumaSourceCache : data.kuma.source === 'last_good' ? s.kumaSourceLastGood : '—'}
             </p>
-            {data.kuma.failing && <p className="text-xs text-danger">هشدار: دریافت وضعیت از Kuma با خطا مواجه است</p>}
+            {data.kuma.failing && <p className="text-xs text-danger">{s.kumaFailingWarning}</p>}
           </div>
 
           {/* ─── Footer ─── */}
           <p className="text-xs text-muted text-center">
-            به‌روزرسانی: {faTime(data.generatedAt)} — این داده تا ۳۰ ثانیه در سرور کش می‌شود
+            {s.footer(f.time(data.generatedAt))}
           </p>
         </>
       ) : null}

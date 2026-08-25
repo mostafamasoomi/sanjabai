@@ -3,12 +3,14 @@
 import { useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
-import { faDate } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/adminI18n'
 import { Field } from './shared'
 import { ErrorCard, RefreshButton, CardSkeleton } from './LoadState'
 import { api, errMessage } from '../api'
 import { useAdminResource } from '../useAdminResource'
-import { SEVERITY_COLOR, SEVERITY_LABEL, SEVERITY_ORDER, type ModerationRule } from './moderationTypes'
+import { SEVERITY_COLOR, SEVERITY_ORDER, severityLabel, type ModerationRule } from './moderationTypes'
+import { moderationRulesStrings } from './ModerationRules.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Moderation rule editor — list/create/edit/delete regex rules.
@@ -30,10 +32,13 @@ const SEVERITY_OPTIONS = SEVERITY_ORDER
 const emptyForm = { id: '', pattern: '', category: '', severity: 'medium', enabled: true, notes: '' }
 
 export default function ModerationRules() {
+  const lang = useLang()
+  const s = moderationRulesStrings(lang)
+  const f = fmt(lang)
   const { data: rules, error, loading, reload } = useAdminResource<ModerationRule[]>(
     '/api/admin/moderation/rules',
     (raw) => (Array.isArray(raw) ? raw : raw?.items || []),
-    'خطا در دریافت قوانین پالایش',
+    s.loadError,
   )
 
   const [form, setForm] = useState(emptyForm)
@@ -57,12 +62,12 @@ export default function ModerationRules() {
         enabled: form.enabled, notes: form.notes.trim(),
       })
       await api(form.id ? `/api/admin/moderation/rules/${form.id}` : '/api/admin/moderation/rules', { method: 'POST', body })
-      toast(form.id ? 'قانون ویرایش شد' : 'قانون اضافه شد', 'success')
+      toast(form.id ? s.savedEdit : s.savedNew, 'success')
       resetForm()
       reload() // refetch after mutation — a saved rule missing from the list reads as a failed save
     } catch (err) {
-      const msg = errMessage(err, 'خطا در ذخیره قانون')
-      setSaveError(msg) // the backend's Persian validation error, shown verbatim
+      const msg = errMessage(err, s.saveErrorGeneric)
+      setSaveError(msg) // the backend's own validation error, shown verbatim
       toast(msg, 'error')
     } finally {
       setSaving(false)
@@ -72,11 +77,11 @@ export default function ModerationRules() {
   const deleteRule = async (id: number) => {
     try {
       await api(`/api/admin/moderation/rules/${id}`, { method: 'DELETE' })
-      toast('قانون حذف شد', 'success')
+      toast(s.deleted, 'success')
       if (form.id === String(id)) resetForm()
       reload()
     } catch (err) {
-      toast(errMessage(err, 'خطا در حذف قانون'), 'error')
+      toast(errMessage(err, s.deleteErrorGeneric), 'error')
     }
   }
 
@@ -91,24 +96,24 @@ export default function ModerationRules() {
         <div className="admin-card overflow-x-auto">
           <div className="flex items-center gap-2 mb-4">
             <Icon name="security" size={18} className="text-accent" />
-            <h3 className="font-semibold text-sm text-primary">قوانین پالایش</h3>
-            <span className="badge badge-accent mr-auto">{list.length}</span>
+            <h3 className="font-semibold text-sm text-primary">{s.rulesTitle}</h3>
+            <span className="badge badge-accent mr-auto">{f.num(list.length)}</span>
             <RefreshButton onClick={reload} busy={loading} />
           </div>
 
           {list.length === 0 ? (
-            <div className="text-center py-8 text-sm text-muted">قانونی ثبت نشده</div>
+            <div className="text-center py-8 text-sm text-muted">{s.noRules}</div>
           ) : (
             <table className="admin-table w-full text-sm">
               <thead>
                 <tr>
-                  <th className="text-right p-3">الگو</th>
-                  <th className="text-right p-3">دسته‌بندی</th>
-                  <th className="text-right p-3">شدت</th>
-                  <th className="text-right p-3">وضعیت</th>
-                  <th className="text-right p-3">یادداشت</th>
-                  <th className="text-right p-3">به‌روزرسانی</th>
-                  <th className="text-right p-3">عملیات</th>
+                  <th className="text-right p-3">{s.colPattern}</th>
+                  <th className="text-right p-3">{s.colCategory}</th>
+                  <th className="text-right p-3">{s.colSeverity}</th>
+                  <th className="text-right p-3">{s.colStatus}</th>
+                  <th className="text-right p-3">{s.colNotes}</th>
+                  <th className="text-right p-3">{s.colUpdated}</th>
+                  <th className="text-right p-3">{s.colActions}</th>
                 </tr>
               </thead>
               <tbody>
@@ -121,18 +126,18 @@ export default function ModerationRules() {
                         className="badge"
                         style={{ background: `${SEVERITY_COLOR[r.severity] ?? '#666'}20`, color: SEVERITY_COLOR[r.severity] ?? 'var(--text-secondary)' }}
                       >
-                        {SEVERITY_LABEL[r.severity] ?? r.severity}
+                        {severityLabel(r.severity, lang)}
                       </span>
                     </td>
                     <td className="p-3">
-                      <span className={r.enabled ? 'badge badge-positive' : 'badge badge-warning'}>{r.enabled ? 'فعال' : 'غیرفعال'}</span>
+                      <span className={r.enabled ? 'badge badge-positive' : 'badge badge-warning'}>{r.enabled ? s.enabled : s.disabled}</span>
                     </td>
                     <td className="p-3 text-xs text-secondary break-words max-w-xs">{r.notes || '—'}</td>
-                    <td className="p-3 text-xs text-muted">{faDate(r.updated_at)}</td>
+                    <td className="p-3 text-xs text-muted">{f.date(r.updated_at)}</td>
                     <td className="p-3">
                       <div className="flex gap-1">
-                        <button className="btn btn-sm" onClick={() => editRule(r)} title="ویرایش"><Icon name="settings" size={14} /></button>
-                        <button className="btn btn-sm btn-danger" onClick={() => deleteRule(r.id)} title="حذف"><Icon name="trash" size={14} /></button>
+                        <button className="btn btn-sm" onClick={() => editRule(r)} title={s.edit}><Icon name="settings" size={14} /></button>
+                        <button className="btn btn-sm btn-danger" onClick={() => deleteRule(r.id)} title={s.delete}><Icon name="trash" size={14} /></button>
                       </div>
                     </td>
                   </tr>
@@ -144,39 +149,38 @@ export default function ModerationRules() {
       )}
 
       <div className="admin-card">
-        <h3 className="font-semibold text-sm mb-1 text-primary">{form.id ? 'ویرایش قانون' : 'افزودن قانون جدید'}</h3>
+        <h3 className="font-semibold text-sm mb-1 text-primary">{form.id ? s.editTitle : s.addTitle}</h3>
         <p className="text-xs text-muted mb-4">
-          الگو (regex) باید نگارش‌های فارسی، فینگلیش و شکل‌های نویسه‌ای مختلف را پوشش دهد —
-          ی/ي، ک/ك، نیم‌فاصله، و ارقام فارسی/عربی (۰۱۲... و ٠١٢...) در کنار ارقام لاتین.
+          {s.formHelp}
         </p>
         {saveError && <ErrorCard message={saveError} onRetry={saveRule} />}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
           <div className="sm:col-span-2">
-            <Field label="الگوی Regex">
+            <Field label={s.patternLabel}>
               <input
                 className="input w-full font-mono" dir="ltr" value={form.pattern}
                 onChange={(e) => setForm({ ...form, pattern: e.target.value })}
-                placeholder="مثال: [هه]روئ[یي]ن|hero[iy]n"
+                placeholder={s.patternPlaceholder}
               />
             </Field>
           </div>
-          <Field label="دسته‌بندی">
-            <input className="input w-full" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="مثال: مواد مخدر" />
+          <Field label={s.categoryLabel}>
+            <input className="input w-full" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder={s.categoryPlaceholder} />
           </Field>
-          <Field label="شدت">
+          <Field label={s.severityLabel}>
             <select className="input w-full" value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}>
-              {SEVERITY_OPTIONS.map((s) => <option key={s} value={s}>{SEVERITY_LABEL[s]}</option>)}
+              {SEVERITY_OPTIONS.map((sv) => <option key={sv} value={sv}>{severityLabel(sv, lang)}</option>)}
             </select>
           </Field>
-          <Field label="وضعیت">
+          <Field label={s.statusLabel}>
             <select className="input w-full" value={String(form.enabled)} onChange={(e) => setForm({ ...form, enabled: e.target.value === 'true' })}>
-              <option value="true">فعال</option>
-              <option value="false">غیرفعال</option>
+              <option value="true">{s.enabled}</option>
+              <option value="false">{s.disabled}</option>
             </select>
           </Field>
           <div className="sm:col-span-2">
-            <Field label="یادداشت">
-              <textarea className="input w-full" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="توضیح دلیل یا زمینه این قانون..." />
+            <Field label={s.notesLabel}>
+              <textarea className="input w-full" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder={s.notesPlaceholder} />
             </Field>
           </div>
         </div>
@@ -184,9 +188,9 @@ export default function ModerationRules() {
           <button className="btn" onClick={saveRule} disabled={saving || !form.pattern.trim()}>
             {saving ? (
               <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-            ) : (<><Icon name="check" size={16} /><span>{form.id ? 'بروزرسانی' : 'افزودن'}</span></>)}
+            ) : (<><Icon name="check" size={16} /><span>{form.id ? s.update : s.add}</span></>)}
           </button>
-          {form.id && <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={resetForm}>انصراف</button>}
+          {form.id && <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={resetForm}>{s.cancel}</button>}
         </div>
       </div>
     </div>

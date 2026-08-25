@@ -24,6 +24,8 @@
  * confusion this file exists to remove.
  */
 
+import type { Lang } from '@/components/LanguageToggle'
+
 export const AVAILABILITY_OPTIONS = ['available', 'degraded', 'maintenance', 'disabled'] as const
 
 export type Availability = (typeof AVAILABILITY_OPTIONS)[number]
@@ -59,8 +61,22 @@ export const AVAILABILITY_COLOR: Record<string, string> = {
  *  1,155 of the ~1,200 catalog rows are `maintenance`. */
 export const TOGGLEABLE = new Set<string>(['available', 'disabled'])
 
+/** English label. Same four states, same one-import rule — the reason this
+ *  file exists is that four hand-synced copies of a label map were not in
+ *  fact in sync, and adding a second language multiplies that failure. */
+export const AVAILABILITY_EN: Record<string, string> = {
+  available: 'Available',
+  degraded: 'Degraded',
+  maintenance: 'Maintenance',
+  disabled: 'Disabled',
+}
+
 /** Label for an unknown value, so a state added to the DB before this file
- *  knows about it renders as itself rather than as `undefined`. */
-export function availabilityLabel(raw: string): string {
-  return AVAILABILITY_FA[raw] || raw
+ *  knows about it renders as itself rather than as `undefined`.
+ *
+ *  `lang` is optional and defaults to Persian so the call sites that have not
+ *  been translated yet keep their current behaviour. */
+export function availabilityLabel(raw: string, lang: Lang = 'fa'): string {
+  const table = lang === 'en' ? AVAILABILITY_EN : AVAILABILITY_FA
+  return table[raw] || raw
 }

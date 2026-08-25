@@ -3,8 +3,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
-import { faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/adminI18n'
 import { SectionHeader, StatCard } from './shared'
+import { siteControlStrings } from './SiteControlSection.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Site Control — runtime, admin-editable site-wide switches. Closes the gap
@@ -60,6 +62,10 @@ const FLAG_ICON: Record<string, React.ComponentProps<typeof Icon>['name']> = {
 }
 
 export default function SiteControlSection({ api }: SiteControlSectionProps) {
+  const lang = useLang()
+  const s = siteControlStrings(lang)
+  const f = fmt(lang)
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [flags, setFlags] = useState<SiteFlag[]>([])
@@ -73,7 +79,7 @@ export default function SiteControlSection({ api }: SiteControlSectionProps) {
       const res = await api('/api/admin/site-settings')
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        throw new Error(body.detail || `خطای سرور (${res.status})`)
+        throw new Error(body.detail || s.serverError(String(res.status)))
       }
       const body = await res.json()
       setFlags(Array.isArray(body.flags) ? body.flags : [])
@@ -81,12 +87,12 @@ export default function SiteControlSection({ api }: SiteControlSectionProps) {
       // Never fall back to an empty/default switch list here -- an error
       // must be visibly an error, not a set of switches that look like
       // real (and possibly wrong) state.
-      setError(e instanceof Error ? e.message : 'خطا در دریافت تنظیمات سایت')
+      setError(e instanceof Error ? e.message : s.genericLoadError)
       setFlags([])
     } finally {
       setLoading(false)
     }
-  }, [api])
+  }, [api, s])
 
   useEffect(() => { load() }, [load])
 
@@ -105,39 +111,38 @@ export default function SiteControlSection({ api }: SiteControlSectionProps) {
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        toast(body.detail || 'ذخیره ناموفق بود', 'error')
+        toast(body.detail || s.saveError, 'error')
         return
       }
-      toast(`«${flag.label_fa}» ${next ? 'فعال' : 'غیرفعال'} شد`, 'success')
+      toast(s.toggleSuccess(flag.label_fa, next ? s.active : s.disabled), 'success')
       setPending(null)
       await load()
     } catch {
-      toast('ذخیره ناموفق بود', 'error')
+      toast(s.saveError, 'error')
     } finally {
       setSaving(null)
     }
   }
 
-  const onCount = flags.filter((f) => f.value).length
-  const unwiredCount = flags.filter((f) => !f.wired).length
+  const onCount = flags.filter((flag) => flag.value).length
+  const unwiredCount = flags.filter((flag) => !flag.wired).length
 
   if (error) {
     return (
       <div className="space-y-6">
-        <SectionHeader title="کنترل سایت" subtitle="سوییچ‌های سراسری برای روشن/خاموش کردن بخش‌های سایت" />
+        <SectionHeader title={s.title} subtitle={s.subtitle} />
         <div className="admin-card" style={{ borderRight: '3px solid var(--danger, #ef4444)' }}>
           <div className="flex items-center gap-2 mb-2">
             <Icon name="warning" size={18} style={{ color: 'var(--danger, #ef4444)' }} />
-            <h3 className="font-semibold text-sm text-primary">دریافت تنظیمات ناموفق بود</h3>
+            <h3 className="font-semibold text-sm text-primary">{s.loadFailedTitle}</h3>
           </div>
           <p className="text-xs text-muted mb-4">{error}</p>
           <p className="text-xs mb-4" style={{ color: 'var(--warning, #f59e0b)' }}>
-            وضعیت واقعی سوییچ‌ها نامشخص است -- تا رفع خطا هیچ سوییچی در این صفحه نمایش داده نمی‌شود، چون
-            نمایش نادرست می‌تواند باعث تصمیم اشتباه شود.
+            {s.unknownStateWarning}
           </p>
           <button className="btn btn-sm" onClick={load}>
             <Icon name="refresh" size={14} />
-            <span>تلاش دوباره</span>
+            <span>{s.retry}</span>
           </button>
         </div>
       </div>
@@ -146,28 +151,28 @@ export default function SiteControlSection({ api }: SiteControlSectionProps) {
 
   return (
     <div className="space-y-6">
-      <SectionHeader title="کنترل سایت" subtitle="سوییچ‌های سراسری برای روشن/خاموش کردن بخش‌های سایت، بدون نیاز به ری‌استارت" />
+      <SectionHeader title={s.title} subtitle={s.subtitle} />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard icon="settings" label="مجموع سوییچ‌ها" value={loading ? '—' : faNum(flags.length)} color="var(--accent)" />
-        <StatCard icon="check" label="فعال" value={loading ? '—' : faNum(onCount)} color="#22c55e" />
+        <StatCard icon="settings" label={s.totalSwitches} value={loading ? '—' : f.num(flags.length)} color="var(--accent)" />
+        <StatCard icon="check" label={s.activeCount} value={loading ? '—' : f.num(onCount)} color="#22c55e" />
         {/* Green while zero, amber the moment a switch controls nothing.
             A count of unwired switches is only worth an alarm colour when
             it is non-zero -- a permanently amber "0" trains the admin to
             ignore the one card that matters. */}
         <StatCard
           icon={unwiredCount > 0 ? 'warning' : 'check'}
-          label="هنوز وصل‌نشده"
-          value={loading ? '—' : faNum(unwiredCount)}
+          label={s.unwiredCount}
+          value={loading ? '—' : f.num(unwiredCount)}
           color={unwiredCount > 0 ? 'var(--warning, #f59e0b)' : '#22c55e'}
         />
       </div>
 
       <div className="admin-card">
         {loading ? (
-          <p className="p-6 text-center text-sm text-muted">در حال بارگذاری…</p>
+          <p className="p-6 text-center text-sm text-muted">{s.loading}</p>
         ) : flags.length === 0 ? (
-          <p className="p-6 text-center text-sm text-muted">سوییچی تعریف نشده است</p>
+          <p className="p-6 text-center text-sm text-muted">{s.noSwitches}</p>
         ) : (
           <div className="space-y-3">
             {flags.map((flag) => (
@@ -191,11 +196,11 @@ export default function SiteControlSection({ api }: SiteControlSectionProps) {
                           title={flag.wire_note}
                         >
                           <Icon name="warning" size={11} />
-                          <span>هنوز وصل نشده</span>
+                          <span>{s.notWiredYet}</span>
                         </span>
                       )}
                       {flag.row_missing && (
-                        <span className="text-xs text-muted">(مقدار پیش‌فرض -- هنوز در پایگاه داده ذخیره نشده)</span>
+                        <span className="text-xs text-muted">{s.defaultValueUnsaved}</span>
                       )}
                     </div>
                     <p className="text-xs text-muted mt-1">{flag.description_fa}</p>
@@ -217,13 +222,13 @@ export default function SiteControlSection({ api }: SiteControlSectionProps) {
                   </div>
                 </div>
                 <label className="flex items-center gap-2 cursor-pointer shrink-0">
-                  <span className="text-xs text-muted">{flag.value ? 'فعال' : 'غیرفعال'}</span>
+                  <span className="text-xs text-muted">{flag.value ? s.active : s.disabled}</span>
                   <input
                     type="checkbox"
                     checked={flag.value}
                     disabled={saving === flag.key}
                     onChange={() => requestToggle(flag)}
-                    aria-label={`تغییر وضعیت ${flag.label_fa}`}
+                    aria-label={s.toggleAria(flag.label_fa)}
                   />
                 </label>
               </div>
@@ -243,22 +248,22 @@ export default function SiteControlSection({ api }: SiteControlSectionProps) {
             <div className="flex items-center gap-2 mb-3">
               <Icon name="warning" size={18} style={{ color: 'var(--warning, #f59e0b)' }} />
               <h3 className="font-semibold text-sm text-primary">
-                {pending.next ? 'فعال کردن' : 'غیرفعال کردن'} «{pending.flag.label_fa}»
+                {pending.next ? s.enable : s.disable} «{pending.flag.label_fa}»
               </h3>
             </div>
             <p className="text-sm text-secondary mb-3">{pending.flag.description_fa}</p>
             {!pending.flag.wired && (
               <p className="text-xs mb-3 p-2 rounded" style={{ color: 'var(--warning, #f59e0b)', background: 'color-mix(in srgb, var(--warning, #f59e0b) 12%, transparent)' }}>
-                توجه: این سوییچ هنوز به هیچ رفتاری وصل نشده -- فقط مقدار در پایگاه داده ذخیره می‌شود.
+                {s.notWiredDialogWarning}
                 {pending.flag.wire_note}
               </p>
             )}
             <p className="text-xs text-muted mb-4">
-              این یک تغییر سراسری روی کل سایت است. مطمئن هستید که می‌خواهید ادامه دهید؟
+              {s.globalChangeConfirm}
             </p>
             <div className="flex items-center gap-2 justify-end">
               <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={() => setPending(null)} disabled={saving === pending.flag.key}>
-                انصراف
+                {s.cancel}
               </button>
               <button className="btn btn-sm" onClick={confirmToggle} disabled={saving === pending.flag.key}>
                 {saving === pending.flag.key ? (
@@ -266,7 +271,7 @@ export default function SiteControlSection({ api }: SiteControlSectionProps) {
                 ) : (
                   <>
                     <Icon name="check" size={14} />
-                    <span>تأیید و اعمال</span>
+                    <span>{s.confirmApply}</span>
                   </>
                 )}
               </button>

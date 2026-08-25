@@ -2,8 +2,10 @@
 
 import { useRef, useState } from 'react'
 import { toast } from '@/components/ui'
-import { faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/adminI18n'
 import { errMessage } from '../api'
+import { bulkLiveTestStrings } from './BulkLiveTest.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Bulk «تست زنده» — run the per-model live probe over a selection.
@@ -60,6 +62,9 @@ interface UseBulkLiveTestArgs {
 }
 
 export function useBulkLiveTest({ api, onResults, onDone }: UseBulkLiveTestArgs) {
+  const lang = useLang()
+  const s = bulkLiveTestStrings(lang)
+  const f = fmt(lang)
   const [bulkTest, setBulkTest] = useState<BulkTestState | null>(null)
   // The live, mutable run object. `bulkTest` is a render-only snapshot of it,
   // so «توقف» has to reach through this ref to actually stop the workers, and
@@ -73,13 +78,10 @@ export function useBulkLiveTest({ api, onResults, onDone }: UseBulkLiveTestArgs)
   }
 
   const run = async (ids: string[]) => {
-    if (ids.length === 0) { toast('ابتدا حداقل یک مدل را انتخاب کنید', 'error'); return }
+    if (ids.length === 0) { toast(s.selectAtLeastOne, 'error'); return }
     if (ids.length > BULK_TEST_WARN_ABOVE) {
       const minutes = Math.ceil((ids.length * 4) / BULK_TEST_CONCURRENCY / 60)
-      if (!window.confirm(
-        `${ids.length} مدل انتخاب شده است. تست زندهٔ همهٔ آن‌ها حدود ${minutes} دقیقه طول می‌کشد `
-        + 'و در همین صفحه اجرا می‌شود (با بستن صفحه متوقف می‌شود). ادامه می‌دهید؟',
-      )) return
+      if (!window.confirm(s.confirmBulk(f.num(ids.length), f.num(minutes)))) return
     }
 
     const state: BulkTestState = { total: ids.length, done: 0, ok: 0, cancel: false }
@@ -104,7 +106,7 @@ export function useBulkLiveTest({ api, onResults, onDone }: UseBulkLiveTestArgs)
         } catch (err) {
           // One unreachable model must not abort the other 199. The reason is
           // kept per row so the admin can see WHICH failed and why.
-          results[id] = { ok: false, latency_ms: null, error: errMessage(err, 'خطای شبکه'), status_code: null }
+          results[id] = { ok: false, latency_ms: null, error: errMessage(err, s.networkError), status_code: null }
         } finally {
           state.done += 1
           setBulkTest({ ...state })
@@ -118,8 +120,8 @@ export function useBulkLiveTest({ api, onResults, onDone }: UseBulkLiveTestArgs)
     setBulkTest(null)
     toast(
       state.cancel
-        ? `تست متوقف شد — ${faNum(state.ok)} مدل سالم از ${faNum(state.done)} مدل آزموده‌شده`
-        : `${faNum(state.ok)} مدل از ${faNum(state.total)} مدل سالم بود`,
+        ? s.stopped(f.num(state.ok), f.num(state.done))
+        : s.finished(f.num(state.ok), f.num(state.total)),
       state.ok > 0 ? 'success' : 'error',
     )
     await onDone()
@@ -129,13 +131,16 @@ export function useBulkLiveTest({ api, onResults, onDone }: UseBulkLiveTestArgs)
 }
 
 export function BulkLiveTestProgress({ state, onCancel }: { state: BulkTestState; onCancel: () => void }) {
+  const lang = useLang()
+  const s = bulkLiveTestStrings(lang)
+  const f = fmt(lang)
   return (
     <div className="admin-card admin-row gap-3"
          style={{ borderRight: '3px solid var(--accent, #6366f1)' }}>
       <span className="w-4 h-4 border-2 rounded-full animate-spin inline-block shrink-0"
             style={{ borderColor: 'var(--border)', borderTopColor: 'var(--accent, #6366f1)' }} />
       <span className="text-sm text-primary">
-        در حال تست زنده: {faNum(state.done)} از {faNum(state.total)} — {faNum(state.ok)} مدل سالم
+        {s.progress(f.num(state.done), f.num(state.total), f.num(state.ok))}
       </span>
       {/* Progress is a plain div, not a chart: recharts breaks the build
           (documented in AdminCharts.tsx). */}
@@ -145,7 +150,7 @@ export function BulkLiveTestProgress({ state, onCancel }: { state: BulkTestState
           background: 'var(--accent, #6366f1)',
         }} />
       </div>
-      <button className="btn btn-sm" onClick={onCancel}>توقف</button>
+      <button className="btn btn-sm" onClick={onCancel}>{s.stop}</button>
     </div>
   )
 }

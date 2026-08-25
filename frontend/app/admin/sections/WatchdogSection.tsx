@@ -3,7 +3,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
+import { useLang } from '@/components/LanguageToggle'
 import { SectionHeader, Field } from './shared'
+import { watchdogSectionStrings } from './WatchdogSection.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    هشدارهای تلگرام — اعتبارنامهٔ رباتی که هر سه مسیر هشدار این پلتفرم از آن
@@ -53,17 +55,14 @@ interface WatchdogSectionProps {
   api: (path: string, opts?: RequestInit) => Promise<Response>
 }
 
-const SOURCE_LABEL: Record<string, string> = {
-  db: 'از پنل (پایگاه داده)',
-  env: 'از متغیر محیطی سرور',
-  none: 'تنظیم نشده',
+function sourceLabel(source: string, s: ReturnType<typeof watchdogSectionStrings>): string {
+  if (source === 'db') return s.sourceDb
+  if (source === 'env') return s.sourceEnv
+  if (source === 'none') return s.sourceNone
+  return source
 }
 
-function sourceLabel(source: string): string {
-  return SOURCE_LABEL[source] || source
-}
-
-function SourceBadge({ source }: { source: string }) {
+function SourceBadge({ source, s }: { source: string; s: ReturnType<typeof watchdogSectionStrings> }) {
   const ok = source === 'db' || source === 'env'
   return (
     <span
@@ -75,12 +74,14 @@ function SourceBadge({ source }: { source: string }) {
           : 'color-mix(in srgb, var(--warning, #f59e0b) 12%, transparent)',
       }}
     >
-      {sourceLabel(source)}
+      {sourceLabel(source, s)}
     </span>
   )
 }
 
 export default function WatchdogSection({ api }: WatchdogSectionProps) {
+  const lang = useLang()
+  const s = watchdogSectionStrings(lang)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<WatchdogSettings | null>(null)
@@ -101,7 +102,7 @@ export default function WatchdogSection({ api }: WatchdogSectionProps) {
       const res = await api('/api/admin/watchdog-settings')
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        throw new Error(body.detail || `خطای سرور (${res.status})`)
+        throw new Error(body.detail || s.serverError(String(res.status)))
       }
       const body: WatchdogSettings = await res.json()
       setData(body)
@@ -110,12 +111,12 @@ export default function WatchdogSection({ api }: WatchdogSectionProps) {
       setChatId(body.chat_id || '')
     } catch (e) {
       // Never fall back to a blank "not configured" form -- see rule 2.
-      setError(e instanceof Error && e.message !== 'unauthorized' ? e.message : 'خطا در دریافت تنظیمات هشدار')
+      setError(e instanceof Error && e.message !== 'unauthorized' ? e.message : s.loadFailedGeneric)
       setData(null)
     } finally {
       setLoading(false)
     }
-  }, [api])
+  }, [api, s])
 
   useEffect(() => { load() }, [load])
 
@@ -138,13 +139,13 @@ export default function WatchdogSection({ api }: WatchdogSectionProps) {
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        toast(body.detail || 'ذخیره ناموفق بود', 'error')
+        toast(body.detail || s.saveFailed, 'error')
         return
       }
-      toast('تنظیمات هشدار ذخیره شد', 'success')
+      toast(s.saveOk, 'success')
       await load()
     } catch {
-      toast('ذخیره ناموفق بود', 'error')
+      toast(s.saveFailed, 'error')
     } finally {
       setSaving(false)
     }
@@ -153,20 +154,19 @@ export default function WatchdogSection({ api }: WatchdogSectionProps) {
   if (error) {
     return (
       <div className="space-y-6">
-        <SectionHeader title="هشدارهای تلگرام" subtitle="اعتبارنامهٔ رباتی که هشدارهای امنیتی، مالی و پالایش محتوا با آن ارسال می‌شود" />
+        <SectionHeader title={s.title} subtitle={s.errorSubtitle} />
         <div className="admin-card" style={{ borderRight: '3px solid var(--danger, #ef4444)' }}>
           <div className="flex items-center gap-2 mb-2">
             <Icon name="warning" size={18} style={{ color: 'var(--danger, #ef4444)' }} />
-            <h3 className="font-semibold text-sm text-primary">دریافت تنظیمات ناموفق بود</h3>
+            <h3 className="font-semibold text-sm text-primary">{s.loadFailedTitle}</h3>
           </div>
           <p className="text-xs text-muted mb-4">{error}</p>
           <p className="text-xs mb-4" style={{ color: 'var(--warning, #f59e0b)' }}>
-            وضعیت واقعی هشدارها نامشخص است — تا رفع خطا فرم نمایش داده نمی‌شود، چون نمایش «تنظیم نشده»
-            وقتی حقیقت معلوم نیست می‌تواند باعث تصمیم اشتباه شود.
+            {s.loadFailedNote}
           </p>
           <button className="btn btn-sm" onClick={load}>
             <Icon name="refresh" size={14} />
-            <span>تلاش دوباره</span>
+            <span>{s.retry}</span>
           </button>
         </div>
       </div>
@@ -176,14 +176,14 @@ export default function WatchdogSection({ api }: WatchdogSectionProps) {
   return (
     <div className="space-y-6">
       <SectionHeader
-        title="هشدارهای تلگرام"
-        subtitle="اعتبارنامهٔ رباتی که هشدارهای قفل‌شدن حساب، ناهنجاری مالی و پالایش محتوا با آن ارسال می‌شود — بدون نیاز به ری‌استارت"
+        title={s.title}
+        subtitle={s.subtitle}
       />
 
       {loading ? (
-        <div className="admin-card p-6 text-center text-sm text-muted">در حال بارگذاری…</div>
+        <div className="admin-card p-6 text-center text-sm text-muted">{s.loading}</div>
       ) : !data ? (
-        <div className="admin-card p-6 text-center text-sm text-muted">اطلاعاتی یافت نشد</div>
+        <div className="admin-card p-6 text-center text-sm text-muted">{s.noData}</div>
       ) : (
         <>
           {/* ── خط وضعیت ─────────────────────────────────────────────── */}
@@ -198,55 +198,53 @@ export default function WatchdogSection({ api }: WatchdogSectionProps) {
                 style={{ color: data.active ? '#22c55e' : 'var(--warning, #f59e0b)' }}
               />
               <h3 className="font-semibold text-sm text-primary">
-                {data.active ? 'هشدارها فعال است' : 'هشدارها ارسال نمی‌شود'}
+                {data.active ? s.statusActiveTitle : s.statusInactiveTitle}
               </h3>
             </div>
             {data.active ? (
               <p className="text-xs text-muted">
-                توکن ربات {sourceLabel(data.bot_token_source)} و شناسهٔ گفتگو {sourceLabel(data.chat_id_source)} خوانده می‌شود.
-                هر سه مسیر هشدار (قفل حساب، دیده‌بان مالی، پالایش محتوا) از همین جفت استفاده می‌کنند.
+                {s.statusActiveBody(sourceLabel(data.bot_token_source, s), sourceLabel(data.chat_id_source, s))}
               </p>
             ) : (
               <p className="text-xs" style={{ color: 'var(--warning, #f59e0b)' }}>
                 {!data.bot_token_set && !data.chat_id_set
-                  ? 'هیچ‌کدام از دو مقدار تنظیم نشده است — هر سه مسیر هشدار بی‌صدا رد می‌شوند.'
+                  ? s.statusInactiveNone
                   : !data.bot_token_set
-                    ? 'توکن ربات تنظیم نشده است — تا وقتی هر دو مقدار پر نشوند هیچ هشداری ارسال نمی‌شود.'
-                    : 'شناسهٔ گفتگو تنظیم نشده است — تا وقتی هر دو مقدار پر نشوند هیچ هشداری ارسال نمی‌شود.'}
+                    ? s.statusInactiveNoToken
+                    : s.statusInactiveNoChat}
               </p>
             )}
           </div>
 
           {/* ── فرم ──────────────────────────────────────────────────── */}
           <div className="admin-card space-y-4">
-            <Field label="توکن ربات تلگرام">
+            <Field label={s.tokenFieldLabel}>
               <div className="flex items-center gap-2 flex-wrap mb-2">
                 {data.bot_token_set ? (
                   <span className="text-xs flex items-center gap-1" style={{ color: '#22c55e' }}>
                     <Icon name="check" size={12} />
-                    <span>تنظیم شده</span>
+                    <span>{s.tokenSet}</span>
                     {data.bot_token_hint && (
                       <span className="font-mono text-muted">••••{data.bot_token_hint}</span>
                     )}
                   </span>
                 ) : (
-                  <span className="text-xs text-muted">تنظیم نشده</span>
+                  <span className="text-xs text-muted">{s.tokenNotSet}</span>
                 )}
-                <SourceBadge source={data.bot_token_source} />
+                <SourceBadge source={data.bot_token_source} s={s} />
               </div>
               <input
                 type="password"
                 className="input w-full"
                 dir="ltr"
                 autoComplete="new-password"
-                placeholder={data.bot_token_set ? 'برای جایگزینی، توکن جدید را وارد کنید' : '123456789:AA...'}
+                placeholder={data.bot_token_set ? s.tokenPlaceholderReplace : s.tokenPlaceholderNew}
                 value={botToken}
                 disabled={clearToken || saving}
                 onChange={(e) => setBotToken(e.target.value)}
               />
               <p className="text-xs text-muted mt-1">
-                مقدار فعلی هرگز از سرور برگردانده نمی‌شود؛ این فیلد فقط برای نوشتن است. ذخیره‌کردن، مقدار
-                قبلی را جایگزین می‌کند.
+                {s.tokenHelp}
               </p>
               <label className="flex items-center gap-2 mt-2 cursor-pointer">
                 <input
@@ -256,31 +254,28 @@ export default function WatchdogSection({ api }: WatchdogSectionProps) {
                   onChange={(e) => { setClearToken(e.target.checked); if (e.target.checked) setBotToken('') }}
                 />
                 <span className="text-xs text-muted">
-                  پاک‌کردن توکن ذخیره‌شده
-                  {data.env_available.bot_token
-                    ? ' — پس از پاک‌کردن، مقدار متغیر محیطی سرور دوباره به‌کار می‌رود.'
-                    : ' — متغیر محیطی هم تنظیم نیست، پس هشدارها خاموش می‌شوند.'}
+                  {s.clearTokenLabel}
+                  {data.env_available.bot_token ? s.clearTokenWithEnv : s.clearTokenNoEnv}
                 </span>
               </label>
             </Field>
 
-            <Field label="شناسهٔ گفتگو (chat id)">
+            <Field label={s.chatFieldLabel}>
               <div className="flex items-center gap-2 flex-wrap mb-2">
-                <SourceBadge source={data.chat_id_source} />
+                <SourceBadge source={data.chat_id_source} s={s} />
               </div>
               <input
                 type="text"
                 className="input w-full"
                 dir="ltr"
-                placeholder="-1001234567890"
+                placeholder={s.chatPlaceholder}
                 value={chatId}
                 disabled={saving}
                 onChange={(e) => setChatId(e.target.value)}
               />
               <p className="text-xs text-muted mt-1">
-                شناسهٔ گفتگو رمز نیست، پس کامل نمایش داده می‌شود تا بتوانید درستی‌اش را بررسی کنید.
-                خالی گذاشتن یعنی برگشتن به متغیر محیطی سرور
-                {data.env_available.chat_id ? '.' : ' (که آن هم تنظیم نیست).'}
+                {s.chatHelp}
+                {data.env_available.chat_id ? s.chatHelpEnvSet : s.chatHelpEnvUnset}
               </p>
             </Field>
 
@@ -291,7 +286,7 @@ export default function WatchdogSection({ api }: WatchdogSectionProps) {
                 ) : (
                   <>
                     <Icon name="check" size={14} />
-                    <span>ذخیره</span>
+                    <span>{s.save}</span>
                   </>
                 )}
               </button>
@@ -301,32 +296,29 @@ export default function WatchdogSection({ api }: WatchdogSectionProps) {
                   style={{ background: 'var(--bg-elevated)' }}
                   onClick={() => { setBotToken(''); setClearToken(false); setChatId(data.chat_id || '') }}
                 >
-                  انصراف
+                  {s.cancel}
                 </button>
               )}
-              {!dirty && <span className="text-xs text-muted">تغییری برای ذخیره وجود ندارد</span>}
+              {!dirty && <span className="text-xs text-muted">{s.noChanges}</span>}
             </div>
 
             {data.rows_missing.length > 0 && (
               <p className="text-xs text-muted">
-                ردیف‌های ذخیره‌سازی هنوز در پایگاه داده ساخته نشده‌اند ({data.rows_missing.join('، ')}) — مهاجرت
-                0044 هنوز اعمال نشده است. اولین ذخیره خودش ردیف را می‌سازد.
+                {s.rowsMissing(data.rows_missing.join(s.listSeparator))}
               </p>
             )}
           </div>
 
           {/* ── جایی که این اعتبارنامه استفاده می‌شود ─────────────────── */}
           <div className="admin-card">
-            <h3 className="font-semibold text-sm text-primary mb-2">این اعتبارنامه کجا خوانده می‌شود</h3>
+            <h3 className="font-semibold text-sm text-primary mb-2">{s.usedWhereTitle}</h3>
             <ul className="text-xs text-muted space-y-1">
-              <li>• قفل‌شدن حساب پس از تلاش‌های ناموفق ورود — backend/security.py</li>
-              <li>• دیده‌بان مالی (۱۳ قاعدهٔ CRITICAL/HIGH) — backend/watchdog.py، کانتینر جدا</li>
-              <li>• پالایش محتوا (block/flag و خطای آشکارساز) — backend/services/moderation_store.py</li>
+              <li>• {s.usedWhereLockout}</li>
+              <li>• {s.usedWhereWatchdog}</li>
+              <li>• {s.usedWhereModeration}</li>
             </ul>
             <p className="text-xs text-muted mt-2">
-              مقدار پنل بر متغیر محیطی اولویت دارد؛ اگر پنل خالی باشد متغیر محیطی سرور به‌کار می‌رود. اگر
-              پایگاه داده در دسترس نباشد، هر سه مسیر به متغیر محیطی برمی‌گردند تا خطای تنظیمات هرگز مسیر
-              گفتگو را نشکند.
+              {s.usedWherePriority}
             </p>
           </div>
         </>

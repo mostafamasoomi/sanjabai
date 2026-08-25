@@ -2,8 +2,10 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { Icon } from '@/components/ui/Icon'
-import { faNum, faPrice, faPercent } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/adminI18n'
 import { previewPrice, PercentInput, type ModelMarkupRow } from './MarkupSection'
+import { markupModelsTableStrings } from './MarkupModelsTable.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    The per-model markup table -- split out of MarkupSection.tsx 2026-08-25
@@ -66,6 +68,9 @@ export default function MarkupModelsTable({
   selected, onToggleSelected, onSetManySelected,
   globalPct, loading, loadError, onRetry,
 }: MarkupModelsTableProps) {
+  const lang = useLang()
+  const s = markupModelsTableStrings(lang)
+  const f = fmt(lang)
   const [filter, setFilter] = useState('')
   const [page, setPage] = useState(1)
 
@@ -94,27 +99,23 @@ export default function MarkupModelsTable({
   return (
     <div className="admin-card">
       <div className="flex items-center justify-between gap-4 mb-2 flex-wrap">
-        <h3 className="font-semibold text-sm text-primary">درصد به ازای هر مدل</h3>
+        <h3 className="font-semibold text-sm text-primary">{s.title}</h3>
         <input
           className="input"
-          placeholder="جستجوی مدل…"
+          placeholder={s.searchPlaceholder}
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
           style={{ maxWidth: 220 }}
         />
       </div>
       <div className="flex items-center justify-between gap-4 mb-4 flex-wrap text-xs text-muted">
-        <span>
-          {faNum(filteredRows.length)} مدل یافت شد — صفحهٔ {faNum(page)} از {faNum(pageCount)}
-        </span>
+        <span>{s.summary(f.num(filteredRows.length), f.num(page), f.num(pageCount))}</span>
         <button
           className="underline"
           onClick={() => onSetManySelected(filteredRows.map((r) => r.id), !allFilteredSelected)}
           disabled={filteredRows.length === 0}
         >
-          {allFilteredSelected
-            ? 'لغو انتخاب همهٔ نتایج (همهٔ صفحات)'
-            : `انتخاب همهٔ ${faNum(filteredRows.length)} نتیجه (همهٔ صفحات)`}
+          {allFilteredSelected ? s.deselectAllFiltered : s.selectAllFiltered(f.num(filteredRows.length))}
         </button>
       </div>
       <div className="overflow-x-auto">
@@ -126,28 +127,28 @@ export default function MarkupModelsTable({
                   type="checkbox"
                   checked={allPageSelected}
                   onChange={() => onSetManySelected(pagedIds, !allPageSelected)}
-                  aria-label="انتخاب همهٔ این صفحه"
-                  title="فقط ردیف‌های همین صفحه را انتخاب می‌کند"
+                  aria-label={s.selectPageAria}
+                  title={s.selectPageTitle}
                 />
               </th>
-              <th className="text-right p-3">مدل</th>
-              <th className="text-right p-3">قیمت پایه ورودی</th>
-              <th className="text-right p-3">قیمت پایه خروجی</th>
-              <th className="text-right p-3">درصد مؤثر</th>
-              <th className="text-right p-3">قیمت ورودی پس از سود</th>
-              <th className="text-right p-3">override این مدل</th>
-              <th className="text-right p-3">عملیات</th>
+              <th className="text-right p-3">{s.colModel}</th>
+              <th className="text-right p-3">{s.colBaseInput}</th>
+              <th className="text-right p-3">{s.colBaseOutput}</th>
+              <th className="text-right p-3">{s.colEffectivePct}</th>
+              <th className="text-right p-3">{s.colInputAfterMarkup}</th>
+              <th className="text-right p-3">{s.colOverride}</th>
+              <th className="text-right p-3">{s.colActions}</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">در حال بارگذاری…</td></tr>
+              <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">{s.loading}</td></tr>
             ) : loadError ? (
               <tr><td colSpan={8} className="p-6 text-center text-sm" style={{ color: 'var(--danger, #ef4444)' }}>
-                {loadError} — <button className="underline" onClick={onRetry}>تلاش دوباره</button>
+                {loadError} — <button className="underline" onClick={onRetry}>{s.retry}</button>
               </td></tr>
             ) : pagedRows.length === 0 ? (
-              <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">مدلی یافت نشد</td></tr>
+              <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">{s.noModels}</td></tr>
             ) : (
               pagedRows.map((r) => {
                 const effectivePct = r.markup_pct ?? globalPct
@@ -159,27 +160,27 @@ export default function MarkupModelsTable({
                         type="checkbox"
                         checked={selected.has(r.id)}
                         onChange={() => onToggleSelected(r.id)}
-                        aria-label={`انتخاب ${r.display_name}`}
+                        aria-label={s.selectRowAria(r.display_name)}
                       />
                     </td>
                     <td className="p-3">
                       <div className="text-sm font-medium text-primary">{r.display_name}</div>
-                      <div className="text-xs font-mono text-muted">{r.id}</div>
+                      <div className="text-xs font-mono text-muted" dir="ltr">{r.id}</div>
                     </td>
-                    <td className="p-3 text-xs">{faNum(r.input_per_million)}</td>
-                    <td className="p-3 text-xs">{faNum(r.output_per_million)}</td>
+                    <td className="p-3 text-xs">{f.num(r.input_per_million)}</td>
+                    <td className="p-3 text-xs">{f.num(r.output_per_million)}</td>
                     <td className="p-3">
-                      <span className="badge" title={r.markup_pct == null ? 'ارث‌برده از درصد سراسری' : 'override اختصاصی این مدل'}>
-                        {faPercent(effectivePct)}
-                        {r.markup_pct == null && <span className="text-muted"> (سراسری)</span>}
+                      <span className="badge" title={r.markup_pct == null ? s.inheritedTitle : s.overrideTitle}>
+                        {f.percent(effectivePct)}
+                        {r.markup_pct == null && <span className="text-muted">{s.globalSuffix}</span>}
                       </span>
                     </td>
-                    <td className="p-3 text-xs">{faPrice(previewPrice(r.input_per_million, effectivePct))}</td>
+                    <td className="p-3 text-xs">{f.price(previewPrice(r.input_per_million, effectivePct))}</td>
                     <td className="p-3">
                       <PercentInput
                         value={draft}
                         onChange={(v) => onRowInputChange(r.id, v)}
-                        placeholder="سراسری"
+                        placeholder={s.overridePlaceholder}
                       />
                     </td>
                     <td className="p-3">
@@ -187,7 +188,7 @@ export default function MarkupModelsTable({
                         className="btn btn-sm"
                         onClick={() => onSaveRow(r.id)}
                         disabled={savingRow === r.id}
-                        title={draft.trim() === '' ? 'خالی = پاک کردن override' : 'ذخیره override'}
+                        title={draft.trim() === '' ? s.saveEmptyTitle : s.saveTitle}
                       >
                         {savingRow === r.id ? (
                           <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
@@ -203,10 +204,10 @@ export default function MarkupModelsTable({
       </div>
       {!loading && !loadError && pageCount > 1 && (
         <div className="flex items-center justify-between gap-4 mt-4 flex-wrap">
-          <span className="text-xs text-muted">صفحهٔ {faNum(page)} از {faNum(pageCount)}</span>
+          <span className="text-xs text-muted">{s.page(f.num(page), f.num(pageCount))}</span>
           <div className="flex gap-2">
-            <button className="btn btn-sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>قبلی</button>
-            <button className="btn btn-sm" disabled={page >= pageCount} onClick={() => setPage((p) => Math.min(pageCount, p + 1))}>بعدی</button>
+            <button className="btn btn-sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>{s.prev}</button>
+            <button className="btn btn-sm" disabled={page >= pageCount} onClick={() => setPage((p) => Math.min(pageCount, p + 1))}>{s.next}</button>
           </div>
         </div>
       )}

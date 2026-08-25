@@ -11,11 +11,19 @@
  *
  * Kept in lib/ rather than inline in the component so it can be unit
  * tested without pulling in SecuritySection's '@/components/ui' and
- * '@/lib/format' imports, which vitest's plain `vite.config`-less setup in
- * this repo cannot resolve (no `@` alias is configured for the test
- * runner -- every other testable module in this codebase lives here for
- * the same reason, see lib/panel.ts, lib/format.tsx).
+ * '@/lib/format' imports. (vitest.config.ts now maps `@/` too, so that is no
+ * longer a constraint -- but every other testable module in this codebase
+ * lives here anyway, see lib/panel.ts, lib/format.tsx.)
  */
+
+import type { Lang } from '@/components/LanguageToggle'
+
+/** The list separator. «،» is the Persian comma; an English audit-log cell
+ *  reading "a: 1، b: 2" is Persian punctuation leaking into translated text,
+ *  which is exactly the kind of half-translation this pass exists to remove. */
+function separator(lang: Lang): string {
+  return lang === 'en' ? ', ' : '، '
+}
 
 /** Renders any jsonb-sourced value as safe, readable Persian-admin-facing
  *  text. For an object/array we want the admin to see what changed --
@@ -25,16 +33,18 @@
  *  writes today (flat key/value pairs); any nested value falls back to
  *  JSON.stringify so it still renders as text instead of crashing or
  *  silently disappearing. */
-export function formatAuditDetails(details: unknown): string {
+export function formatAuditDetails(details: unknown, lang: Lang = 'fa'): string {
   if (details === null || details === undefined) return '—'
   if (typeof details === 'string') return details || '—'
   if (typeof details === 'number' || typeof details === 'boolean') return String(details)
   if (Array.isArray(details)) {
-    return details.length === 0 ? '—' : details.map(formatAuditDetailsValue).join('، ')
+    return details.length === 0 ? '—' : details.map(formatAuditDetailsValue).join(separator(lang))
   }
   if (typeof details === 'object') {
     const entries = Object.entries(details as Record<string, unknown>)
-    return entries.length === 0 ? '—' : entries.map(([k, v]) => `${k}: ${formatAuditDetailsValue(v)}`).join('، ')
+    return entries.length === 0
+      ? '—'
+      : entries.map(([k, v]) => `${k}: ${formatAuditDetailsValue(v)}`).join(separator(lang))
   }
   return String(details)
 }

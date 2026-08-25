@@ -1,11 +1,13 @@
 'use client'
 
-import { faNum, faPrice, faDate, faTime } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/adminI18n'
+import { userDetailTabsStrings } from './UserDetailTabs.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    UserDetailTabs — presentational tables for the four data-heavy tabs of
-   UserDetailDrawer.tsx (کیف پول/ledger, پرداخت‌ها, مصرف, گفتگوها). Split out
-   of the drawer itself purely to stay under the repo's 500-line-per-file
+   UserDetailDrawer.tsx (wallet/ledger, payments, usage, conversations). Split
+   out of the drawer itself purely to stay under the repo's 500-line-per-file
    cap; these components own no state and no fetching — UserDetailDrawer.tsx
    fetches and owns a `TabState<T>` per tab and hands it down here.
 
@@ -22,7 +24,7 @@ import { faNum, faPrice, faDate, faTime } from '@/lib/format'
    cannot tell an `admin_credit` apart from a `chat_settle` apart from a
    `referral_bonus` except by the free-text `reason` string. Money here is
    already integer toman — never divide/multiply by 10, render only via
-   faPrice/faNum.
+   f.price/f.num (see lib/adminI18n.ts).
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export type TabStatus = 'idle' | 'loading' | 'error' | 'ready'
@@ -90,25 +92,32 @@ export interface ConversationsPayload { items: ConversationRow[]; total: number 
 function StateShell<T>({
   state, isEmpty, children,
 }: { state: TabState<T>; isEmpty: (d: T) => boolean; children: (d: T) => React.ReactNode }) {
+  const lang = useLang()
+  const s = userDetailTabsStrings(lang)
+
   if (state.status === 'idle' || state.status === 'loading') {
     return <div className="skeleton h-28 w-full rounded" />
   }
   if (state.status === 'error') {
     return (
       <p className="p-4 text-sm text-danger">
-        {state.error || 'خطا در دریافت اطلاعات — لطفاً دوباره تلاش کنید'}
+        {state.error || s.loadError}
       </p>
     )
   }
   if (!state.data || isEmpty(state.data)) {
-    return <p className="p-6 text-center text-sm text-muted">چیزی ثبت نشده</p>
+    return <p className="p-6 text-center text-sm text-muted">{s.empty}</p>
   }
   return <>{children(state.data)}</>
 }
 
-// ─── کیف پول (ledger rows only — the wallet-adjust form lives beside this) ──
+// ─── wallet ledger (rows only — the wallet-adjust form lives beside this) ───
 
 export function LedgerTab({ state }: { state: TabState<LedgerPayload> }) {
+  const lang = useLang()
+  const s = userDetailTabsStrings(lang)
+  const f = fmt(lang)
+
   return (
     <StateShell state={state} isEmpty={(d) => d.items.length === 0}>
       {(d) => (
@@ -116,41 +125,41 @@ export function LedgerTab({ state }: { state: TabState<LedgerPayload> }) {
           <table className="admin-table w-full text-sm">
             <thead>
               <tr>
-                <th className="text-right p-2">شناسه</th>
-                <th className="text-right p-2">مبلغ</th>
-                <th className="text-right p-2">مانده پس از تراکنش</th>
-                <th className="text-right p-2">شرح</th>
-                <th className="text-right p-2">تاریخ</th>
+                <th className="text-right p-2">{s.colId}</th>
+                <th className="text-right p-2">{s.colAmount}</th>
+                <th className="text-right p-2">{s.colBalanceAfter}</th>
+                <th className="text-right p-2">{s.colReason}</th>
+                <th className="text-right p-2">{s.colDate}</th>
               </tr>
             </thead>
             <tbody>
               {d.items.map((l) => (
                 <tr key={l.id}>
-                  <td className="p-2 text-xs font-mono">{faNum(l.id)}</td>
+                  <td className="p-2 text-xs font-mono">{f.num(l.id)}</td>
                   <td className={`p-2 text-xs font-bold ${l.amount >= 0 ? 'text-positive' : 'text-danger'}`}>
-                    {faPrice(l.amount, { signed: true })}
+                    {f.price(l.amount, { signed: true })}
                   </td>
-                  <td className="p-2 text-xs">{faPrice(l.balance_after)}</td>
+                  <td className="p-2 text-xs">{f.price(l.balance_after)}</td>
                   <td className="p-2 text-xs text-secondary">{l.reason || '—'}</td>
-                  <td className="p-2 text-xs">{faDate(l.created_at)} {faTime(l.created_at)}</td>
+                  <td className="p-2 text-xs">{f.date(l.created_at)} {f.time(l.created_at)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <p className="text-xs mt-2 text-muted">{faNum(d.total)} تراکنش</p>
+          <p className="text-xs mt-2 text-muted">{s.txCount(f.num(d.total))}</p>
         </div>
       )}
     </StateShell>
   )
 }
 
-// ─── پرداخت‌ها ────────────────────────────────────────────────────────────
-
-const PAYMENT_STATUS_FA: Record<string, string> = {
-  verified: 'تایید شده', pending: 'در انتظار', failed: 'ناموفق',
-}
+// ─── payments ────────────────────────────────────────────────────────────
 
 export function PaymentsTab({ state }: { state: TabState<PaymentsPayload> }) {
+  const lang = useLang()
+  const s = userDetailTabsStrings(lang)
+  const f = fmt(lang)
+
   return (
     <StateShell state={state} isEmpty={(d) => d.payments.length === 0 && d.subscriptions.length === 0}>
       {(d) => (
@@ -160,60 +169,60 @@ export function PaymentsTab({ state }: { state: TabState<PaymentsPayload> }) {
               <table className="admin-table w-full text-sm">
                 <thead>
                   <tr>
-                    <th className="text-right p-2">شناسه</th>
-                    <th className="text-right p-2">مبلغ</th>
-                    <th className="text-right p-2">وضعیت</th>
-                    <th className="text-right p-2">نوع</th>
-                    <th className="text-right p-2">کد مرجع</th>
-                    <th className="text-right p-2">تاریخ</th>
+                    <th className="text-right p-2">{s.colId}</th>
+                    <th className="text-right p-2">{s.colAmount}</th>
+                    <th className="text-right p-2">{s.colStatus}</th>
+                    <th className="text-right p-2">{s.colType}</th>
+                    <th className="text-right p-2">{s.colRefCode}</th>
+                    <th className="text-right p-2">{s.colDate}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {d.payments.map((p) => (
                     <tr key={p.id}>
-                      <td className="p-2 text-xs font-mono">{faNum(p.id)}</td>
-                      <td className="p-2 text-xs font-bold">{faPrice(p.amount)}</td>
+                      <td className="p-2 text-xs font-mono">{f.num(p.id)}</td>
+                      <td className="p-2 text-xs font-bold">{f.price(p.amount)}</td>
                       <td className="p-2">
                         <span className={`badge ${p.status === 'verified' ? 'badge-positive' : p.status === 'pending' ? 'badge-accent' : 'badge-danger'}`}>
-                          {PAYMENT_STATUS_FA[p.status] || p.status}
+                          {s.paymentStatus[p.status] || p.status}
                         </span>
                       </td>
                       <td className="p-2 text-xs">{p.payment_type || '—'}</td>
                       <td className="p-2 text-xs font-mono">{p.ref_id || '—'}</td>
-                      <td className="p-2 text-xs">{faDate(p.created_at)}</td>
+                      <td className="p-2 text-xs">{f.date(p.created_at)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           ) : (
-            <p className="text-sm text-muted">هیچ پرداختی ثبت نشده</p>
+            <p className="text-sm text-muted">{s.noPayments}</p>
           )}
           {d.subscriptions.length > 0 && (
             <>
-              <h3 className="text-sm font-bold text-primary">اشتراک‌ها</h3>
+              <h3 className="text-sm font-bold text-primary">{s.subscriptionsTitle}</h3>
               <table className="admin-table w-full text-sm">
                 <thead>
                   <tr>
-                    <th className="text-right p-2">پلن</th>
-                    <th className="text-right p-2">وضعیت</th>
-                    <th className="text-right p-2">شروع</th>
-                    <th className="text-right p-2">پایان</th>
-                    <th className="text-right p-2">مبلغ</th>
+                    <th className="text-right p-2">{s.colPlan}</th>
+                    <th className="text-right p-2">{s.colStatus}</th>
+                    <th className="text-right p-2">{s.colStart}</th>
+                    <th className="text-right p-2">{s.colEnd}</th>
+                    <th className="text-right p-2">{s.colAmount}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {d.subscriptions.map((s, i) => (
-                    <tr key={s.id ?? i}>
-                      <td className="p-2 text-xs font-medium">{s.plan || '—'}</td>
+                  {d.subscriptions.map((sub, i) => (
+                    <tr key={sub.id ?? i}>
+                      <td className="p-2 text-xs font-medium">{sub.plan || '—'}</td>
                       <td className="p-2">
-                        <span className={`badge ${s.status === 'active' ? 'badge-positive' : 'badge-accent'}`}>
-                          {s.status === 'active' ? 'فعال' : s.status || '—'}
+                        <span className={`badge ${sub.status === 'active' ? 'badge-positive' : 'badge-accent'}`}>
+                          {sub.status === 'active' ? s.subActive : sub.status || '—'}
                         </span>
                       </td>
-                      <td className="p-2 text-xs">{faDate(s.starts_at)}</td>
-                      <td className="p-2 text-xs">{s.ends_at ? faDate(s.ends_at) : '—'}</td>
-                      <td className="p-2 text-xs">{faPrice(s.price_paid)}</td>
+                      <td className="p-2 text-xs">{f.date(sub.starts_at)}</td>
+                      <td className="p-2 text-xs">{sub.ends_at ? f.date(sub.ends_at) : '—'}</td>
+                      <td className="p-2 text-xs">{f.price(sub.price_paid)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -226,12 +235,16 @@ export function PaymentsTab({ state }: { state: TabState<PaymentsPayload> }) {
   )
 }
 
-// ─── مصرف ────────────────────────────────────────────────────────────────
+// ─── usage ───────────────────────────────────────────────────────────────
 
 /** Hand-rolled SVG bars — recharts is banned in this project (breaks the
-    build; see AdminCharts.tsx). Oldest day on the right, newest on the
-    left, matching RTL reading order. */
+    build; see AdminCharts.tsx). Oldest day at the trailing edge, newest at
+    the leading edge, matching the panel's reading order. */
 function DailyUsageChart({ daily }: { daily: UsageDailyRow[] }) {
+  const lang = useLang()
+  const s = userDetailTabsStrings(lang)
+  const f = fmt(lang)
+
   const rows = [...daily].reverse()
   const max = Math.max(1, ...rows.map((r) => Number(r.tokens) || 0))
   const barW = 18
@@ -247,11 +260,12 @@ function DailyUsageChart({ daily }: { daily: UsageDailyRow[] }) {
         viewBox={`0 0 ${width} ${chartH + 20}`}
         style={{ minWidth: '100%' }}
         role="img"
-        aria-label="مصرف توکن روزانه"
+        aria-label={s.chartAriaLabel}
       >
         {rows.map((r, i) => {
           const h = Math.max(2, (Number(r.tokens) / max) * chartH)
-          // RTL: first (oldest) bar drawn at the right edge.
+          // First (oldest) bar drawn at the trailing edge for the language's
+          // reading order (right edge in RTL, left edge in LTR).
           const x = width - gap - (i + 1) * (barW + gap) + gap
           return (
             <g key={r.day}>
@@ -259,7 +273,7 @@ function DailyUsageChart({ daily }: { daily: UsageDailyRow[] }) {
                 x={x} y={chartH - h + 10} width={barW} height={h}
                 rx={3} fill="var(--accent)" opacity={0.85}
               >
-                <title>{`${faDate(r.day)}: ${faNum(r.tokens)} توکن`}</title>
+                <title>{s.chartTooltip(f.date(r.day), f.num(r.tokens))}</title>
               </rect>
             </g>
           )
@@ -270,32 +284,36 @@ function DailyUsageChart({ daily }: { daily: UsageDailyRow[] }) {
 }
 
 export function UsageTab({ state }: { state: TabState<UsagePayload> }) {
+  const lang = useLang()
+  const s = userDetailTabsStrings(lang)
+  const f = fmt(lang)
+
   return (
     <StateShell state={state} isEmpty={(d) => d.by_model.length === 0}>
       {(d) => (
         <div className="space-y-5">
           <div>
-            <h3 className="text-sm font-bold text-primary mb-2">مصرف بر اساس مدل</h3>
+            <h3 className="text-sm font-bold text-primary mb-2">{s.usageByModelTitle}</h3>
             <table className="admin-table w-full text-sm">
               <thead>
                 <tr>
-                  <th className="text-right p-2">مدل</th>
-                  <th className="text-right p-2">درخواست</th>
-                  <th className="text-right p-2">ورودی</th>
-                  <th className="text-right p-2">خروجی</th>
-                  <th className="text-right p-2">هزینه</th>
-                  <th className="text-right p-2">آخرین استفاده</th>
+                  <th className="text-right p-2">{s.colModel}</th>
+                  <th className="text-right p-2">{s.colCalls}</th>
+                  <th className="text-right p-2">{s.colInput}</th>
+                  <th className="text-right p-2">{s.colOutput}</th>
+                  <th className="text-right p-2">{s.colCost}</th>
+                  <th className="text-right p-2">{s.colLastUsed}</th>
                 </tr>
               </thead>
               <tbody>
                 {d.by_model.map((m, i) => (
                   <tr key={`${m.model}-${i}`}>
                     <td className="p-2 text-xs font-medium">{m.model}</td>
-                    <td className="p-2 text-xs">{faNum(m.calls)}</td>
-                    <td className="p-2 text-xs">{faNum(m.input_tokens)}</td>
-                    <td className="p-2 text-xs">{faNum(m.output_tokens)}</td>
-                    <td className="p-2 text-xs">{faPrice(m.total_cost)}</td>
-                    <td className="p-2 text-xs">{m.last_used ? faDate(m.last_used) : '—'}</td>
+                    <td className="p-2 text-xs">{f.num(m.calls)}</td>
+                    <td className="p-2 text-xs">{f.num(m.input_tokens)}</td>
+                    <td className="p-2 text-xs">{f.num(m.output_tokens)}</td>
+                    <td className="p-2 text-xs">{f.price(m.total_cost)}</td>
+                    <td className="p-2 text-xs">{m.last_used ? f.date(m.last_used) : '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -303,7 +321,7 @@ export function UsageTab({ state }: { state: TabState<UsagePayload> }) {
           </div>
           {d.daily.length > 0 && (
             <div>
-              <h3 className="text-sm font-bold text-primary mb-2">مصرف توکن ۳۰ روز اخیر</h3>
+              <h3 className="text-sm font-bold text-primary mb-2">{s.dailyUsageTitle}</h3>
               <DailyUsageChart daily={d.daily} />
             </div>
           )}
@@ -313,9 +331,13 @@ export function UsageTab({ state }: { state: TabState<UsagePayload> }) {
   )
 }
 
-// ─── گفتگوها ──────────────────────────────────────────────────────────────
+// ─── conversations ──────────────────────────────────────────────────────
 
 export function ConversationsTab({ state }: { state: TabState<ConversationsPayload> }) {
+  const lang = useLang()
+  const s = userDetailTabsStrings(lang)
+  const f = fmt(lang)
+
   return (
     <StateShell state={state} isEmpty={(d) => d.items.length === 0}>
       {(d) => (
@@ -323,26 +345,26 @@ export function ConversationsTab({ state }: { state: TabState<ConversationsPaylo
           <table className="admin-table w-full text-sm">
             <thead>
               <tr>
-                <th className="text-right p-2">شناسه</th>
-                <th className="text-right p-2">عنوان</th>
-                <th className="text-right p-2">مدل</th>
-                <th className="text-right p-2">پیام‌ها</th>
-                <th className="text-right p-2">آخرین بروزرسانی</th>
+                <th className="text-right p-2">{s.colId}</th>
+                <th className="text-right p-2">{s.colTitle}</th>
+                <th className="text-right p-2">{s.colModel}</th>
+                <th className="text-right p-2">{s.colMessages}</th>
+                <th className="text-right p-2">{s.colLastUpdated}</th>
               </tr>
             </thead>
             <tbody>
               {d.items.map((c) => (
                 <tr key={c.id}>
-                  <td className="p-2 text-xs font-mono">{faNum(c.id)}</td>
+                  <td className="p-2 text-xs font-mono">{f.num(c.id)}</td>
                   <td className="p-2 text-xs">{c.title || '—'}</td>
                   <td className="p-2 text-xs"><span className="badge badge-accent">{c.model || '—'}</span></td>
-                  <td className="p-2 text-xs">{faNum(c.msg_count)}</td>
-                  <td className="p-2 text-xs">{faDate(c.updated_at)}</td>
+                  <td className="p-2 text-xs">{f.num(c.msg_count)}</td>
+                  <td className="p-2 text-xs">{f.date(c.updated_at)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          <p className="text-xs mt-2 text-muted">{faNum(d.total)} گفتگو</p>
+          <p className="text-xs mt-2 text-muted">{s.convCount(f.num(d.total))}</p>
         </div>
       )}
     </StateShell>

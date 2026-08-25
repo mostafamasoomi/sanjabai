@@ -11,8 +11,15 @@
  * reasoning `app/admin/apiError.ts` was already split out for.
  *
  * `elapsedParts` deliberately returns numbers, not a Persian string — the
- * component formats those through `faNum` itself so the actual rendered
- * digits still go through the app's one number formatter.
+ * component formats those through `f.num` itself so the actual rendered
+ * digits still go through the language-bound formatter (see lib/adminI18n.ts).
+ *
+ * This file is plain .ts, not .tsx, so it cannot call the `useLang` hook
+ * (see the header note above on why Vitest can't parse .tsx at all here).
+ * `parseOverheadResponse`'s error strings therefore take `lang` as a plain
+ * parameter, defaulting to 'fa' so the existing unit tests — which call it
+ * without a `lang` argument — keep passing unchanged. The component is the
+ * one that reads `useLang()` and passes the result through.
  *
  * ── The real response contract ──────────────────────────────────────────
  * Pinned against `backend/admin_overhead.py` (both GET /admin/upstream-overhead
@@ -70,6 +77,11 @@
  * response" state, separate from both the inert-empty state and a plain
  * network failure.
  */
+
+// Relative, not `@/components/LanguageToggle` -- see the note in
+// upstreamOverheadHelpers.strings.ts on why this file avoids the `@` alias.
+import type { Lang } from '@/components/LanguageToggle'
+import { upstreamOverheadHelperStrings } from './upstreamOverheadHelpers.strings'
 
 export interface OverheadRouteRow {
   /** The raw "<upstream>:<prefix>" key from `stored.entries`. */
@@ -129,18 +141,24 @@ function fail(message: string): never {
 
 /** Strictly validates and flattens the real `/admin/upstream-overhead`
  *  response (see the contract doc above). Throws rather than guessing on
- *  anything that doesn't match — see "Why this throws" above. */
-export function parseOverheadResponse(raw: unknown): ParsedOverhead {
-  if (!isPlainObject(raw)) fail('پاسخ سرور سربار یک شیء JSON نیست')
+ *  anything that doesn't match — see "Why this throws" above.
+ *
+ *  `lang` is a plain parameter, not `useLang()`, because this is not a
+ *  component — see the header comment. Defaults to 'fa' so the existing
+ *  unit tests, which call this without a `lang` argument, keep passing. */
+export function parseOverheadResponse(raw: unknown, lang: Lang = 'fa'): ParsedOverhead {
+  const s = upstreamOverheadHelperStrings(lang)
+
+  if (!isPlainObject(raw)) fail(s.notObject)
 
   const stored = raw.stored
-  if (!isPlainObject(stored)) fail('پاسخ سرور فاقد فیلد stored است — قرارداد بک‌اند تغییر کرده؟')
+  if (!isPlainObject(stored)) fail(s.missingStored)
 
   const entriesRaw = stored.entries
-  if (!isPlainObject(entriesRaw)) fail('فیلد stored.entries در پاسخ سرور یک نگاشت نیست')
+  if (!isPlainObject(entriesRaw)) fail(s.entriesNotMap)
 
   const providerDefaultRaw = stored.provider_default
-  if (!isPlainObject(providerDefaultRaw)) fail('فیلد stored.provider_default در پاسخ سرور یک نگاشت نیست')
+  if (!isPlainObject(providerDefaultRaw)) fail(s.providerDefaultNotMap)
 
   // Absent entirely on the never-measured default (see get_upstream_overhead's
   // fallback dict, which omits it) — treated as "no derivation data", not an error.
@@ -148,7 +166,7 @@ export function parseOverheadResponse(raw: unknown): ParsedOverhead {
 
   const entries: OverheadRouteRow[] = Object.entries(entriesRaw).map(([routeKey, overheadValue]) => {
     if (typeof overheadValue !== 'number' || !Number.isFinite(overheadValue)) {
-      fail(`مقدار سربار برای مسیر «${routeKey}» عدد معتبر نیست`)
+      fail(s.invalidOverheadForRoute(routeKey))
     }
     const measurement = isPlainObject(measurementsRaw[routeKey]) ? measurementsRaw[routeKey] : null
     const numOrNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
@@ -171,7 +189,7 @@ export function parseOverheadResponse(raw: unknown): ParsedOverhead {
 
   const providerDefaults: ProviderDefaultRow[] = Object.entries(providerDefaultRaw).map(([provider, overheadValue]) => {
     if (typeof overheadValue !== 'number' || !Number.isFinite(overheadValue)) {
-      fail(`مقدار پیش‌فرض سربار برای پروایدر «${provider}» عدد معتبر نیست`)
+      fail(s.invalidDefaultForProvider(provider))
     }
     return { provider, overhead_tokens: overheadValue }
   })

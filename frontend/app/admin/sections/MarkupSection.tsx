@@ -3,10 +3,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
-import { faNum, faPrice } from '@/lib/format'
+import { useLang, type Lang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/adminI18n'
 import { errMessage } from '../api'
 import { SectionHeader, Field } from './shared'
 import MarkupModelsTable from './MarkupModelsTable'
+import { markupSectionStrings } from './MarkupSection.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Markup — profit percentage, global + per-model override (owner request,
@@ -77,16 +79,25 @@ export const MARKUP_PCT_MAX = 1000
 
 /** Matches the server's exact wording (backend/admin_catalog.py) so the
     negative-percent refusal reads the same whether it was caught here or
-    echoed back from the API. */
-export function validateMarkupPct(pct: number): string | null {
-  if (!Number.isFinite(pct) || pct < 0) return 'درصد سود نمی‌تواند منفی باشد (هیچ درخواستی نباید ضررده باشد)'
-  if (pct > MARKUP_PCT_MAX) return `درصد سود نمی‌تواند بیش از ${faNum(MARKUP_PCT_MAX)}٪ باشد`
+    echoed back from the API. Takes `lang` as a plain parameter rather than
+    calling `useLang()` -- it is an ordinary function, not a component, only
+    ever called from this file's own event handlers. */
+export function validateMarkupPct(pct: number, lang: Lang): string | null {
+  const s = markupSectionStrings(lang)
+  const f = fmt(lang)
+  if (!Number.isFinite(pct) || pct < 0) return s.negativePctError
+  if (pct > MARKUP_PCT_MAX) return s.aboveMaxPctError(f.num(MARKUP_PCT_MAX))
   return null
 }
 
 /** A bare <input type=number> never says whether "7" means 7% or 0.07 --
-    the unit lived only in a preview line an admin can miss. The "٪" sits
-    next to every percent input now, not just in the price-preview text. */
+    the unit lived only in a preview line an admin can miss. The "٪"/"%" sits
+    next to every percent input now, not just in the price-preview text. This
+    is a component, so it reads `useLang()` itself rather than taking the
+    sign as a prop -- it is rendered from a table row's .map() callback in
+    MarkupModelsTable.tsx, which is a normal place for a component (and its
+    own hook call) to render, not the "hook in a loop" case the rules of
+    hooks forbid. */
 export function PercentInput({ value, onChange, placeholder, maxWidth = 110, disabled }: {
   value: string
   onChange: (v: string) => void
@@ -94,6 +105,8 @@ export function PercentInput({ value, onChange, placeholder, maxWidth = 110, dis
   maxWidth?: number
   disabled?: boolean
 }) {
+  const lang = useLang()
+  const s = markupSectionStrings(lang)
   return (
     <div className="flex items-center gap-1.5" style={{ maxWidth }}>
       <input
@@ -107,12 +120,15 @@ export function PercentInput({ value, onChange, placeholder, maxWidth = 110, dis
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
       />
-      <span className="text-sm text-muted" aria-hidden="true">٪</span>
+      <span className="text-sm text-muted" aria-hidden="true">{s.percentSign}</span>
     </div>
   )
 }
 
 export default function MarkupSection({ api }: MarkupSectionProps) {
+  const lang = useLang()
+  const s = markupSectionStrings(lang)
+  const f = fmt(lang)
   const [loading, setLoading] = useState(true)
   // Distinct from an empty table: a failed load must not look like "zero
   // models exist" once the toast fades (see PlansSection's plansError).
@@ -150,27 +166,27 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
       for (const r of m) next[r.id] = r.markup_pct == null ? '' : String(r.markup_pct)
       setRowInputs(next)
     } catch (err) {
-      const msg = errMessage(err, 'خطا در دریافت اطلاعات درصد سود')
+      const msg = errMessage(err, s.loadErrorToast)
       setLoadError(msg)
       toast(msg, 'error')
     } finally {
       setLoading(false)
     }
-  }, [api])
+  }, [api, s.loadErrorToast])
 
   useEffect(() => { load() }, [load])
 
   const saveGlobal = async () => {
     const pct = Number(globalInput)
-    const err = validateMarkupPct(pct)
+    const err = validateMarkupPct(pct, lang)
     if (err) { toast(err, 'error'); return }
     setSavingGlobal(true)
     try {
       await api('/api/admin/markup/global', { method: 'POST', body: JSON.stringify({ markup_pct: pct }) })
-      toast('درصد سراسری ذخیره شد', 'success')
+      toast(s.globalSavedToast, 'success')
       await load()
     } catch (err) {
-      toast(errMessage(err, 'ذخیره درصد سراسری ناموفق بود'), 'error')
+      toast(errMessage(err, s.globalSaveFailedToast), 'error')
     } finally {
       setSavingGlobal(false)
     }
@@ -180,7 +196,7 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
     const raw = (rowInputs[id] ?? '').trim()
     const pct = raw === '' ? null : Number(raw)
     if (pct !== null) {
-      const err = validateMarkupPct(pct)
+      const err = validateMarkupPct(pct, lang)
       if (err) { toast(err, 'error'); return }
     }
     setSavingRow(id)
@@ -188,10 +204,10 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
       await api(`/api/admin/markup/models/${encodeURIComponent(id)}`, {
         method: 'POST', body: JSON.stringify({ markup_pct: pct }),
       })
-      toast(pct === null ? 'override پاک شد — این مدل درصد سراسری را دارد' : 'override این مدل ذخیره شد', 'success')
+      toast(pct === null ? s.overrideClearedToast : s.overrideSavedToast, 'success')
       await load()
     } catch (err) {
-      toast(errMessage(err, 'ذخیره ناموفق بود'), 'error')
+      toast(errMessage(err, s.rowSaveFailedToast), 'error')
     } finally {
       setSavingRow(null)
     }
@@ -220,13 +236,13 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
 
   const bulkApply = async (clear: boolean) => {
     if (selected.size === 0) {
-      toast('حداقل یک مدل را انتخاب کنید', 'error')
+      toast(s.selectAtLeastOneToast, 'error')
       return
     }
     let pct: number | null = null
     if (!clear) {
       pct = Number(bulkInput)
-      const err = validateMarkupPct(pct)
+      const err = validateMarkupPct(pct, lang)
       if (err) { toast(err, 'error'); return }
     }
     setBulkSaving(true)
@@ -236,11 +252,11 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
         body: JSON.stringify({ ids: Array.from(selected), markup_pct: pct }),
       })
       const body = await r.json()
-      toast(`${faNum(body.updated ?? selected.size)} مدل به‌روزرسانی شد`, 'success')
+      toast(s.bulkUpdatedToast(f.num(body.updated ?? selected.size)), 'success')
       setSelected(new Set())
       await load()
     } catch (err) {
-      toast(errMessage(err, 'اعمال گروهی ناموفق بود'), 'error')
+      toast(errMessage(err, s.bulkFailedToast), 'error')
     } finally {
       setBulkSaving(false)
     }
@@ -248,56 +264,51 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
 
   return (
     <div className="space-y-6">
-      <SectionHeader
-        title="درصد سود"
-        subtitle="یک درصد سراسری روی همهٔ مدل‌ها، به‌علاوهٔ امکان override روی هر مدل — مدل بدون override از درصد سراسری ارث می‌برد"
-      />
+      <SectionHeader title={s.title} subtitle={s.subtitle} />
 
       {/* Global percentage */}
       <div className="admin-card">
-        <h3 className="font-semibold text-sm mb-1 text-primary">درصد سراسری</h3>
-        <p className="text-xs text-muted mb-4">
-          روی همهٔ مدل‌هایی که override اختصاصی ندارند اعمال می‌شود.
-        </p>
+        <h3 className="font-semibold text-sm mb-1 text-primary">{s.globalTitle}</h3>
+        <p className="text-xs text-muted mb-4">{s.globalSubtitle}</p>
         <div className="flex items-end gap-4 flex-wrap">
-          <Field label="درصد سود سراسری">
+          <Field label={s.globalFieldLabel}>
             <PercentInput value={globalInput} onChange={setGlobalInput} maxWidth={140} />
           </Field>
           <button className="btn" onClick={saveGlobal} disabled={savingGlobal}>
             {savingGlobal ? (
               <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-            ) : (<><Icon name="check" size={16} /><span>ذخیره درصد سراسری</span></>)}
+            ) : (<><Icon name="check" size={16} /><span>{s.saveGlobal}</span></>)}
           </button>
           <span className="text-xs text-muted">
-            نمونه: قیمت پایه {faPrice(1_000_000)} با این درصد می‌شود {faPrice(previewPrice(1_000_000, Number(globalInput) || 0))}
+            {s.globalPreview(f.price(1_000_000), f.price(previewPrice(1_000_000, Number(globalInput) || 0)))}
           </span>
         </div>
       </div>
 
       {/* Bulk edit */}
       <div className="admin-card">
-        <h3 className="font-semibold text-sm mb-1 text-primary">ویرایش گروهی</h3>
+        <h3 className="font-semibold text-sm mb-1 text-primary">{s.bulkTitle}</h3>
         <p className="text-xs text-muted mb-4">
-          {selected.size > 0 ? `${faNum(selected.size)} مدل انتخاب شده` : 'از جدول زیر مدل‌ها را انتخاب کنید'}
+          {selected.size > 0 ? s.bulkSelected(f.num(selected.size)) : s.bulkNoneSelected}
         </p>
         <div className="flex items-end gap-4 flex-wrap">
-          <Field label="درصد سود برای مدل‌های انتخاب‌شده">
+          <Field label={s.bulkFieldLabel}>
             <PercentInput value={bulkInput} onChange={setBulkInput} maxWidth={140} />
           </Field>
           <button className="btn" onClick={() => bulkApply(false)} disabled={bulkSaving || selected.size === 0}>
             {bulkSaving ? (
               <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-            ) : (<><Icon name="check" size={16} /><span>اعمال روی انتخاب‌شده‌ها</span></>)}
+            ) : (<><Icon name="check" size={16} /><span>{s.applyToSelected}</span></>)}
           </button>
           <button
             className="btn btn-sm"
             style={{ background: 'var(--bg-elevated)' }}
             onClick={() => bulkApply(true)}
             disabled={bulkSaving || selected.size === 0}
-            title="override این مدل‌ها را پاک می‌کند تا دوباره از درصد سراسری ارث ببرند"
+            title={s.clearOverrideTitle}
           >
             <Icon name="trash" size={14} />
-            <span>پاک کردن override</span>
+            <span>{s.clearOverride}</span>
           </button>
         </div>
       </div>

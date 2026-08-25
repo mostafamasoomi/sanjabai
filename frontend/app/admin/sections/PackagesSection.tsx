@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from '@/components/ui'
-import { faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/adminI18n'
 import { SectionHeader } from './shared'
 import PackagesRow from './PackagesRow'
 import PackagesCreateForm from './PackagesCreateForm'
@@ -11,6 +12,7 @@ import {
   toDraft, isLossPath, EMPTY_NEW_PACKAGE,
   type Draft, type PackageRow, type PackagesSectionProps, type NewPackageDraft,
 } from './PackagesTypes'
+import { packagesSectionStrings } from './PackagesSection.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Packages — GapGPT-style credit packages: a Toman top-up that can also
@@ -56,6 +58,10 @@ import {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function PackagesSection({ api }: PackagesSectionProps) {
+  const lang = useLang()
+  const s = packagesSectionStrings(lang)
+  const f = fmt(lang)
+
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<PackageRow[]>([])
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
@@ -80,13 +86,13 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
       for (const p of data) next[p.id] = toDraft(p)
       setDrafts(next)
     } catch (err) {
-      const msg = err instanceof Error && err.message !== 'unauthorized' ? err.message : 'خطا در دریافت بسته‌ها'
+      const msg = err instanceof Error && err.message !== 'unauthorized' ? err.message : s.loadError
       setLoadError(msg)
       toast(msg, 'error')
     } finally {
       setLoading(false)
     }
-  }, [api])
+  }, [api, s.loadError])
 
   useEffect(() => { load() }, [load])
 
@@ -106,14 +112,11 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
     const d = drafts[id]
     if (!d) return
     if (!d.name_fa.trim() || !d.name_en.trim()) {
-      toast('نام فارسی و انگلیسی الزامی است', 'error')
+      toast(s.nameRequired, 'error')
       return
     }
     if (isLossPath(d)) {
-      toast(
-        'بسته‌ای که سهمیهٔ درخواست یا توکن دارد باید سقف هزینهٔ هر درخواست هم داشته باشد، وگرنه مسیر ضررده است',
-        'error',
-      )
+      toast(s.lossPathToastMessage, 'error')
       return
     }
     const n = (s: string) => (s.trim() === '' ? null : Number(s))
@@ -135,10 +138,10 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
       await api(`/api/admin/packages/${encodeURIComponent(id)}`, {
         method: 'POST', body: JSON.stringify(payload),
       })
-      toast('بسته ذخیره شد', 'success')
+      toast(s.saved, 'success')
       await load()
     } catch (err) {
-      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'ذخیره ناموفق بود', 'error')
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : s.saveError, 'error')
     } finally {
       setSaving(null)
     }
@@ -146,16 +149,13 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
 
   const createPackage = async () => {
     const id = newPackage.id.trim()
-    if (!id) { toast('شناسهٔ بسته الزامی است', 'error'); return }
+    if (!id) { toast(s.idRequired, 'error'); return }
     if (!newPackage.name_fa.trim() || !newPackage.name_en.trim()) {
-      toast('نام فارسی و انگلیسی الزامی است', 'error')
+      toast(s.nameRequired, 'error')
       return
     }
     if (isLossPath(newPackage)) {
-      toast(
-        'بسته‌ای که سهمیهٔ درخواست یا توکن دارد باید سقف هزینهٔ هر درخواست هم داشته باشد، وگرنه مسیر ضررده است',
-        'error',
-      )
+      toast(s.lossPathToastMessage, 'error')
       return
     }
     const n = (s: string) => (s.trim() === '' ? null : Number(s))
@@ -178,12 +178,12 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
           validity_days: n(newPackage.validity_days),
         }),
       })
-      toast('بستهٔ جدید ایجاد شد', 'success')
+      toast(s.created, 'success')
       setNewPackage(EMPTY_NEW_PACKAGE)
       setShowCreate(false)
       await load()
     } catch (err) {
-      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'ایجاد بسته ناموفق بود', 'error')
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : s.createError, 'error')
     } finally {
       setCreating(false)
     }
@@ -192,22 +192,22 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
   return (
     <div className="space-y-6">
       <SectionHeader
-        title="بسته‌های اعتباری"
-        subtitle={`${faNum(rows.length)} بسته — پرداختی، اعتبار واریزی، سهمیهٔ درخواست/توکن و سقف پیام ۵ ساعته چهار عدد جداگانه‌اند`}
+        title={s.title}
+        subtitle={s.subtitle(f.num(rows.length))}
       />
 
       <PackagesPremiumThreshold api={api} />
 
       <div className="admin-card" style={{ borderRight: '3px solid var(--accent)' }}>
-        <h3 className="font-semibold text-sm mb-2 text-primary">چهار عدد، چهار معنای متفاوت</h3>
+        <h3 className="font-semibold text-sm mb-2 text-primary">{s.fourNumbersTitle}</h3>
         <ul className="text-xs text-muted space-y-1" style={{ listStyle: 'disc', paddingRight: 18 }}>
-          <li><b className="text-secondary">مبلغ پرداختی</b> (base_amount): مبلغی که کاربر واقعاً پرداخت می‌کند.</li>
-          <li><b className="text-secondary">مبلغ واریزی به کیف پول</b> (total_credits): مبلغ نهایی (شامل پاداش) که به کیف پول کاربر اضافه می‌شود — این عدد از قبل شامل پاداش است، جمع‌کردن درصد پاداش رویش دوباره اشتباه است.</li>
-          <li><b className="text-secondary">سهمیهٔ درخواست/توکن</b>: عددی کاملاً جدا از تومان — تعداد کل درخواست یا توکنی که این بسته می‌خرد و به کاربر سهمیهٔ مستقل از کیف پول می‌دهد.</li>
-          <li><b className="text-secondary">سقف پیام ۵ ساعته</b>: محدودیت نرخ ارسال پیام، ربطی به سهمیهٔ بالا ندارد — کیف پول همیشه هزینهٔ این پیام‌ها را می‌پردازد؛ فقط تعداد پیام در هر پنجرهٔ ۵ ساعته را محدود می‌کند. ستون «از این، روی مدل گران» زیرمجموعهٔ همین سقف است، نه عددی جدا و اضافه.</li>
+          <li><b className="text-secondary">{s.bulletPaid}</b> (base_amount){s.bulletPaidText}</li>
+          <li><b className="text-secondary">{s.bulletCredited}</b> (total_credits){s.bulletCreditedText}</li>
+          <li><b className="text-secondary">{s.bulletQuota}</b>{s.bulletQuotaText}</li>
+          <li><b className="text-secondary">{s.bulletRateLimit}</b>{s.bulletRateLimitText}</li>
         </ul>
         <p className="text-xs mt-2" style={{ color: 'var(--warning, #f59e0b)' }}>
-          🔴 بسته‌ای که سهمیهٔ درخواست یا توکن دارد باید «سقف هزینهٔ هر درخواست» هم داشته باشد — وگرنه کاربر می‌تواند کل سهمیه را روی گران‌ترین مدل خرج کند و هر درخواست ضررده شود. سرور این را رد می‌کند؛ این فرم فقط از قبل هشدار می‌دهد. سقف پیام ۵ ساعته و زیرمجموعهٔ آن روی مدل گران این قاعده را ندارند، چون کیف پول همیشه پرداخت می‌کند.
+          {s.lossPathWarning}
         </p>
       </div>
 
@@ -216,35 +216,35 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
           <table className="admin-table w-full text-sm">
             <thead>
               <tr>
-                <th className="text-right p-3">بسته</th>
-                <th className="text-right p-3">فعال</th>
-                <th className="text-right p-3">مبلغ پرداختی</th>
-                <th className="text-right p-3">مبلغ واریزی به کیف پول</th>
-                <th className="text-right p-3">درصد پاداش</th>
-                <th className="text-right p-3">سهمیهٔ درخواست</th>
-                <th className="text-right p-3">سهمیهٔ توکن</th>
-                <th className="text-right p-3">سقف هزینهٔ هر درخواست</th>
+                <th className="text-right p-3">{s.colPackage}</th>
+                <th className="text-right p-3">{s.colActive}</th>
+                <th className="text-right p-3">{s.colBaseAmount}</th>
+                <th className="text-right p-3">{s.colTotalCredits}</th>
+                <th className="text-right p-3">{s.colBonusPercent}</th>
+                <th className="text-right p-3">{s.colRequestQuota}</th>
+                <th className="text-right p-3">{s.colTokenQuota}</th>
+                <th className="text-right p-3">{s.colMaxCostPerRequest}</th>
                 <th className="text-right p-3">
-                  <div>سقف پیام</div>
-                  <div className="text-xs text-muted font-normal">۵ ساعته</div>
+                  <div>{s.colRateLimit}</div>
+                  <div className="text-xs text-muted font-normal">{s.colRateLimitSub}</div>
                 </th>
-                <th className="text-right p-3" title="زیرمجموعهٔ ستون «سقف پیام» است، نه عددی جدا و اضافه">
-                  <div>از این، روی مدل گران</div>
-                  <div className="text-xs text-muted font-normal">۵ ساعته</div>
+                <th className="text-right p-3" title={s.colPremiumRateLimitTitle}>
+                  <div>{s.colPremiumRateLimit}</div>
+                  <div className="text-xs text-muted font-normal">{s.colRateLimitSub}</div>
                 </th>
-                <th className="text-right p-3">مدت اعتبار (روز)</th>
-                <th className="text-right p-3">عملیات</th>
+                <th className="text-right p-3">{s.colValidityDays}</th>
+                <th className="text-right p-3">{s.colActions}</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={11} className="p-6 text-center text-sm text-muted">در حال بارگذاری…</td></tr>
+                <tr><td colSpan={11} className="p-6 text-center text-sm text-muted">{s.loading}</td></tr>
               ) : loadError ? (
                 <tr><td colSpan={11} className="p-6 text-center text-sm" style={{ color: 'var(--danger, #ef4444)' }}>
-                  {loadError} — <button className="underline" onClick={load}>تلاش دوباره</button>
+                  {loadError} — <button className="underline" onClick={load}>{s.retry}</button>
                 </td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={11} className="p-6 text-center text-sm text-muted">بسته‌ای یافت نشد</td></tr>
+                <tr><td colSpan={11} className="p-6 text-center text-sm text-muted">{s.noPackages}</td></tr>
               ) : (
                 rows.map((p) => {
                   const d = drafts[p.id]
@@ -264,13 +264,12 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
         </div>
 
         <p className="text-xs text-muted mt-3">
-          «از این، روی مدل گران» از داخل «سقف پیام» شمرده می‌شود، نه اضافه بر آن — مثلاً کاربری با ۴۰ و ۵، در هر
-          پنجرهٔ ۵ ساعته حداکثر ۴۰ پیام می‌فرستد که حداکثر ۵ تای آن‌ها می‌تواند روی مدل‌های گران باشد.
+          {s.premiumFootnote}
         </p>
 
         <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
           <button className="text-xs underline" onClick={() => setShowCreate((v) => !v)}>
-            {showCreate ? 'بستن فرم بستهٔ جدید' : '+ افزودن بسته'}
+            {showCreate ? s.closeCreateForm : s.openCreateForm}
           </button>
           {showCreate && (
             <PackagesCreateForm

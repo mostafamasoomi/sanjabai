@@ -16,12 +16,9 @@ export type ModelsTab =
  * what it COSTS. The order inside each group is the order the work happens
  * in -- discover a model, map it, measure it, then price it.
  *
- * `label` stays the Persian string ModelsModule.tsx already renders via
- * `t.label` -- unchanged in type and value, so that file (out of this
- * task's scope) keeps compiling and rendering as-is. `labelEn` is the
- * bilingual sibling AdminPanel.tsx's own sub-tab picker (if any) or a
- * future language-aware consumer of MODELS_TABS reads via the `t()` helper
- * in ./adminLabels. */
+ * `label` is the Persian string and `labelEn` its sibling; ModelsModule.tsx
+ * renders whichever the active language calls for via the `t()` helper in
+ * ../adminLabels. */
 export const MODELS_TABS: { key: ModelsTab; label: string; labelEn: string; group: 'catalog' | 'pricing' }[] = [
   { key: 'catalog', label: 'کاتالوگ و عملیات', labelEn: 'Catalog & Operations', group: 'catalog' },
   { key: 'logical', label: 'مدل‌های منطقی', labelEn: 'Logical Models', group: 'catalog' },

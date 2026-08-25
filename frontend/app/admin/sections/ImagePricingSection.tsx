@@ -3,9 +3,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
-import { faNum, faPrice, faPercent } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/adminI18n'
 import { SectionHeader, Field } from './shared'
 import { availabilityLabel } from './availability'
+import { imagePricingStrings } from './ImagePricingSection.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Image pricing — per-model base Toman price for POST /v1/images/generations
@@ -54,6 +56,10 @@ function previewPrice(base: number | null | undefined, pct: number | null): numb
 }
 
 export default function ImagePricingSection({ api }: ImagePricingSectionProps) {
+  const lang = useLang()
+  const s = imagePricingStrings(lang)
+  const f = fmt(lang)
+
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<MediaModelRow[]>([])
   const [rowInputs, setRowInputs] = useState<Record<string, string>>({})
@@ -76,13 +82,13 @@ export default function ImagePricingSection({ api }: ImagePricingSectionProps) {
       for (const r of m) next[r.id] = r.image_price_per_unit == null ? '' : String(r.image_price_per_unit)
       setRowInputs(next)
     } catch (err) {
-      const msg = err instanceof Error && err.message !== 'unauthorized' ? err.message : 'خطا در دریافت مدل‌های تصویری'
+      const msg = err instanceof Error && err.message !== 'unauthorized' ? err.message : s.loadError
       setLoadError(msg)
       toast(msg, 'error')
     } finally {
       setLoading(false)
     }
-  }, [api])
+  }, [api, s.loadError])
 
   useEffect(() => { load() }, [load])
 
@@ -91,12 +97,12 @@ export default function ImagePricingSection({ api }: ImagePricingSectionProps) {
     let price: number | null = null
     if (raw !== '') {
       if (!/^-?\d+$/.test(raw)) {
-        toast('قیمت باید عدد صحیح تومان باشد (اعشار مجاز نیست)', 'error')
+        toast(s.priceNotInteger, 'error')
         return
       }
       price = Number(raw)
       if (price < 0) {
-        toast('قیمت نمی‌تواند منفی باشد', 'error')
+        toast(s.priceNegative, 'error')
         return
       }
     }
@@ -108,10 +114,10 @@ export default function ImagePricingSection({ api }: ImagePricingSectionProps) {
       await api(`/api/admin/catalog/models/${encodeURIComponent(id)}/image-price`, {
         method: 'POST', body: JSON.stringify({ image_price_per_unit: price }),
       })
-      toast(price === null ? 'قیمت پاک شد — این مدل دیگر قابل ارائه نیست' : 'قیمت این مدل ذخیره شد', 'success')
+      toast(price === null ? s.priceCleared : s.priceSaved, 'success')
       await load()
     } catch (err) {
-      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'ذخیره ناموفق بود', 'error')
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : s.saveErrorGeneric, 'error')
     } finally {
       setSavingRow(null)
     }
@@ -128,25 +134,25 @@ export default function ImagePricingSection({ api }: ImagePricingSectionProps) {
   return (
     <div className="space-y-6">
       <SectionHeader
-        title="قیمت‌گذاری تصویر"
-        subtitle="قیمت پایه (تومان) برای هر تصویر تولیدشده — مدل بدون قیمت هرگز به کاربر ارائه نمی‌شود"
+        title={s.title}
+        subtitle={s.subtitle}
       />
 
       {unpricedCount > 0 && !loading && (
         <div className="admin-card admin-row gap-3" style={{ borderRight: '3px solid var(--warning)' }}>
           <Icon name="notification" size={18} style={{ color: 'var(--warning)' }} />
           <span className="text-sm" style={{ color: 'var(--warning)' }}>
-            {faNum(unpricedCount)} مدل تصویری بدون قیمت — تا قیمت‌گذاری نشوند قابل ارائه نیستند
+            {s.unpriced(f.num(unpricedCount))}
           </span>
         </div>
       )}
 
       <div className="admin-card">
         <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
-          <h3 className="font-semibold text-sm text-primary">مدل‌های تصویری</h3>
+          <h3 className="font-semibold text-sm text-primary">{s.sectionTitle}</h3>
           <input
             className="input"
-            placeholder="جستجوی مدل…"
+            placeholder={s.searchPlaceholder}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             style={{ maxWidth: 220 }}
@@ -156,32 +162,32 @@ export default function ImagePricingSection({ api }: ImagePricingSectionProps) {
           <table className="admin-table w-full text-sm">
             <thead>
               <tr>
-                <th className="text-right p-3">مدل</th>
-                <th className="text-right p-3">وضعیت</th>
-                <th className="text-right p-3">قیمت پایه (تومان)</th>
+                <th className="text-right p-3">{s.colModel}</th>
+                <th className="text-right p-3">{s.colStatus}</th>
+                <th className="text-right p-3">{s.colBasePrice}</th>
                 {/* Read-only here. The column is `model_catalog.markup_pct`, written
                     only from the «درصد سود» sub-tab -- an admin looking at a wrong
                     final price on this screen has no way to know which control
                     produced it unless the screen says so. Same reason PricingSection
                     points at «عملیات کاتالوگ» for the availability it cannot change. */}
                 <th className="text-right p-3">
-                  درصد سود
-                  <span className="block text-[10px] font-normal text-muted">از تب «درصد سود»</span>
+                  {s.colMarkup}
+                  <span className="block text-[10px] font-normal text-muted">{s.colMarkupSub}</span>
                 </th>
-                <th className="text-right p-3">قیمت نهایی هر تصویر</th>
-                <th className="text-right p-3">قیمت جدید</th>
-                <th className="text-right p-3">عملیات</th>
+                <th className="text-right p-3">{s.colFinalPrice}</th>
+                <th className="text-right p-3">{s.colNewPrice}</th>
+                <th className="text-right p-3">{s.colActions}</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} className="p-6 text-center text-sm text-muted">در حال بارگذاری…</td></tr>
+                <tr><td colSpan={7} className="p-6 text-center text-sm text-muted">{s.loading}</td></tr>
               ) : loadError ? (
                 <tr><td colSpan={7} className="p-6 text-center text-sm" style={{ color: 'var(--danger, #ef4444)' }}>
-                  {loadError} — <button className="underline" onClick={load}>تلاش دوباره</button>
+                  {loadError} — <button className="underline" onClick={load}>{s.retry}</button>
                 </td></tr>
               ) : visibleRows.length === 0 ? (
-                <tr><td colSpan={7} className="p-6 text-center text-sm text-muted">مدل تصویری یافت نشد</td></tr>
+                <tr><td colSpan={7} className="p-6 text-center text-sm text-muted">{s.noModels}</td></tr>
               ) : (
                 visibleRows.map((r) => {
                   const draft = rowInputs[r.id] ?? ''
@@ -195,24 +201,24 @@ export default function ImagePricingSection({ api }: ImagePricingSectionProps) {
                         <div className="text-xs font-mono text-muted">{r.id}</div>
                       </td>
                       <td className="p-3">
-                        <span className="badge">{availabilityLabel(r.availability)}</span>
+                        <span className="badge">{availabilityLabel(r.availability, lang)}</span>
                       </td>
                       <td className="p-3 text-xs">
                         {r.image_price_per_unit == null ? (
-                          <span className="text-muted">تعیین نشده</span>
+                          <span className="text-muted">{s.notSet}</span>
                         ) : (
-                          faPrice(r.image_price_per_unit)
+                          f.price(r.image_price_per_unit)
                         )}
                       </td>
                       <td className="p-3 text-xs">
                         {r.markup_pct == null ? (
-                          <span className="text-muted">سراسری</span>
+                          <span className="text-muted">{s.global}</span>
                         ) : (
-                          faPercent(r.markup_pct)
+                          f.percent(r.markup_pct)
                         )}
                       </td>
                       <td className="p-3 text-xs">
-                        {finalPrice == null ? <span className="text-muted">—</span> : faPrice(finalPrice)}
+                        {finalPrice == null ? <span className="text-muted">—</span> : f.price(finalPrice)}
                       </td>
                       <td className="p-3">
                         <input
@@ -220,7 +226,7 @@ export default function ImagePricingSection({ api }: ImagePricingSectionProps) {
                           type="number"
                           min={0}
                           step={1}
-                          placeholder="بدون قیمت"
+                          placeholder={s.noPricePlaceholder}
                           value={draft}
                           onChange={(e) => setRowInputs((prev) => ({ ...prev, [r.id]: e.target.value }))}
                           style={{ maxWidth: 130 }}
@@ -231,7 +237,7 @@ export default function ImagePricingSection({ api }: ImagePricingSectionProps) {
                           className="btn btn-sm"
                           onClick={() => saveRowPrice(r.id)}
                           disabled={savingRow === r.id}
-                          title={draft.trim() === '' ? 'خالی = پاک کردن قیمت (مدل قابل ارائه نمی‌شود)' : 'ذخیره قیمت'}
+                          title={draft.trim() === '' ? s.saveTitleCleared : s.saveTitle}
                         >
                           {savingRow === r.id ? (
                             <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />

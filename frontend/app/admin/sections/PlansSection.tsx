@@ -3,8 +3,10 @@
 import { Fragment, useState, useEffect, useCallback } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
-import { faNum, faPrice, faDate } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/adminI18n'
 import { SectionHeader, Field, NumInput } from './shared'
+import { plansStrings } from './PlansSection.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Plans & Subscriptions — first frontend consumer of backend/admin.py's
@@ -119,6 +121,10 @@ const EMPTY_NEW_PLAN: PlanDraft & { id: string } = {
 const SUB_PAGE_SIZE = 50
 
 export default function PlansSection({ api }: PlansSectionProps) {
+  const lang = useLang()
+  const s = plansStrings(lang)
+  const f = fmt(lang)
+
   // ── Plans ──
   const [plansLoading, setPlansLoading] = useState(true)
   const [plansError, setPlansError] = useState<string | null>(null)
@@ -141,11 +147,11 @@ export default function PlansSection({ api }: PlansSectionProps) {
       for (const p of data) next[p.id] = toPlanDraft(p)
       setDrafts(next)
     } catch (err) {
-      setPlansError(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'خطا در دریافت پلن‌ها')
+      setPlansError(err instanceof Error && err.message !== 'unauthorized' ? err.message : s.loadPlansError)
     } finally {
       setPlansLoading(false)
     }
-  }, [api])
+  }, [api, s.loadPlansError])
 
   useEffect(() => { loadPlans() }, [loadPlans])
 
@@ -161,8 +167,8 @@ export default function PlansSection({ api }: PlansSectionProps) {
   const savePlan = async (id: string) => {
     const d = drafts[id]
     if (!d) return
-    if (!d.name_fa.trim() || !d.name_en.trim()) { toast('نام فارسی و انگلیسی الزامی است', 'error'); return }
-    const n = (s: string) => (s.trim() === '' ? 0 : Number(s))
+    if (!d.name_fa.trim() || !d.name_en.trim()) { toast(s.nameRequired, 'error'); return }
+    const n = (v: string) => (v.trim() === '' ? 0 : Number(v))
     setSavingId(id)
     try {
       await api('/api/admin/plans', {
@@ -174,10 +180,10 @@ export default function PlansSection({ api }: PlansSectionProps) {
           active: d.active, sort_order: n(d.sort_order),
         }),
       })
-      toast('پلن ذخیره شد', 'success')
+      toast(s.planSaved, 'success')
       await loadPlans()
     } catch (err) {
-      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'ذخیره پلن ناموفق بود', 'error')
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : s.planSaveError, 'error')
     } finally {
       setSavingId(null)
     }
@@ -185,9 +191,9 @@ export default function PlansSection({ api }: PlansSectionProps) {
 
   const createPlan = async () => {
     const id = newPlan.id.trim()
-    if (!id) { toast('شناسهٔ پلن الزامی است', 'error'); return }
-    if (!newPlan.name_fa.trim() || !newPlan.name_en.trim()) { toast('نام فارسی و انگلیسی الزامی است', 'error'); return }
-    const n = (s: string) => (s.trim() === '' ? 0 : Number(s))
+    if (!id) { toast(s.planIdRequired, 'error'); return }
+    if (!newPlan.name_fa.trim() || !newPlan.name_en.trim()) { toast(s.nameRequired, 'error'); return }
+    const n = (v: string) => (v.trim() === '' ? 0 : Number(v))
     setCreating(true)
     try {
       await api('/api/admin/plans', {
@@ -199,12 +205,12 @@ export default function PlansSection({ api }: PlansSectionProps) {
           active: newPlan.active, sort_order: n(newPlan.sort_order),
         }),
       })
-      toast('پلن جدید ایجاد شد', 'success')
+      toast(s.planCreated, 'success')
       setNewPlan(EMPTY_NEW_PLAN)
       setShowCreate(false)
       await loadPlans()
     } catch (err) {
-      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'ایجاد پلن ناموفق بود', 'error')
+      toast(err instanceof Error && err.message !== 'unauthorized' ? err.message : s.planCreateError, 'error')
     } finally {
       setCreating(false)
     }
@@ -227,36 +233,35 @@ export default function PlansSection({ api }: PlansSectionProps) {
       setSubs(Array.isArray(body.subscriptions) ? body.subscriptions : [])
       setSubsTotal(typeof body.total === 'number' ? body.total : 0)
     } catch (err) {
-      setSubsError(err instanceof Error && err.message !== 'unauthorized' ? err.message : 'خطا در دریافت اشتراک‌ها')
+      setSubsError(err instanceof Error && err.message !== 'unauthorized' ? err.message : s.loadSubsError)
     } finally {
       setSubsLoading(false)
     }
-  }, [api])
+  }, [api, s.loadSubsError])
 
   useEffect(() => { loadSubs(subsPage) }, [loadSubs, subsPage])
 
   const subsTotalPages = Math.max(1, Math.ceil(subsTotal / SUB_PAGE_SIZE))
 
   return (
-    <div className="space-y-6" dir="rtl">
-      <SectionHeader title="پلن‌ها و اشتراک‌ها" subtitle={`${faNum(plans.length)} پلن — ${faNum(subsTotal)} اشتراک ثبت‌شده`} />
+    <div className="space-y-6">
+      <SectionHeader title={s.headerTitle} subtitle={s.headerSubtitle(f.num(plans.length), f.num(subsTotal))} />
 
       {freePlan && (
         <div className="admin-card" style={{ borderRight: '3px solid var(--danger, #ef4444)' }}>
           <h3 className="font-semibold text-sm mb-2 flex items-center gap-1" style={{ color: 'var(--danger, #ef4444)' }}>
-            <Icon name="warning" size={14} /> تناقض با قاعدهٔ محصول: «هیچ مدل رایگانی نداریم»
+            <Icon name="warning" size={14} /> {s.freeConflictTitle}
           </h3>
           <p className="text-xs text-secondary">
-            پلن با شناسهٔ <b dir="ltr">free</b> در دیتابیس زنده وجود دارد: قیمت ماهانه = <b>{faPrice(freePlan.price_monthly)}</b>،
-            سهمیهٔ توکن ماهانه (monthly_token_quota) = <b>{faNum(freePlan.monthly_token_quota)}</b> توکن
+            {s.freeConflictIdPrefix} <b dir="ltr">free</b> {s.freeConflictExists} <b>{f.price(freePlan.price_monthly)}</b>
+            {s.freeConflictQuotaLabel} <b>{f.num(freePlan.monthly_token_quota)}</b> {s.freeConflictTokenUnit}
             {freePlan.token_quota_monthly != null && freePlan.token_quota_monthly !== freePlan.monthly_token_quota && (
-              <> (ستون قدیمی token_quota_monthly = <b>{faNum(freePlan.token_quota_monthly)}</b>)</>
+              <> {s.freeConflictLegacyNote(f.num(freePlan.token_quota_monthly))}</>
             )}
-            ، is_default = <b>{freePlan.is_default ? 'بله' : 'خیر'}</b>.
+            {s.freeConflictIsDefault} <b>{freePlan.is_default ? s.yes : s.no}</b>.
           </p>
           <p className="text-xs mt-2 text-muted">
-            طبق قاعدهٔ محصول هیچ مدلی رایگان نیست — حتی تأمین رایگان هم پولی فروخته می‌شود. این پلن حذف یا خودکار ویرایش نشد؛
-            فقط اینجا برجسته شده تا مالک محصول تصمیم بگیرد (غیرفعال کردن، تغییر قیمت، یا حذفش).
+            {s.freeConflictExplain}
           </p>
         </div>
       )}
@@ -266,25 +271,25 @@ export default function PlansSection({ api }: PlansSectionProps) {
           <table className="admin-table w-full text-sm">
             <thead>
               <tr>
-                <th className="text-right p-3">پلن</th>
-                <th className="text-right p-3">فعال</th>
-                <th className="text-right p-3">قیمت ماهانه</th>
-                <th className="text-right p-3">سهمیهٔ توکن ماهانه</th>
-                <th className="text-right p-3">سقف روزانه</th>
-                <th className="text-right p-3">صف اولویت</th>
-                <th className="text-right p-3">ترتیب نمایش</th>
-                <th className="text-right p-3">عملیات</th>
+                <th className="text-right p-3">{s.colPlan}</th>
+                <th className="text-right p-3">{s.colActive}</th>
+                <th className="text-right p-3">{s.colPriceMonthly}</th>
+                <th className="text-right p-3">{s.colMonthlyQuota}</th>
+                <th className="text-right p-3">{s.colDailyCap}</th>
+                <th className="text-right p-3">{s.colPriorityQueue}</th>
+                <th className="text-right p-3">{s.colSortOrder}</th>
+                <th className="text-right p-3">{s.colActions}</th>
               </tr>
             </thead>
             <tbody>
               {plansLoading ? (
-                <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">در حال بارگذاری…</td></tr>
+                <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">{s.loading}</td></tr>
               ) : plansError ? (
                 <tr><td colSpan={8} className="p-6 text-center text-sm" style={{ color: 'var(--danger, #ef4444)' }}>
-                  {plansError} — <button className="underline" onClick={loadPlans}>تلاش دوباره</button>
+                  {plansError} — <button className="underline" onClick={loadPlans}>{s.retry}</button>
                 </td></tr>
               ) : plans.length === 0 ? (
-                <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">پلنی یافت نشد</td></tr>
+                <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">{s.noPlans}</td></tr>
               ) : (
                 plans.map((p) => {
                   const d = drafts[p.id]
@@ -294,24 +299,24 @@ export default function PlansSection({ api }: PlansSectionProps) {
                     <Fragment key={p.id}>
                       <tr style={isFree ? { background: 'color-mix(in srgb, var(--danger, #ef4444) 8%, transparent)' } : undefined}>
                         <td className="p-3">
-                          <input className="input mb-1" value={d.name_fa} placeholder="نام فارسی" onChange={(e) => setField(p.id, 'name_fa', e.target.value)} style={{ maxWidth: 160 }} />
-                          <input className="input" value={d.name_en} placeholder="نام انگلیسی" onChange={(e) => setField(p.id, 'name_en', e.target.value)} style={{ maxWidth: 160 }} />
-                          <div className="text-xs font-mono text-muted mt-1" dir="ltr">{p.id}{p.is_default ? ' · پیش‌فرض' : ''}</div>
+                          <input className="input mb-1" value={d.name_fa} placeholder={s.namePlaceholderFa} onChange={(e) => setField(p.id, 'name_fa', e.target.value)} style={{ maxWidth: 160 }} />
+                          <input className="input" value={d.name_en} placeholder={s.namePlaceholderEn} onChange={(e) => setField(p.id, 'name_en', e.target.value)} style={{ maxWidth: 160 }} />
+                          <div className="text-xs font-mono text-muted mt-1" dir="ltr">{p.id}{p.is_default ? s.defaultSuffix : ''}</div>
                           <button className="text-xs text-muted underline mt-1" onClick={() => toggleExpanded(p.id)}>
-                            {expanded.has(p.id) ? 'بستن جزئیات' : 'نمایش جزئیات'}
+                            {expanded.has(p.id) ? s.hideDetails : s.showDetails}
                           </button>
                         </td>
                         <td className="p-3"><input type="checkbox" checked={d.active} onChange={(e) => setField(p.id, 'active', e.target.checked)} /></td>
                         <td className="p-3">
                           <NumInput value={d.price_monthly} onChange={(v) => setField(p.id, 'price_monthly', v)} />
-                          <div className="text-xs text-muted mt-1">{faPrice(Number(d.price_monthly) || 0)}</div>
+                          <div className="text-xs text-muted mt-1">{f.price(Number(d.price_monthly) || 0)}</div>
                         </td>
                         <td className="p-3"><NumInput value={d.monthly_token_quota} onChange={(v) => setField(p.id, 'monthly_token_quota', v)} width={150} /></td>
                         <td className="p-3"><NumInput value={d.daily_token_limit} onChange={(v) => setField(p.id, 'daily_token_limit', v)} width={140} /></td>
                         <td className="p-3"><input type="checkbox" checked={d.priority_queue} onChange={(e) => setField(p.id, 'priority_queue', e.target.checked)} /></td>
                         <td className="p-3"><NumInput value={d.sort_order} onChange={(v) => setField(p.id, 'sort_order', v)} width={80} /></td>
                         <td className="p-3">
-                          <button className="btn btn-sm" onClick={() => savePlan(p.id)} disabled={savingId === p.id} title="ذخیره">
+                          <button className="btn btn-sm" onClick={() => savePlan(p.id)} disabled={savingId === p.id} title={s.save}>
                             {savingId === p.id ? <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" /> : <Icon name="check" size={14} />}
                           </button>
                         </td>
@@ -320,12 +325,12 @@ export default function PlansSection({ api }: PlansSectionProps) {
                         <tr>
                           <td colSpan={8} className="p-3" style={{ background: 'var(--bg-elevated)' }}>
                             <div className="text-xs text-secondary space-y-1">
-                              <p>توضیحات: {p.description || '—'}</p>
-                              <p>قیمت سالانه (price_yearly): {p.price_yearly != null ? faPrice(p.price_yearly) : '—'}</p>
-                              <p>ستون قدیمی token_quota_monthly: {faNum(p.token_quota_monthly)} — اکنون همیشه هم‌زمان با monthly_token_quota ذخیره می‌شود و نباید از آن واگرا شود.</p>
-                              <p>امکانات (features، فقط نمایش): {p.features && p.features.length > 0 ? p.features.join('، ') : '—'}</p>
-                              <p>مدل‌های مجاز (models_allowed، فقط نمایش): {p.models_allowed && p.models_allowed.length > 0 ? p.models_allowed.join('، ') : 'بدون محدودیت'}</p>
-                              <p>ایجاد: {faDate(p.created_at)} — به‌روزرسانی: {faDate(p.updated_at)}</p>
+                              <p>{s.detailDescription(p.description || '—')}</p>
+                              <p>{s.detailYearlyPrice(p.price_yearly != null ? f.price(p.price_yearly) : '—')}</p>
+                              <p>{s.detailLegacyQuota(f.num(p.token_quota_monthly))}</p>
+                              <p>{s.detailFeatures(p.features && p.features.length > 0 ? p.features.join(s.listSeparator) : '—')}</p>
+                              <p>{s.detailModelsAllowed(p.models_allowed && p.models_allowed.length > 0 ? p.models_allowed.join(s.listSeparator) : s.detailUnlimited)}</p>
+                              <p>{s.detailCreatedUpdated(f.date(p.created_at), f.date(p.updated_at))}</p>
                             </div>
                           </td>
                         </tr>
@@ -340,65 +345,65 @@ export default function PlansSection({ api }: PlansSectionProps) {
 
         <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
           <button className="text-xs underline" onClick={() => setShowCreate((v) => !v)}>
-            {showCreate ? 'بستن فرم پلن جدید' : '+ ایجاد پلن جدید'}
+            {showCreate ? s.closeCreateForm : s.openCreateForm}
           </button>
           {showCreate && (
             <div className="mt-3 space-y-3">
               <p className="text-xs text-muted">
-                ستون‌های الزامی <code dir="ltr">name</code>، <code dir="ltr">price_yearly</code> و
+                {s.createFormIntroBefore} <code dir="ltr">name</code>{s.createFormIntroSep} <code dir="ltr">price_yearly</code> {s.createFormIntroAnd}
                 <code dir="ltr" style={{ margin: '0 4px' }}>token_quota_monthly</code>
-                توسط بک‌اند به‌صورت خودکار مقداردهی می‌شوند (قیمت سالانه پیش‌فرض = ۱۲ برابر قیمت ماهانه، مگر جای دیگری تعیین شود).
+                {s.createFormIntroAfter}
               </p>
               <div className="flex flex-wrap gap-3">
-                <Field label="شناسه (id)"><input className="input" dir="ltr" value={newPlan.id} onChange={(e) => setNewPlan({ ...newPlan, id: e.target.value })} style={{ maxWidth: 140 }} /></Field>
-                <Field label="نام فارسی"><input className="input" value={newPlan.name_fa} onChange={(e) => setNewPlan({ ...newPlan, name_fa: e.target.value })} style={{ maxWidth: 150 }} /></Field>
-                <Field label="نام انگلیسی"><input className="input" value={newPlan.name_en} onChange={(e) => setNewPlan({ ...newPlan, name_en: e.target.value })} style={{ maxWidth: 150 }} /></Field>
-                <Field label="قیمت ماهانه"><NumInput value={newPlan.price_monthly} onChange={(v) => setNewPlan({ ...newPlan, price_monthly: v })} /></Field>
-                <Field label="سهمیهٔ توکن ماهانه"><NumInput value={newPlan.monthly_token_quota} onChange={(v) => setNewPlan({ ...newPlan, monthly_token_quota: v })} width={150} /></Field>
-                <Field label="سقف روزانه"><NumInput value={newPlan.daily_token_limit} onChange={(v) => setNewPlan({ ...newPlan, daily_token_limit: v })} width={140} /></Field>
+                <Field label={s.fieldId}><input className="input" dir="ltr" value={newPlan.id} onChange={(e) => setNewPlan({ ...newPlan, id: e.target.value })} style={{ maxWidth: 140 }} /></Field>
+                <Field label={s.fieldNameFa}><input className="input" value={newPlan.name_fa} onChange={(e) => setNewPlan({ ...newPlan, name_fa: e.target.value })} style={{ maxWidth: 150 }} /></Field>
+                <Field label={s.fieldNameEn}><input className="input" value={newPlan.name_en} onChange={(e) => setNewPlan({ ...newPlan, name_en: e.target.value })} style={{ maxWidth: 150 }} /></Field>
+                <Field label={s.fieldPriceMonthly}><NumInput value={newPlan.price_monthly} onChange={(v) => setNewPlan({ ...newPlan, price_monthly: v })} /></Field>
+                <Field label={s.fieldMonthlyQuota}><NumInput value={newPlan.monthly_token_quota} onChange={(v) => setNewPlan({ ...newPlan, monthly_token_quota: v })} width={150} /></Field>
+                <Field label={s.fieldDailyCap}><NumInput value={newPlan.daily_token_limit} onChange={(v) => setNewPlan({ ...newPlan, daily_token_limit: v })} width={140} /></Field>
               </div>
-              <button className="btn btn-sm" onClick={createPlan} disabled={creating}>{creating ? 'در حال ایجاد...' : 'ایجاد پلن'}</button>
+              <button className="btn btn-sm" onClick={createPlan} disabled={creating}>{creating ? s.creating : s.createPlan}</button>
             </div>
           )}
         </div>
       </div>
 
       <div className="admin-card">
-        <h3 className="font-semibold text-sm mb-3 text-primary">اشتراک‌های کاربران</h3>
+        <h3 className="font-semibold text-sm mb-3 text-primary">{s.subsTitle}</h3>
         <div className="overflow-x-auto">
           <table className="admin-table w-full text-sm">
             <thead>
               <tr>
-                <th className="text-right p-3">کاربر</th>
-                <th className="text-right p-3">پلن</th>
-                <th className="text-right p-3">وضعیت</th>
-                <th className="text-right p-3">سهمیهٔ توکن</th>
-                <th className="text-right p-3">توکن مصرف‌شده</th>
-                <th className="text-right p-3">مبلغ پرداختی</th>
-                <th className="text-right p-3">تمدید خودکار</th>
-                <th className="text-right p-3">تاریخ ایجاد</th>
+                <th className="text-right p-3">{s.colUser}</th>
+                <th className="text-right p-3">{s.colPlan}</th>
+                <th className="text-right p-3">{s.colStatus}</th>
+                <th className="text-right p-3">{s.colQuota}</th>
+                <th className="text-right p-3">{s.colUsedTokens}</th>
+                <th className="text-right p-3">{s.colPricePaid}</th>
+                <th className="text-right p-3">{s.colAutoRenew}</th>
+                <th className="text-right p-3">{s.colCreatedAt}</th>
               </tr>
             </thead>
             <tbody>
               {subsLoading ? (
-                <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">در حال بارگذاری…</td></tr>
+                <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">{s.loading}</td></tr>
               ) : subsError ? (
                 <tr><td colSpan={8} className="p-6 text-center text-sm" style={{ color: 'var(--danger, #ef4444)' }}>
-                  {subsError} — <button className="underline" onClick={() => loadSubs(subsPage)}>تلاش دوباره</button>
+                  {subsError} — <button className="underline" onClick={() => loadSubs(subsPage)}>{s.retry}</button>
                 </td></tr>
               ) : subs.length === 0 ? (
-                <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">هیچ اشتراکی ثبت نشده (خروجی زندهٔ سرور: total = ۰)</td></tr>
+                <tr><td colSpan={8} className="p-6 text-center text-sm text-muted">{s.noSubs}</td></tr>
               ) : (
-                subs.map((s) => (
-                  <tr key={s.id}>
-                    <td className="p-3 text-xs" dir="ltr">{s.email || `#${s.user_id ?? '—'}`}</td>
-                    <td className="p-3 text-xs" dir="ltr">{s.plan_id || s.plan}</td>
-                    <td className="p-3 text-xs">{s.status}</td>
-                    <td className="p-3 text-xs">{faNum(s.monthly_token_quota)}</td>
-                    <td className="p-3 text-xs">{faNum(s.tokens_used_this_period)}</td>
-                    <td className="p-3 text-xs">{faPrice(s.price_paid)}</td>
-                    <td className="p-3 text-xs">{s.auto_renew ? 'بله' : 'خیر'}</td>
-                    <td className="p-3 text-xs">{faDate(s.created_at)}</td>
+                subs.map((row) => (
+                  <tr key={row.id}>
+                    <td className="p-3 text-xs" dir="ltr">{row.email || `#${row.user_id ?? '—'}`}</td>
+                    <td className="p-3 text-xs" dir="ltr">{row.plan_id || row.plan}</td>
+                    <td className="p-3 text-xs">{row.status}</td>
+                    <td className="p-3 text-xs">{f.num(row.monthly_token_quota)}</td>
+                    <td className="p-3 text-xs">{f.num(row.tokens_used_this_period)}</td>
+                    <td className="p-3 text-xs">{f.price(row.price_paid)}</td>
+                    <td className="p-3 text-xs">{row.auto_renew ? s.yes : s.no}</td>
+                    <td className="p-3 text-xs">{f.date(row.created_at)}</td>
                   </tr>
                 ))
               )}
@@ -407,10 +412,10 @@ export default function PlansSection({ api }: PlansSectionProps) {
         </div>
         {!subsLoading && !subsError && subsTotal > 0 && (
           <div className="flex items-center justify-between mt-3 text-xs text-muted">
-            <span>صفحهٔ {faNum(subsPage)} از {faNum(subsTotalPages)} ({faNum(subsTotal)} اشتراک)</span>
+            <span>{s.subsPage(f.num(subsPage), f.num(subsTotalPages), f.num(subsTotal))}</span>
             <div className="flex gap-2">
-              <button className="btn btn-sm" onClick={() => setSubsPage((p) => Math.max(1, p - 1))} disabled={subsPage <= 1}>قبلی</button>
-              <button className="btn btn-sm" onClick={() => setSubsPage((p) => Math.min(subsTotalPages, p + 1))} disabled={subsPage >= subsTotalPages}>بعدی</button>
+              <button className="btn btn-sm" onClick={() => setSubsPage((p) => Math.max(1, p - 1))} disabled={subsPage <= 1}>{s.prev}</button>
+              <button className="btn btn-sm" onClick={() => setSubsPage((p) => Math.min(subsTotalPages, p + 1))} disabled={subsPage >= subsTotalPages}>{s.next}</button>
             </div>
           </div>
         )}

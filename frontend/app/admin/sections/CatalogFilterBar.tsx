@@ -1,8 +1,10 @@
 'use client'
 
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
-import { AVAILABILITY_OPTIONS, AVAILABILITY_FA, AVAILABILITY_COLOR, type Availability } from './availability'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/adminI18n'
+import { AVAILABILITY_COLOR, AVAILABILITY_OPTIONS, availabilityLabel, type Availability } from './availability'
+import { catalogFilterStrings } from './CatalogFilterBar.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    The one control strip for «عملیات کاتالوگ مدل‌ها»: filters and counters on
@@ -42,7 +44,9 @@ interface CatalogFilterBarProps {
 /** A counter as a chip rather than a card: a coloured dot, a label, a number.
  *  `tabular-nums` so the digits do not shift width as the counts change
  *  during a bulk live test. */
-function CountChip({ color, label, value }: { color: string; label: string; value: number }) {
+function CountChip({ color, label, value, num }: {
+  color: string; label: string; value: number; num: (n: number) => string
+}) {
   return (
     <span
       className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs whitespace-nowrap"
@@ -50,7 +54,7 @@ function CountChip({ color, label, value }: { color: string; label: string; valu
     >
       <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} aria-hidden />
       <span className="text-muted">{label}</span>
-      <span className="font-bold text-primary tabular-nums">{faNum(value)}</span>
+      <span className="font-bold text-primary tabular-nums">{num(value)}</span>
     </span>
   )
 }
@@ -63,11 +67,19 @@ export default function CatalogFilterBar({
   search, onSearch, availFilter, onAvailFilter, probeFilter, onProbeFilter,
   onReload, loading, matched, total, counts, probeCounts,
 }: CatalogFilterBarProps) {
+  const lang = useLang()
+  const s = catalogFilterStrings(lang)
+  const f = fmt(lang)
+  const chip = (n: number) => f.num(n)
+
+  // No `dir` of its own any more: it inherits from the panel root, which
+  // follows the language. A hard-coded dir="rtl" here put the English
+  // controls in a right-to-left strip inside a left-to-right panel.
   return (
-    <div className="admin-card admin-row gap-3" dir="rtl">
+    <div className="admin-card admin-row gap-3">
       <input
         className="input"
-        placeholder="جستجو در نام، شناسه، تأمین‌کننده…"
+        placeholder={s.searchPlaceholder}
         value={search}
         onChange={(e) => onSearch(e.target.value)}
         style={{ minWidth: 200, flex: '1 1 200px' }}
@@ -78,8 +90,10 @@ export default function CatalogFilterBar({
         onChange={(e) => onAvailFilter(e.target.value as 'all' | Availability)}
         style={{ maxWidth: 160 }}
       >
-        <option value="all">همهٔ وضعیت‌ها</option>
-        {AVAILABILITY_OPTIONS.map((a) => <option key={a} value={a}>{AVAILABILITY_FA[a]}</option>)}
+        <option value="all">{s.allAvailability}</option>
+        {AVAILABILITY_OPTIONS.map((a) => (
+          <option key={a} value={a}>{availabilityLabel(a, lang)}</option>
+        ))}
       </select>
       <select
         className="input"
@@ -87,32 +101,32 @@ export default function CatalogFilterBar({
         onChange={(e) => onProbeFilter(e.target.value as ProbeFilter)}
         style={{ maxWidth: 190 }}
       >
-        <option value="all">همهٔ مدل‌ها</option>
-        <option value="confirmed">پروب تأییدشده</option>
-        <option value="unprobed">بدون پروب موفق</option>
-        <option value="ready">آمادهٔ ارائه (پروب + قیمت + شناسهٔ عمومی)</option>
+        <option value="all">{s.allModels}</option>
+        <option value="confirmed">{s.probeConfirmed}</option>
+        <option value="unprobed">{s.probeUnconfirmed}</option>
+        <option value="ready">{s.probeReady}</option>
       </select>
       <button className="btn btn-sm" onClick={onReload} disabled={loading}>
-        <Icon name="refresh" size={14} /> بازخوانی
+        <Icon name="refresh" size={14} /> {s.reload}
       </button>
       <span className="text-xs text-muted whitespace-nowrap">
-        {faNum(matched)} از {faNum(total)} مدل مطابق فیلتر
+        {s.matched(f.num(matched), f.num(total))}
       </span>
 
       <Divider />
 
-      <CountChip color={AVAILABILITY_COLOR.available} label="در دسترس" value={counts.available || 0} />
-      <CountChip color={AVAILABILITY_COLOR.degraded} label="کاهش‌یافته" value={counts.degraded || 0} />
-      <CountChip color={AVAILABILITY_COLOR.maintenance} label="در تعمیر" value={counts.maintenance || 0} />
-      <CountChip color={AVAILABILITY_COLOR.disabled} label="غیرفعال" value={counts.disabled || 0} />
+      <CountChip color={AVAILABILITY_COLOR.available} label={s.available} value={counts.available || 0} num={chip} />
+      <CountChip color={AVAILABILITY_COLOR.degraded} label={s.degraded} value={counts.degraded || 0} num={chip} />
+      <CountChip color={AVAILABILITY_COLOR.maintenance} label={s.maintenance} value={counts.maintenance || 0} num={chip} />
+      <CountChip color={AVAILABILITY_COLOR.disabled} label={s.disabled} value={counts.disabled || 0} num={chip} />
 
       <Divider />
 
       {/* The three the panel had no way to show before: measured against
           model_health_state.last_ok_at, not model_catalog.last_verified_at. */}
-      <CountChip color={AVAILABILITY_COLOR.available} label="پروب تأییدشده" value={probeCounts.confirmed} />
-      <CountChip color={AVAILABILITY_COLOR.degraded} label="سالم ولی ارائه‌نشده" value={probeCounts.parkedConfirmed} />
-      <CountChip color="var(--accent, #6366f1)" label="آمادهٔ ارائه" value={probeCounts.ready} />
+      <CountChip color={AVAILABILITY_COLOR.available} label={s.confirmed} value={probeCounts.confirmed} num={chip} />
+      <CountChip color={AVAILABILITY_COLOR.degraded} label={s.healthyUnserved} value={probeCounts.parkedConfirmed} num={chip} />
+      <CountChip color="var(--accent, #6366f1)" label={s.ready} value={probeCounts.ready} num={chip} />
     </div>
   )
 }

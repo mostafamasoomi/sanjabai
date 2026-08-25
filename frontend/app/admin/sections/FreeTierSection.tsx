@@ -3,7 +3,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/adminI18n'
 import { SectionHeader, Field } from './shared'
+import { freeTierStrings } from './FreeTierSection.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    محدودیت‌های حساب رایگان — سه عددی که رفتار کاربرِ بدون شارژ و بدون بسته را
@@ -43,28 +46,17 @@ interface FreeTierSectionProps {
 
 type FieldKey = keyof FreeTierValues
 
-const FIELDS: { key: FieldKey; label: string; help: string; suffix: string }[] = [
-  {
-    key: 'free_hourly_limit',
-    label: 'سقف پیام در ساعت',
-    help: 'کاربر رایگان در هر ساعت حداکثر این تعداد پیام می‌تواند بفرستد. با پایان ساعت دوباره باز می‌شود.',
-    suffix: 'پیام / ساعت',
-  },
-  {
-    key: 'free_lifetime_limit',
-    label: 'سقف پیام مادام‌العمر',
-    help: 'کل پیام‌هایی که یک کاربر رایگان در تمام عمر حسابش می‌تواند بفرستد. پس از رسیدن به این عدد، تا شارژ حساب مسدود می‌ماند (سقف سخت، در پایگاه داده نگهداری می‌شود).',
-    suffix: 'پیام (کل)',
-  },
-  {
-    key: 'free_tier_max_input_per_million',
-    label: 'سقف قیمت مدل‌های رایگان',
-    help: 'کاربر رایگان فقط به مدل‌هایی دسترسی دارد که قیمت ورودی‌شان کمتر یا مساوی این عدد باشد (تومان بر میلیون توکن). مدل‌های گران‌تر برایش مسدودند تا هزینهٔ رایگان‌دهی کنترل شود.',
-    suffix: 'تومان / میلیون توکن',
-  },
-]
-
 export default function FreeTierSection({ api }: FreeTierSectionProps) {
+  const lang = useLang()
+  const s = freeTierStrings(lang)
+  const f = fmt(lang)
+
+  const FIELDS: { key: FieldKey; label: string; help: string; suffix: string }[] = [
+    { key: 'free_hourly_limit', label: s.hourlyLabel, help: s.hourlyHelp, suffix: s.hourlySuffix },
+    { key: 'free_lifetime_limit', label: s.lifetimeLabel, help: s.lifetimeHelp, suffix: s.lifetimeSuffix },
+    { key: 'free_tier_max_input_per_million', label: s.maxInputLabel, help: s.maxInputHelp, suffix: s.maxInputSuffix },
+  ]
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [data, setData] = useState<FreeTierData | null>(null)
@@ -82,7 +74,7 @@ export default function FreeTierSection({ api }: FreeTierSectionProps) {
       const res = await api('/api/admin/free-tier-settings')
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        throw new Error(body.detail || `خطای سرور (${res.status})`)
+        throw new Error(body.detail || s.serverError(String(res.status)))
       }
       const body: FreeTierData = await res.json()
       setData(body)
@@ -92,29 +84,29 @@ export default function FreeTierSection({ api }: FreeTierSectionProps) {
         free_tier_max_input_per_million: String(body.values.free_tier_max_input_per_million),
       })
     } catch (e) {
-      setError(e instanceof Error && e.message !== 'unauthorized' ? e.message : 'خطا در دریافت تنظیمات حساب رایگان')
+      setError(e instanceof Error && e.message !== 'unauthorized' ? e.message : s.loadError)
       setData(null)
     } finally {
       setLoading(false)
     }
-  }, [api])
+  }, [api, s.loadError])
 
   useEffect(() => { load() }, [load])
 
   const changed: Partial<FreeTierValues> = {}
   if (data) {
-    for (const f of FIELDS) {
-      const raw = draft[f.key].trim()
+    for (const field of FIELDS) {
+      const raw = draft[field.key].trim()
       if (raw === '' || !/^\d+$/.test(raw)) continue
       const n = parseInt(raw, 10)
-      if (n !== data.values[f.key]) changed[f.key] = n
+      if (n !== data.values[field.key]) changed[field.key] = n
     }
   }
   const dirty = Object.keys(changed).length > 0
 
   // A field the admin typed that is not a valid non-negative integer.
   const invalidField = data
-    ? FIELDS.find(f => { const r = draft[f.key].trim(); return r !== '' && !/^\d+$/.test(r) })
+    ? FIELDS.find(field => { const r = draft[field.key].trim(); return r !== '' && !/^\d+$/.test(r) })
     : undefined
 
   const save = async () => {
@@ -127,13 +119,13 @@ export default function FreeTierSection({ api }: FreeTierSectionProps) {
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        toast(body.detail || 'ذخیره ناموفق بود', 'error')
+        toast(body.detail || s.saveError, 'error')
         return
       }
-      toast('محدودیت‌های حساب رایگان ذخیره شد', 'success')
+      toast(s.saveSuccess, 'success')
       await load()
     } catch {
-      toast('ذخیره ناموفق بود', 'error')
+      toast(s.saveError, 'error')
     } finally {
       setSaving(false)
     }
@@ -142,16 +134,16 @@ export default function FreeTierSection({ api }: FreeTierSectionProps) {
   if (error) {
     return (
       <div className="space-y-6">
-        <SectionHeader title="حساب رایگان" subtitle="سقف پیام و مدل‌های مجاز برای کاربر بدون شارژ" />
+        <SectionHeader title={s.title} subtitle={s.subtitle} />
         <div className="admin-card" style={{ borderRight: '3px solid var(--danger, #ef4444)' }}>
           <div className="flex items-center gap-2 mb-2">
             <Icon name="warning" size={18} style={{ color: 'var(--danger, #ef4444)' }} />
-            <h3 className="font-semibold text-sm text-primary">دریافت تنظیمات ناموفق بود</h3>
+            <h3 className="font-semibold text-sm text-primary">{s.loadFailedTitle}</h3>
           </div>
           <p className="text-xs text-muted mb-4">{error}</p>
           <button className="btn btn-sm" onClick={load}>
             <Icon name="refresh" size={14} />
-            <span>تلاش دوباره</span>
+            <span>{s.retry}</span>
           </button>
         </div>
       </div>
@@ -161,18 +153,18 @@ export default function FreeTierSection({ api }: FreeTierSectionProps) {
   return (
     <div className="space-y-6">
       <SectionHeader
-        title="حساب رایگان"
-        subtitle="سقف پیام ساعتی و مادام‌العمر و سقف قیمت مدل‌های مجاز برای کاربر بدون شارژ و بدون بسته — بدون نیاز به ری‌استارت"
+        title={s.title}
+        subtitle={s.fullSubtitle}
       />
 
       {loading ? (
-        <div className="admin-card p-6 text-center text-sm text-muted">در حال بارگذاری…</div>
+        <div className="admin-card p-6 text-center text-sm text-muted">{s.loading}</div>
       ) : !data ? (
-        <div className="admin-card p-6 text-center text-sm text-muted">اطلاعاتی یافت نشد</div>
+        <div className="admin-card p-6 text-center text-sm text-muted">{s.noData}</div>
       ) : (
         <div className="admin-card space-y-4">
-          {FIELDS.map(f => (
-            <Field key={f.key} label={f.label}>
+          {FIELDS.map(field => (
+            <Field key={field.key} label={field.label}>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
@@ -180,22 +172,22 @@ export default function FreeTierSection({ api }: FreeTierSectionProps) {
                   className="input"
                   dir="ltr"
                   style={{ maxWidth: '12rem' }}
-                  value={draft[f.key]}
+                  value={draft[field.key]}
                   disabled={saving}
-                  onChange={(e) => setDraft(prev => ({ ...prev, [f.key]: e.target.value }))}
+                  onChange={(e) => setDraft(prev => ({ ...prev, [field.key]: e.target.value }))}
                 />
-                <span className="text-xs text-muted">{f.suffix}</span>
-                {data.values[f.key] !== data.defaults[f.key] && (
-                  <span className="text-xs text-muted">(پیش‌فرض: {data.defaults[f.key]})</span>
+                <span className="text-xs text-muted">{field.suffix}</span>
+                {data.values[field.key] !== data.defaults[field.key] && (
+                  <span className="text-xs text-muted">{s.defaultValue(f.num(data.defaults[field.key]))}</span>
                 )}
               </div>
-              <p className="text-xs text-muted mt-1">{f.help}</p>
+              <p className="text-xs text-muted mt-1">{field.help}</p>
             </Field>
           ))}
 
           {invalidField && (
             <p className="text-xs" style={{ color: 'var(--danger, #ef4444)' }}>
-              «{invalidField.label}» باید یک عدد صحیح نامنفی باشد.
+              {s.invalidField(invalidField.label)}
             </p>
           )}
 
@@ -206,7 +198,7 @@ export default function FreeTierSection({ api }: FreeTierSectionProps) {
               ) : (
                 <>
                   <Icon name="check" size={14} />
-                  <span>ذخیره</span>
+                  <span>{s.save}</span>
                 </>
               )}
             </button>
@@ -220,16 +212,15 @@ export default function FreeTierSection({ api }: FreeTierSectionProps) {
                   free_tier_max_input_per_million: String(data.values.free_tier_max_input_per_million),
                 })}
               >
-                انصراف
+                {s.cancel}
               </button>
             )}
-            {!dirty && !invalidField && <span className="text-xs text-muted">تغییری برای ذخیره وجود ندارد</span>}
+            {!dirty && !invalidField && <span className="text-xs text-muted">{s.noChanges}</span>}
           </div>
 
           {data.rows_missing.length > 0 && (
             <p className="text-xs text-muted">
-              ردیف‌های ذخیره‌سازی هنوز در پایگاه داده ساخته نشده‌اند ({data.rows_missing.join('، ')}) — مهاجرت
-              0045 هنوز اعمال نشده است. مقادیر پیش‌فرض به‌کار می‌روند و اولین ذخیره ردیف را می‌سازد.
+              {s.rowsMissing(data.rows_missing.join(s.listSeparator))}
             </p>
           )}
         </div>

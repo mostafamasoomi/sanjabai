@@ -3,12 +3,14 @@
 import { useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
-import { faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/adminI18n'
 import { SectionHeader, Field } from './shared'
 import { ErrorCard, RefreshButton, CardSkeleton } from './LoadState'
 import { api, errMessage } from '../api'
 import { useAdminResource } from '../useAdminResource'
 import type { FeatureRow } from '../types'
+import { featuresStrings } from './FeaturesSection.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Features — self-contained. GET/POST /admin/features, DELETE
@@ -16,10 +18,14 @@ import type { FeatureRow } from '../types'
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function FeaturesSection() {
+  const lang = useLang()
+  const s = featuresStrings(lang)
+  const f = fmt(lang)
+
   const { data: features, error, loading, reload } = useAdminResource<FeatureRow[]>(
     '/api/admin/features',
     (raw) => (Array.isArray(raw) ? raw : raw?.features || []),
-    'خطا در دریافت ویژگی‌ها',
+    s.loadError,
   )
 
   const [ftId, setFtId] = useState('')
@@ -47,11 +53,11 @@ export default function FeaturesSection() {
         method: 'POST',
         body: JSON.stringify({ id: ftId ? +ftId : undefined, title: ftTitle, description: ftDesc, icon: ftIcon, order_idx: +ftOrder || 0, active: ftActive }),
       })
-      toast(ftId ? 'ویژگی ویرایش شد' : 'ویژگی اضافه شد', 'success')
+      toast(ftId ? s.saveEditSuccess : s.saveAddSuccess, 'success')
       resetFeatureForm()
       reload()
     } catch (err) {
-      toast(errMessage(err, 'خطا در ذخیره ویژگی'), 'error')
+      toast(errMessage(err, s.saveError), 'error')
     } finally {
       setSaving(false)
     }
@@ -60,10 +66,10 @@ export default function FeaturesSection() {
   const delFeature = async (id: number) => {
     try {
       await api('/api/admin/features/' + id, { method: 'DELETE' })
-      toast('ویژگی حذف شد', 'success')
+      toast(s.deleteSuccess, 'success')
       reload()
     } catch (err) {
-      toast(errMessage(err, 'خطا در حذف ویژگی'), 'error')
+      toast(errMessage(err, s.deleteError), 'error')
     }
   }
 
@@ -72,7 +78,7 @@ export default function FeaturesSection() {
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between">
-        <SectionHeader title="امکانات و ویژگی‌ها" subtitle={`${faNum(list.length)} ویژگی ثبت شده`} />
+        <SectionHeader title={s.title} subtitle={s.subtitle(f.num(list.length))} />
         <RefreshButton onClick={reload} busy={loading} />
       </div>
 
@@ -83,29 +89,31 @@ export default function FeaturesSection() {
         <div className="space-y-2">
           {list.length === 0 && (
             <div className="admin-card text-center py-8 text-muted">
-              ویژگی‌ای ثبت نشده
+              {s.noneRegistered}
             </div>
           )}
-          {list.map((f) => (
-            <div key={f.id} className="admin-card admin-row justify-between">
+          {/* f.title / f.description here are the saved feature copy, from
+              and to the server — content, not UI chrome, so left as-is. */}
+          {list.map((row) => (
+            <div key={row.id} className="admin-card admin-row justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm" style={{ background: 'var(--bg-elevated)' }}>
-                  {f.icon || '—'}
+                  {row.icon || '—'}
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-primary">{f.title}</p>
-                  <p className="text-xs text-muted">{f.description || 'بدون توضیح'}</p>
+                  <p className="text-sm font-medium text-primary">{row.title}</p>
+                  <p className="text-xs text-muted">{row.description || s.noDescription}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className={f.active ? 'badge badge-positive' : 'badge badge-warning'}>
-                  {f.active ? 'فعال' : 'غیرفعال'}
+                <span className={row.active ? 'badge badge-positive' : 'badge badge-warning'}>
+                  {row.active ? s.active : s.disabled}
                 </span>
-                <span className="badge text-[10px]">#{faNum(f.order_idx)}</span>
-                <button className="btn btn-sm" onClick={() => editFeature(f)}>
+                <span className="badge text-[10px]">#{f.num(row.order_idx)}</span>
+                <button className="btn btn-sm" onClick={() => editFeature(row)}>
                   <Icon name="settings" size={14} />
                 </button>
-                <button className="btn btn-sm btn-danger" onClick={() => delFeature(f.id)}>
+                <button className="btn btn-sm btn-danger" onClick={() => delFeature(row.id)}>
                   <Icon name="close" size={14} />
                 </button>
               </div>
@@ -116,28 +124,28 @@ export default function FeaturesSection() {
 
       <div className="admin-card">
         <h3 className="font-semibold text-sm mb-4 text-primary">
-          {ftId ? 'ویرایش ویژگی' : 'افزودن ویژگی جدید'}
+          {ftId ? s.editTitle : s.addTitle}
         </h3>
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="عنوان">
-              <input className="input w-full" value={ftTitle} onChange={(e) => setFtTitle(e.target.value)} placeholder="چت هوشمند" />
+            <Field label={s.titleField}>
+              <input className="input w-full" value={ftTitle} onChange={(e) => setFtTitle(e.target.value)} placeholder={s.titlePlaceholder} />
             </Field>
-            <Field label="آیکون">
+            <Field label={s.iconField}>
               <input className="input w-full" value={ftIcon} onChange={(e) => setFtIcon(e.target.value)} placeholder="icon-name" />
             </Field>
           </div>
-          <Field label="توضیحات">
+          <Field label={s.descriptionField}>
             <textarea className="input w-full min-h-[80px] resize-y" value={ftDesc} onChange={(e) => setFtDesc(e.target.value)} />
           </Field>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="ترتیب نمایش">
+            <Field label={s.orderField}>
               <input className="input w-full" type="number" value={ftOrder} onChange={(e) => setFtOrder(e.target.value)} />
             </Field>
-            <Field label="وضعیت">
+            <Field label={s.statusField}>
               <select className="input w-full" value={String(ftActive)} onChange={(e) => setFtActive(e.target.value === 'true')}>
-                <option value="true">فعال</option>
-                <option value="false">غیرفعال</option>
+                <option value="true">{s.active}</option>
+                <option value="false">{s.disabled}</option>
               </select>
             </Field>
           </div>
@@ -146,11 +154,11 @@ export default function FeaturesSection() {
           <button className="btn" onClick={saveFeature} disabled={saving}>
             {saving ? (
               <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" />
-            ) : (<><Icon name="check" size={16} /><span>{ftId ? 'بروزرسانی' : 'افزودن'}</span></>)}
+            ) : (<><Icon name="check" size={16} /><span>{ftId ? s.update : s.add}</span></>)}
           </button>
           {ftId && (
             <button className="btn btn-sm" style={{ background: 'var(--bg-elevated)' }} onClick={resetFeatureForm}>
-              انصراف
+              {s.cancel}
             </button>
           )}
         </div>

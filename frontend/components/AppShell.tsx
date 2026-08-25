@@ -11,6 +11,7 @@ import { Icon, type IconName } from '@/components/ui/Icon'
 import { useCommandPalette } from '@/components/CommandPalette'
 import { isOnboarded } from '@/lib/onboarding'
 import { getPanelPreference, isNavItemVisibleForPanel } from '@/lib/panel'
+import { BrandLockup } from './BrandLockup'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Sanjabai Aurora — AppShell v2
@@ -229,11 +230,13 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
       {/* ── Desktop Sidebar — hidden when not logged in ── */}
       {user && (
       <aside className="layout-sidebar hidden md:flex sidebar-glass">
-        <div className="flex items-center gap-2 px-4 py-3.5">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{background: 'var(--accent-dim)'}}>
-            <img src="/logo.svg" alt="" width={22} height={22} />
-          </div>
-          <Link href="/" className="text-lg font-extrabold text-gradient tracking-tight">Sanjabai</Link>
+        {/* The lockup already contains the wordmark, so the tinted icon chip
+            and the separate "Sanjabai" text next to it are both gone -- side
+            by side they printed the name twice. */}
+        <div className="flex items-center px-4 py-3.5">
+          <Link href="/" aria-label="Sanjabai">
+            <BrandLockup height={30} />
+          </Link>
         </div>
         <div className="divider" />
 
@@ -321,8 +324,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               href="/"
               className={`topbar-brand${user ? ' topbar-brand--duplicate' : ''}`}
             >
-              <img src="/logo.svg" alt="" width={24} height={24} />
-              <span>Sanjabai</span>
+              <BrandLockup height={26} />
             </Link>
 
             {/* Command palette. It lives at the start of the bar rather than

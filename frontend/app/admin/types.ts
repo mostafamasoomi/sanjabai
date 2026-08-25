@@ -77,31 +77,50 @@ export interface SecurityStats {
   banned_users: { id: number; email: string; username: string; banned_at: string }[]
 }
 
-// No endpoint feeds this today. The security screen used to render an
-// always-empty "رویدادهای امنیتی" table from it, which read as "nothing
-// suspicious has happened" when the truth was "nothing is being collected";
-// that table is gone. The type stays exported because it is part of this
-// module's public surface and a real feed is still the intent.
+// No endpoint feeds this today, and no `security_events` table has ever
+// existed in migrations/models.py -- there is nothing live to verify this
+// shape against. `details` is left as `unknown` rather than `string | null`
+// on the same reasoning as AuditLog below: every other event-ish detail
+// blob in this schema that does exist (audit_logs.details) is jsonb, not
+// text, so assuming a bare string here would repeat the exact mistake that
+// crashed the security tab. The type stays exported because it is part of
+// this module's public surface and a real feed is still the intent.
 export interface SecurityEvent {
   id: number
   event_type: string
   user_id: number | null
   user_email: string | null
   ip_address: string | null
-  details: string | null
+  details: unknown
   created_at: string
 }
 
 // GET /admin/audit-logs -> { logs, total, page, limit } (admin_analytics.py).
 // The column is `admin_user_id`; this type previously declared `admin_id`,
 // a name the server has never sent.
+//
+// `details` was declared `string | null` -- a lie. Confirmed live against
+// psql `\d audit_logs`: the column is `jsonb`, nullable. The backend does
+// no stringification (admin_analytics.py selects it raw and returns it
+// through jsonable_encoder), so a row like {"availability":"disabled"}
+// arrives as a real object, not a string. Rendering it with `{log.details}`
+// threw "Objects are not valid as a React child" (React error #31) the
+// moment any row had non-null details, which is exactly what happened when
+// a model-toggle audit entry first got written. `unknown` forces callers to
+// handle string/object/array/null explicitly instead of assuming text.
+//
+// `target_id` was declared `number | null` -- also wrong. `\d audit_logs`
+// shows it as `text`, nullable (e.g. a model id like
+// "bynaraa2/agnes-2.0-flash" is not a number). This one never crashed
+// because JSX renders strings and numbers identically, but the type should
+// still describe reality rather than an assumption nobody checked.
 export interface AuditLog {
   id: number
   admin_user_id: number | null
   action: string
   target_type: string | null
-  target_id: number | null
-  details: string | null
+  target_id: string | null
+  details: unknown
   ip_address: string | null
   user_agent: string | null
   created_at: string

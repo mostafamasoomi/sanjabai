@@ -601,11 +601,13 @@ a.lp-pill:hover {
   flex-shrink: 0;
 }
 
+/* Sized for a lockup, not the old square mark. BrandMark now renders the
+   squirrel+wordmark (aspect 3.44:1) and sets its own height inline, so this
+   must not pin a 28px square -- doing so squashed the lockup to 28px wide
+   and made the wordmark unreadable. */
 .lp-brand__mark {
-  width: 28px;
-  height: 28px;
+  width: auto;
   flex-shrink: 0;
-  object-fit: contain;
 }
 
 .lp-nav {

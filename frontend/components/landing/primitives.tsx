@@ -1,6 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    Small shared pieces used across landing sections.
    ═══════════════════════════════════════════════════════════════════════════ */
+import { BrandLockup } from '../BrandLockup'
 
 /**
  * Provider brand mark. Rendered as a CSS mask rather than an <img> because the
@@ -80,9 +81,9 @@ export function ForwardArrow({ size = 15 }: { size?: number }) {
   )
 }
 
-/** The product mark, used in the header and the footer. */
+/** The product mark, used in the header and the footer. Now the full
+    squirrel + wordmark lockup, so the three `.lp-brand` anchors no longer
+    print the word "Sanjabai" next to a mark that already contains it. */
 export function BrandMark() {
-  // eslint-disable-next-line @next/next/no-img-element -- a fixed-size SVG;
-  // next/image would add a loader and layout wrapper for no benefit.
-  return <img src="/logo.svg" alt="" width={28} height={28} className="lp-brand__mark" />
+  return <BrandLockup height={30} className="lp-brand__mark" />
 }

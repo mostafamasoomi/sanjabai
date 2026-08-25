@@ -3,6 +3,7 @@
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
 import { faNum, faDate, toFaDigits } from '@/lib/format'
+import { formatAuditDetails } from '@/lib/auditDetails'
 import { StatCard, SectionHeader } from './shared'
 import { ErrorCard, RefreshButton, CardSkeleton } from './LoadState'
 import { api, errMessage } from '../api'
@@ -27,6 +28,18 @@ import { useSecurityData, AUDIT_PAGE_SIZE } from '../useSecurityData'
 
 const THREAT_COLOR = { low: '#22c55e', medium: '#eab308', high: '#f97316', critical: '#ef4444' } as const
 const THREAT_LABEL = { low: 'پایین', medium: 'متوسط', high: 'بالا', critical: 'بحرانی' } as const
+
+/* `audit_logs.details` is jsonb (confirmed via \d audit_logs), so the API
+   can hand back a string, a number, a boolean, an array, a plain object, or
+   null -- `AuditLog['details']` is typed `unknown` for exactly this reason
+   (see types.ts). Rendering it with `{log.details}` used to throw React
+   error #31 ("Objects are not valid as a React child") the moment a row
+   like {"availability":"disabled"} showed up, which crashed the whole
+   admin panel into its error boundary. `formatAuditDetails` (lib/auditDetails.ts)
+   renders any of those shapes as safe, readable text -- see that file for
+   the full rationale and for its unit tests (kept out of this component so
+   it's importable from vitest without this file's '@/components/ui' /
+   '@/lib/format' dependency chain). */
 
 /* The backend matches `action LIKE '<filter>%'` — a PREFIX, not a substring
    (admin_analytics.py). Every action name it stores is dotted and namespaced
@@ -255,7 +268,7 @@ export default function SecuritySection() {
                       </td>
                       <td className="p-3 text-xs text-secondary">{log.target_type || '—'}</td>
                       <td className="p-3 text-xs font-mono">{log.target_id ?? '—'}</td>
-                      <td className="p-3 text-xs text-secondary break-words max-w-md">{log.details || '—'}</td>
+                      <td className="p-3 text-xs text-secondary break-words max-w-md">{formatAuditDetails(log.details)}</td>
                       <td className="p-3 text-xs text-muted">
                         {toFaDigits(new Date(log.created_at).toLocaleString('fa-IR'))}
                       </td>

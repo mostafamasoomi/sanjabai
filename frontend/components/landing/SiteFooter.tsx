@@ -9,7 +9,6 @@ export function SiteFooter() {
           <div className="lp-footer__about">
             <a href="/" className="lp-brand">
               <BrandMark />
-              Sanjabai
             </a>
             <p className="lp-footer__tagline">
               پلتفرم فارسی دسترسی به مدل‌های هوش مصنوعی. چت کنید، عامل بسازید و با یک API

@@ -498,6 +498,22 @@ img, svg, video, canvas {
 }
 .topbar-brand img { width: 24px; height: 24px; object-fit: contain; }
 
+/* Brand lockup (components/BrandLockup.tsx). Two <img> variants stacked in
+   the markup, exactly one shown per theme. The dark file is the default
+   because <html> ships with data-theme="dark"; the light rules override it
+   only when the toggle has actually set data-theme="light". Nothing here
+   depends on prefers-color-scheme, because this app has no such path --
+   the theme is always an explicit attribute. */
+.brand-lockup { display: inline-block; line-height: 0; flex-shrink: 0; }
+/* max-width: none defeats the global `img, svg, video, canvas { max-width:
+   100% }` reset at the top of this file: the wrapper shrink-wraps to its
+   content, so a 100% cap on the child is circular and pinned the lockup to
+   its own container's collapsed width (measured live: 28px instead of 103). */
+.brand-lockup__img { display: block; height: 100%; width: auto; max-width: none; }
+.brand-lockup__img--light { display: none; }
+[data-theme='light'] .brand-lockup__img--dark { display: none; }
+[data-theme='light'] .brand-lockup__img--light { display: block; }
+
 /* Signed in on a wide screen the sidebar already carries the lockup ~200px
    away, so the topbar copy is pure duplication. It stays for narrow screens,
    where the sidebar is collapsed into the drawer and this is the only brand

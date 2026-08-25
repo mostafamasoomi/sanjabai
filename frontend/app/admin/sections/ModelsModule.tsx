@@ -1,8 +1,10 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
+import { getLang } from '@/components/LanguageToggle'
 import { api } from '../api'
+import { t as label } from '../adminLabels'
 import { MODELS_TABS, DEFAULT_MODELS_TAB, isModelsTab, type ModelsTab } from './modelsTabs'
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -55,29 +57,38 @@ export default function ModelsModule({ tab, onTabChange }: ModelsModuleProps) {
 
   const active: ModelsTab = isModelsTab(tab) ? tab : DEFAULT_MODELS_TAB
 
+  // Read once, lazily, like AdminPanel.tsx does -- safe for the same reason:
+  // this module is mounted with `dynamic(..., { ssr: false })`, so there is
+  // no server pass for getLang()'s client-only read to mismatch against.
+  // LanguageToggle reloads the page on flip, so this never has to react.
+  const [lang] = useState(getLang)
+
   return (
     <div className="space-y-6">
       <div
         role="tablist"
-        aria-label="مدل‌ها و قیمت‌گذاری"
+        aria-label={lang === 'en' ? 'Models & Pricing' : 'مدل‌ها و قیمت‌گذاری'}
         data-testid="models-tabs"
         className="flex gap-1 border-b overflow-x-auto"
         style={{ borderColor: 'var(--border)' }}
       >
-        {MODELS_TABS.map((t, i) => (
-          <div key={t.key} className="flex items-center">
+        {/* `entry`, not `t`: `t` is the bilingual label helper imported above
+            as `label`, and reusing the name for the map item is how the two
+            get confused. */}
+        {MODELS_TABS.map((entry, i) => (
+          <div key={entry.key} className="flex items-center">
             {/* Divider between "what a model is" and "what it costs". */}
-            {i > 0 && MODELS_TABS[i - 1].group !== t.group && (
+            {i > 0 && MODELS_TABS[i - 1].group !== entry.group && (
               <span className="mx-2 h-4 w-px shrink-0" style={{ background: 'var(--border)' }} aria-hidden />
             )}
             <button
               role="tab"
-              aria-selected={active === t.key}
-              className={`px-3 py-2 text-xs font-medium whitespace-nowrap transition-colors ${active === t.key ? 'border-b-2' : 'opacity-60 hover:opacity-100'}`}
-              style={active === t.key ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : { color: 'var(--text-secondary)' }}
-              onClick={() => onTabChange(t.key)}
+              aria-selected={active === entry.key}
+              className={`px-3 py-2 text-xs font-medium whitespace-nowrap transition-colors ${active === entry.key ? 'border-b-2' : 'opacity-60 hover:opacity-100'}`}
+              style={active === entry.key ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : { color: 'var(--text-secondary)' }}
+              onClick={() => onTabChange(entry.key)}
             >
-              {t.label}
+              {label(entry, lang)}
             </button>
           </div>
         ))}

@@ -15,6 +15,8 @@ import AboutSection from './sections/AboutSection'
 import ProxySection from './sections/ProxySection'
 import SecuritySection from './sections/SecuritySection'
 import { tabFromSearch, type ModelsTab } from './sections/modelsTabs'
+import { getLang, LanguageToggle } from '@/components/LanguageToggle'
+import { t, ADMIN_CHROME } from './adminLabels'
 
 const MonitoringTab = dynamic(() => import('./components/MonitoringTab'), { ssr: false })
 const PackagesSection = dynamic(() => import('./sections/PackagesSection'), { ssr: false })
@@ -55,24 +57,28 @@ type Page = 'dashboard' | 'analytics' | 'site-control' | 'models' | 'packages' |
    مدل‌های منطقی, توکن تزریقی بالادست, تعرفه‌ها, قیمت‌گذاری تصویر, نرخ ارز,
    درصد سود -- scattered down the sidebar, each opening its own list of the
    same models from a different endpoint. They are now sub-tabs of one
-   ModelsModule entry. */
-const NAV_ITEMS: { key: Page; label: string; icon: IconName }[] = [
-  { key: 'dashboard', label: 'داشبورد', icon: 'dashboard' },
-  { key: 'analytics', label: 'تحلیل و درآمد', icon: 'chart' },
-  { key: 'site-control', label: 'کنترل سایت', icon: 'settings' },
-  { key: 'models', label: 'مدل‌ها و قیمت‌گذاری', icon: 'code' },
-  { key: 'users', label: 'کاربران', icon: 'profile' },
-  { key: 'packages', label: 'بسته‌ها', icon: 'wallet' },
-  { key: 'plans', label: 'پلن و اشتراک', icon: 'wallet' },
-  { key: 'features', label: 'امکانات', icon: 'models' },
-  { key: 'discounts', label: 'تخفیف‌ها', icon: 'wallet' },
-  { key: 'about', label: 'درباره ما', icon: 'notification' },
-  { key: 'proxy', label: 'پروکسی', icon: 'security' },
-  { key: 'security', label: 'امنیت', icon: 'lock' },
-  { key: 'moderation', label: 'پالایش محتوا', icon: 'warning' },
-  { key: 'watchdog', label: 'هشدارهای تلگرام', icon: 'notification' },
-  { key: 'free-tier', label: 'حساب رایگان', icon: 'gift' },
-  { key: 'monitoring', label: 'پایش', icon: 'chart' },
+   ModelsModule entry.
+
+   `label` stays Persian; `labelEn` is the bilingual sibling read via the
+   `t()` helper in ./adminLabels, driven by the same `lang`/LanguageToggle
+   the user-facing app already uses. */
+const NAV_ITEMS: { key: Page; label: string; labelEn: string; icon: IconName }[] = [
+  { key: 'dashboard', label: 'داشبورد', labelEn: 'Dashboard', icon: 'dashboard' },
+  { key: 'analytics', label: 'تحلیل و درآمد', labelEn: 'Analytics & Revenue', icon: 'chart' },
+  { key: 'site-control', label: 'کنترل سایت', labelEn: 'Site Control', icon: 'settings' },
+  { key: 'models', label: 'مدل‌ها و قیمت‌گذاری', labelEn: 'Models & Pricing', icon: 'code' },
+  { key: 'users', label: 'کاربران', labelEn: 'Users', icon: 'profile' },
+  { key: 'packages', label: 'بسته‌ها', labelEn: 'Packages', icon: 'wallet' },
+  { key: 'plans', label: 'پلن و اشتراک', labelEn: 'Plans & Subscription', icon: 'wallet' },
+  { key: 'features', label: 'امکانات', labelEn: 'Features', icon: 'models' },
+  { key: 'discounts', label: 'تخفیف‌ها', labelEn: 'Discounts', icon: 'wallet' },
+  { key: 'about', label: 'درباره ما', labelEn: 'About Us', icon: 'notification' },
+  { key: 'proxy', label: 'پروکسی', labelEn: 'Proxy', icon: 'security' },
+  { key: 'security', label: 'امنیت', labelEn: 'Security', icon: 'lock' },
+  { key: 'moderation', label: 'پالایش محتوا', labelEn: 'Content Moderation', icon: 'warning' },
+  { key: 'watchdog', label: 'هشدارهای تلگرام', labelEn: 'Telegram Alerts', icon: 'notification' },
+  { key: 'free-tier', label: 'حساب رایگان', labelEn: 'Free Tier', icon: 'gift' },
+  { key: 'monitoring', label: 'پایش', labelEn: 'Monitoring', icon: 'chart' },
 ]
 
 const PAGE_KEYS = new Set<string>(NAV_ITEMS.map((n) => n.key))
@@ -94,6 +100,13 @@ export default function AdminPage() {
   const [authed, setAuthed] = useState(false)
   const [tokenInput, setTokenInput] = useState('')
   const [loggingIn, setLoggingIn] = useState(false)
+  // Read once, lazily, from the same `localStorage` key the user-facing
+  // LanguageToggle owns -- safe as an initialiser for the same reason as
+  // `page` below: page.tsx mounts this component with `ssr: false`, so
+  // there is no server pass to mismatch against `getLang()`'s client-only
+  // read. `<LanguageToggle />` itself reloads the page on flip, so this
+  // never needs to react to an in-place change.
+  const [lang] = useState(() => getLang())
   // Seeded from the URL, lazily. Safe as an initialiser rather than a mount
   // effect because page.tsx loads this component with `ssr: false` -- it only
   // ever renders on the client, so there is no server pass to mismatch.
@@ -129,7 +142,7 @@ export default function AdminPage() {
     setUnauthorizedHandler(() => {
       setAuthed(false)
       setTokenInput('')
-      toast('نشست شما منقضی شد؛ دوباره وارد شوید', 'error')
+      toast(t(ADMIN_CHROME.sessionExpired, lang), 'error')
     })
     return () => setUnauthorizedHandler(null)
   }, [])
@@ -143,12 +156,12 @@ export default function AdminPage() {
       if (res.ok) {
         setAdminToken(token)
         setAuthed(true)
-        toast('ورود موفقیت‌آمیز بود', 'success')
+        toast(t(ADMIN_CHROME.loginSuccess, lang), 'success')
       } else {
-        toast('توکن نامعتبر است', 'error')
+        toast(t(ADMIN_CHROME.invalidToken, lang), 'error')
       }
     } catch {
-      toast('خطا در اتصال به سرور', 'error')
+      toast(t(ADMIN_CHROME.connectionError, lang), 'error')
     } finally {
       setLoggingIn(false)
     }
@@ -173,16 +186,16 @@ export default function AdminPage() {
             <div className="flex justify-center mb-5">
               <BrandLockup height={38} />
             </div>
-            <h1 className="text-xl font-bold text-primary">پنل مدیریت</h1>
-            <p className="text-sm mt-1 text-muted">ورود با توکن ادمین</p>
+            <h1 className="text-xl font-bold text-primary">{t(ADMIN_CHROME.panelCaption, lang)}</h1>
+            <p className="text-sm mt-1 text-muted">{t(ADMIN_CHROME.loginSubtitle, lang)}</p>
           </div>
 
           <div className="space-y-4">
-            <Field label="توکن ادمین">
+            <Field label={t(ADMIN_CHROME.tokenFieldLabel, lang)}>
               <input
                 type="password"
                 className="input w-full"
-                placeholder="توکن خود را وارد کنید..."
+                placeholder={t(ADMIN_CHROME.tokenPlaceholder, lang)}
                 value={tokenInput}
                 onChange={(e) => setTokenInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && login()}
@@ -197,10 +210,10 @@ export default function AdminPage() {
               {loggingIn ? (
                 <span className="flex items-center justify-center gap-2">
                   <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  در حال ورود...
+                  {t(ADMIN_CHROME.loggingIn, lang)}
                 </span>
               ) : (
-                'ورود'
+                t(ADMIN_CHROME.loginButton, lang)
               )}
             </button>
           </div>
@@ -215,15 +228,22 @@ export default function AdminPage() {
 
   const currentNav = NAV_ITEMS.find((n) => n.key === page)
 
+  // `dir` follows the language, the way the user-facing app already does it.
+  // LanguageToggle.setLang writes dir onto <html>, but the panel's root
+  // hard-coded dir="rtl" overrode that for everything inside it -- so
+  // switching to English produced English labels in a right-to-left shell,
+  // sidebar on the wrong side, every icon mirrored away from its text.
+  // Section bodies keep their own dir="rtl": their content is still Persian,
+  // and only the chrome is translated.
   return (
-    <div className="admin-layout min-h-screen" dir="rtl">
+    <div className="admin-layout min-h-screen" dir={lang === 'en' ? 'ltr' : 'rtl'}>
       {/* Mobile Header */}
       <div className="lg:hidden flex items-center justify-between p-4 border-b" style={{ borderColor: 'var(--border)', background: 'var(--bg-surface)' }}>
         <button className="btn btn-icon btn-sm" onClick={() => setSidebarOpen(!sidebarOpen)}>
           <Icon name={sidebarOpen ? 'close' : 'menu'} size={20} />
         </button>
         <span className="text-sm font-bold text-accent">
-          {currentNav?.label}
+          {currentNav && t(currentNav, lang)}
         </span>
         <button className="btn btn-icon btn-sm" onClick={logout}>
           <Icon name="logout" size={18} />
@@ -259,10 +279,13 @@ export default function AdminPage() {
               wordmark. `Admin Panel` became Persian: it is the only text
               left in this corner and every other label in the panel is
               Persian. The lockup already carries the name, so it is not
-              repeated underneath. */}
+              repeated underneath.
+
+              Now bilingual: the caption follows `lang`, same as every nav
+              label below. */}
           <div className="shrink-0 p-5 border-b" style={{ borderColor: 'var(--border)' }}>
             <BrandLockup height={28} />
-            <p className="text-[10px] text-muted mt-2">پنل مدیریت</p>
+            <p className="text-[10px] text-muted mt-2">{t(ADMIN_CHROME.panelCaption, lang)}</p>
           </div>
 
           {/* Navigation — the کاربران/مدل‌ها count badges are gone with the
@@ -285,21 +308,25 @@ export default function AdminPage() {
                 onClick={() => { setPage(item.key); setSidebarOpen(false) }}
               >
                 <Icon name={item.icon} size={18} />
-                <span>{item.label}</span>
+                <span>{t(item, lang)}</span>
               </button>
             ))}
           </nav>
 
           {/* Sidebar Footer -- a normal flow item, not `absolute bottom-0`.
-              See the aside's comment for what that cost. */}
-          <div className="shrink-0 p-3 border-t" style={{ borderColor: 'var(--border)' }}>
+              See the aside's comment for what that cost. The language
+              toggle sits next to logout, same row, same button language --
+              it is the only way to flip the panel's language without
+              leaving it. */}
+          <div className="shrink-0 p-3 border-t flex items-center gap-2" style={{ borderColor: 'var(--border)' }}>
             <button
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-muted"
+              className="flex-1 flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-muted"
               onClick={logout}
             >
               <Icon name="logout" size={18} />
-              <span>خروج</span>
+              <span>{t(ADMIN_CHROME.logout, lang)}</span>
             </button>
+            <LanguageToggle />
           </div>
         </aside>
 

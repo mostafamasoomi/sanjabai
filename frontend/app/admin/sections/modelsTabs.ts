@@ -14,16 +14,23 @@ export type ModelsTab =
 
 /* Two groups, rendered with a divider between them: what a model IS, then
  * what it COSTS. The order inside each group is the order the work happens
- * in -- discover a model, map it, measure it, then price it. */
-export const MODELS_TABS: { key: ModelsTab; label: string; group: 'catalog' | 'pricing' }[] = [
-  { key: 'catalog', label: 'کاتالوگ و عملیات', group: 'catalog' },
-  { key: 'logical', label: 'مدل‌های منطقی', group: 'catalog' },
-  { key: 'overhead', label: 'توکن تزریقی بالادست', group: 'catalog' },
-  { key: 'default', label: 'مدل پیش‌فرض', group: 'catalog' },
-  { key: 'pricing', label: 'تعرفه‌ها', group: 'pricing' },
-  { key: 'image-pricing', label: 'قیمت‌گذاری تصویر', group: 'pricing' },
-  { key: 'exchange-rate', label: 'نرخ ارز', group: 'pricing' },
-  { key: 'markup', label: 'درصد سود', group: 'pricing' },
+ * in -- discover a model, map it, measure it, then price it.
+ *
+ * `label` stays the Persian string ModelsModule.tsx already renders via
+ * `t.label` -- unchanged in type and value, so that file (out of this
+ * task's scope) keeps compiling and rendering as-is. `labelEn` is the
+ * bilingual sibling AdminPanel.tsx's own sub-tab picker (if any) or a
+ * future language-aware consumer of MODELS_TABS reads via the `t()` helper
+ * in ./adminLabels. */
+export const MODELS_TABS: { key: ModelsTab; label: string; labelEn: string; group: 'catalog' | 'pricing' }[] = [
+  { key: 'catalog', label: 'کاتالوگ و عملیات', labelEn: 'Catalog & Operations', group: 'catalog' },
+  { key: 'logical', label: 'مدل‌های منطقی', labelEn: 'Logical Models', group: 'catalog' },
+  { key: 'overhead', label: 'توکن تزریقی بالادست', labelEn: 'Upstream Token Overhead', group: 'catalog' },
+  { key: 'default', label: 'مدل پیش‌فرض', labelEn: 'Default Model', group: 'catalog' },
+  { key: 'pricing', label: 'تعرفه‌ها', labelEn: 'Tariffs', group: 'pricing' },
+  { key: 'image-pricing', label: 'قیمت‌گذاری تصویر', labelEn: 'Image Pricing', group: 'pricing' },
+  { key: 'exchange-rate', label: 'نرخ ارز', labelEn: 'Exchange Rate', group: 'pricing' },
+  { key: 'markup', label: 'درصد سود', labelEn: 'Markup', group: 'pricing' },
 ]
 
 export const DEFAULT_MODELS_TAB: ModelsTab = 'catalog'

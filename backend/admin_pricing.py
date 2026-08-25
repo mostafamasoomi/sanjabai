@@ -10,6 +10,7 @@ still works -- see admin.py's own module docstring for why.
 """
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import sqlalchemy
@@ -25,6 +26,11 @@ from dependencies import _write_audit_log
 from services import margin, probe_gate
 
 router = APIRouter()
+
+#: Total wall-clock budget for the admin panel's «تست زنده», retry included.
+#: Sized against the Next.js rewrite's hard 30s cap, not against the probe --
+#: see the call site in test_model.
+_ADMIN_PROBE_BUDGET_S = float(os.getenv('ADMIN_PROBE_BUDGET_S', '26'))
 
 # MONKEYPATCH CONTRACT (second one, see the module docstring for the first):
 # the guard is reached as `margin.refuse_if_loss_making`, never imported by
@@ -242,14 +248,30 @@ async def test_model(request: Request, model_id: str) -> JSONResponse:
     schedule) so "test now" in the admin panel and the status page's
     background health checks agree on what "working" means.
 
-    `:path` converter — see toggle_model above.
+    The result is RECORDED, not just displayed. It used to be displayed only,
+    which made this button the front half of a deadlock: services/probe_gate.py
+    will not let a model be made `available` until `model_health_state.last_ok_at`
+    is non-NULL, the panel told the admin to press this button first, and
+    pressing it wrote nothing. See model_health.record_probe_sample.
+
+    Retries a transient failure (a router cooldown quotes ~40s and then
+    answers) before believing it — a button an admin presses by hand must not
+    condemn a model on one unlucky moment. `:path` converter — see
+    toggle_model above.
     """
     if not await admin.admin_required(request):
         return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
     from chat import _resolve_provider
-    from providers import probe_model
+    from model_health import record_probe_sample
+    from providers import probe_model_resilient
     provider = await _resolve_provider(model_id)
-    result = await probe_model(provider, model_id)
+    # budget_s: the browser reaches this through a Next.js rewrite that
+    # hard-caps at 30s. 26 leaves the retry room to run after a fast 429
+    # (~23s worst case end to end) and skips it after a slow failure, rather
+    # than handing the admin a bare 500 for a probe that actually completed.
+    result = await probe_model_resilient(provider, model_id, budget_s=_ADMIN_PROBE_BUDGET_S)
+    await record_probe_sample(model_id, ok=result.ok, latency_ms=result.latency_ms,
+                              error=result.error, provider=provider.name)
     await _write_audit_log('admin.model.test', target_type='model_catalog', target_id=model_id,
                            details={'ok': result.ok, 'latency_ms': result.latency_ms, 'error': result.error})
     return JSONResponse({

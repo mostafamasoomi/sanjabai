@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
 import { faNum, faPrice, faDate } from '@/lib/format'
@@ -46,6 +46,13 @@ import { AVAILABILITY_OPTIONS, AVAILABILITY_FA, AVAILABILITY_COLOR, TOGGLEABLE, 
        AdminPanel.tsx uses a plain `fetch` with no AbortController) --
        intentional, since a probe can legitimately take up to ~11s on a slow
        upstream router and has been observed at 103s for image generation.
+       The server bounds it instead: admin_pricing._ADMIN_PROBE_BUDGET_S caps
+       the probe plus its retry at 26s, under the 30s ceiling of the Next.js
+       rewrite this call travels through.
+       This route now RECORDS its result. It used to only display it, which
+       made the panel's advice ("run a live test first, or the server will
+       refuse to enable it") impossible to follow — see
+       backend/model_health_record.record_probe_sample.
 
    Product rule reminder (docs/NEXT-SESSION.md, CLAUDE.md): a model may only
    be served to real users after a successful *live* probe. Bulk-availability
@@ -105,6 +112,34 @@ interface ModelOpsSectionProps {
 
 const PAGE_SIZE = 50
 
+/* Bulk «تست زنده».
+ *
+ * Deliberately NOT a new bulk endpoint. Each model is one call to the
+ * existing per-model /test route, because that route's whole job is to spend
+ * up to ~26s on one upstream, and the browser reaches the API through a
+ * Next.js rewrite that hard-caps at 30s. A server-side bulk probe of even
+ * ten models could not answer inside that cap; a hundred calls of one model
+ * each always can, and the admin gets a live count instead of a spinner that
+ * either returns in twenty minutes or 500s.
+ *
+ * The concurrency is small on purpose: these probes go to the same three
+ * upstream routers the site serves traffic through, and the failure this
+ * whole feature exists to fix — «All credentials are cooling down» — is a
+ * rate limit. Testing faster produces more cooldowns, not more answers. */
+const BULK_TEST_CONCURRENCY = 3
+
+/** Above this, a bulk run is long enough that the admin should be told the
+ *  rough cost in time before starting it rather than after. At 3 at a time
+ *  and a few seconds each, 200 models is already several minutes. */
+const BULK_TEST_WARN_ABOVE = 200
+
+interface BulkTestState {
+  total: number
+  done: number
+  ok: number
+  cancel: boolean
+}
+
 export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -122,6 +157,10 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [testingId, setTestingId] = useState<string | null>(null)
   const [testResults, setTestResults] = useState<Record<string, TestResult>>({})
+  const [bulkTest, setBulkTest] = useState<BulkTestState | null>(null)
+  // The live, mutable run object. `bulkTest` is a render-only snapshot of
+  // it, so «توقف» has to reach through this to actually stop the workers.
+  const bulkRunRef = useRef<BulkTestState | null>(null)
 
   const [upstreamEditId, setUpstreamEditId] = useState<string | null>(null)
   const [upstreamDraft, setUpstreamDraft] = useState('')
@@ -242,6 +281,64 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
     }
   }
 
+  const runBulkTest = async () => {
+    const ids = Array.from(selected)
+    if (ids.length === 0) { toast('ابتدا حداقل یک مدل را انتخاب کنید', 'error'); return }
+    if (ids.length > BULK_TEST_WARN_ABOVE) {
+      const minutes = Math.ceil((ids.length * 4) / BULK_TEST_CONCURRENCY / 60)
+      if (!window.confirm(
+        `${ids.length} مدل انتخاب شده است. تست زندهٔ همهٔ آن‌ها حدود ${minutes} دقیقه طول می‌کشد `
+        + 'و در همین صفحه اجرا می‌شود (با بستن صفحه متوقف می‌شود). ادامه می‌دهید؟',
+      )) return
+    }
+
+    // `state` is the mutable source of truth for the run; the useState copy
+    // below is only for rendering. Reading progress out of React state
+    // inside the workers would read a stale snapshot on every tick.
+    const state: BulkTestState = { total: ids.length, done: 0, ok: 0, cancel: false }
+    bulkRunRef.current = state
+    setBulkTest({ ...state })
+
+    const results: Record<string, TestResult> = {}
+    let cursor = 0
+    const worker = async () => {
+      while (!state.cancel) {
+        const i = cursor++
+        if (i >= ids.length) return
+        const id = ids[i]
+        try {
+          const res = await api(`/api/admin/models/${encodeURIComponent(id)}/test`, { method: 'POST' })
+          const body = await res.json()
+          results[id] = {
+            ok: !!body.ok, latency_ms: body.latency_ms ?? null,
+            error: body.error ?? null, status_code: body.status_code ?? null,
+          }
+          if (body.ok) state.ok += 1
+        } catch (err) {
+          // One unreachable model must not abort the other 199. The reason
+          // is kept per-row so the admin can see WHICH failed and why.
+          results[id] = { ok: false, latency_ms: null, error: errMessage(err, 'خطای شبکه'), status_code: null }
+        } finally {
+          state.done += 1
+          setBulkTest({ ...state })
+        }
+      }
+    }
+
+    await Promise.all(Array.from({ length: Math.min(BULK_TEST_CONCURRENCY, ids.length) }, worker))
+    setTestResults((prev) => ({ ...prev, ...results }))
+    bulkRunRef.current = null
+    setBulkTest(null)
+    toast(
+      state.cancel
+        ? `تست متوقف شد — ${faNum(state.ok)} مدل سالم از ${faNum(state.done)} مدل آزموده‌شده`
+        : `${faNum(state.ok)} مدل از ${faNum(state.total)} مدل سالم بود`,
+      state.ok > 0 ? 'success' : 'error',
+    )
+    // The catalog carries last_verified_at, which every probe moves.
+    await load()
+  }
+
   const openUpstreamEdit = (row: CatalogModelRow) => { setUpstreamEditId(row.id); setUpstreamDraft(row.upstream || '') }
   const saveUpstream = async (id: string) => {
     const upstream = upstreamDraft.trim()
@@ -276,7 +373,7 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
       <div className="admin-card" style={{ borderRight: '3px solid var(--warning, #f59e0b)' }}>
         <p className="text-xs" style={{ color: 'var(--warning, #f59e0b)' }}>
           <Icon name="warning" size={12} /> سرور اجازهٔ «در دسترس» کردن مدلی که هرگز «تست زنده» موفق نداشته را نمی‌دهد و این درخواست را با نام همان مدل‌ها رد می‌کند.
-          پیش از تلاش برای «در دسترس» کردن مدل‌های جدید، دکمهٔ «تست زنده» را برای هرکدام بزنید تا رد نشوند.
+          مدل‌ها را انتخاب کنید و «تست زندهٔ گروهی» را بزنید؛ هر تست موفق همان‌جا ثبت می‌شود و مدل را برای فعال‌سازی واجد شرایط می‌کند.
         </p>
       </div>
 
@@ -301,10 +398,41 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
         <select className="input" value={bulkTarget} onChange={(e) => setBulkTarget(e.target.value as Availability)} style={{ maxWidth: 160 }}>
           {AVAILABILITY_OPTIONS.map((a) => <option key={a} value={a}>{AVAILABILITY_FA[a]}</option>)}
         </select>
-        <button className="btn btn-sm" onClick={openBulkConfirm} disabled={selected.size === 0}>
+        <button className="btn btn-sm" onClick={openBulkConfirm} disabled={selected.size === 0 || bulkTest !== null}>
           <Icon name="check" size={14} /> اعمال گروهی
         </button>
+        <button className="btn btn-sm" onClick={runBulkTest} disabled={selected.size === 0 || bulkTest !== null}>
+          <Icon name="refresh" size={14} /> تست زندهٔ گروهی
+        </button>
       </div>
+
+      {bulkTest && (
+        <div className="admin-card flex flex-wrap items-center gap-3"
+             style={{ borderRight: '3px solid var(--accent, #6366f1)' }}>
+          <span className="w-4 h-4 border-2 rounded-full animate-spin inline-block shrink-0"
+                style={{ borderColor: 'var(--border)', borderTopColor: 'var(--accent, #6366f1)' }} />
+          <span className="text-sm text-primary">
+            در حال تست زنده: {faNum(bulkTest.done)} از {faNum(bulkTest.total)} — {faNum(bulkTest.ok)} مدل سالم
+          </span>
+          {/* Progress is a plain div, not a chart: recharts breaks the build
+              (documented in AdminCharts.tsx). */}
+          <div className="h-1 rounded flex-1" style={{ minWidth: 120, background: 'var(--border)' }}>
+            <div className="h-1 rounded" style={{
+              width: `${Math.round((bulkTest.done / Math.max(1, bulkTest.total)) * 100)}%`,
+              background: 'var(--accent, #6366f1)',
+            }} />
+          </div>
+          {/* The ref, not the state copy: `bulkTest` is a snapshot spread out
+              of the run object for rendering, so flipping ITS `cancel` would
+              stop nothing. The workers poll the ref. */}
+          <button className="btn btn-sm" onClick={() => {
+            if (bulkRunRef.current) bulkRunRef.current.cancel = true
+            setBulkTest((prev) => (prev ? { ...prev, cancel: true } : prev))
+          }}>
+            توقف
+          </button>
+        </div>
+      )}
 
       <div className="admin-card">
         <div className="overflow-x-auto">

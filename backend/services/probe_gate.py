@@ -80,10 +80,19 @@ async def refuse_if_unprobed(session, model_ids: Sequence[str]) -> ProbeRefusal 
         return None
 
     try:
+        # Health samples are keyed by whatever id the prober used, which is
+        # `provider_model_id` for the background sweep and the catalog `id`
+        # for the admin's «تست زنده». Those are the same string for 1,199 of
+        # the 1,200 catalog rows -- and for the one where they differ, keying
+        # on `id` alone would refuse a model that had in fact been probed
+        # successfully. Match either, resolved back to the caller's id.
         res = await session.execute(sqlalchemy.text(
-            'SELECT model_id, last_ok_at FROM model_health_state WHERE model_id = ANY(:ids)'
+            'SELECT c.id AS catalog_id FROM model_catalog c '
+            'JOIN model_health_state s '
+            '  ON s.model_id = c.id OR s.model_id = c.provider_model_id '
+            'WHERE c.id = ANY(:ids) AND s.last_ok_at IS NOT NULL'
         ), {'ids': ids})
-        confirmed = {r.model_id for r in res.fetchall() if r.last_ok_at is not None}
+        confirmed = {r.catalog_id for r in res.fetchall()}
     except Exception as e:
         logger.error(f'probe gate: model_health_state read failed for {len(ids)} model(s): {e}')
         return ProbeRefusal(

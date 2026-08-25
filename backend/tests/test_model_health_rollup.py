@@ -109,8 +109,28 @@ class TestProviderFaultClassifier:
             health_quarantine_reason='http_402',
             provider_fault_only=False,
             fault_reason=None,
+            # Required, and this test failed for months without it: the
+            # `upstream` kwarg was added later with a None default, and
+            # is_paid_upstream(None) is True (see the test below), so
+            # omitting it silently exercised the never-promote-a-paid-row
+            # branch instead of the promotion this test is named for.
+            upstream='litellm',
         )
         assert (availability, reason) == ('available', None)
+
+    def test_an_unknown_upstream_is_treated_as_paid_and_never_promoted(self):
+        """Fail-safe direction: we cannot prove a row costs us nothing, so
+        we do not auto-put it on sale. Pinned because the whole point of the
+        test above is that omitting `upstream` lands here by accident."""
+        availability, _ = policy._target_catalog_state(
+            status='healthy',
+            current_availability='maintenance',
+            input_per_million=100,
+            health_quarantine_reason='http_402',
+            provider_fault_only=False,
+            fault_reason=None,
+        )
+        assert availability == 'maintenance'
 
     def test_healthy_never_promotes_admin_or_discovery_parked_row(self):
         # health_quarantine_reason is NULL -- this row was not parked by
@@ -137,6 +157,53 @@ class TestProviderFaultClassifier:
         assert availability == 'maintenance'
 
 
+class TestParkedRowsAreMeasuredButNeverRelabelled:
+    """The invariant that makes the parked-model measurement lane safe.
+
+    A `maintenance` row with NO quarantine reason was parked by an admin or
+    landed by discovery. The probe may now measure it (lane 3 of
+    _probe_targets) -- but the mirror must not act on what it finds, in
+    either direction. Each test below is a way the mirror WOULD have acted
+    before this guard existed.
+    """
+
+    def _parked(self, status, **kw):
+        return policy._target_catalog_state(
+            status=status, current_availability='maintenance',
+            input_per_million=kw.pop('input_per_million', 100),
+            health_quarantine_reason=None, provider_fault_only=kw.pop('pf', False),
+            fault_reason=kw.pop('fault_reason', None), upstream=kw.pop('upstream', 'litellm'),
+        )
+
+    def test_healthy_does_not_promote_it(self):
+        assert self._parked('healthy') == ('maintenance', None)
+
+    def test_degraded_does_not_make_it_visible(self):
+        """Would have returned ('degraded', None) -- and 'degraded' is a
+        served state, so probing parked rows would have put models nobody
+        approved in front of users."""
+        assert self._parked('degraded') == ('maintenance', None)
+
+    def test_provider_fault_down_does_not_stamp_a_quarantine_reason(self):
+        """The nastiest one. Stamping a reason on an admin-parked row is
+        what makes it auto-promotable on the next healthy probe -- so a
+        failing probe followed by a passing one would have published it."""
+        assert self._parked('down', pf=True, fault_reason='http_429') == ('maintenance', None)
+
+    def test_plain_down_does_not_rewrite_the_parking_as_disabled(self):
+        assert self._parked('down') == ('maintenance', None)
+
+    def test_a_quarantined_row_is_still_this_mechanisms_to_manage(self):
+        """The guard keys on the reason being NULL, so a row THIS mechanism
+        parked keeps its existing recheck-and-promote behaviour."""
+        availability, _ = policy._target_catalog_state(
+            status='healthy', current_availability='maintenance', input_per_million=100,
+            health_quarantine_reason='http_402', provider_fault_only=False,
+            fault_reason=None, upstream='litellm',
+        )
+        assert availability == 'available'
+
+
 class TestQuarantineRecheckSweep:
     """A quarantined model is probed on the slow lane, not every sweep."""
 
@@ -150,14 +217,17 @@ class TestQuarantineRecheckSweep:
         for sweep in range(1, n):
             assert policy._is_quarantine_recheck_sweep(sweep) is False
 
+    # calls[0], not calls[-1]: _probe_targets now issues a SECOND query for
+    # the parked-model measurement lane (see TestParkedProbeLane below), so
+    # the last call is no longer the serving-models one these assert on.
     @pytest.mark.asyncio
     async def test_probe_targets_passes_recheck_flag_through_to_the_query(self):
         session = _FakeSession(rows=[SimpleNamespace(provider_model_id='m1', up='litellm')])
         with patch.object(model_health, 'async_session', lambda: _FakeSessionCtx(session)):
             result = await model_health._probe_targets(recheck_quarantine=True)
 
-        assert result == [('m1', 'litellm')]
-        sql, params = session.calls[-1]
+        assert ('m1', 'litellm') in result
+        sql, params = session.calls[0]
         assert 'health_quarantine_reason' in sql
         assert params == {'recheck': True}
 
@@ -167,8 +237,52 @@ class TestQuarantineRecheckSweep:
         with patch.object(model_health, 'async_session', lambda: _FakeSessionCtx(session)):
             await model_health._probe_targets()
 
-        _, params = session.calls[-1]
+        _, params = session.calls[0]
         assert params == {'recheck': False}
+
+
+class TestParkedProbeLane:
+    """Lane 3 of _probe_targets: admin-parked / discovery-landed rows are
+    MEASURED on a rotating slice so their model_health_state.last_ok_at can
+    ever become non-NULL. Before this lane existed, 1,156 of 1,200 catalog
+    rows were excluded from every probe -- and services/probe_gate.py refuses
+    to make a model available until that column is non-NULL, so no sequence
+    of admin actions could enable any of them."""
+
+    @pytest.mark.asyncio
+    async def test_parked_rows_are_queried_on_a_bounded_least_recent_slice(self):
+        session = _FakeSession(rows=[SimpleNamespace(provider_model_id='p1', up='omniroute')])
+        with patch.object(model_health, 'async_session', lambda: _FakeSessionCtx(session)):
+            result = await model_health._probe_targets()
+
+        sql, params = session.calls[-1]
+        assert "c.availability = 'maintenance'" in sql
+        assert 'c.health_quarantine_reason IS NULL' in sql
+        # Least-recently-checked first, never-checked first of all: that is
+        # what makes the rotation cover everything without a stored cursor.
+        assert 'ORDER BY s.checked_at ASC NULLS FIRST' in sql
+        assert params == {'slice': policy.PARKED_PROBE_SLICE}
+        assert ('p1', 'omniroute') in result
+
+    @pytest.mark.asyncio
+    async def test_a_row_in_both_lanes_is_probed_once(self):
+        """Both queries are answered with the same id by the fake. A model
+        probed twice in one sweep would record two samples and skew its own
+        success rate."""
+        session = _FakeSession(rows=[SimpleNamespace(provider_model_id='dup', up='litellm')])
+        with patch.object(model_health, 'async_session', lambda: _FakeSessionCtx(session)):
+            result = await model_health._probe_targets()
+
+        assert result.count(('dup', 'litellm')) == 1
+
+    @pytest.mark.asyncio
+    async def test_slice_of_zero_disables_the_lane_entirely(self):
+        session = _FakeSession(rows=[])
+        with patch.object(model_health, 'PARKED_PROBE_SLICE', 0), \
+             patch.object(model_health, 'async_session', lambda: _FakeSessionCtx(session)):
+            await model_health._probe_targets()
+
+        assert len(session.calls) == 1
 
 
 # ── Fakes ─────────────────────────────────────────────────────────────────

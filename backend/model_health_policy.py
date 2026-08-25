@@ -83,6 +83,17 @@ PROVIDER_FAULT_REASONS = frozenset({
     'http_401', 'http_402', 'http_403', 'http_429', 'upstream_down',
 })
 
+#: How many admin-parked / discovery-landed `maintenance` rows one sweep
+#: measures (lane 3 in _probe_targets). They are never promoted by the probe —
+#: the point is purely to give them a truthful `last_ok_at`, without which
+#: services/probe_gate.py can never let an admin enable them. At 40 a sweep,
+#: 1,156 parked rows are covered in ~29 sweeps. Deliberately not "all of
+#: them": health_loop sleeps PROBE_INTERVAL_S *after* a sweep returns, so a
+#: sweep that probes 1,156 models at PROBE_CONCURRENCY does not overlap the
+#: next one — it just starves the models we actually serve of fresh samples.
+#: 0 disables the lane entirely.
+PARKED_PROBE_SLICE = int(os.getenv('MODEL_HEALTH_PARKED_SLICE', '40'))
+
 #: Sweeps between rechecks of a health-quarantined model. `_probe_targets`
 #: normally skips `maintenance` entirely so an admin's/discovery's parking is
 #: never undone by a probe — but a row *this* mechanism parked must not stay
@@ -160,6 +171,23 @@ def _target_catalog_state(
     Inert today: every catalog row sits on a free upstream.
     """
     priced = (input_per_million or 0) > 0
+
+    # A row parked by an admin or landed by discovery — `maintenance` with no
+    # quarantine reason — is not this mechanism's to touch, in EITHER
+    # direction. Measurement may probe it (and must, or its last_ok_at can
+    # never become non-NULL and services/probe_gate.py can never let an admin
+    # enable it); the mirror may not act on what measurement finds.
+    #
+    # Without this, extending the sweep to parked rows would quietly do three
+    # things nobody asked for: a `degraded` reading would move the row to
+    # 'degraded' (visible), a provider-fault `down` reading would stamp a
+    # quarantine reason on it — which is precisely the flag that makes a row
+    # auto-promotable on the next healthy probe — and a plain `down` reading
+    # would rewrite an admin's parking as 'disabled'. Promotion of a parked
+    # model stays an admin action, taken through the guards.
+    if current_availability == 'maintenance' and health_quarantine_reason is None:
+        return 'maintenance', None
+
     if is_paid_upstream(upstream):
         # Never *promote*; parking/disabling a sick paid row still proceeds.
         if current_availability != 'available':

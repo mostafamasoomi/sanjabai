@@ -45,8 +45,18 @@ class _Session:
         return make_result(fetchall=self.rows)
 
 
-def _health_row(model_id, last_ok_at):
-    return make_row(model_id=model_id, last_ok_at=last_ok_at)
+def _confirmed(model_id):
+    """One row of what the gate's query returns: a catalog id that JOINed to
+    a model_health_state row with a non-NULL last_ok_at.
+
+    The NULL filtering moved into SQL when the query grew a join onto
+    model_catalog (health samples are keyed by `provider_model_id` for the
+    background sweep and by catalog `id` for the admin's «تست زنده», and
+    matching only one of them refused models that had in fact been probed).
+    So the double no longer replays last_ok_at at all -- a model that was
+    never confirmed simply does not come back, which is what
+    test_last_ok_at_null_is_filtered_in_sql pins down."""
+    return make_row(catalog_id=model_id)
 
 
 @pytest.mark.anyio
@@ -56,30 +66,39 @@ class TestRefuseIfUnprobed:
         return 'asyncio'
 
     async def test_all_confirmed_is_allowed(self):
-        session = _Session([_health_row('m1', '2026-08-20'), _health_row('m2', '2026-08-21')])
+        session = _Session([_confirmed('m1'), _confirmed('m2')])
         assert await probe_gate_mod.refuse_if_unprobed(session, ['m1', 'm2']) is None
 
-    async def test_one_with_last_ok_at_null_is_refused(self):
-        """A row exists in model_health_state but was never actually
-        confirmed working (e.g. every probe so far has failed)."""
-        session = _Session([_health_row('m1', '2026-08-20'), _health_row('m2', None)])
-        refusal = await probe_gate_mod.refuse_if_unprobed(session, ['m1', 'm2'])
-        assert refusal is not None
-        assert 'm2' in refusal.detail
-        assert refusal.audit['unprobed_ids'] == ['m2']
+    async def test_last_ok_at_null_is_filtered_in_sql(self):
+        """The "row exists but was never confirmed working" case is now
+        excluded by the query itself, so assert the query says so. Without
+        this predicate the join would confirm any model that merely HAS a
+        health row -- including one whose every probe has failed."""
+        session = _Session([])
+        await probe_gate_mod.refuse_if_unprobed(session, ['m1'])
+        assert 'last_ok_at IS NOT NULL' in session.sql[0]
 
-    async def test_one_with_no_health_row_at_all_is_refused(self):
-        """m2 never appears in the query result -- a model discovered but
-        never probed has no model_health_state row at all, which must be
-        treated the same as a row with last_ok_at IS NULL."""
-        session = _Session([_health_row('m1', '2026-08-20')])
+    async def test_the_query_matches_either_id_column(self):
+        """The background sweep records under provider_model_id, «تست زنده»
+        under the catalog id. Matching only one of them refuses a model that
+        was in fact probed successfully."""
+        session = _Session([])
+        await probe_gate_mod.refuse_if_unprobed(session, ['m1'])
+        assert 's.model_id = c.id' in session.sql[0]
+        assert 's.model_id = c.provider_model_id' in session.sql[0]
+
+    async def test_one_with_no_confirmed_probe_is_refused(self):
+        """m2 never appears in the query result -- whether because it has no
+        model_health_state row at all or because its last_ok_at is NULL, both
+        are the same "never confirmed working" case."""
+        session = _Session([_confirmed('m1')])
         refusal = await probe_gate_mod.refuse_if_unprobed(session, ['m1', 'm2'])
         assert refusal is not None
         assert 'm2' in refusal.detail
         assert refusal.audit['unprobed_ids'] == ['m2']
 
     async def test_confirmed_ids_are_never_named_in_the_refusal(self):
-        session = _Session([_health_row('m1', '2026-08-20')])
+        session = _Session([_confirmed('m1')])
         refusal = await probe_gate_mod.refuse_if_unprobed(session, ['m1', 'm2'])
         assert 'm1' not in refusal.detail
 

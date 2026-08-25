@@ -366,6 +366,67 @@ async def probe_model(p: Provider, model_id: str, timeout: float = 20.0) -> Prob
         return ProbeResult(False, int((time.monotonic() - started) * 1000), type(e).__name__)
 
 
+#: Probe failures that describe a MOMENT, not a model. Measured on the live
+#: catalog (2026-08-25, 82 parked models sampled against all three upstreams):
+#: of every failure the single-shot probe reported, these bodies came back --
+#:   http_429  "All credentials for model X are cooling down, reset after 42s"
+#:   http_402  "You have reached the limit ... reset after 41s"
+#:   ReadTimeout / http_5xx  gateway hiccup
+#: Re-probing exactly those turned 5 of 70 "dead" models into answers. A
+#: single sample was deciding a model's fate, so a 40-second cooldown read as
+#: permanent death and the model was parked. 401/403/404 are NOT here: a
+#: missing credential or a model the upstream does not have is not a moment.
+TRANSIENT_PROBE_REASONS = frozenset({
+    'http_402', 'http_429', 'http_500', 'http_502', 'http_503', 'http_504',
+    'timeout', 'ReadTimeout', 'ConnectTimeout', 'ConnectError', 'ReadError',
+    'RemoteProtocolError', 'PoolTimeout',
+})
+
+#: Wait between the first probe and its retry. Long enough for a router's
+#: short cooldown to lapse (the observed bodies quote ~40s, so this does not
+#: outwait them -- it outwaits the queue, and the cooldowns that are shorter
+#: than they claim), short enough that a full-catalog sweep is not doubled in
+#: wall-clock by the retries alone.
+PROBE_RETRY_DELAY_S = float(os.getenv('MODEL_HEALTH_PROBE_RETRY_DELAY', '3'))
+
+
+async def probe_model_resilient(
+    p: Provider, model_id: str, timeout: float = 20.0, retries: int = 1,
+    budget_s: float | None = None,
+) -> ProbeResult:
+    """`probe_model`, but a transient failure is retried before it is believed.
+
+    Returns the first success, else the LAST result -- so the recorded reason
+    describes the final attempt rather than a stale first one. A non-transient
+    failure (401/403/404/http_400) returns immediately: retrying a model the
+    upstream does not have only costs time and makes the sweep look like a
+    retry storm to the gateway.
+
+    `budget_s` caps TOTAL wall-clock: a retry that could not finish inside it
+    is not started. Required on any request-path caller, because the retry
+    turns a 20s worst case into 43s and the frontend reaches the API through
+    a Next.js rewrite that hard-caps at 30s -- past which a complete answer
+    comes back to the user as a bare 500. The background sweep passes None:
+    nothing is waiting on it.
+    """
+    started = time.monotonic()
+    result = await probe_model(p, model_id, timeout=timeout)
+    attempts = 0
+    while (
+        not result.ok
+        and attempts < retries
+        and (result.error or '') in TRANSIENT_PROBE_REASONS
+    ):
+        if budget_s is not None:
+            elapsed = time.monotonic() - started
+            if elapsed + PROBE_RETRY_DELAY_S + timeout > budget_s:
+                break
+        attempts += 1
+        await asyncio.sleep(PROBE_RETRY_DELAY_S)
+        result = await probe_model(p, model_id, timeout=timeout)
+    return result
+
+
 # ── kr/ cost signal ─────────────────────────────────────────────────────
 #
 # `kr/` routes report a credit cost alongside the token counts. It is a

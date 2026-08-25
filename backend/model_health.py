@@ -38,7 +38,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import Any
 
 import sqlalchemy
 
@@ -46,15 +46,21 @@ from database import async_session, rds
 # _derive_status: unused directly below, but this re-exports it so
 # tests/test_model_health.py's `from model_health import _derive_status` keeps working.
 from model_health_policy import (
-    PROBE_CONCURRENCY, PROBE_INTERVAL_S, PROVIDER_FAULT_REASONS, RETENTION, WINDOW,
-    _SUMMARY_CACHE_KEY, _build_mirror_target, _derive_status, _is_quarantine_recheck_sweep,
-    _plan_catalog_mirror,
+    PARKED_PROBE_SLICE, PROBE_CONCURRENCY, PROBE_INTERVAL_S, PROVIDER_FAULT_REASONS,
+    RETENTION, WINDOW, _SUMMARY_CACHE_KEY, _build_mirror_target, _derive_status,
+    _is_quarantine_recheck_sweep, _plan_catalog_mirror,
 )
 # router/health_map: unused directly below, re-exported so app.py's
 # `from model_health import router` and admin_monitoring.py's/content.py's
 # `from model_health import health_map` keep working unchanged.
 from model_health_api import health_map, router
-from providers import Provider, configured_providers, list_models, probe_model, upstream_alive
+# The recording lane moved to its own file when this one passed the 500-line
+# cap; re-exported here so chat.py's `from model_health import record_traffic`
+# and every other existing import keeps working unchanged.
+from model_health_record import record, record_probe_sample, record_traffic
+from providers import (
+    Provider, configured_providers, list_models, probe_model_resilient, upstream_alive,
+)
 
 logger = logging.getLogger('model_health')
 
@@ -63,56 +69,6 @@ _CATALOG_CACHE_KEYS = ('cache:catalog:models', 'cache:catalog:pricing', 'cache:a
 #: Sweep counter for the quarantine slow lane. Module-level, not Redis: one
 #: background task in one process — losing it on restart costs one extra cycle.
 _sweep_count = 0
-
-
-# ── Recording ───────────────────────────────────────────────────────────────
-
-
-async def record(
-    model_id: str,
-    *,
-    ok: bool,
-    source: Literal['probe', 'traffic'],
-    latency_ms: int | None = None,
-    error: str | None = None,
-    provider: str = 'unknown',
-) -> None:
-    """Append one health sample.
-
-    Never raises. This is called from the chat request path, where a failure to
-    record health must not turn a working completion into a 500.
-    """
-    if not model_id or async_session is None:
-        return
-    try:
-        async with async_session() as session:
-            await session.execute(
-                sqlalchemy.text(
-                    'INSERT INTO model_health_event '
-                    '(model_id, provider, source, ok, latency_ms, error) '
-                    'VALUES (:m, :p, :s, :ok, :lat, :err)'
-                ),
-                {
-                    'm': model_id,
-                    'p': provider,
-                    's': source,
-                    'ok': ok,
-                    'lat': latency_ms,
-                    # Reason codes only — these are served to an unauthenticated
-                    # status page, so never let a raw upstream body through.
-                    'err': (error or None) if not ok else None,
-                },
-            )
-            await session.commit()
-    except Exception as e:
-        logger.warning('record health failed for %s: %s', model_id, e)
-
-
-async def record_traffic(
-    model_id: str, ok: bool, latency_ms: int | None = None, error: str | None = None
-) -> None:
-    """Convenience wrapper for the chat path."""
-    await record(model_id, ok=ok, source='traffic', latency_ms=latency_ms, error=error)
 
 
 # ── Rollup (DB-touching; pure decisions live in model_health_policy.py) ───
@@ -343,10 +299,27 @@ async def _probe_targets(recheck_quarantine: bool = False) -> list[tuple[str, st
     """(model_id, provider) pairs worth probing.
 
     Sourced from the catalog so the loop probes what we actually offer, not
-    everything an upstream happens to expose. `maintenance` rows are normally
-    excluded entirely too — an admin's/discovery's parking must never be
-    undone by a probe — except a row THIS mechanism quarantined, which is
-    probed anyway, but only on a recheck sweep (see QUARANTINE_RECHECK_EVERY).
+    everything an upstream happens to expose. Three lanes:
+
+    1. everything not `maintenance` — the models we serve or might serve;
+    2. rows THIS mechanism quarantined, on a slow lane so a self-parked model
+       is not parked forever (see QUARANTINE_RECHECK_EVERY);
+    3. a rotating slice of rows an admin parked or discovery landed
+       (`maintenance`, no quarantine reason), least-recently-checked first.
+
+    Lane 3 is new, and it is the fix for a hard deadlock. Parked rows used to
+    be excluded outright, on the reasoning that a probe must never undo an
+    admin's parking. The parking is still never undone — that guarantee moved
+    into _target_catalog_state, where it belongs, so the mirror ignores what
+    this lane finds. But *excluding them from measurement* meant their
+    `model_health_state.last_ok_at` stayed NULL forever, and
+    services/probe_gate.py refuses to make such a model available. 1,156 of
+    1,200 catalog rows sat in that state: unprobeable, therefore un-enableable,
+    therefore permanently invisible however well they actually worked. A live
+    sample of 82 of them found ~12% answering on the first try.
+
+    Least-recently-checked ordering (NULLS FIRST, so never-checked rows go
+    first) makes the rotation self-balancing without a persisted cursor.
     """
     if async_session is None:
         return []
@@ -360,7 +333,29 @@ async def _probe_targets(recheck_quarantine: bool = False) -> list[tuple[str, st
             ),
             {'recheck': recheck_quarantine},
         )
-        return [(str(r.provider_model_id), str(r.up or 'unknown')) for r in res.fetchall()]
+        targets = [(str(r.provider_model_id), str(r.up or 'unknown')) for r in res.fetchall()]
+
+        if PARKED_PROBE_SLICE > 0:
+            parked = await session.execute(
+                sqlalchemy.text(
+                    'SELECT c.provider_model_id, COALESCE(c.upstream, c.provider) AS up '
+                    'FROM model_catalog c '
+                    'LEFT JOIN model_health_state s '
+                    '  ON s.model_id = c.provider_model_id OR s.model_id = c.id '
+                    "WHERE c.availability = 'maintenance' "
+                    '  AND c.health_quarantine_reason IS NULL '
+                    'ORDER BY s.checked_at ASC NULLS FIRST, c.provider_model_id '
+                    'LIMIT :slice'
+                ),
+                {'slice': PARKED_PROBE_SLICE},
+            )
+            seen = {m for m, _ in targets}
+            for r in parked.fetchall():
+                m = str(r.provider_model_id)
+                if m not in seen:
+                    targets.append((m, str(r.up or 'unknown')))
+                    seen.add(m)
+        return targets
 
 
 async def probe_sweep() -> dict[str, Any]:
@@ -403,7 +398,11 @@ async def probe_sweep() -> dict[str, Any]:
             probed += 1
             return
         async with sem:
-            result = await probe_model(p, model_id)
+            # Resilient, not bare: a router that answers "cooling down, reset
+            # after 42s" is not a broken model, and one such sample used to be
+            # enough to park it. Measured on the live catalog, retrying only
+            # the transient reasons rescued 5 of 70 apparent failures.
+            result = await probe_model_resilient(p, model_id)
         await record(model_id, ok=result.ok, source='probe', latency_ms=result.latency_ms,
                      error=result.error, provider=p.name)
         probed += 1

@@ -1112,6 +1112,17 @@ img, svg, video, canvas {
 .admin-layout { display: flex; gap: var(--space-6); align-items: flex-start; }
 .admin-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-6); }
 .admin-card { display: flex; flex-direction: column; gap: var(--space-3); }
+
+/* Thirteen call sites decorate a card with a coloured status bar via an inline
+   `borderRight: '3px solid var(--accent|--danger|--warning)'` (StatCard,
+   ErrorCard, and eleven section headers). `.admin-card` carries no padding of
+   its own, so that bar sat flush against the text.
+   Scoped to the cards that actually have the bar: of ~100 .admin-card uses only
+   these 13 draw a line, and padding the other ~87 would inset content that has
+   nothing to be inset from and pull it out of alignment with its neighbours.
+   Logical property, because every admin page is RTL and inline-start is the
+   same edge React's `borderRight` lands on. */
+.admin-card[style*='border-right'] { padding-inline-start: var(--space-3); }
 .admin-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .admin-table th { text-align: start; padding: 0.6rem 0.75rem; font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; border-bottom: 1px solid var(--border); }
 .admin-table td { padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); }

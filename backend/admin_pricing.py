@@ -31,6 +31,14 @@ router = APIRouter()
 # name, so tests/test_margin_guard.py can patch the one symbol on
 # services.margin and have every call site here follow it.
 
+# Money law: the internal unit is ALWAYS integer Toman, everywhere; a Rial
+# conversion happens only inside the payment-gateway adapter (payment.py).
+# model_catalog.currency's own CHECK constraint still permits 'IRR' (a
+# schema leftover), but this admin surface must never be the place an
+# admin mislabels a Toman price as something else, so it is pinned to the
+# one value this product actually uses.
+_ALLOWED_CURRENCY = 'IRT'
+
 
 async def _refuse_loss_making(session, model_ids, request, **kwargs) -> JSONResponse | None:
     """400 + audit when the resulting price would be loss-making, else None.
@@ -103,7 +111,12 @@ async def set_pricing(request: Request, payload: dict[str, Any]) -> JSONResponse
         output_pm = int(payload.get('output_per_million', 0))
     except (TypeError, ValueError):
         return JSONResponse({'detail': 'قیمتها باید عدد صحیح باشند'}, status_code=400)
-    currency = payload.get('currency', 'IRT')
+    currency = payload.get('currency', _ALLOWED_CURRENCY)
+    if currency != _ALLOWED_CURRENCY:
+        return JSONResponse(
+            {'detail': f'واحد پول باید «{_ALLOWED_CURRENCY}» (تومان) باشد؛ این سامانه فقط تومان می‌فروشد.'},
+            status_code=400,
+        )
     async with async_session() as session:
         refused = await _refuse_loss_making(
             session, [model], request,
@@ -123,6 +136,27 @@ async def set_pricing(request: Request, payload: dict[str, Any]) -> JSONResponse
     if rds:
         await rds.delete('cache:catalog:models', 'cache:catalog:pricing', 'cache:api:pricing')
     return JSONResponse({'status': 'updated', 'model': model})
+
+
+# `/toggle` is a quick single-click kill-switch between 'available' and
+# 'disabled' only -- see its own docstring below. model_catalog.availability
+# also has 'maintenance' (the vast majority of rows -- discovered but never
+# promoted) and 'degraded' (probe partially failing), both owned by the
+# background health mirror (model_health_policy.py._target_catalog_state),
+# which only ever promotes a row to 'available' after a live probe *and* a
+# price are both present ("مدل فقط بعد از پروب زنده موفق ارائه می‌شود"). A
+# binary flip that treats "anything that isn't 'available'" as "should
+# become 'available'" would let one misclick push an unprobed/parked model
+# straight onto customers -- admin_catalog.py's bulk_set_availability
+# already had to special-case this ("a bulk 'disable' must also correctly
+# cover rows that start out maintenance or degraded"); this single-row
+# endpoint never got the matching fix until now. `/admin/models/bulk-
+# availability` (تب «عملیات کاتالوگ») is the correct tool for a
+# maintenance/degraded row.
+_TOGGLE_STATES = {'available', 'disabled'}
+# Same Persian labels as the frontend's ModelsTab.tsx / PricingSection.tsx
+# AVAILABILITY_FA -- one wording for this status across the whole panel.
+_AVAILABILITY_FA = {'maintenance': 'تعمیرات', 'degraded': 'کاهش‌یافته'}
 
 
 @router.post('/admin/models/{model_id:path}/toggle')
@@ -149,6 +183,15 @@ async def toggle_model(request: Request, model_id: str) -> JSONResponse:
         row = res.fetchone()
         if row is None:
             return JSONResponse({'detail': 'مدل در کاتالوگ یافت نشد'}, status_code=404)
+        if row.availability not in _TOGGLE_STATES:
+            state_fa = _AVAILABILITY_FA.get(row.availability, row.availability)
+            await _write_audit_log('admin.model.toggle_refused', target_type='model_catalog',
+                                   target_id=model_id, details={'availability': row.availability}, request=request)
+            return JSONResponse({'detail': (
+                f'مدل «{model_id}» در وضعیت «{state_fa}» است. این کلید سریع فقط بین «فعال» و «غیرفعال» '
+                'جابه‌جا می‌کند و برای این وضعیت معنا ندارد؛ فعال‌سازی مدلی که پروب زنده آن را تأیید '
+                'نکرده ممنوع است -- برای تغییر وضعیت از تب «عملیات کاتالوگ» استفاده کنید.'
+            )}, status_code=400)
         new_avail = 'disabled' if row.availability == 'available' else 'available'
         # Withdrawing a model can never be loss-making; only the flip that
         # puts it back on sale is a margin decision.

@@ -31,6 +31,13 @@
   --lp-ink-2: #b3a08c;
   --lp-ink-3: #645630;
 
+  /* The bright stop the hero headline's gradient opens on. A token rather
+     than a literal because the literal was #fff, which is correct on this
+     near-black surface and invisible (1.04:1) on the light theme's cream --
+     the first 20% of the headline simply vanished. See the light-theme
+     block below for its counterpart. */
+  --lp-hero-highlight: #fff;
+
   /* ── Brand — the squirrel mark's own gradient (F26712 -> B83D05). Mirrors
      globals.css exactly: --lp-brand is text/icon-safe on this near-black
      surface, --lp-brand-fill is the darker tone the few solid #fff-on-brand
@@ -85,7 +92,16 @@
 
   --lp-ink: #241505;
   --lp-ink-2: #5c4630;
-  --lp-ink-3: #8a745c;
+  /* Measured on the real page in light mode: #8a745c scored 4.26:1 on
+     --lp-bg and 3.92:1 on --lp-bg-soft, i.e. under AA for normal text at
+     the 0.82rem this is actually used at (hero trust row, card meta).
+     #7a6450 keeps the same warm hue and clears AA on BOTH surfaces
+     (5.36:1 / 4.93:1). */
+  --lp-ink-3: #7a6450;
+
+  /* Dark counterpart of the hero headline's opening stop -- see the .lp
+     block. On cream the gradient must open dark, not white. */
+  --lp-hero-highlight: #241505;
 
   --lp-brand: #b83d05;
   --lp-brand-fill: #b83d05;
@@ -740,6 +756,14 @@ a.lp-pill:hover {
 .lp-hero__rotator-sizer {
   display: grid;
   visibility: hidden;
+  /* Must share cell 1/1 with .lp-hero__rotator-word. Only the word carried
+     grid-area, so the sizer auto-placed into row 2 and the rotator box came
+     out 166px tall for an 83px line -- a dead second line under the
+     headline that read as a missing word. Measured on the live page:
+     parent height 166 -> 83 with this one declaration, and the sizer still
+     does its job of holding the widest word's width so the headline never
+     reflows mid-rotation. */
+  grid-area: 1 / 1;
 }
 
 .lp-hero__rotator-sizer > span {
@@ -2352,7 +2376,12 @@ a.lp-pill:hover {
 }
 
 .lp-hero__title-highlight {
-  background: linear-gradient(120deg, #fff 20%, var(--lp-cyan) 60%, var(--lp-brand) 100%);
+  background: linear-gradient(
+    120deg,
+    var(--lp-hero-highlight) 20%,
+    var(--lp-cyan) 60%,
+    var(--lp-brand) 100%
+  );
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -2369,5 +2398,9 @@ a.lp-pill:hover {
   backdrop-filter: blur(5px) saturate(180%);
   -webkit-backdrop-filter: blur(5px) saturate(180%);
   border: 1px solid var(--lp-line);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+  /* Was a literal rgba(0,0,0,0.4) -- a near-black bloom that reads as a
+     smudge under the glass card on the light theme's cream. --lp-shadow-lg
+     is already tuned per theme (warm and faint on cream, deep on the dark
+     surface), so the token does the right thing in both. */
+  box-shadow: var(--lp-shadow-lg);
 }

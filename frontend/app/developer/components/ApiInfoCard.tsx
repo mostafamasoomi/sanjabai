@@ -46,8 +46,8 @@ export function ApiInfoCard() {
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)' }}>
-              <th style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 600 }}>{s.colPlan}</th>
-              <th style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 600 }}>{s.colLimit}</th>
+              <th style={{ padding: '8px 12px', textAlign: 'start', color: 'var(--text-muted)', fontWeight: 600 }}>{s.colPlan}</th>
+              <th style={{ padding: '8px 12px', textAlign: 'start', color: 'var(--text-muted)', fontWeight: 600 }}>{s.colLimit}</th>
             </tr>
           </thead>
           <tbody>

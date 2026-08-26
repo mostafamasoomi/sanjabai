@@ -35,7 +35,7 @@ _ADMIN_PROBE_BUDGET_S = float(os.getenv('ADMIN_PROBE_BUDGET_S', '26'))
 
 # MONKEYPATCH CONTRACT (second one, see the module docstring for the first):
 # the guard is reached as `margin.refuse_if_loss_making`, never imported by
-# name, so tests/test_margin_guard.py can patch the one symbol on
+# name, so tests/test_margin_guard_wiring.py can patch the one symbol on
 # services.margin and have every call site here follow it. Same contract
 # for the probe guard, reached as `probe_gate.refuse_if_unprobed`.
 

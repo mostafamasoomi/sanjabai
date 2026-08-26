@@ -15,7 +15,7 @@ from a satellite near the bottom of this file.
 IMPORT/MONKEYPATCH CONTRACT -- read before moving anything again. The test
 suite patches several names directly on this module
 (`content_mod.get_global_markup_pct = ...` via `unittest.mock.patch.object`,
-see tests/test_margin_guard.py and tests/test_exchange_rate_source.py for
+see tests/test_margin_guard_wiring.py and tests/test_exchange_rate_source.py for
 `get_global_markup_pct`, `_get_exchange_rate`, `_fetch_tgju_rate`, `_http`,
 and `content.get_exchange_rate_meta`), and several external modules
 (admin_catalog.py, exchange_rate_admin.py, hermes.py, images.py,

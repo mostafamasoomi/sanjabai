@@ -29,7 +29,7 @@ router = APIRouter()
 
 # MONKEYPATCH CONTRACT: the margin guard is reached as
 # `margin.refuse_if_loss_making`, never imported by name, so
-# tests/test_margin_guard.py can patch the one symbol on services.margin
+# tests/test_margin_guard_wiring.py can patch the one symbol on services.margin
 # and have every call site here follow it. Same contract for the probe
 # guard, reached as `probe_gate.refuse_if_unprobed`.
 

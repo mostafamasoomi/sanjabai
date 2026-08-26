@@ -36,7 +36,7 @@ const FA = {
   ctaSubtitle: 'کیف پول خود را شارژ کنید و همین الان با هوش مصنوعی چت کنید.',
   ctaLoginAndStart: 'ورود و شروع',
   ctaTopUp: 'شارژ کیف پول',
-  ctaStartChat: 'شروع چت رایگان',
+  ctaStartChat: 'شروع چت',
   tier: {
     economy: 'اقتصادی',
     fast: 'سریع',
@@ -73,11 +73,11 @@ const EN: typeof FA = {
   ctaSubtitle: 'Top up your wallet and start chatting with AI right now.',
   ctaLoginAndStart: 'Sign in and start',
   ctaTopUp: 'Top up wallet',
-  // Faithful translation of the existing FA copy (شروع چت رایگان). Flagged
-  // separately: "free" here may conflict with the product rule that no
-  // model is free — not something this translation pass should silently
-  // fix. See the handoff report.
-  ctaStartChat: 'Start free chat',
+  // Updated to drop the "free" claim — no model on this platform is free,
+  // including free-upstream supply, per product rule (see CLAUDE.md). Was
+  // previously a faithful translation of FA's "شروع چت رایگان"; both sides
+  // changed together to stay consistent.
+  ctaStartChat: 'Start chat',
   tier: {
     economy: 'Economy',
     fast: 'Fast',

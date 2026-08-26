@@ -44,6 +44,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
+from i18n import err, err_openai
 from database import async_session, _http
 from models import Assistant
 from dependencies import _get_user_id, _to_fa
@@ -240,6 +241,10 @@ def _free_tier_response(gate: dict) -> JSONResponse:
     return JSONResponse(
         {'error': {
             'message': gate.get('message', 'محدودیت حساب رایگان اعمال شد.'),
+            # The gate builds a reason-specific pair (services/free_tier.py,
+            # services/premium_quota.py); these defaults only cover a gate
+            # shape that predates them.
+            'message_en': gate.get('message_en', 'A free-tier limit has been reached.'),
             'type': 'rate_limited',
             'code': gate.get('code', 'free_tier_throttle'),
             'model': gate.get('model', ''),
@@ -304,7 +309,7 @@ from chat_stream import _chat_stream, _smart_chat_stream  # noqa: E402
 async def chat(request: Request, payload: ChatRequest) -> Response:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
     _disabled = await _chat_preflight(uid, payload.messages)
     if _disabled is not None:
         return _disabled
@@ -366,9 +371,10 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
             )
             await _bill_session.commit()
     except InsufficientBalanceError:
-        return JSONResponse(
-            {'error': {'message': 'موجودی کیف پول شما کافی نیست. لطفاً حساب خود را شارژ کنید.', 'type': 'quota_exceeded', 'code': 'balance'}},
-            status_code=429,
+        return err_openai(
+            'موجودی کیف پول شما کافی نیست. لطفاً حساب خود را شارژ کنید.',
+            'Your wallet balance is not enough. Please top up your account.',
+            429, code='balance', err_type='quota_exceeded',
         )
     except Exception as e:
         import traceback
@@ -385,16 +391,18 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
         # unresolved id misses the billing price lookup and bills the
         # fallback ceiling rate, see _resolve_public_model's docstring).
         await _release_reservation(reservation, uid, 'no_model_available')
-        return JSONResponse(
-            {'error': {'message': 'در حال حاضر مدلی برای انتخاب پیش‌فرض در دسترس نیست. لطفاً یک مدل را به‌صورت دستی انتخاب کنید.', 'type': 'invalid_request', 'code': 'model_not_available'}},
-            status_code=400,
+        return err_openai(
+            'در حال حاضر مدلی برای انتخاب پیش‌فرض در دسترس نیست. لطفاً یک مدل را به‌صورت دستی انتخاب کنید.',
+            'No model is available to pick by default right now. Please choose one manually.',
+            400, code='model_not_available', err_type='invalid_request',
         )
     if not await _is_model_allowed(model_to_check):
         logger.info(f"chat blocked: model={model_to_check} uid={uid} not allowed")
         await _release_reservation(reservation, uid, 'model_reject')
-        return JSONResponse(
-            {'error': {'message': f'مدل {model_to_check} در دسترس نیست', 'type': 'invalid_request', 'code': 'model_not_available'}},
-            status_code=400,
+        return err_openai(
+            f'مدل {model_to_check} در دسترس نیست',
+            f'Model {model_to_check} is not available',
+            400, code='model_not_available', err_type='invalid_request',
         )
 
     # Assistant injection
@@ -490,7 +498,7 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
             error=type(e).__name__,
         )
         await _release_reservation(reservation, uid, 'on_error')
-        return JSONResponse({'detail': 'سرویس موقتاً در دسترس نیست', 'code': 'gateway_error'}, status_code=502)
+        return err('سرویس موقتاً در دسترس نیست', 'The service is temporarily unavailable.', 502)
 
 
 # /v1/chat/with-file -> chat_web.py (imported above; registers itself on

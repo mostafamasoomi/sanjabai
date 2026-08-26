@@ -29,6 +29,7 @@ from pydantic import BaseModel
 from database import async_session
 from models import User
 from dependencies import _hash_password, _verify_password, _rotate_session, _write_audit_log
+from i18n import err
 
 import auth
 
@@ -58,19 +59,19 @@ async def change_password(request: Request, payload: ChangePasswordRequest) -> J
     """Change user password"""
     uid = await auth._get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     from security import validate_password
-    valid, err = validate_password(payload.new_password)
+    valid, verr_fa, verr_en = validate_password(payload.new_password)
     if not valid:
-        return JSONResponse({'detail': err}, status_code=400)
+        return err(verr_fa, verr_en, 400)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     async with async_session() as session:
         res = await session.execute(User.__table__.select().where(User.id == uid))
         user = res.fetchone()
         if not user or not _verify_password(payload.current_password, user.password_hash):
-            return JSONResponse({'detail': 'current password is incorrect | رمز عبور فعلی نادرست است'}, status_code=401)
+            return err('رمز عبور فعلی نادرست است', 'The current password is incorrect.', 401)
 
         new_hash = _hash_password(payload.new_password)
         await session.execute(
@@ -90,15 +91,15 @@ async def get_profile(request: Request) -> JSONResponse:
     """Get full user profile including preferences and autonomy settings"""
     uid = await auth._get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     async with async_session() as session:
         res = await session.execute(User.__table__.select().where(User.id == uid))
         user = res.fetchone()
         if not user:
-            return JSONResponse({'detail': 'user not found | کاربر یافت نشد'}, status_code=404)
+            return err('کاربر یافت نشد', 'User not found.', 404)
 
         prefs = user.preferences or {}
         from fastapi.encoders import jsonable_encoder
@@ -131,24 +132,24 @@ async def update_profile(request: Request, payload: UpdateProfileRequest) -> JSO
     """Update user profile fields including preferences"""
     uid = await auth._get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     update_data: dict[str, Any] = {}
     if payload.display_name is not None:
         if len(payload.display_name) > 100:
-            return JSONResponse({'detail': 'نام نمایشی نباید بیشتر از ۱۰۰ کاراکتر باشد'}, status_code=400)
+            return err('نام نمایشی نباید بیشتر از ۱۰۰ کاراکتر باشد', 'Display name must not exceed 100 characters.', 400)
         update_data['display_name'] = payload.display_name.strip() or None
     if payload.bio is not None:
         if len(payload.bio) > 500:
-            return JSONResponse({'detail': 'بیوگرافی نباید بیشتر از ۵۰۰ کاراکتر باشد'}, status_code=400)
+            return err('بیوگرافی نباید بیشتر از ۵۰۰ کاراکتر باشد', 'Bio must not exceed 500 characters.', 400)
         update_data['bio'] = payload.bio.strip() or None
     if payload.timezone is not None:
         update_data['timezone'] = payload.timezone
     if payload.language is not None:
         if payload.language not in ('fa', 'en'):
-            return JSONResponse({'detail': 'زبان باید fa یا en باشد'}, status_code=400)
+            return err('زبان باید fa یا en باشد', 'Language must be fa or en.', 400)
         update_data['language'] = payload.language
 
     if payload.preferences is not None:
@@ -160,20 +161,20 @@ async def update_profile(request: Request, payload: UpdateProfileRequest) -> JSO
         if 'autonomy_level' in payload.preferences:
             level = payload.preferences['autonomy_level']
             if level not in ('low', 'medium', 'high'):
-                return JSONResponse({'detail': 'سطح خودمختاری باید low، medium یا high باشد'}, status_code=400)
+                return err('سطح خودمختاری باید low، medium یا high باشد', 'Autonomy level must be low, medium, or high.', 400)
 
         if 'pinned_context' in payload.preferences:
             pinned = payload.preferences['pinned_context']
             if not isinstance(pinned, str):
-                return JSONResponse({'detail': 'یادداشت دائمی باید متن باشد'}, status_code=400)
+                return err('یادداشت دائمی باید متن باشد', 'Pinned context must be text.', 400)
             if len(pinned) > 20000:
-                return JSONResponse({'detail': 'یادداشت دائمی نباید بیشتر از ۲۰,۰۰۰ کاراکتر باشد'}, status_code=400)
+                return err('یادداشت دائمی نباید بیشتر از ۲۰,۰۰۰ کاراکتر باشد', 'Pinned context must not exceed 20,000 characters.', 400)
 
         existing_prefs.update(payload.preferences)
         update_data['preferences'] = existing_prefs
 
     if not update_data:
-        return JSONResponse({'detail': 'فیلد معتبری برای بروزرسانی وجود ندارد'}, status_code=400)
+        return err('فیلد معتبری برای بروزرسانی وجود ندارد', 'No valid field to update.', 400)
 
     async with async_session() as session:
         await session.execute(
@@ -192,17 +193,17 @@ async def upload_avatar(request: Request, payload: AvatarUploadRequest) -> JSONR
     """Upload or set user avatar (URL or base64 image)"""
     uid = await auth._get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     avatar_url = None
 
     if payload.avatar_url:
         if not payload.avatar_url.startswith(('http://', 'https://')):
-            return JSONResponse({'detail': 'آدرس تصویر نامعتبر است'}, status_code=400)
+            return err('آدرس تصویر نامعتبر است', 'Invalid image URL.', 400)
         if len(payload.avatar_url) > 2000:
-            return JSONResponse({'detail': 'آدرس تصویر بیش از حد طولانی است'}, status_code=400)
+            return err('آدرس تصویر بیش از حد طولانی است', 'Image URL is too long.', 400)
         avatar_url = payload.avatar_url
     elif payload.avatar_base64:
         raw = payload.avatar_base64
@@ -211,9 +212,9 @@ async def upload_avatar(request: Request, payload: AvatarUploadRequest) -> JSONR
         try:
             decoded = base64.b64decode(raw)
         except Exception:
-            return JSONResponse({'detail': 'تصویر نامعتبر است (base64 نادرست)'}, status_code=400)
+            return err('تصویر نامعتبر است (base64 نادرست)', 'Invalid image (bad base64).', 400)
         if len(decoded) > 2 * 1024 * 1024:
-            return JSONResponse({'detail': 'حجم تصویر نباید بیشتر از ۲ مگابایت باشد'}, status_code=400)
+            return err('حجم تصویر نباید بیشتر از ۲ مگابایت باشد', 'Image size must not exceed 2 MB.', 400)
         mime = 'image/jpeg'
         if decoded[:8] == b'\x89PNG\r\n\x1a\n':
             mime = 'image/png'
@@ -223,7 +224,7 @@ async def upload_avatar(request: Request, payload: AvatarUploadRequest) -> JSONR
             mime = 'image/gif'
         avatar_url = f'data:{mime};base64,{raw}'
     else:
-        return JSONResponse({'detail': 'آدرس تصویر یا داده base64 ارسال کنید'}, status_code=400)
+        return err('آدرس تصویر یا داده base64 ارسال کنید', 'Provide an image URL or base64 data.', 400)
 
     async with async_session() as session:
         await session.execute(

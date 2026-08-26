@@ -9,6 +9,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from i18n import err
 from database import async_session
 from models import UserMemory
 from dependencies import _get_user_id, _escape_like
@@ -35,9 +36,9 @@ async def list_memories(request: Request, category: Optional[str] = None) -> JSO
     """List active memories for the current user, optional by category."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable.', 500)
     async with async_session() as session:
         stmt = UserMemory.__table__.select().where(
             UserMemory.user_id == uid,
@@ -56,9 +57,9 @@ async def count_memories(request: Request, category: Optional[str] = None) -> JS
     """Return count of active memories for current user, optional by category."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable.', 500)
     async with async_session() as session:
         stmt = UserMemory.__table__.select().where(
             UserMemory.user_id == uid,
@@ -77,9 +78,9 @@ async def search_memories(request: Request, q: str = '') -> JSONResponse:
     """Full-text search across memory content for current user."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable.', 500)
     async with async_session() as session:
         base = UserMemory.__table__.select().where(
             UserMemory.user_id == uid,
@@ -97,9 +98,9 @@ async def create_memory(request: Request, payload: MemoryCreate) -> JSONResponse
     """Create a new memory entry for the current user."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable.', 500)
     async with async_session() as session:
         mem = UserMemory(
             user_id=uid,
@@ -127,9 +128,9 @@ async def update_memory(request: Request, memory_id: int, payload: MemoryUpdate)
     """Update an existing memory entry."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(
             UserMemory.__table__.select().where(
@@ -138,7 +139,7 @@ async def update_memory(request: Request, memory_id: int, payload: MemoryUpdate)
         )
         mem = res.fetchone()
         if not mem:
-            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+            return err('یافت نشد', 'Not found.', 404)
         update_data: Dict[str, object] = {}
         if payload.content is not None:
             update_data['content'] = payload.content
@@ -163,9 +164,9 @@ async def delete_memory(request: Request, memory_id: int) -> JSONResponse:
     """Soft-delete a memory entry (set active=False)."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(
             UserMemory.__table__.select().where(
@@ -174,7 +175,7 @@ async def delete_memory(request: Request, memory_id: int) -> JSONResponse:
         )
         mem = res.fetchone()
         if not mem:
-            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+            return err('یافت نشد', 'Not found.', 404)
         await session.execute(
             UserMemory.__table__.update().where(UserMemory.id == memory_id),
             {'active': False, 'updated_at': datetime.now(timezone.utc).replace(tzinfo=None)},

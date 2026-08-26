@@ -20,6 +20,7 @@ from dependencies import _get_user_id, _write_audit_log
 from payment import create_payment, verify_payment, PaymentRequest, handle_payment_callback, CallbackResult
 from services.billing import SqlBillingRepo
 from services.money import Money
+from i18n import err
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -30,9 +31,9 @@ async def payment_request(request: Request, payload: PaymentRequest) -> JSONResp
     """Create a Zarinpal payment and return redirect URL"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if payload.amount < 1000:
-        return JSONResponse({'detail': 'حداقل مبلغ ۱۰۰۰ تومان است'}, status_code=400)
+        return err('حداقل مبلغ ۱۰۰۰ تومان است', 'Minimum amount is 1,000 tomans.', 400)
 
     callback_url = f"{BASE_URL}/api/payment/callback"
 
@@ -43,6 +44,9 @@ async def payment_request(request: Request, payload: PaymentRequest) -> JSONResp
     )
 
     if result.get('status') != 'ok':
+        # NOT CONVERTED -- `detail` here is result.get('error', ...), a
+        # variable sourced from the gateway adapter (create_payment) with no
+        # Persian sibling visible at this definition site. See handoff report.
         return JSONResponse({'detail': result.get('error', 'payment failed')}, status_code=result.get('status', 500))
 
     if async_session is not None:
@@ -66,7 +70,7 @@ async def payment_callback(request: Request) -> JSONResponse:
     status = request.query_params.get('Status', '')
 
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     payment_type = 'wallet_topup'
     reference_id = None
@@ -147,6 +151,10 @@ async def payment_callback(request: Request) -> JSONResponse:
             'credit_package': f'{BASE_URL}/wallet?payment=failed',
             'hermes_order': f'{BASE_URL}/hermes/order?payment=failed',
         }.get(payment_type, f'{BASE_URL}/wallet?payment=failed')
+        # NOT CONVERTED -- result.detail (payment.CallbackResult, out of
+        # scope) is English-only with no Persian sibling defined, and this
+        # response also carries a 'redirect' key err() doesn't support. See
+        # handoff report.
         return JSONResponse({'detail': result.detail, 'redirect': fail_redirect}, status_code=result.code)
 
     redirect_path = '/wallet?payment=success'
@@ -263,9 +271,9 @@ async def payment_history(request: Request) -> JSONResponse:
     """Get user's payment history"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     async with async_session() as session:
         res = await session.execute(

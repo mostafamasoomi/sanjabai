@@ -23,6 +23,7 @@ from sqlalchemy import select
 from database import async_session, BASE_URL
 from models import Plan, CreditPackage, Subscription, Payment, UserBillingSetting
 from dependencies import _get_user_id
+from i18n import err
 from payment import create_payment
 
 router = APIRouter()
@@ -57,9 +58,9 @@ async def get_billing_settings(request: Request) -> JSONResponse:
     """Get user's billing settings (auto-creates defaults if missing)"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     async with async_session() as session:
         res = await session.execute(
@@ -86,9 +87,9 @@ async def update_billing_settings(request: Request, payload: BillingSettingsUpda
     """Update user's billing settings"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     update_data = {'updated_at': now}
@@ -129,9 +130,9 @@ async def get_my_subscription(request: Request) -> JSONResponse:
     """Auth required: return current subscription, PAYG status, and usage summary."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     async with async_session() as session:
         sub_res = await session.execute(
@@ -189,9 +190,9 @@ async def get_my_billing(request: Request) -> JSONResponse:
     """Auth required: return billing settings."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     async with async_session() as session:
         res = await session.execute(
@@ -220,9 +221,9 @@ async def update_my_billing(request: Request, payload: BillingUpdate) -> JSONRes
     """Auth required: update billing settings."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     async with async_session() as session:
         res = await session.execute(
@@ -254,17 +255,17 @@ async def subscription_checkout(request: Request, payload: SubscriptionCheckout)
     """Auth required: create ZarinPal payment for a subscription plan."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     async with async_session() as session:
         plan_res = await session.execute(select(Plan).where(Plan.id == payload.plan_id, Plan.active == True))
         plan = plan_res.scalar_one_or_none()
         if not plan:
-            return JSONResponse({'detail': 'طرح یافت نشد'}, status_code=404)
+            return err('طرح یافت نشد', 'Plan not found.', 404)
         if plan.price_monthly <= 0:
-            return JSONResponse({'detail': 'این طرح رایگان است، نیازی به پرداخت نیست'}, status_code=400)
+            return err('این طرح رایگان است، نیازی به پرداخت نیست', 'This plan is free; no payment is required.', 400)
 
         callback_url = f"{BASE_URL}/api/payment/callback"
         result = await create_payment(
@@ -294,9 +295,9 @@ async def credit_package_checkout(request: Request, payload: CreditPackageChecko
     """Auth required: create ZarinPal payment for a credit package."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     async with async_session() as session:
         pkg_res = await session.execute(
@@ -304,7 +305,7 @@ async def credit_package_checkout(request: Request, payload: CreditPackageChecko
         )
         pkg = pkg_res.scalar_one_or_none()
         if not pkg:
-            return JSONResponse({'detail': 'بسته یافت نشد'}, status_code=404)
+            return err('بسته یافت نشد', 'Package not found.', 404)
 
         # What the user is actually charged via Zarinpal. total_credits (which
         # may be higher, when bonus_percent > 0) is what the wallet gets

@@ -46,6 +46,8 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from i18n import err
+
 logger = logging.getLogger(__name__)
 
 # Prefixes exempt from the 503 even while maintenance_mode is on. Every
@@ -117,7 +119,7 @@ class MaintenanceModeMiddleware(BaseHTTPMiddleware):
             # contract for this middleware.
             logger.warning('maintenance middleware: admin check failed: %s', e)
 
-        return JSONResponse(
-            {'detail': 'سایت در حال حاضر در حالت تعمیر و نگهداری است. لطفاً بعداً دوباره تلاش کنید.'},
-            status_code=503,
+        return err(
+            'سایت در حال حاضر در حالت تعمیر و نگهداری است. لطفاً بعداً دوباره تلاش کنید.',
+            'The site is currently under maintenance. Please try again later.', 503,
         )

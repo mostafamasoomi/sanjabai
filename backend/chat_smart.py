@@ -39,6 +39,7 @@ from services.money import Money
 from services.entitlement_gate import covering_entitlement
 from middleware.compression import compress_messages, estimate_savings
 from model_output import clean_response_dict
+from i18n import err, err_openai
 
 import chat
 from providers import COMPLETION_TIMEOUT_SECONDS
@@ -193,7 +194,7 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
     """Smart Mode: auto-selects the cheapest model capable of handling the request."""
     uid = await chat._get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     _disabled = await chat._chat_preflight(uid, payload.messages)
     if _disabled is not None:
         return _disabled
@@ -230,10 +231,11 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
         selected_model = await chat._resolve_public_model(force_model)
         if not await chat._is_model_allowed(selected_model):
             logger.info(f"smart_chat blocked forced model={force_model} uid={uid}")
-            return JSONResponse(
-                {'error': {'message': f'مدل {force_model} در دسترس نیست', 'type': 'invalid_request', 'code': 'model_not_available'}},
-                status_code=400,
-            )
+            return err_openai(
+            f'مدل {force_model} در دسترس نیست',
+            f'Model {force_model} is not available',
+            400, code='model_not_available', err_type='invalid_request',
+        )
         selected_provider = selected_model.split('/', 1)[0] if '/' in selected_model else 'bynara2'
         # Display label: echo back exactly what the caller sent in the
         # X-Smart-Model request header, never the resolved provider_model_id
@@ -288,9 +290,10 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
                 )
             await _bill_session.commit()
     except InsufficientBalanceError:
-        return JSONResponse(
-            {'error': {'message': 'موجودی کیف پول شما کافی نیست. لطفاً حساب خود را شارژ کنید.', 'type': 'quota_exceeded', 'code': 'balance'}},
-            status_code=429,
+        return err_openai(
+            'موجودی کیف پول شما کافی نیست. لطفاً حساب خود را شارژ کنید.',
+            'Your wallet balance is not enough. Please top up your account.',
+            429, code='balance', err_type='quota_exceeded',
         )
     except Exception as e:
         import traceback
@@ -406,7 +409,8 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
                     await _rel_session.commit()
             except Exception as _rel_e:
                 logger.warning(f"BillingService.release on error failed uid={uid}: {_rel_e}")
-        return JSONResponse(
-            {'detail': 'سرویس موقتاً در دسترس نیست', 'code': 'gateway_error'},
-            status_code=502,
-        )
+        # Same site as chat.py's identical gateway-error handler (already
+        # converted) -- matches that precedent, including dropping the
+        # unused 'code': 'gateway_error' key (nothing reads it; the frontend
+        # only special-cases code == 'balance', see useChatStream.ts).
+        return err('سرویس موقتاً در دسترس نیست', 'The service is temporarily unavailable.', 502)

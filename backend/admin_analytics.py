@@ -23,6 +23,7 @@ from database import async_session
 from models import Ledger
 import admin
 from dependencies import _write_audit_log
+from i18n import err
 
 router = APIRouter()
 
@@ -33,9 +34,9 @@ router = APIRouter()
 async def export_ledger(request: Request) -> Response:
     """Export all ledger entries as CSV"""
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(Ledger.__table__.select().order_by(Ledger.created_at.desc()).limit(10000))
         rows = res.fetchall()
@@ -56,9 +57,9 @@ async def export_ledger(request: Request) -> Response:
 async def export_users(request: Request) -> Response:
     """Export all users as CSV"""
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(
             sqlalchemy.text('''
@@ -86,9 +87,9 @@ async def export_users(request: Request) -> Response:
 @router.get('/admin/analytics')
 async def admin_analytics(request: Request) -> JSONResponse:
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         r = await session.execute(sqlalchemy.text('SELECT COUNT(*) as c FROM users'))
         user_count = r.fetchone().c
@@ -169,9 +170,9 @@ async def admin_analytics(request: Request) -> JSONResponse:
 async def admin_stats(request: Request) -> JSONResponse:
     """Quick stats summary for admin dashboard."""
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         r = await session.execute(sqlalchemy.text('SELECT COUNT(*) as c FROM users'))
         total_users = r.fetchone().c
@@ -251,9 +252,9 @@ async def admin_analytics_timeseries(request: Request) -> JSONResponse:
     change.
     """
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         # 1) Daily consumption -- what users were charged for usage. This is
         # NOT revenue (see docstring above). generate_series fills zero days.
@@ -414,9 +415,9 @@ async def admin_audit_logs(request: Request) -> JSONResponse:
       since     – ISO datetime; only return entries after this time
     """
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     page = max(1, int(request.query_params.get('page', 1)))
     limit = min(max(1, int(request.query_params.get('limit', 50))), 200)

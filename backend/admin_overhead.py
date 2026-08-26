@@ -82,6 +82,7 @@ from fastapi.responses import JSONResponse
 
 from database import _http, async_session
 from dependencies import admin_required
+from i18n import err
 from providers import get_provider
 
 logger = logging.getLogger(__name__)
@@ -209,9 +210,9 @@ async def _representative_models() -> list[tuple[str, str]]:
 @router.post('/admin/upstream-overhead/measure')
 async def measure_upstream_overhead(request: Request) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'The database is unavailable.', 500)
 
     from chat_billing import _estimate_input_tokens
 
@@ -222,7 +223,10 @@ async def measure_upstream_overhead(request: Request) -> JSONResponse:
         candidates = await _representative_models()
     except Exception as e:
         logger.warning('upstream-overhead measure: candidate lookup failed: %s', e)
-        return JSONResponse({'detail': 'خطا در خواندن فهرست مدل‌ها از پایگاه داده'}, status_code=500)
+        return err(
+            'خطا در خواندن فهرست مدل‌ها از پایگاه داده',
+            'Failed to read the model list from the database.', 500,
+        )
 
     entries: dict[str, int] = {}
     measurements: dict[str, dict[str, Any]] = {}
@@ -307,7 +311,10 @@ async def measure_upstream_overhead(request: Request) -> JSONResponse:
             await session.commit()
     except Exception as e:
         logger.warning('upstream-overhead measure: write failed: %s', e)
-        return JSONResponse({'detail': 'خطا در ذخیره‌سازی نتیجه اندازه‌گیری'}, status_code=500)
+        return err(
+            'خطا در ذخیره‌سازی نتیجه اندازه‌گیری',
+            'Failed to save the measurement result.', 500,
+        )
 
     try:
         from services.upstream_overhead import invalidate_cache
@@ -326,9 +333,9 @@ async def measure_upstream_overhead(request: Request) -> JSONResponse:
 @router.get('/admin/upstream-overhead')
 async def get_upstream_overhead(request: Request) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'The database is unavailable.', 500)
 
     try:
         async with async_session() as session:
@@ -339,7 +346,10 @@ async def get_upstream_overhead(request: Request) -> JSONResponse:
             row = res.fetchone()
     except Exception as e:
         logger.warning('GET /admin/upstream-overhead: DB read failed: %s', e)
-        return JSONResponse({'detail': 'خطا در خواندن تنظیمات از پایگاه داده'}, status_code=500)
+        return err(
+            'خطا در خواندن تنظیمات از پایگاه داده',
+            'Failed to read settings from the database.', 500,
+        )
 
     stored = row.value if row is not None else {'version': 1, 'measured_at': None, 'entries': {}, 'provider_default': {}}
     updated_at = row.updated_at.isoformat() if row is not None and row.updated_at else None

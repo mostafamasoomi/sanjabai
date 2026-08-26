@@ -9,7 +9,7 @@ import json
 
 import pytest
 
-from i18n import bi, err, pick
+from i18n import bi, err, err_openai, pick
 
 
 class TestErr:
@@ -36,6 +36,41 @@ class TestErr:
     @pytest.mark.parametrize('status', [400, 401, 403, 404, 409, 429, 500, 503])
     def test_passes_the_status_through_untouched(self, status):
         assert err('خطا', 'error', status).status_code == status
+
+
+class TestErrOpenai:
+    """The /v1/* shape. `type` and `code` are what OpenAI-compatible SDKs
+    branch on, so the whole point of a separate helper is that they survive."""
+
+    def test_keeps_the_persian_under_message(self):
+        body = json.loads(bytes(err_openai('موجودی کافی نیست', 'Insufficient balance.', 402).body))
+        assert body['error']['message'] == 'موجودی کافی نیست'
+
+    def test_adds_the_english_sibling(self):
+        body = json.loads(bytes(err_openai('موجودی کافی نیست', 'Insufficient balance.', 402).body))
+        assert body['error']['message_en'] == 'Insufficient balance.'
+
+    def test_passes_type_and_code_through_untouched(self):
+        res = err_openai('الف', 'a', 402, code='balance', err_type='quota_exceeded')
+        body = json.loads(bytes(res.body))
+        assert body['error']['type'] == 'quota_exceeded'
+        assert body['error']['code'] == 'balance'
+        assert res.status_code == 402
+
+    def test_omits_code_entirely_when_absent(self):
+        # An SDK doing `if err.code == ...` must not trip over a null.
+        body = json.loads(bytes(err_openai('الف', 'a', 400).body))
+        assert 'code' not in body['error']
+
+    def test_defaults_the_type_rather_than_leaving_it_out(self):
+        body = json.loads(bytes(err_openai('الف', 'a', 400).body))
+        assert body['error']['type'] == 'invalid_request'
+
+    def test_never_uses_the_detail_shape(self):
+        # Flattening a /v1/* refusal to {detail: ...} changes the contract for
+        # every client pointed at this API. That is why this helper exists.
+        body = json.loads(bytes(err_openai('الف', 'a', 400).body))
+        assert 'detail' not in body and set(body) == {'error'}
 
 
 class TestBi:

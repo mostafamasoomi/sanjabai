@@ -65,6 +65,7 @@ from fastapi.responses import JSONResponse
 
 from database import async_session
 from dependencies import admin_required, _write_audit_log
+from i18n import err
 
 logger = logging.getLogger(__name__)
 
@@ -75,189 +76,23 @@ router = APIRouter()
 # endpoint, but never required from a caller and never defaulted from a
 # live field except on create, where the NOT NULL constraint forces *some*
 # value.
-_LEGACY_MONEY_FIELDS = ('price', 'credits', 'bonus_credits')
-
-# Live money columns: what pricing.py/payment_endpoints.py actually read.
-_LIVE_MONEY_FIELDS = ('base_amount', 'total_credits')
-
-# The loss-protection ceiling. Nullable; NULL means "no ceiling set yet".
-_CEILING_FIELD = 'max_cost_per_request_toman'
-
-# All Toman fields share the same "non-negative integer, no floats" rule.
-_ALL_MONEY_FIELDS = _LEGACY_MONEY_FIELDS + _LIVE_MONEY_FIELDS + (_CEILING_FIELD,)
-
-# migrations/0034_*: nullable quota fields. NULL means "this package does
-# not grant that kind of quota". Positive-only when set -- a zero-request
-# quota is meaningless and should just be NULL.
-_QUOTA_FIELDS = ('request_quota', 'token_quota', 'validity_days')
-
-# migrations/0046_*: nullable pure rate-limit fields, NULL = "no cap of that
-# kind". Deliberately NOT part of _QUOTA_FIELDS and NOT wired into
-# `_check_loss_path` below -- these never create a `package_entitlement`
-# (see user_quota.py/chat_billing.py for what does), so the wallet always
-# pays for what they gate; a ceiling requirement here would just re-couple
-# a pure rate limit to the wallet-bypass entitlement the guard polices.
-# `premium_rate_limit_per_window` is a subset counted from inside
-# `rate_limit_per_window`, not an additional cap.
-_RATE_LIMIT_FIELDS = ('rate_limit_per_window', 'premium_rate_limit_per_window')
-
-_TEXT_FIELDS = ('name_fa', 'name_en', 'description', 'name')
-
-_PERCENT_FIELD = 'bonus_percent'
-
-# Every field this router will write if present in a request payload.
-_EDITABLE_FIELDS = (
-    _TEXT_FIELDS + _ALL_MONEY_FIELDS + _QUOTA_FIELDS + _RATE_LIMIT_FIELDS
-    + (_PERCENT_FIELD, 'active')
+# Field tables, payload parsing and the loss-path rule live in a sibling
+# module -- this file is the endpoints. See admin_packages_validation.py.
+from admin_packages_validation import (  # noqa: E402
+    _ALL_MONEY_FIELDS, _CEILING_FIELD, _EDITABLE_FIELDS, _LEGACY_MONEY_FIELDS,
+    _LIVE_MONEY_FIELDS, _MONEY_LABELS, _PERCENT_FIELD, _QUOTA_FIELDS,
+    _QUOTA_LABELS, _RATE_LIMIT_FIELDS, _RATE_LIMIT_LABELS, _TEXT_FIELDS,
+    _check_loss_path, _parse_int_field, _validate_payload,
 )
-
-def _parse_int_field(raw: Any, *, label: str, allow_null: bool, min_value: int) -> tuple[int | None, str | None]:
-    """Shared integer guard for every money/quota field on this table.
-
-    Rejects floats outright -- including an integral-looking one like
-    ``10.0`` -- and rejects ``bool`` (a subclass of ``int`` in Python, so
-    ``True`` would otherwise silently parse as ``1``). This is the only
-    thing standing between an admin's request and a fractional Toman or a
-    fractional quota entering the pricing/entitlement pipeline; never
-    multiply or divide by 10 here or anywhere downstream.
-    """
-    if raw is None:
-        if allow_null:
-            return None, None
-        return None, f'{label} الزامی است'
-    if isinstance(raw, bool) or isinstance(raw, float):
-        return None, f'{label} باید عدد صحیح باشد (اعشار مجاز نیست)'
-    if isinstance(raw, int):
-        value = raw
-    elif isinstance(raw, str) and re.fullmatch(r'-?\d+', raw.strip()):
-        value = int(raw.strip())
-    else:
-        return None, f'{label} باید عدد صحیح باشد'
-    if value < min_value:
-        return None, f'{label} نمی‌تواند کمتر از {min_value} باشد'
-    return value, None
-
-
-_MONEY_LABELS = {
-    'price': 'قیمت (ستون قدیمی)',
-    'credits': 'اعتبار (ستون قدیمی)',
-    'bonus_credits': 'اعتبار پاداش (ستون قدیمی)',
-    'base_amount': 'مبلغ پرداختی',
-    'total_credits': 'مبلغ واریزی به کیف پول',
-    'max_cost_per_request_toman': 'سقف هزینه هر درخواست',
-}
-_QUOTA_LABELS = {
-    'request_quota': 'سهمیهٔ تعداد درخواست',
-    'token_quota': 'سهمیهٔ توکن',
-    'validity_days': 'مدت اعتبار (روز)',
-}
-_RATE_LIMIT_LABELS = {
-    'rate_limit_per_window': 'سقف پیام در هر پنجرهٔ ۵ ساعته',
-    'premium_rate_limit_per_window': 'سقف پیام روی مدل‌های گران در هر پنجرهٔ ۵ ساعته',
-}
-
-
-def _validate_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
-    """Validate whichever editable fields are present in *payload*.
-
-    Returns ``(cleaned, error)``: ``cleaned`` holds only the fields that
-    were actually present, parsed to their final DB-ready value;
-    ``error`` is a Persian message for the first validation failure, or
-    ``None``. The loss-protection cross-field rule (quota without a
-    ceiling) is deliberately NOT checked here -- it needs the *effective*
-    row (payload merged over what's already in the DB), which only the
-    caller can compute after fetching the current row.
-    """
-    cleaned: dict[str, Any] = {}
-
-    for field in _ALL_MONEY_FIELDS:
-        if field not in payload:
-            continue
-        # price/credits/bonus_credits are NOT NULL in the DB (no default on
-        # price/credits); base_amount, total_credits and the ceiling are
-        # nullable columns, so an explicit `null` legitimately clears them.
-        allow_null = field not in _LEGACY_MONEY_FIELDS
-        value, err = _parse_int_field(payload[field], label=_MONEY_LABELS[field], allow_null=allow_null, min_value=0)
-        if err:
-            return {}, err
-        cleaned[field] = value
-
-    for field in _QUOTA_FIELDS:
-        if field not in payload:
-            continue
-        value, err = _parse_int_field(payload[field], label=_QUOTA_LABELS[field], allow_null=True, min_value=1)
-        if err:
-            return {}, err
-        cleaned[field] = value
-
-    # Same non-negative-integer, positive-only-when-set rule as the quota
-    # fields above -- NULL means "no rate cap", zero is meaningless and
-    # should just be NULL. See the field-group comment above _QUOTA_FIELDS:
-    # deliberately not fed into `_check_loss_path`.
-    for field in _RATE_LIMIT_FIELDS:
-        if field not in payload:
-            continue
-        value, err = _parse_int_field(payload[field], label=_RATE_LIMIT_LABELS[field], allow_null=True, min_value=1)
-        if err:
-            return {}, err
-        cleaned[field] = value
-
-    if _PERCENT_FIELD in payload:
-        value, err = _parse_int_field(payload[_PERCENT_FIELD], label='درصد پاداش', allow_null=True, min_value=0)
-        if err:
-            return {}, err
-        cleaned[_PERCENT_FIELD] = value
-
-    for field in _TEXT_FIELDS:
-        if field not in payload:
-            continue
-        raw = payload[field]
-        if field == 'description':
-            cleaned[field] = None if raw is None else str(raw)
-            continue
-        if raw is None or not str(raw).strip():
-            return {}, f'{"نام" if field != "description" else field} نمی‌تواند خالی باشد'
-        cleaned[field] = str(raw)
-
-    if 'active' in payload:
-        if not isinstance(payload['active'], bool):
-            return {}, 'وضعیت فعال بودن باید true/false باشد'
-        cleaned['active'] = payload['active']
-
-    return cleaned, None
-
-
-def _check_loss_path(effective: dict[str, Any]) -> str | None:
-    """🔴 The product's core loss-protection rule: a package that grants a
-    request or token quota MUST carry a per-request cost ceiling, or a user
-    could spend the whole quota on the most expensive model available and
-    every one of those requests loses money. A request priced above the
-    ceiling simply isn't covered by the quota and falls back to the wallet
-    -- so the ceiling is not optional once either quota is set.
-
-    Deliberately checks ONLY `request_quota`/`token_quota` -- do NOT extend
-    this to `rate_limit_per_window`/`premium_rate_limit_per_window`
-    (migration 0046, see `_RATE_LIMIT_FIELDS` above): those create no
-    `package_entitlement` and the wallet always pays for what they gate, so
-    there is no loss path here to close for them.
-    """
-    has_quota = effective.get('request_quota') is not None or effective.get('token_quota') is not None
-    if has_quota and effective.get(_CEILING_FIELD) is None:
-        return (
-            'بسته‌ای که سهمیهٔ درخواست یا توکن دارد باید سقف هزینهٔ هر درخواست '
-            '(max_cost_per_request_toman) هم داشته باشد، وگرنه مسیر ضررده است: '
-            'کاربر می‌تواند کل سهمیه را روی گران‌ترین مدل خرج کند و هر درخواست ضرر بدهد.'
-        )
-    return None
 
 
 @router.get('/admin/packages')
 async def list_packages(request: Request) -> JSONResponse:
     """All credit packages, every column, for the admin packages table."""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(sqlalchemy.text('SELECT * FROM credit_packages ORDER BY sort_order, id'))
         rows = [dict(r._mapping) for r in res.fetchall()]
@@ -273,19 +108,21 @@ async def update_package(request: Request, package_id: str, payload: dict[str, A
     the audit log; pricing is money and every edit must be traceable.
     """
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     unknown = set(payload) - set(_EDITABLE_FIELDS)
     if unknown:
-        return JSONResponse({'detail': f'فیلد ناشناخته: {", ".join(sorted(unknown))}'}, status_code=400)
+        return err(f'فیلد ناشناخته: {", ".join(sorted(unknown))}',
+                    f'Unknown field(s): {", ".join(sorted(unknown))}', 400)
 
-    cleaned, err = _validate_payload(payload)
-    if err:
-        return JSONResponse({'detail': err}, status_code=400)
+    # Named `error`, not `err`, so it never shadows the `err()` import used above/below.
+    cleaned, error = _validate_payload(payload)
+    if error:
+        return JSONResponse({'detail': error}, status_code=400)
     if not cleaned:
-        return JSONResponse({'detail': 'هیچ فیلدی برای بروزرسانی ارسال نشده است'}, status_code=400)
+        return err('هیچ فیلدی برای بروزرسانی ارسال نشده است', 'No fields were submitted to update.', 400)
 
     async with async_session() as session:
         res = await session.execute(
@@ -293,13 +130,13 @@ async def update_package(request: Request, package_id: str, payload: dict[str, A
         )
         current = res.fetchone()
         if not current:
-            return JSONResponse({'detail': 'بسته یافت نشد'}, status_code=404)
+            return err('بسته یافت نشد', 'Package not found.', 404)
         current_map = dict(current._mapping)
 
         effective = {**current_map, **cleaned}
         loss_err = _check_loss_path(effective)
         if loss_err:
-            return JSONResponse({'detail': loss_err}, status_code=400)
+            return err(loss_err[0], loss_err[1], 400)
 
         set_parts = [f'{f} = :{f}' for f in cleaned]
         set_parts.append('updated_at = now()')
@@ -329,29 +166,29 @@ async def create_package(request: Request, payload: dict[str, Any]) -> JSONRespo
     means anything.
     """
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     package_id = str(payload.get('id') or '').strip()
     if not package_id or not re.fullmatch(r'[a-z0-9][a-z0-9_-]*', package_id):
-        return JSONResponse(
-            {'detail': 'شناسهٔ بسته الزامی است (حروف/اعداد کوچک انگلیسی، خط تیره یا زیرخط)'},
-            status_code=400,
-        )
+        return err('شناسهٔ بسته الزامی است (حروف/اعداد کوچک انگلیسی، خط تیره یا زیرخط)',
+                    'Package ID is required (lowercase English letters/digits, hyphen or underscore).', 400)
 
     unknown = set(payload) - set(_EDITABLE_FIELDS) - {'id'}
     if unknown:
-        return JSONResponse({'detail': f'فیلد ناشناخته: {", ".join(sorted(unknown))}'}, status_code=400)
+        return err(f'فیلد ناشناخته: {", ".join(sorted(unknown))}',
+                    f'Unknown field(s): {", ".join(sorted(unknown))}', 400)
 
     if not str(payload.get('name_fa') or '').strip():
-        return JSONResponse({'detail': 'نام فارسی الزامی است'}, status_code=400)
+        return err('نام فارسی الزامی است', 'The Persian name is required.', 400)
     if not str(payload.get('name_en') or '').strip():
-        return JSONResponse({'detail': 'نام انگلیسی الزامی است'}, status_code=400)
+        return err('نام انگلیسی الزامی است', 'The English name is required.', 400)
 
-    cleaned, err = _validate_payload({k: v for k, v in payload.items() if k != 'id'})
-    if err:
-        return JSONResponse({'detail': err}, status_code=400)
+    # Named `error`, not `err`, so it never shadows the `err()` import used above.
+    cleaned, error = _validate_payload({k: v for k, v in payload.items() if k != 'id'})
+    if error:
+        return JSONResponse({'detail': error}, status_code=400)
 
     # Satisfy the NOT-NULL-no-default legacy columns from the live fields
     # when not explicitly given -- see docstring.
@@ -363,14 +200,14 @@ async def create_package(request: Request, payload: dict[str, Any]) -> JSONRespo
 
     loss_err = _check_loss_path(cleaned)
     if loss_err:
-        return JSONResponse({'detail': loss_err}, status_code=400)
+        return err(loss_err[0], loss_err[1], 400)
 
     async with async_session() as session:
         existing = await session.execute(
             sqlalchemy.text('SELECT id FROM credit_packages WHERE id = :pid'), {'pid': package_id}
         )
         if existing.fetchone():
-            return JSONResponse({'detail': 'این شناسه قبلاً استفاده شده است'}, status_code=400)
+            return err('این شناسه قبلاً استفاده شده است', 'This ID is already in use.', 400)
 
         columns = list(cleaned.keys())
         await session.execute(
@@ -424,9 +261,9 @@ async def get_premium_threshold(request: Request) -> JSONResponse:
     here, no fail-open: a DB error is a 500, never a guessed default shown
     as if it were the stored value."""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     try:
         async with async_session() as session:
@@ -437,7 +274,7 @@ async def get_premium_threshold(request: Request) -> JSONResponse:
             row = res.fetchone()
     except Exception as e:
         logger.warning('GET /admin/premium-threshold DB read failed: %s', e)
-        return JSONResponse({'detail': 'خطا در خواندن تنظیمات از پایگاه داده'}, status_code=500)
+        return err('خطا در خواندن تنظیمات از پایگاه داده', 'Failed to read settings from the database.', 500)
 
     row_missing = row is None
     value = (
@@ -456,12 +293,12 @@ async def update_premium_threshold(request: Request, payload: dict[str, Any]) ->
     """Write the threshold: ``{"value": 200000}`` -- one non-negative
     integer within bounds, stored as a bare JSON number."""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     if not isinstance(payload, dict) or 'value' not in payload:
-        return JSONResponse({'detail': 'مقدار الزامی است'}, status_code=400)
+        return err('مقدار الزامی است', 'Value is required.', 400)
 
     raw = payload['value']
     # Reject non-integers explicitly (admin_free_tier.py's rule): "3.5" or
@@ -471,11 +308,11 @@ async def update_premium_threshold(request: Request, payload: dict[str, Any]) ->
         if isinstance(raw, str) and raw.strip().lstrip('-').isdigit():
             raw = int(raw.strip())
         else:
-            return JSONResponse({'detail': 'مقدار باید یک عدد صحیح باشد'}, status_code=400)
+            return err('مقدار باید یک عدد صحیح باشد', 'Value must be an integer.', 400)
 
     lo, hi = _PREMIUM_THRESHOLD_BOUNDS
     if raw < lo or raw > hi:
-        return JSONResponse({'detail': f'مقدار باید بین {lo} و {hi} باشد'}, status_code=400)
+        return err(f'مقدار باید بین {lo} و {hi} باشد', f'Value must be between {lo} and {hi}.', 400)
 
     try:
         async with async_session() as session:
@@ -490,7 +327,7 @@ async def update_premium_threshold(request: Request, payload: dict[str, Any]) ->
             await session.commit()
     except Exception as e:
         logger.warning('POST /admin/premium-threshold DB write failed: %s', e)
-        return JSONResponse({'detail': 'خطا در ذخیرهٔ تنظیمات در پایگاه داده'}, status_code=500)
+        return err('خطا در ذخیرهٔ تنظیمات در پایگاه داده', 'Failed to save settings to the database.', 500)
 
     await _write_audit_log(
         'admin.premium_threshold.update', target_type='app_setting',

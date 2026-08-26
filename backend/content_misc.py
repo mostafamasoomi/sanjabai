@@ -29,6 +29,7 @@ from PIL import Image, ImageDraw, ImageFont
 from database import async_session, rds, LITELLM_HOST
 from models import AboutContent, Feature, Discount, ProxyConfig
 from dependencies import admin_required
+from i18n import err
 
 import content
 
@@ -115,7 +116,7 @@ async def test_all_models(request: Request):
     # change which models we recommend to real users. Verified open on
     # production before this fix- an unauthenticated GET returned 200.
     if not await admin_required(request):
-        return JSONResponse({'detail': 'دسترسی مدیر لازم است'}, status_code=403)
+        return err('دسترسی مدیر لازم است', 'Admin access required.', 403)
     import httpx, asyncio
     async with async_session() as session:
         res = await session.execute(sqlalchemy.text(

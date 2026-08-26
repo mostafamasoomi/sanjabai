@@ -28,6 +28,7 @@ from sqlalchemy import select
 
 import hermes
 from database import async_session
+from i18n import err
 from models import HermesServer, HermesServerSkill, HermesSkillCatalog, HermesAgentEvent, HermesOffering
 from dependencies import _get_user_id, _write_audit_log, _hash_api_key
 from hermes import _utcnow, _validate_skill_options
@@ -72,9 +73,9 @@ async def _load_owned_server(session, server_id: int, uid: int) -> HermesServer 
 async def list_servers(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
     async with async_session() as session:
         res = await session.execute(
             select(HermesServer).where(HermesServer.user_id == uid).order_by(HermesServer.created_at.desc())
@@ -103,13 +104,13 @@ def _server_public(server: HermesServer) -> dict:
 async def get_server(request: Request, server_id: int) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
     async with async_session() as session:
         server = await _load_owned_server(session, server_id, uid)
         if not server:
-            return JSONResponse({'detail': 'سرور یافت نشد'}, status_code=404)
+            return err('سرور یافت نشد', 'Server not found', 404)
         skills_res = await session.execute(
             select(HermesServerSkill).where(HermesServerSkill.server_id == server.id)
         )
@@ -124,25 +125,25 @@ async def get_server(request: Request, server_id: int) -> JSONResponse:
 async def attach_skill(request: Request, server_id: int, payload: SkillAttach) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
 
     async with async_session() as session:
         server = await _load_owned_server(session, server_id, uid)
         if not server:
-            return JSONResponse({'detail': 'سرور یافت نشد'}, status_code=404)
+            return err('سرور یافت نشد', 'Server not found', 404)
 
         skill_res = await session.execute(
             select(HermesSkillCatalog).where(HermesSkillCatalog.id == payload.skill_id, HermesSkillCatalog.active == True)
         )
         skill = skill_res.scalar_one_or_none()
         if not skill:
-            return JSONResponse({'detail': 'اسکیل یافت نشد'}, status_code=404)
+            return err('اسکیل یافت نشد', 'Skill not found', 404)
 
         error = _validate_skill_options(skill.options_schema, payload.options)
         if error:
-            return JSONResponse({'detail': error}, status_code=400)
+            return err(error[0], error[1], 400)
 
         offering_res = await session.execute(select(HermesOffering).where(HermesOffering.id == server.offering_id))
         offering = offering_res.scalar_one_or_none()
@@ -154,7 +155,11 @@ async def attach_skill(request: Request, server_id: int, payload: SkillAttach) -
         )
         existing_count = len(existing_res.fetchall())
         if offering and existing_count >= offering.max_skills:
-            return JSONResponse({'detail': f'این سرور حداکثر {offering.max_skills} اسکیل پشتیبانی می‌کند'}, status_code=400)
+            return err(
+                f'این سرور حداکثر {offering.max_skills} اسکیل پشتیبانی می‌کند',
+                f'This server supports at most {offering.max_skills} skills',
+                400,
+            )
 
         dup_res = await session.execute(
             select(HermesServerSkill).where(
@@ -162,7 +167,7 @@ async def attach_skill(request: Request, server_id: int, payload: SkillAttach) -
             )
         )
         if dup_res.scalar_one_or_none():
-            return JSONResponse({'detail': 'این اسکیل قبلاً روی سرور نصب شده است'}, status_code=400)
+            return err('این اسکیل قبلاً روی سرور نصب شده است', 'This skill is already installed on the server', 400)
 
         row = HermesServerSkill(
             server_id=server.id, skill_id=payload.skill_id, options=payload.options,
@@ -180,14 +185,14 @@ async def attach_skill(request: Request, server_id: int, payload: SkillAttach) -
 async def update_skill(request: Request, server_id: int, skill_id: str, payload: SkillUpdate) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
 
     async with async_session() as session:
         server = await _load_owned_server(session, server_id, uid)
         if not server:
-            return JSONResponse({'detail': 'سرور یافت نشد'}, status_code=404)
+            return err('سرور یافت نشد', 'Server not found', 404)
 
         row_res = await session.execute(
             select(HermesServerSkill).where(
@@ -196,14 +201,14 @@ async def update_skill(request: Request, server_id: int, skill_id: str, payload:
         )
         row = row_res.scalar_one_or_none()
         if not row:
-            return JSONResponse({'detail': 'اسکیل روی این سرور نصب نیست'}, status_code=404)
+            return err('اسکیل روی این سرور نصب نیست', 'Skill is not installed on this server', 404)
 
         if payload.options is not None:
             catalog_res = await session.execute(select(HermesSkillCatalog).where(HermesSkillCatalog.id == skill_id))
             catalog = catalog_res.scalar_one_or_none()
             error = _validate_skill_options(catalog.options_schema if catalog else {}, payload.options)
             if error:
-                return JSONResponse({'detail': error}, status_code=400)
+                return err(error[0], error[1], 400)
             row.options = payload.options
         if payload.enabled is not None:
             row.enabled = payload.enabled
@@ -221,14 +226,14 @@ async def update_skill(request: Request, server_id: int, skill_id: str, payload:
 async def remove_skill(request: Request, server_id: int, skill_id: str) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
 
     async with async_session() as session:
         server = await _load_owned_server(session, server_id, uid)
         if not server:
-            return JSONResponse({'detail': 'سرور یافت نشد'}, status_code=404)
+            return err('سرور یافت نشد', 'Server not found', 404)
 
         row_res = await session.execute(
             select(HermesServerSkill).where(
@@ -237,7 +242,7 @@ async def remove_skill(request: Request, server_id: int, skill_id: str) -> JSONR
         )
         row = row_res.scalar_one_or_none()
         if not row:
-            return JSONResponse({'detail': 'اسکیل روی این سرور نصب نیست'}, status_code=404)
+            return err('اسکیل روی این سرور نصب نیست', 'Skill is not installed on this server', 404)
 
         # Not deleted immediately -- the agent must confirm removal via
         # POST /hermes/agent/report before the row disappears.
@@ -255,15 +260,15 @@ async def remove_skill(request: Request, server_id: int, skill_id: str) -> JSONR
 async def rotate_agent_token(request: Request, server_id: int) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
 
     raw_token = f'hsa-{secrets.token_urlsafe(32)}'
     async with async_session() as session:
         server = await _load_owned_server(session, server_id, uid)
         if not server:
-            return JSONResponse({'detail': 'سرور یافت نشد'}, status_code=404)
+            return err('سرور یافت نشد', 'Server not found', 404)
         server.agent_token_hash = _hash_api_key(raw_token)
         server.agent_token_prefix = raw_token[:12]
         server.updated_at = _utcnow()
@@ -282,16 +287,16 @@ async def _authenticate_agent(request: Request) -> HermesServer | JSONResponse:
     token. Returns the HermesServer row, or a ready-to-return 401
     JSONResponse on failure -- callers check the type."""
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
     token = request.headers.get('Authorization', '').removeprefix('Bearer ').strip()
     if not token or not token.startswith('hsa-'):
-        return JSONResponse({'detail': 'توکن نامعتبر است'}, status_code=401)
+        return err('توکن نامعتبر است', 'Invalid token', 401)
     token_hash = _hash_api_key(token)
     async with async_session() as session:
         res = await session.execute(select(HermesServer).where(HermesServer.agent_token_hash == token_hash))
         server = res.scalar_one_or_none()
         if not server or server.status == 'terminated':
-            return JSONResponse({'detail': 'توکن نامعتبر است'}, status_code=401)
+            return err('توکن نامعتبر است', 'Invalid token', 401)
         return server
 
 

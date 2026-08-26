@@ -67,6 +67,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from database import async_session, BASE_URL
+from i18n import err
 from models import HermesOffering, HermesSkillCatalog, HermesOrder, Payment
 from dependencies import _get_user_id
 from content import _get_cached_eur_to_irt
@@ -139,10 +140,13 @@ def _offering_public(offering: HermesOffering, setup_price_irt: int, monthly_pri
 
 # ── Config / options-schema validation ───────────────────────────
 
-def _validate_skill_options(schema: dict, options: dict) -> str | None:
+def _validate_skill_options(schema: dict, options: dict) -> tuple[str, str] | None:
     """Validate `options` against a skill's `options_schema`.
 
-    Returns a Persian error message on failure, or None if valid. Schema
+    Returns `(persian, english)` on failure, or None if valid — the pair
+    rather than one language, so the four call sites across hermes.py and
+    hermes_servers.py can hand it straight to `err()` (backend/i18n.py).
+    `key` is a schema field name and stays untranslated in both. Schema
     shape example:
       {"languages": {"type": "multiselect", "values": [...], "max": 5}}
       {"topics": {"type": "tags", "max": 10}}
@@ -152,7 +156,7 @@ def _validate_skill_options(schema: dict, options: dict) -> str | None:
     bad input, not every edge case.
     """
     if not isinstance(options, dict):
-        return 'گزینه‌های اسکیل نامعتبر است'
+        return ('گزینه‌های اسکیل نامعتبر است', 'The skill options are not valid.')
     for key, spec in (schema or {}).items():
         if key not in options:
             continue
@@ -160,22 +164,27 @@ def _validate_skill_options(schema: dict, options: dict) -> str | None:
         field_type = spec.get('type')
         if field_type == 'multiselect':
             if not isinstance(value, list):
-                return f'{key} باید فهرستی از مقادیر باشد'
+                return (f'{key} باید فهرستی از مقادیر باشد',
+                        f'{key} must be a list of values.')
             allowed = spec.get('values')
             if allowed and any(v not in allowed for v in value):
-                return f'مقدار نامعتبر در {key}'
+                return (f'مقدار نامعتبر در {key}', f'Invalid value in {key}.')
             max_items = spec.get('max')
             if max_items and len(value) > max_items:
-                return f'حداکثر {max_items} مورد برای {key} مجاز است'
+                return (f'حداکثر {max_items} مورد برای {key} مجاز است',
+                        f'At most {max_items} item(s) are allowed for {key}.')
         elif field_type == 'tags':
             if not isinstance(value, list):
-                return f'{key} باید فهرستی از مقادیر باشد'
+                return (f'{key} باید فهرستی از مقادیر باشد',
+                        f'{key} must be a list of values.')
             max_items = spec.get('max')
             if max_items and len(value) > max_items:
-                return f'حداکثر {max_items} مورد برای {key} مجاز است'
+                return (f'حداکثر {max_items} مورد برای {key} مجاز است',
+                        f'At most {max_items} item(s) are allowed for {key}.')
         elif field_type == 'cron':
             if not isinstance(value, str) or not value.strip():
-                return f'{key} باید یک عبارت cron معتبر باشد'
+                return (f'{key} باید یک عبارت cron معتبر باشد',
+                        f'{key} must be a valid cron expression.')
     return None
 
 
@@ -187,7 +196,7 @@ def _validate_skill_options(schema: dict, options: dict) -> str | None:
 async def list_offerings() -> JSONResponse:
     """Public server catalog, live-priced in Toman. No EUR fields ever."""
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
     async with async_session() as session:
         res = await session.execute(
             select(HermesOffering).where(HermesOffering.active == True).order_by(HermesOffering.sort_order)
@@ -205,7 +214,7 @@ async def list_offerings() -> JSONResponse:
 async def list_skill_catalog() -> JSONResponse:
     """Public catalog of skills installable on a Hermes server."""
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
     async with async_session() as session:
         res = await session.execute(
             select(HermesSkillCatalog).where(HermesSkillCatalog.active == True).order_by(HermesSkillCatalog.sort_order)
@@ -229,12 +238,12 @@ async def list_skill_catalog() -> JSONResponse:
 async def create_order(request: Request, payload: OrderCreate) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
 
     if len(payload.config.skills) > 20:
-        return JSONResponse({'detail': 'تعداد اسکیل‌های درخواستی بیش از حد مجاز است'}, status_code=400)
+        return err('تعداد اسکیل‌های درخواستی بیش از حد مجاز است', 'The number of requested skills exceeds the allowed limit', 400)
 
     async with async_session() as session:
         offering_res = await session.execute(
@@ -242,27 +251,29 @@ async def create_order(request: Request, payload: OrderCreate) -> JSONResponse:
         )
         offering = offering_res.scalar_one_or_none()
         if not offering:
-            return JSONResponse({'detail': 'سرویس یافت نشد'}, status_code=404)
+            return err('سرویس یافت نشد', 'Service not found', 404)
 
         if len(payload.config.skills) > offering.max_skills:
-            return JSONResponse(
-                {'detail': f'این پلن حداکثر {offering.max_skills} اسکیل پشتیبانی می‌کند'}, status_code=400
+            return err(
+                f'این پلن حداکثر {offering.max_skills} اسکیل پشتیبانی می‌کند',
+                f'This plan supports at most {offering.max_skills} skills',
+                400,
             )
 
         seen_skill_ids: set[str] = set()
         for sel in payload.config.skills:
             if sel.skill_id in seen_skill_ids:
-                return JSONResponse({'detail': 'اسکیل تکراری در سفارش'}, status_code=400)
+                return err('اسکیل تکراری در سفارش', 'Duplicate skill in order', 400)
             seen_skill_ids.add(sel.skill_id)
             skill_res = await session.execute(
                 select(HermesSkillCatalog).where(HermesSkillCatalog.id == sel.skill_id, HermesSkillCatalog.active == True)
             )
             skill = skill_res.scalar_one_or_none()
             if not skill:
-                return JSONResponse({'detail': f'اسکیل «{sel.skill_id}» یافت نشد'}, status_code=404)
+                return err(f'اسکیل «{sel.skill_id}» یافت نشد', f'Skill "{sel.skill_id}" not found', 404)
             error = _validate_skill_options(skill.options_schema, sel.options)
             if error:
-                return JSONResponse({'detail': error}, status_code=400)
+                return err(error[0], error[1], 400)
 
         setup_price_irt, monthly_price_irt, eur_rate = await _price_offering(offering)
         total = setup_price_irt + monthly_price_irt
@@ -278,7 +289,7 @@ async def create_order(request: Request, payload: OrderCreate) -> JSONResponse:
 
         if total <= 0:
             await session.rollback()
-            return JSONResponse({'detail': 'قیمت سرویس نامعتبر است'}, status_code=400)
+            return err('قیمت سرویس نامعتبر است', 'Invalid service price', 400)
 
         result = await create_payment(
             amount=total,
@@ -308,9 +319,9 @@ async def create_order(request: Request, payload: OrderCreate) -> JSONResponse:
 async def list_orders(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
     async with async_session() as session:
         res = await session.execute(
             select(HermesOrder).where(HermesOrder.user_id == uid).order_by(HermesOrder.created_at.desc())
@@ -323,14 +334,14 @@ async def list_orders(request: Request) -> JSONResponse:
 async def get_order(request: Request, order_id: int) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
     async with async_session() as session:
         res = await session.execute(select(HermesOrder).where(HermesOrder.id == order_id))
         order = res.scalar_one_or_none()
         if not order or order.user_id != uid:
-            return JSONResponse({'detail': 'سفارش یافت نشد'}, status_code=404)
+            return err('سفارش یافت نشد', 'Order not found', 404)
     return JSONResponse(jsonable_encoder(order))
 
 

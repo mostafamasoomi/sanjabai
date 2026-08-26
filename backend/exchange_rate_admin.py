@@ -32,6 +32,7 @@ from fastapi.responses import JSONResponse
 
 from database import async_session, rds
 from dependencies import admin_required, _write_audit_log
+from i18n import err
 from services.exchange_sources import (
     FLAT_MARKUP_SETTING_KEY,
     FLAT_MARKUP_CACHE_KEY,
@@ -73,7 +74,7 @@ async def _invalidate_exchange_rate_caches() -> None:
 async def get_exchange_rate_admin(request: Request) -> JSONResponse:
     """Current USD->IRT rate, its source, and when it was last fetched."""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
 
     from content import get_exchange_rate_meta
     meta = await get_exchange_rate_meta()
@@ -109,7 +110,7 @@ async def refresh_exchange_rate_admin(request: Request) -> JSONResponse:
     between, i.e. a no-op that just doubles the Redis round-trip.
     """
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
 
     import content
     await _invalidate_exchange_rate_caches()
@@ -123,6 +124,12 @@ async def refresh_exchange_rate_admin(request: Request) -> JSONResponse:
 # ── Flat Toman markup ──────────────────────────────────────────────────
 
 def _parse_flat_markup_toman(raw: Any) -> tuple[float | None, str | None]:
+    """Returns (value, error_detail), Persian only -- same 2-tuple contract
+    as admin_catalog.py's _parse_markup_pct/_parse_image_price (kept for
+    consistency, in case a future test pins this the same way). English
+    siblings live in `_FLAT_MARKUP_ERR_EN` below, keyed by the exact
+    Persian string.
+    """
     if raw is None:
         return None, 'مقدار مارک‌آپ الزامی است'
     try:
@@ -136,10 +143,20 @@ def _parse_flat_markup_toman(raw: Any) -> tuple[float | None, str | None]:
     return v, None
 
 
+_FLAT_MARKUP_ERR_EN = {
+    'مقدار مارک‌آپ الزامی است': 'Markup value is required.',
+    'مقدار مارک‌آپ نامعتبر است': 'Invalid markup value.',
+    'مارک‌آپ نمی‌تواند منفی باشد (باعث فروش زیر نرخ بازار می‌شود)':
+        'Markup cannot be negative (it would cause selling below market rate).',
+    f'مارک‌آپ بیش از حد بزرگ است (سقف {_FLAT_MARKUP_MAX_TOMAN:,} تومان) -- احتمالاً اشتباه تایپی است':
+        f'Markup is too large (ceiling {_FLAT_MARKUP_MAX_TOMAN:,} toman) -- likely a typo.',
+}
+
+
 @router.get('/admin/exchange-rate/flat-markup')
 async def get_flat_markup_admin(request: Request) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     from services.exchange_sources import get_flat_markup_toman
     import content
     value = await get_flat_markup_toman()
@@ -153,13 +170,13 @@ async def set_flat_markup_admin(request: Request, payload: dict[str, Any]) -> JS
     and absurdly large values are refused outright, never auto-corrected --
     same house style as admin_catalog.py's global-markup-percent write."""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
-    value, err = _parse_flat_markup_toman(payload.get('flat_markup_toman'))
-    if err:
-        return JSONResponse({'detail': err}, status_code=400)
+    value, fa_err = _parse_flat_markup_toman(payload.get('flat_markup_toman'))
+    if fa_err:
+        return err(fa_err, _FLAT_MARKUP_ERR_EN.get(fa_err, fa_err), 400)
 
     async with async_session() as session:
         await session.execute(sqlalchemy.text(
@@ -194,9 +211,9 @@ async def list_exchange_rate_sources(request: Request) -> JSONResponse:
     exchange_rate_sources (Bonbast.com, is_builtin, and any admin-added
     custom_regex source), which the panel can create/edit/delete below."""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     try:
         async with async_session() as session:
@@ -207,7 +224,7 @@ async def list_exchange_rate_sources(request: Request) -> JSONResponse:
             ))
             rows = [dict(r._mapping) for r in res.fetchall()]
     except Exception as e:
-        return JSONResponse({'detail': f'خطا در خواندن منابع نرخ ارز: {e}'}, status_code=500)
+        return err(f'خطا در خواندن منابع نرخ ارز: {e}', f'Error reading exchange rate sources: {e}', 500)
 
     for r in rows:
         r['editable'] = True  # every DB row (bonbast included) supports enabled/priority/timeout_s edits
@@ -222,9 +239,9 @@ async def create_exchange_rate_source(request: Request, payload: dict[str, Any])
     for ("اگر مرجع دیگری خواست"). Always kind='custom_regex'; a second
     'bonbast' row, or any code-only kind, cannot be created from here."""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     source_key = str(payload.get('source_key') or '').strip().lower()
     display_name = str(payload.get('display_name') or '').strip()
@@ -235,28 +252,37 @@ async def create_exchange_rate_source(request: Request, payload: dict[str, Any])
     timeout_s = payload.get('timeout_s', 5)
 
     if not _SOURCE_KEY_RE.match(source_key):
-        return JSONResponse({'detail': 'کلید منبع باید با حرف کوچک شروع شود و فقط شامل حروف کوچک، عدد و _ باشد (۲ تا ۳۲ نویسه)'}, status_code=400)
+        return err(
+            'کلید منبع باید با حرف کوچک شروع شود و فقط شامل حروف کوچک، عدد و _ باشد (۲ تا ۳۲ نویسه)',
+            'Source key must start with a lowercase letter and contain only lowercase letters, '
+            'digits, and underscores (2 to 32 characters).',
+            400,
+        )
     if source_key in _RESERVED_SOURCE_KEYS:
-        return JSONResponse({'detail': 'این کلید برای یک منبع پایه رزرو شده است'}, status_code=400)
+        return err('این کلید برای یک منبع پایه رزرو شده است', 'This key is reserved for a built-in source.', 400)
     if not display_name:
-        return JSONResponse({'detail': 'نام نمایشی الزامی است'}, status_code=400)
+        return err('نام نمایشی الزامی است', 'Display name is required.', 400)
     if unit not in ('toman', 'rial'):
-        return JSONResponse({'detail': "واحد باید toman یا rial باشد"}, status_code=400)
+        return err("واحد باید toman یا rial باشد", "Unit must be 'toman' or 'rial'.", 400)
     url_err = validate_source_url(url)
     if url_err:
-        return JSONResponse({'detail': url_err}, status_code=400)
+        return err(url_err[0], url_err[1], 400)
     regex_err = validate_custom_regex_pattern(extract_regex)
     if regex_err:
-        return JSONResponse({'detail': regex_err}, status_code=400)
+        return err(regex_err[0], regex_err[1], 400)
     try:
         priority = int(priority)
         timeout_s = float(timeout_s)
     except (TypeError, ValueError):
-        return JSONResponse({'detail': 'اولویت و مهلت زمانی باید عددی باشند'}, status_code=400)
+        return err('اولویت و مهلت زمانی باید عددی باشند', 'Priority and timeout must be numeric.', 400)
     if priority <= 0:
-        return JSONResponse({'detail': 'اولویت باید عددی مثبت باشد (کوچک‌تر یعنی زودتر امتحان می‌شود)'}, status_code=400)
+        return err(
+            'اولویت باید عددی مثبت باشد (کوچک‌تر یعنی زودتر امتحان می‌شود)',
+            'Priority must be a positive number (lower means it is tried sooner).',
+            400,
+        )
     if not (0 < timeout_s <= 10):
-        return JSONResponse({'detail': 'مهلت زمانی باید بین ۰ تا ۱۰ ثانیه باشد'}, status_code=400)
+        return err('مهلت زمانی باید بین ۰ تا ۱۰ ثانیه باشد', 'Timeout must be between 0 and 10 seconds.', 400)
 
     try:
         async with async_session() as session:
@@ -272,9 +298,9 @@ async def create_exchange_rate_source(request: Request, payload: dict[str, Any])
             new_id = res.scalar_one()
             await session.commit()
     except sqlalchemy.exc.IntegrityError:
-        return JSONResponse({'detail': 'کلید منبع تکراری است'}, status_code=409)
+        return err('کلید منبع تکراری است', 'Duplicate source key.', 409)
     except Exception as e:
-        return JSONResponse({'detail': f'خطا در ایجاد منبع: {e}'}, status_code=500)
+        return err(f'خطا در ایجاد منبع: {e}', f'Error creating source: {e}', 500)
 
     await _write_audit_log('admin.exchange_rate.source_create', target_type='exchange_rate_sources',
                             target_id=source_key, details={'url': url, 'unit': unit, 'priority': priority},
@@ -290,9 +316,9 @@ async def update_exchange_rate_source(source_key: str, request: Request, payload
     fetch is fixed Python code, so those three fields are ignored for it
     even if sent."""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     sets, params = [], {'source_key': source_key}
 
@@ -303,37 +329,37 @@ async def update_exchange_rate_source(source_key: str, request: Request, payload
         try:
             p = int(payload['priority'])
         except (TypeError, ValueError):
-            return JSONResponse({'detail': 'اولویت باید عددی باشد'}, status_code=400)
+            return err('اولویت باید عددی باشد', 'Priority must be numeric.', 400)
         if p <= 0:
-            return JSONResponse({'detail': 'اولویت باید عددی مثبت باشد'}, status_code=400)
+            return err('اولویت باید عددی مثبت باشد', 'Priority must be a positive number.', 400)
         sets.append('priority = :priority')
         params['priority'] = p
     if 'timeout_s' in payload:
         try:
             t = float(payload['timeout_s'])
         except (TypeError, ValueError):
-            return JSONResponse({'detail': 'مهلت زمانی باید عددی باشد'}, status_code=400)
+            return err('مهلت زمانی باید عددی باشد', 'Timeout must be numeric.', 400)
         if not (0 < t <= 10):
-            return JSONResponse({'detail': 'مهلت زمانی باید بین ۰ تا ۱۰ ثانیه باشد'}, status_code=400)
+            return err('مهلت زمانی باید بین ۰ تا ۱۰ ثانیه باشد', 'Timeout must be between 0 and 10 seconds.', 400)
         sets.append('timeout_s = :timeout_s')
         params['timeout_s'] = t
     if 'url' in payload or 'extract_regex' in payload or 'unit' in payload:
         if 'url' in payload:
             url_err = validate_source_url(str(payload['url'] or ''))
             if url_err:
-                return JSONResponse({'detail': url_err}, status_code=400)
+                return err(url_err[0], url_err[1], 400)
             sets.append('url = :url')
             params['url'] = str(payload['url']).strip()
         if 'extract_regex' in payload:
             regex_err = validate_custom_regex_pattern(str(payload['extract_regex'] or ''))
             if regex_err:
-                return JSONResponse({'detail': regex_err}, status_code=400)
+                return err(regex_err[0], regex_err[1], 400)
             sets.append('extract_regex = :extract_regex')
             params['extract_regex'] = str(payload['extract_regex']).strip()
         if 'unit' in payload:
             unit = str(payload['unit']).strip().lower()
             if unit not in ('toman', 'rial'):
-                return JSONResponse({'detail': "واحد باید toman یا rial باشد"}, status_code=400)
+                return err("واحد باید toman یا rial باشد", "Unit must be 'toman' or 'rial'.", 400)
             sets.append('unit = :unit')
             params['unit'] = unit
         # A builtin row (bonbast) ignores these three fields even if sent --
@@ -344,7 +370,7 @@ async def update_exchange_rate_source(source_key: str, request: Request, payload
         # those columns simply get written but are never read by the fetch.
 
     if not sets:
-        return JSONResponse({'detail': 'هیچ فیلدی برای به‌روزرسانی ارسال نشده است'}, status_code=400)
+        return err('هیچ فیلدی برای به‌روزرسانی ارسال نشده است', 'No fields were sent to update.', 400)
 
     sets.append('updated_at = now()')
     try:
@@ -354,10 +380,10 @@ async def update_exchange_rate_source(source_key: str, request: Request, payload
             ), params)
             row = res.fetchone()
             if row is None:
-                return JSONResponse({'detail': 'منبع یافت نشد'}, status_code=404)
+                return err('منبع یافت نشد', 'Source not found.', 404)
             await session.commit()
     except Exception as e:
-        return JSONResponse({'detail': f'خطا در به‌روزرسانی منبع: {e}'}, status_code=500)
+        return err(f'خطا در به‌روزرسانی منبع: {e}', f'Error updating source: {e}', 500)
 
     await _write_audit_log('admin.exchange_rate.source_update', target_type='exchange_rate_sources',
                             target_id=source_key, details={k: v for k, v in payload.items()}, request=request)
@@ -371,9 +397,9 @@ async def delete_exchange_rate_source(source_key: str, request: Request) -> JSON
     Bonbast can be disabled (PATCH enabled=false) but not removed, so the
     seeded row migrations/0047_exchange_sources.sql relies on always exists."""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     try:
         async with async_session() as session:
@@ -382,10 +408,11 @@ async def delete_exchange_rate_source(source_key: str, request: Request) -> JSON
             ), {'source_key': source_key})
             row = res.fetchone()
             if row is None:
-                return JSONResponse({'detail': 'منبع یافت نشد یا منبع پایه است و قابل حذف نیست'}, status_code=404)
+                return err('منبع یافت نشد یا منبع پایه است و قابل حذف نیست',
+                          'Source not found, or it is a built-in source and cannot be deleted.', 404)
             await session.commit()
     except Exception as e:
-        return JSONResponse({'detail': f'خطا در حذف منبع: {e}'}, status_code=500)
+        return err(f'خطا در حذف منبع: {e}', f'Error deleting source: {e}', 500)
 
     await _write_audit_log('admin.exchange_rate.source_delete', target_type='exchange_rate_sources',
                             target_id=source_key, details={}, request=request)

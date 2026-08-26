@@ -23,6 +23,7 @@ from database import async_session, rds
 from models import Feature, Discount, AboutContent, ProxyConfig
 import admin
 from dependencies import _write_audit_log
+from i18n import bi, err
 
 router = APIRouter()
 
@@ -32,9 +33,9 @@ router = APIRouter()
 @router.get('/admin/features')
 async def list_features(request: Request) -> JSONResponse:
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(Feature.__table__.select().order_by(Feature.order_idx))
         rows = [dict(r._mapping) for r in res.fetchall()]
@@ -44,13 +45,13 @@ async def list_features(request: Request) -> JSONResponse:
 @router.post('/admin/features')
 async def upsert_feature(request: Request, payload: dict[str, Any]) -> JSONResponse:
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     fid = payload.get('id')
     async with async_session() as session:
         if fid:
             row = await session.get(Feature, fid)
             if not row:
-                return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+                return err('یافت نشد', 'Not found.', 404)
         else:
             row = Feature()
             session.add(row)
@@ -69,7 +70,7 @@ async def upsert_feature(request: Request, payload: dict[str, Any]) -> JSONRespo
 @router.delete('/admin/features/{fid}')
 async def delete_feature(request: Request, fid: int) -> JSONResponse:
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     async with async_session() as session:
         row = await session.get(Feature, fid)
         if row:
@@ -85,9 +86,9 @@ async def delete_feature(request: Request, fid: int) -> JSONResponse:
 @router.get('/admin/discounts')
 async def list_discounts(request: Request) -> JSONResponse:
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(Discount.__table__.select())
         rows = [dict(r._mapping) for r in res.fetchall()]
@@ -97,16 +98,16 @@ async def list_discounts(request: Request) -> JSONResponse:
 @router.post('/admin/discounts')
 async def upsert_discount(request: Request, payload: dict[str, Any]) -> JSONResponse:
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     did = payload.get('id')
     code = payload.get('code')
     if not code:
-        return JSONResponse({'detail': 'کد الزامی است'}, status_code=400)
+        return err('کد الزامی است', 'Code is required.', 400)
     async with async_session() as session:
         if did:
             row = await session.get(Discount, did)
             if not row:
-                return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+                return err('یافت نشد', 'Not found.', 404)
         else:
             row = Discount()
             session.add(row)
@@ -124,7 +125,7 @@ async def upsert_discount(request: Request, payload: dict[str, Any]) -> JSONResp
 @router.delete('/admin/discounts/{did}')
 async def delete_discount(request: Request, did: int) -> JSONResponse:
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     async with async_session() as session:
         row = await session.get(Discount, did)
         if row:
@@ -147,7 +148,7 @@ async def get_about_admin(request: Request) -> JSONResponse:
     silently swallowing the 405). Same shape the form saves: title/body.
     """
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
         return JSONResponse({'title': '', 'body': ''})
     async with async_session() as session:
@@ -161,7 +162,7 @@ async def get_about_admin(request: Request) -> JSONResponse:
 @router.post('/admin/about')
 async def set_about(request: Request, payload: dict[str, Any]) -> JSONResponse:
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     async with async_session() as session:
         res = await session.execute(AboutContent.__table__.select())
         row = res.fetchone()
@@ -184,7 +185,7 @@ async def set_about(request: Request, payload: dict[str, Any]) -> JSONResponse:
 @router.get('/admin/proxy')
 async def get_proxy(request: Request) -> JSONResponse:
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
         return JSONResponse({'proxy_url': '', 'proxy_type': 'socks5', 'active': False})
     async with async_session() as session:
@@ -198,7 +199,7 @@ async def get_proxy(request: Request) -> JSONResponse:
 @router.post('/admin/proxy')
 async def set_proxy(request: Request, payload: dict[str, Any]) -> JSONResponse:
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
 
     proxy_url = payload.get('proxy_url', '')
     if proxy_url:
@@ -206,7 +207,8 @@ async def set_proxy(request: Request, payload: dict[str, Any]) -> JSONResponse:
         _ALLOWED_PROXY_SCHEMES = {'socks5', 'socks5h', 'http', 'https'}
         if parsed.scheme not in _ALLOWED_PROXY_SCHEMES:
             return JSONResponse(
-                {'detail': 'نوع پروکسی مجاز نیست', 'code': 'invalid_proxy_scheme'},
+                bi({'code': 'invalid_proxy_scheme'},
+                   detail=('نوع پروکسی مجاز نیست', 'Proxy scheme is not allowed.')),
                 status_code=400,
             )
         hostname = parsed.hostname or ''
@@ -214,7 +216,8 @@ async def set_proxy(request: Request, payload: dict[str, Any]) -> JSONResponse:
            hostname.startswith('10.') or hostname.startswith('192.168.') or \
            hostname.startswith('172.'):
             return JSONResponse(
-                {'detail': 'آدرس پروکسی داخلی مجاز نیست', 'code': 'internal_proxy_blocked'},
+                bi({'code': 'internal_proxy_blocked'},
+                   detail=('آدرس پروکسی داخلی مجاز نیست', 'Internal proxy addresses are not allowed.')),
                 status_code=400,
             )
 
@@ -252,10 +255,10 @@ async def set_org_default_model(request: Request, payload: dict[str, Any]) -> JS
     started against it.
     """
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     model_id = payload.get('default_model', '')
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         if model_id:
             res = await session.execute(sqlalchemy.text(
@@ -263,12 +266,17 @@ async def set_org_default_model(request: Request, payload: dict[str, Any]) -> JS
             ), {'id': model_id})
             row = res.fetchone()
             if row is None:
-                return JSONResponse({'detail': f'مدل «{model_id}» در کاتالوگ یافت نشد'}, status_code=400)
+                return err(
+                    f'مدل «{model_id}» در کاتالوگ یافت نشد',
+                    f'Model "{model_id}" was not found in the catalog.', 400,
+                )
             if row.availability != 'available':
-                return JSONResponse({'detail': (
+                return err(
                     f'مدل «{model_id}» فعال نیست و نمی‌تواند پیش‌فرض سازمان باشد '
-                    '(فقط مدلی که وضعیت آن «فعال» است مجاز است).'
-                )}, status_code=400)
+                    '(فقط مدلی که وضعیت آن «فعال» است مجاز است).',
+                    f'Model "{model_id}" is not active and cannot be the org default '
+                    '(only a model with "available" status is allowed).', 400,
+                )
         res = await session.execute(ProxyConfig.__table__.select())
         row = res.fetchone()
         if not row:

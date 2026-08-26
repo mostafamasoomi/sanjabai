@@ -70,8 +70,11 @@ from typing import Any
 
 from fastapi.responses import JSONResponse
 
+from i18n import err_openai
 from services.moderation_rules import (  # noqa: F401 -- re-exported facade
+    BLOCK_MESSAGE_EN,
     BLOCK_MESSAGE_FA,
+    block_message_en_for_category,
     DECISIONS,
     MAX_SCAN_CHARS,
     MAX_SNIPPET_CHARS,
@@ -145,9 +148,15 @@ async def screen_request(uid: int, messages: Any,
             if await _model_review(text, cfg.model) == 'allow':
                 decision = 'flag'
 
+        # Both languages resolved at the same point, from the same category.
+        # Setting only message_fa here would have left every block falling
+        # back to the generic English line and silently losing the
+        # per-category wording the Persian side keeps.
         v = Verdict(decision=decision, category=rule.category,
                     severity=rule.severity, rule_id=rule.id, snippet=snippet,
                     message_fa=block_message_for_category(rule.category)
+                    if decision == 'block' else None,
+                    message_en=block_message_en_for_category(rule.category)
                     if decision == 'block' else None)
         await _record_event(uid, conversation_id, v, cfg.retention_days)
         await _send_alert(uid, v)
@@ -175,8 +184,14 @@ async def moderation_preflight(uid: int, messages: Any,
     verdict = await screen_request(uid, messages, conversation_id)
     if verdict.decision != 'block':
         return None
-    return JSONResponse(
-        {'error': {'message': verdict.message_fa or BLOCK_MESSAGE_FA,
-                   'type': 'content_policy', 'code': 'content_blocked'}},
-        status_code=403,
+    # The one refusal a blocked user actually reads. `message` is unchanged;
+    # `message_en` is the sibling every other /v1/* refusal now carries
+    # (backend/i18n.py::err_openai). Built here rather than through that
+    # helper because the message is per-category and already resolved.
+    return err_openai(
+        verdict.message_fa or BLOCK_MESSAGE_FA,
+        verdict.message_en or BLOCK_MESSAGE_EN,
+        403,
+        code='content_blocked',
+        err_type='content_policy',
     )

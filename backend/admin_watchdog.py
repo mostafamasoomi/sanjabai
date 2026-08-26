@@ -47,6 +47,7 @@ from fastapi.responses import JSONResponse
 
 from database import async_session
 from dependencies import admin_required, _write_audit_log
+from i18n import err
 from services.watchdog_settings import (
     ENV_BOT_TOKEN,
     ENV_CHAT_ID,
@@ -91,9 +92,9 @@ async def get_watchdog_settings(request: Request) -> JSONResponse:
     actually has and the answer depends on both sources.
     """
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'The database is unavailable.', 500)
 
     try:
         async with async_session() as session:
@@ -108,8 +109,9 @@ async def get_watchdog_settings(request: Request) -> JSONResponse:
             db_values = {r.setting_key: r.value for r in rows}
     except Exception as e:
         logger.warning('GET /admin/watchdog-settings DB read failed: %s', e)
-        return JSONResponse(
-            {'detail': 'خطا در خواندن تنظیمات از پایگاه داده'}, status_code=500
+        return err(
+            'خطا در خواندن تنظیمات از پایگاه داده',
+            'Failed to read settings from the database.', 500,
         )
 
     db_token = _coerce(db_values.get(KEY_BOT_TOKEN), KEY_BOT_TOKEN)
@@ -149,20 +151,22 @@ async def update_watchdog_settings(request: Request, payload: dict[str, Any]) ->
     anything, it has duplicated the exposure.
     """
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'The database is unavailable.', 500)
 
     if not isinstance(payload, dict) or not payload:
-        return JSONResponse(
-            {'detail': 'هیچ فیلدی برای بروزرسانی ارسال نشده است'}, status_code=400
+        return err(
+            'هیچ فیلدی برای بروزرسانی ارسال نشده است',
+            'No field was sent to update.', 400,
         )
 
     field_to_key = {'bot_token': KEY_BOT_TOKEN, 'chat_id': KEY_CHAT_ID}
     unknown = set(payload) - set(field_to_key)
     if unknown:
-        return JSONResponse(
-            {'detail': f'کلید ناشناخته: {", ".join(sorted(unknown))}'}, status_code=400
+        return err(
+            f'کلید ناشناخته: {", ".join(sorted(unknown))}',
+            f'Unknown key: {", ".join(sorted(unknown))}', 400,
         )
 
     cleaned: dict[str, str] = {}
@@ -173,25 +177,29 @@ async def update_watchdog_settings(request: Request, payload: dict[str, Any]) ->
         if value is None:
             value = ''
         if not isinstance(value, str):
-            return JSONResponse(
-                {'detail': f'مقدار {field} باید رشته باشد'}, status_code=400
+            return err(
+                f'مقدار {field} باید رشته باشد',
+                f'The {field} value must be a string.', 400,
             )
         value = value.strip()
         if len(value) > _MAX_VALUE_CHARS:
-            return JSONResponse(
-                {'detail': f'مقدار {field} بیش از حد طولانی است'}, status_code=400
+            return err(
+                f'مقدار {field} بیش از حد طولانی است',
+                f'The {field} value is too long.', 400,
             )
         # A newline inside a credential is always a paste accident and
         # would be sent verbatim into a Telegram URL.
         if any(c in value for c in '\n\r\t'):
-            return JSONResponse(
-                {'detail': f'مقدار {field} نباید شامل خط جدید یا تب باشد'}, status_code=400
+            return err(
+                f'مقدار {field} نباید شامل خط جدید یا تب باشد',
+                f'The {field} value must not contain a newline or tab.', 400,
             )
         cleaned[key] = value
 
     if not cleaned:
-        return JSONResponse(
-            {'detail': 'هیچ فیلدی برای بروزرسانی ارسال نشده است'}, status_code=400
+        return err(
+            'هیچ فیلدی برای بروزرسانی ارسال نشده است',
+            'No field was sent to update.', 400,
         )
 
     try:
@@ -208,8 +216,9 @@ async def update_watchdog_settings(request: Request, payload: dict[str, Any]) ->
             await session.commit()
     except Exception as e:
         logger.warning('POST /admin/watchdog-settings DB write failed: %s', e)
-        return JSONResponse(
-            {'detail': 'خطا در ذخیرهٔ تنظیمات در پایگاه داده'}, status_code=500
+        return err(
+            'خطا در ذخیرهٔ تنظیمات در پایگاه داده',
+            'Failed to save settings to the database.', 500,
         )
 
     await invalidate_cache()

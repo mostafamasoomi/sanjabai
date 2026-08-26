@@ -19,6 +19,7 @@ it is.
 So:
 
   errors    {"detail": "<fa>", "detail_en": "<en>"}
+  /v1/*     {"error": {"message": "<fa>", "message_en": "<en>", "type", "code"}}
   payloads  {"label": "<fa>", "label_en": "<en>"}
 
 The Persian key keeps its existing name and its existing value in every case.
@@ -53,6 +54,32 @@ def err(fa: str, en: str, status: int) -> JSONResponse:
         return err('کپچا اشتباه است', 'Incorrect captcha', 400)
     """
     return JSONResponse({'detail': fa, 'detail_en': en}, status_code=status)
+
+
+def err_openai(
+    fa: str,
+    en: str,
+    status: int,
+    *,
+    code: str | None = None,
+    err_type: str = 'invalid_request',
+) -> JSONResponse:
+    """A refusal in the OpenAI-compatible shape, in both languages.
+
+    The `/v1/*` routes do not answer with `detail`; they answer with
+    ``{"error": {"message", "type", "code"}}`` because OpenAI-compatible
+    clients branch on `type` and `code`. Those two fields are contract and are
+    passed through untouched -- only the human sentence gains a sibling.
+
+    This exists because the chat and image paths had no sanctioned way to be
+    bilingual: `err()` would have flattened them to `detail` and silently
+    dropped `code`, changing the contract for every SDK pointed at this API.
+    The frontend already reads `error.message_en` (lib/i18n.ts::detailFor).
+    """
+    body: dict[str, Any] = {'message': fa, 'message_en': en, 'type': err_type}
+    if code is not None:
+        body['code'] = code
+    return JSONResponse({'error': body}, status_code=status)
 
 
 def bi(payload: dict[str, Any], **pairs: tuple[str, str]) -> dict[str, Any]:

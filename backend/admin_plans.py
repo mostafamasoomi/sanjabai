@@ -23,6 +23,7 @@ from fastapi.responses import JSONResponse
 from database import async_session
 import admin
 from dependencies import _write_audit_log
+from i18n import err
 
 router = APIRouter()
 
@@ -33,9 +34,9 @@ router = APIRouter()
 async def admin_list_plans(request: Request) -> JSONResponse:
     """List all plans (admin, including inactive)"""
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(sqlalchemy.text('SELECT * FROM plans ORDER BY sort_order'))
         rows = [dict(r._mapping) for r in res.fetchall()]
@@ -88,14 +89,14 @@ async def admin_create_plan(request: Request) -> JSONResponse:
     `_plan_jsonb`.
     """
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     payload = await request.json()
     plan_id = payload.get('id')
     if not plan_id:
-        return JSONResponse({'detail': 'شناسه الزامی است'}, status_code=400)
+        return err('شناسه الزامی است', 'ID is required.', 400)
 
     # Single source of truth for the monthly quota, written to BOTH
     # `monthly_token_quota` and the legacy `token_quota_monthly` so they can
@@ -176,9 +177,9 @@ async def admin_create_plan(request: Request) -> JSONResponse:
 async def admin_list_credit_packages(request: Request) -> JSONResponse:
     """List all credit packages (admin, including inactive)"""
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(sqlalchemy.text('SELECT * FROM credit_packages ORDER BY sort_order'))
         rows = [dict(r._mapping) for r in res.fetchall()]
@@ -189,14 +190,14 @@ async def admin_list_credit_packages(request: Request) -> JSONResponse:
 async def admin_create_credit_package(request: Request) -> JSONResponse:
     """Create or update a credit package (admin)"""
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     payload = await request.json()
     pkg_id = payload.get('id')
     if not pkg_id:
-        return JSONResponse({'detail': 'شناسه الزامی است'}, status_code=400)
+        return err('شناسه الزامی است', 'ID is required.', 400)
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     async with async_session() as session:
@@ -247,9 +248,9 @@ async def admin_create_credit_package(request: Request) -> JSONResponse:
 async def admin_list_subscriptions(request: Request) -> JSONResponse:
     """List all subscriptions (admin)"""
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     page = int(request.query_params.get('page', 1))
     limit = min(int(request.query_params.get('limit', 50)), 200)

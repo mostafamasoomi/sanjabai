@@ -22,6 +22,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
 from dependencies import _get_user_id
+from i18n import err
 
 router = APIRouter()
 
@@ -38,7 +39,7 @@ async def list_my_entitlements(request: Request) -> JSONResponse:
     """
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
 
     try:
         # Imported lazily, inside the function: services/entitlements.py is

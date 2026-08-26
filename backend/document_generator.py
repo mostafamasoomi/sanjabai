@@ -88,9 +88,10 @@ from fastapi.responses import JSONResponse, FileResponse, Response
 
 from database import async_session
 from dependencies import _get_user_id
+from i18n import err_openai
 from services.billing import BillingService, InsufficientBalanceError, SqlBillingRepo
 from services.free_tier import check_and_consume
-from services.moderation import BLOCK_MESSAGE_FA, screen_request
+from services.moderation import BLOCK_MESSAGE_EN, BLOCK_MESSAGE_FA, screen_request
 from services.money import Money
 from services.premium_quota import check_and_consume as _premium_quota_check
 from services.user_quota import check_and_consume as _user_quota_check
@@ -131,29 +132,22 @@ _RESERVE_ESTIMATE_UNKNOWN = 8000
 # _GATEWAY_ERROR_MESSAGE are byte-for-byte task_execution.py's constants --
 # reused deliberately (not reworded) per this fix's "mirror the reference,
 # don't invent a new pattern" instruction.
-_MODEL_NOT_ALLOWED_MESSAGE = 'مدل انتخابی پشتیبانی نمیشود'
-_CHAT_DISABLED_MESSAGE = 'گفتگو موقتاً در دسترس نیست'
-_FREE_TIER_MESSAGE = (
-    'سقف پیام رایگان این مدل برای اکنون پر شده است؛ کمی بعد دوباره تلاش کنید '
-    'یا با شارژ حساب این محدودیت را برای همیشه بردارید.'
+# Refusal copy lives in a sibling module -- DATA ONLY, see its docstring
+# for why no function was moved with it.
+from document_generator_messages import (  # noqa: E402
+    _CHAT_DISABLED_MESSAGE,
+    _CHAT_DISABLED_MESSAGE_EN,
+    _FREE_TIER_MESSAGE,
+    _FREE_TIER_MESSAGE_EN,
+    _GATEWAY_ERROR_MESSAGE,
+    _GATEWAY_ERROR_MESSAGE_EN,
+    _INSUFFICIENT_BALANCE_MESSAGE,
+    _INSUFFICIENT_BALANCE_MESSAGE_EN,
+    _MODEL_NOT_ALLOWED_MESSAGE,
+    _MODEL_NOT_ALLOWED_MESSAGE_EN,
+    _QUOTA_MESSAGE,
+    _QUOTA_MESSAGE_EN,
 )
-_QUOTA_MESSAGE = (
-    'سقف پیام بستهٔ شما برای این بازه پر شده است؛ کمی بعد دوباره تلاش کنید '
-    'یا بستهٔ بزرگ‌تری تهیه کنید.'
-)
-_INSUFFICIENT_BALANCE_MESSAGE = 'موجودی کیف پول شما کافی نیست. لطفاً حساب خود را شارژ کنید.'
-_GATEWAY_ERROR_MESSAGE = 'سرویس موقتاً در دسترس نیست'
-
-
-# ── Model resolution/validation ───────────────────────────────────
-#
-# Late-bound `import chat` inside each function (not at module scope, and
-# never `from chat import X`) -- same reasoning as task_execution.py's
-# module docstring: chat.py's model-resolution names
-# (`_resolve_public_model`, `_safe_default_model`, `_is_model_allowed`) are
-# what the test suite monkeypatches directly on the `chat` module, and a
-# module-level import would both risk a chat.py <-> document_generator.py
-# load-order issue and silently defeat that monkeypatching.
 
 async def _resolve_and_validate_model(requested_model: str) -> str | None:
     """Resolve a user-supplied model string to a catalog `provider_model_id`
@@ -219,41 +213,43 @@ async def generate_document(request: Request) -> JSONResponse:
     `reserve()` always runs before the upstream call."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'error': {'message': 'لطفاً وارد حساب خود شوید'}}, status_code=401)
+        return err_openai('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
 
     try:
         body = await request.json()
     except Exception:
-        return JSONResponse({'error': {'message': 'درخواست نامعتبر'}}, status_code=400)
+        return err_openai('درخواست نامعتبر', 'Invalid request.', 400)
 
     prompt = (body.get('prompt') or '').strip()
     doc_type = (body.get('type') or 'pptx').lower()  # pptx, docx, mdx
     requested_model = (body.get('model') or '').strip()
 
     if not prompt:
-        return JSONResponse({'error': {'message': 'متن درخواست الزامی است'}}, status_code=400)
+        return err_openai('متن درخواست الزامی است', 'Prompt text is required.', 400)
 
     if len(prompt) > MAX_PROMPT_LENGTH:
-        return JSONResponse(
-            {'error': {'message': f'متن درخواست نباید بیشتر از {MAX_PROMPT_LENGTH} کاراکتر باشد'}},
-            status_code=413,
+        return err_openai(
+            f'متن درخواست نباید بیشتر از {MAX_PROMPT_LENGTH} کاراکتر باشد',
+            f'Prompt text must not exceed {MAX_PROMPT_LENGTH} characters.',
+            413,
         )
 
     if doc_type not in ('pptx', 'docx', 'mdx'):
-        return JSONResponse({'error': {'message': 'نوع فایل نامعتبر. pptx, docx, یا mdx'}}, status_code=400)
+        return err_openai(
+            'نوع فایل نامعتبر. pptx, docx, یا mdx', 'Invalid file type. pptx, docx, or mdx.', 400,
+        )
 
     # ── Gate 1: model validation — BEFORE anything else, never forwarded
     # to the upstream unresolved/unverified. ──────────────────────────
     model = await _resolve_and_validate_model(requested_model)
     if model is None:
-        return JSONResponse({'error': {'message': _MODEL_NOT_ALLOWED_MESSAGE}}, status_code=400)
+        return err_openai(_MODEL_NOT_ALLOWED_MESSAGE, _MODEL_NOT_ALLOWED_MESSAGE_EN, 400)
 
     # ── Gate 2: chat_enabled kill switch. ──────────────────────────────
     if not await get_site_flag('chat_enabled'):
-        return JSONResponse(
-            {'error': {'message': _CHAT_DISABLED_MESSAGE,
-                       'type': 'service_unavailable', 'code': 'chat_disabled'}},
-            status_code=503,
+        return err_openai(
+            _CHAT_DISABLED_MESSAGE, _CHAT_DISABLED_MESSAGE_EN,
+            503, code='chat_disabled', err_type='service_unavailable',
         )
 
     # ── Gate 3: content moderation — BEFORE any reservation and BEFORE
@@ -261,28 +257,26 @@ async def generate_document(request: Request) -> JSONResponse:
     # provider name. ───────────────────────────────────────────────────
     verdict = await screen_request(uid, [{'role': 'user', 'content': prompt}])
     if verdict.decision == 'block':
-        return JSONResponse(
-            {'error': {'message': verdict.message_fa or BLOCK_MESSAGE_FA,
-                       'type': 'content_policy', 'code': 'content_blocked'}},
-            status_code=403,
+        return err_openai(
+            verdict.message_fa or BLOCK_MESSAGE_FA, verdict.message_en or BLOCK_MESSAGE_EN,
+            403, code='content_blocked', err_type='content_policy',
         )
 
     # ── Gate 4: free-tier gate (per-model). ────────────────────────────
     ft_gate = await check_and_consume(uid, [model])
     if ft_gate is not None:
-        return JSONResponse(
-            {'error': {'message': ft_gate.get('message', _FREE_TIER_MESSAGE),
-                       'type': 'rate_limited', 'code': ft_gate.get('code', 'free_tier')}},
-            status_code=429,
+        return err_openai(
+            ft_gate.get('message', _FREE_TIER_MESSAGE),
+            ft_gate.get('message_en', _FREE_TIER_MESSAGE_EN),
+            429, code=ft_gate.get('code', 'free_tier'), err_type='rate_limited',
         )
 
     # ── Gate 5: aggregate package quota gate. ──────────────────────────
     q_gate = await _user_quota_check(uid)
     if q_gate is not None:
-        return JSONResponse(
-            {'error': {'message': _QUOTA_MESSAGE,
-                       'type': 'rate_limited', 'code': 'message_quota_exceeded'}},
-            status_code=429,
+        return err_openai(
+            _QUOTA_MESSAGE, _QUOTA_MESSAGE_EN,
+            429, code='message_quota_exceeded', err_type='rate_limited',
         )
 
     # ── Gate 6: premium (expensive-model) sub-allowance. The same gate the
@@ -291,10 +285,10 @@ async def generate_document(request: Request) -> JSONResponse:
     # sub-allowance rather than escaping it. ──────────────────────────
     p_gate = await _premium_quota_check(uid, [model])
     if p_gate is not None:
-        return JSONResponse(
-            {'error': {'message': p_gate.get('message', _FREE_TIER_MESSAGE),
-                       'type': 'rate_limited', 'code': p_gate.get('code', 'premium_quota_exceeded')}},
-            status_code=429,
+        return err_openai(
+            p_gate.get('message', _FREE_TIER_MESSAGE),
+            p_gate.get('message_en', _FREE_TIER_MESSAGE_EN),
+            429, code=p_gate.get('code', 'premium_quota_exceeded'), err_type='rate_limited',
         )
 
     # ── Gate 7: reserve. Every gate above has now passed; this is the
@@ -319,14 +313,13 @@ async def generate_document(request: Request) -> JSONResponse:
             )
             await bill_session.commit()
     except InsufficientBalanceError:
-        return JSONResponse(
-            {'error': {'message': _INSUFFICIENT_BALANCE_MESSAGE,
-                       'type': 'quota_exceeded', 'code': 'balance'}},
-            status_code=429,
+        return err_openai(
+            _INSUFFICIENT_BALANCE_MESSAGE, _INSUFFICIENT_BALANCE_MESSAGE_EN,
+            429, code='balance', err_type='quota_exceeded',
         )
     except Exception as e:
         logger.warning(f"document_generator: reserve failed uid={uid} model={model}: {e}")
-        return JSONResponse({'error': {'message': _GATEWAY_ERROR_MESSAGE}}, status_code=502)
+        return err_openai(_GATEWAY_ERROR_MESSAGE, _GATEWAY_ERROR_MESSAGE_EN, 502)
 
     doc_id = uuid.uuid4().hex[:12]
     output_path = DOC_STORAGE / f'{doc_id}{EXT_MAP[doc_type]}'
@@ -347,11 +340,13 @@ async def generate_document(request: Request) -> JSONResponse:
     except json.JSONDecodeError as e:
         logger.error(f'JSON parse error: {e}')
         await _release_reservation(reservation, uid, 'json_parse_error')
-        return JSONResponse({'error': {'message': 'خطا در تولید محتوا. دوباره تلاش کنید.'}}, status_code=500)
+        return err_openai('خطا در تولید محتوا. دوباره تلاش کنید.', 'Error generating content. Please try again.', 500)
     except Exception as e:
         logger.error(f'Document generation failed: {e}', exc_info=True)
         await _release_reservation(reservation, uid, 'generation_failed')
-        return JSONResponse({'error': {'message': 'خطا در تولید سند. لطفاً دوباره تلاش کنید.'}}, status_code=500)
+        return err_openai(
+            'خطا در تولید سند. لطفاً دوباره تلاش کنید.', 'Error generating the document. Please try again.', 500,
+        )
 
     try:
         if doc_type == 'pptx':
@@ -364,7 +359,9 @@ async def generate_document(request: Request) -> JSONResponse:
     except Exception as e:
         logger.error(f'Document file build failed: {e}', exc_info=True)
         await _release_reservation(reservation, uid, 'build_failed')
-        return JSONResponse({'error': {'message': 'خطا در تولید سند. لطفاً دوباره تلاش کنید.'}}, status_code=500)
+        return err_openai(
+            'خطا در تولید سند. لطفاً دوباره تلاش کنید.', 'Error generating the document. Please try again.', 500,
+        )
 
     # ── Gate 8: bill the REAL cost directly to wallet.balance. The
     # response was already generated at this point -- a settle failure
@@ -431,7 +428,7 @@ async def list_documents(request: Request) -> JSONResponse:
     """List user's generated documents."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'error': {'message': 'لطفاً وارد حساب خود شوید'}}, status_code=401)
+        return err_openai('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
 
     docs = [d for d in _doc_registry.values() if d['user_id'] == uid]
     docs.sort(key=lambda d: d['created_at'], reverse=True)
@@ -443,24 +440,24 @@ async def download_document(doc_id: str, request: Request) -> Response:
     """Download a generated document."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'error': {'message': 'لطفاً وارد حساب خود شوید'}}, status_code=401)
+        return err_openai('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
 
     # Strict doc_id validation (defense-in-depth vs path traversal)
     if not DOC_ID_RE.match(doc_id or ''):
-        return JSONResponse({'error': {'message': 'شناسه سند نامعتبر است'}}, status_code=400)
+        return err_openai('شناسه سند نامعتبر است', 'Invalid document ID.', 400)
 
     doc = _doc_registry.get(doc_id)
     if not doc or doc['user_id'] != uid:
-        return JSONResponse({'error': {'message': 'سند یافت نشد'}}, status_code=404)
+        return err_openai('سند یافت نشد', 'Document not found.', 404)
 
     path = DOC_STORAGE / f'{doc_id}{EXT_MAP[doc["type"]]}'
 
     # Ensure resolved path stays inside DOC_STORAGE (defense-in-depth)
     if not str(path.resolve()).startswith(str(DOC_STORAGE.resolve()) + os.sep):
-        return JSONResponse({'error': {'message': 'سند یافت نشد'}}, status_code=404)
+        return err_openai('سند یافت نشد', 'Document not found.', 404)
 
     if not path.exists():
-        return JSONResponse({'error': {'message': 'فایل یافت نشد'}}, status_code=404)
+        return err_openai('فایل یافت نشد', 'File not found.', 404)
 
     mime_map = {
         'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
@@ -483,14 +480,14 @@ async def delete_document(doc_id: str, request: Request) -> JSONResponse:
     """Delete a generated document."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'error': {'message': 'لطفاً وارد حساب خود شوید'}}, status_code=401)
+        return err_openai('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
 
     if not DOC_ID_RE.match(doc_id or ''):
-        return JSONResponse({'error': {'message': 'شناسه سند نامعتبر است'}}, status_code=400)
+        return err_openai('شناسه سند نامعتبر است', 'Invalid document ID.', 400)
 
     doc = _doc_registry.get(doc_id)
     if not doc or doc['user_id'] != uid:
-        return JSONResponse({'error': {'message': 'سند یافت نشد'}}, status_code=404)
+        return err_openai('سند یافت نشد', 'Document not found.', 404)
 
     path = DOC_STORAGE / f'{doc_id}{EXT_MAP[doc["type"]]}'
     path.unlink(missing_ok=True)

@@ -101,8 +101,14 @@ class TestSignupsEnabledFlag:
                 'email': 'flagoff@example.com', 'password': 'securepass123',
             })
         assert resp.status_code == 403
+        # Still an equality assertion, deliberately: the body must be exactly
+        # these two keys and nothing else. The Persian under `detail` is
+        # byte-identical to what it always was -- that is the whole point of
+        # the bilingual contract (backend/i18n.py), which adds a sibling and
+        # never moves the original.
         assert resp.json() == {
             'detail': 'ثبت‌نام کاربران جدید موقتاً غیرفعال است. لطفاً بعداً دوباره تلاش کنید.',
+            'detail_en': 'Sign-ups are temporarily disabled. Please try again later.',
         }
         captcha_delete.assert_not_awaited()
 
@@ -161,7 +167,12 @@ def _chat_off(mock_async_session):
 
 _REFUSAL = {
     'error': {
+        # Persian byte-identical to what it always was; `message_en` is the
+        # sibling backend/i18n.py::err_openai adds. `type` and `code` are the
+        # contract fields OpenAI-compatible clients branch on and must not
+        # move -- asserting the whole body by equality is what keeps that true.
         'message': 'گفتگو موقتاً در دسترس نیست',
+        'message_en': 'Chat is temporarily unavailable.',
         'type': 'service_unavailable',
         'code': 'chat_disabled',
     },
@@ -345,9 +356,15 @@ def _image_off(mock_async_session):
         yield billing_instance
 
 
+# The OpenAI-compatible refusal shape. `message` is byte-identical to what it
+# always was and `message_en` is the sibling the client picks when the UI is in
+# English (backend/i18n.py, frontend lib/i18n.ts::detailFor). `type` and `code`
+# are contract fields that OpenAI-compatible clients branch on and must never
+# move -- asserting the whole body by equality is what keeps that true.
 _IMAGE_REFUSAL = {
     'error': {
         'message': 'تولید تصویر موقتاً در دسترس نیست',
+        'message_en': 'Image generation is temporarily unavailable.',
         'type': 'service_unavailable',
         'code': 'image_generation_disabled',
     },

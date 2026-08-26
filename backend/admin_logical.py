@@ -75,6 +75,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
 from database import async_session
+from i18n import err
 from dependencies import admin_required, _write_audit_log
 
 router = APIRouter()
@@ -99,12 +100,12 @@ def _unauthorized() -> JSONResponse:
 
     Same defect and same fix as admin_moderation.py::_denied().
     """
-    return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
 
 
 def _no_db() -> JSONResponse:
     """A fresh 500 per call -- see :func:`_unauthorized`."""
-    return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+    return err('پایگاه داده در دسترس نیست', 'The database is unavailable.', 500)
 
 
 def _candidate_counts_cte() -> str:
@@ -144,7 +145,7 @@ async def list_logical_models(request: Request) -> JSONResponse:
     q = (qp.get('q') or '').strip()
     availability = qp.get('availability') or ''
     if availability and availability not in _AVAILABILITY_VALUES:
-        return JSONResponse({'detail': 'مقدار availability نامعتبر است'}, status_code=400)
+        return err('مقدار availability نامعتبر است', 'Invalid availability value.', 400)
     pending_only = (qp.get('pending_only') or '').lower() in ('1', 'true', 'yes')
     page = max(1, int(qp.get('page', 1)))
     limit = min(max(1, int(qp.get('limit', 50))), 200)
@@ -215,7 +216,7 @@ async def get_logical_model(request: Request, key: str) -> JSONResponse:
         )
         model_row = res.fetchone()
         if not model_row:
-            return JSONResponse({'detail': 'مدل منطقی یافت نشد'}, status_code=404)
+            return err('مدل منطقی یافت نشد', 'Logical model not found.', 404)
         model = dict(model_row._mapping)
 
         cand_res = await session.execute(

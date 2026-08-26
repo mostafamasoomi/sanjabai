@@ -46,7 +46,7 @@ import logging
 import math
 import os
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import sqlalchemy
@@ -192,10 +192,15 @@ class PriceRefusal:
 
     model_id: str
     detail: str
-    audit: dict[str, Any]
+    #: The same refusal in English. Defaulted so an older construction still
+    #: type-checks; endpoints fall back to `detail` when it is empty, so a
+    #: missing translation shows the Persian rather than nothing.
+    detail_en: str = ''
+    audit: dict[str, Any] = field(default_factory=dict)
 
 
 _TOKEN_KIND_FA = {'input': 'ورودی', 'output': 'خروجی'}
+_TOKEN_KIND_EN = {'input': 'input', 'output': 'output'}
 
 
 def evaluate_price(
@@ -230,6 +235,7 @@ def evaluate_price(
     ):
         cost = upstream_cost_toman(usd, rate_irt, ceiling_usd_per_million=ceiling)
         kind_fa = _TOKEN_KIND_FA[kind]
+        kind_en = _TOKEN_KIND_EN[kind]
         if cost is None:
             return PriceRefusal(
                 model_id=model_id,
@@ -237,6 +243,12 @@ def evaluate_price(
                     f'هزینه بالادست «{model_id}» روی «{upstream}» برای توکن {kind_fa} '
                     f'نامعلوم است و سقف دسته هم در دسترس نیست. تا مشخص‌شدن هزینه، '
                     f'قیمت‌گذاری و عرضهٔ این مدل رد می‌شود (هیچ درخواستی نباید ضررده باشد).'
+                ),
+                detail_en=(
+                    f'The upstream cost of "{model_id}" on "{upstream}" for {kind_en} '
+                    f'tokens is unknown and no category ceiling is available either. '
+                    f'Pricing and serving this model is refused until the cost is '
+                    f'known (no request may be loss-making).'
                 ),
                 audit={
                     'model': model_id, 'upstream': upstream, 'token_kind': kind,
@@ -255,6 +267,13 @@ def evaluate_price(
                     f'{int(listed):,} تومان بر هر میلیون توکن در برابر هزینه بالادست '
                     f'{cost:,} تومان — حاشیه {margin_txt}، حداقل مجاز '
                     f'{MIN_MARGIN_PCT:g}٪. هیچ درخواستی نباید ضررده باشد.'
+                ),
+                detail_en=(
+                    f'Selling "{model_id}" would lose money: the {kind_en} token price '
+                    f'of {int(listed):,} Toman per million against an upstream cost of '
+                    f'{cost:,} Toman — margin '
+                    f'{"unknown" if result.margin_pct is None else f"{result.margin_pct:.1f}%"}, '
+                    f'minimum allowed {MIN_MARGIN_PCT:g}%. No request may be loss-making.'
                 ),
                 audit={
                     'model': model_id, 'upstream': upstream, 'token_kind': kind,
@@ -335,6 +354,11 @@ async def refuse_if_loss_making(
                 'هیچ درخواستی نباید ضررده باشد، پس تا زمانی که این بررسی '
                 'قابل انجام نباشد تغییر پذیرفته نمی‌شود.'
             ),
+            detail_en=(
+                'The margin check could not be run, so the price/availability '
+                'change was not applied. No request may be loss-making, so the '
+                'change is refused while that check is impossible.'
+            ),
             audit={'model': ids[0], 'model_count': len(ids), 'currency': 'IRT',
                    'reason': f'margin guard could not read model_catalog: {type(e).__name__}'},
         )
@@ -358,6 +382,11 @@ async def refuse_if_loss_making(
             detail=(
                 'نرخ ارز یا درصد سود در دسترس نیست، پس ضررده‌نبودن این قیمت '
                 'قابل اثبات نیست و تغییر پذیرفته نشد.'
+            ),
+            detail_en=(
+                'The exchange rate or the markup percentage is unavailable, so this '
+                'price cannot be shown to be non-loss-making and the change was '
+                'refused.'
             ),
             audit={'model': paid[0].id, 'currency': 'IRT',
                    'reason': f'margin guard could not resolve rate/markup: {type(e).__name__}'},

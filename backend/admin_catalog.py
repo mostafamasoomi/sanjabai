@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 
 from database import async_session, rds
 from dependencies import admin_required, _write_audit_log
+from i18n import err
 from services import margin, probe_gate
 
 router = APIRouter()
@@ -45,7 +46,9 @@ async def _refuse_loss_making(session, model_ids, request, **kwargs) -> JSONResp
         return None
     await _write_audit_log('admin.margin.refused', target_type='model_catalog',
                            target_id=refusal.model_id, details=refusal.audit, request=request)
-    return JSONResponse({'detail': refusal.detail}, status_code=400)
+    # `detail_en or detail` -- a refusal built before the English side existed
+    # shows its Persian rather than an empty string.
+    return err(refusal.detail, refusal.detail_en or refusal.detail, 400)
 
 
 async def _refuse_unprobed(session, model_ids, request) -> JSONResponse | None:
@@ -63,7 +66,9 @@ async def _refuse_unprobed(session, model_ids, request) -> JSONResponse | None:
         return None
     await _write_audit_log('admin.model.probe_refused', target_type='model_catalog',
                            target_id=None, details=refusal.audit, request=request)
-    return JSONResponse({'detail': refusal.detail}, status_code=400)
+    # `detail_en or detail` -- a refusal built before the English side existed
+    # shows its Persian rather than an empty string.
+    return err(refusal.detail, refusal.detail_en or refusal.detail, 400)
 
 
 _VALID_AVAILABILITY = {'available', 'degraded', 'maintenance', 'disabled'}
@@ -96,9 +101,9 @@ async def list_catalog_models(request: Request) -> JSONResponse:
     availability says, and nothing in the panel used to reveal that.
     """
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(sqlalchemy.text(
             "SELECT c.id, c.provider_model_id, c.provider, c.upstream, c.display_name, "
@@ -133,19 +138,20 @@ async def set_model_upstream(request: Request, model_id: str, payload: dict[str,
     (unencoded) slash for this route to match.
     """
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     upstream = str(payload.get('upstream') or '').strip()
     if not upstream:
-        return JSONResponse({'detail': 'مقدار upstream الزامی است'}, status_code=400)
+        return err('مقدار upstream الزامی است', 'upstream is required.', 400)
 
     from providers import configured_providers
     valid = {p.name for p in configured_providers()}
     if upstream not in valid:
-        return JSONResponse(
-            {'detail': f'upstream نامعتبر است (مجاز: {", ".join(sorted(valid))})'},
-            status_code=400,
+        return err(
+            f'upstream نامعتبر است (مجاز: {", ".join(sorted(valid))})',
+            f'Invalid upstream. Valid options: {", ".join(sorted(valid))}',
+            400,
         )
 
     async with async_session() as session:
@@ -160,7 +166,7 @@ async def set_model_upstream(request: Request, model_id: str, payload: dict[str,
             'UPDATE model_catalog SET upstream = :u, updated_at = now() WHERE id = :id'
         ), {'u': upstream, 'id': model_id})
         if res.rowcount == 0:
-            return JSONResponse({'detail': 'مدل در کاتالوگ یافت نشد'}, status_code=404)
+            return err('مدل در کاتالوگ یافت نشد', 'Model not found in catalog.', 404)
         await session.commit()
 
     await _write_audit_log('admin.model.set_upstream', target_type='model_catalog', target_id=model_id,
@@ -180,18 +186,18 @@ async def bulk_set_availability(request: Request, payload: dict[str, Any]) -> JS
     just `available`.
     """
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     ids = payload.get('ids')
     availability = payload.get('availability')
     if not isinstance(ids, list) or not ids:
-        return JSONResponse({'detail': 'فهرست مدلها الزامی است'}, status_code=400)
+        return err('فهرست مدلها الزامی است', 'A list of model ids is required.', 400)
     if len(ids) > _BULK_MAX_IDS:
-        return JSONResponse({'detail': 'تعداد مدلها بیش از حد مجاز است'}, status_code=400)
+        return err('تعداد مدلها بیش از حد مجاز است', 'Too many model ids.', 400)
     if availability not in _VALID_AVAILABILITY:
-        return JSONResponse({'detail': 'وضعیت نامعتبر است'}, status_code=400)
+        return err('وضعیت نامعتبر است', 'Invalid availability status.', 400)
 
     str_ids = [str(i) for i in ids]
     async with async_session() as session:
@@ -242,31 +248,20 @@ async def bulk_set_availability(request: Request, payload: dict[str, Any]) -> JS
 # never blocks a legitimate business decision, but it still catches the
 # fat-finger case (a stray extra digit, a % sign typed as a raw multiplier,
 # etc.) before it reaches a live price.
-_MARKUP_PCT_MAX = 1000
-
-
-def _parse_markup_pct(raw: Any, *, allow_null: bool) -> tuple[float | None, str | None]:
-    """Validate a markup_pct payload value. Returns (value, error_detail)."""
-    if raw is None:
-        if allow_null:
-            return None, None
-        return None, 'درصد سود الزامی است'
-    try:
-        pct = float(raw)
-    except (TypeError, ValueError):
-        return None, 'درصد نامعتبر است'
-    if pct < 0:
-        return None, 'درصد سود نمی‌تواند منفی باشد (هیچ درخواستی نباید ضررده باشد)'
-    if pct > _MARKUP_PCT_MAX:
-        return None, f'درصد سود بیش از حد مجاز است (سقف {_MARKUP_PCT_MAX:,}٪) -- احتمالاً اشتباه تایپی است'
-    return pct, None
+# The two field parsers and their English error tables live in a sibling
+# module; this file is the endpoints. See admin_catalog_parsing.py for why
+# they return a 2-tuple and not a language triple.
+from admin_catalog_parsing import (  # noqa: E402
+    _IMAGE_PRICE_ERR_EN, _MARKUP_PCT_ERR_EN, _MARKUP_PCT_MAX,
+    _parse_image_price, _parse_markup_pct,
+)
 
 
 @router.get('/admin/markup/global')
 async def get_global_markup(request: Request) -> JSONResponse:
     """Current global markup percentage (models with no override use this)."""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     from content import get_global_markup_pct
     pct = await get_global_markup_pct()
     return JSONResponse({'markup_pct': pct})
@@ -276,13 +271,13 @@ async def get_global_markup(request: Request) -> JSONResponse:
 async def set_global_markup(request: Request, payload: dict[str, Any]) -> JSONResponse:
     """Set the global markup percentage applied to every model with no override."""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
-    pct, err = _parse_markup_pct(payload.get('markup_pct'), allow_null=False)
-    if err:
-        return JSONResponse({'detail': err}, status_code=400)
+    pct, fa_err = _parse_markup_pct(payload.get('markup_pct'), allow_null=False)
+    if fa_err:
+        return err(fa_err, _MARKUP_PCT_ERR_EN.get(fa_err, fa_err), 400)
 
     async with async_session() as session:
         await session.execute(sqlalchemy.text(
@@ -303,9 +298,9 @@ async def set_global_markup(request: Request, payload: dict[str, Any]) -> JSONRe
 async def list_model_markups(request: Request) -> JSONResponse:
     """Per-model markup overrides (markup_pct: null means "inherit the global")."""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(sqlalchemy.text(
             "SELECT id, display_name, input_per_million, output_per_million, markup_pct "
@@ -327,19 +322,19 @@ async def bulk_set_model_markup(request: Request, payload: dict[str, Any]) -> JS
     it (model_id="bulk") and this endpoint would be unreachable.
     """
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     ids = payload.get('ids')
     if not isinstance(ids, list) or not ids:
-        return JSONResponse({'detail': 'فهرست مدلها الزامی است'}, status_code=400)
+        return err('فهرست مدلها الزامی است', 'A list of model ids is required.', 400)
     if len(ids) > _BULK_MAX_IDS:
-        return JSONResponse({'detail': 'تعداد مدلها بیش از حد مجاز است'}, status_code=400)
+        return err('تعداد مدلها بیش از حد مجاز است', 'Too many model ids.', 400)
 
-    pct, err = _parse_markup_pct(payload.get('markup_pct'), allow_null=True)
-    if err:
-        return JSONResponse({'detail': err}, status_code=400)
+    pct, fa_err = _parse_markup_pct(payload.get('markup_pct'), allow_null=True)
+    if fa_err:
+        return err(fa_err, _MARKUP_PCT_ERR_EN.get(fa_err, fa_err), 400)
 
     str_ids = [str(i) for i in ids]
     async with async_session() as session:
@@ -370,13 +365,13 @@ async def set_model_markup(request: Request, model_id: str, payload: dict[str, A
     bulk_set_model_markup above -- see that function's docstring.
     """
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
-    pct, err = _parse_markup_pct(payload.get('markup_pct'), allow_null=True)
-    if err:
-        return JSONResponse({'detail': err}, status_code=400)
+    pct, fa_err = _parse_markup_pct(payload.get('markup_pct'), allow_null=True)
+    if fa_err:
+        return err(fa_err, _MARKUP_PCT_ERR_EN.get(fa_err, fa_err), 400)
 
     async with async_session() as session:
         refused = await _refuse_loss_making(session, [model_id], request,
@@ -387,7 +382,7 @@ async def set_model_markup(request: Request, model_id: str, payload: dict[str, A
             'UPDATE model_catalog SET markup_pct = :p, updated_at = now() WHERE id = :id'
         ), {'p': pct, 'id': model_id})
         if res.rowcount == 0:
-            return JSONResponse({'detail': 'مدل در کاتالوگ یافت نشد'}, status_code=404)
+            return err('مدل در کاتالوگ یافت نشد', 'Model not found in catalog.', 404)
         await session.commit()
 
     await _write_audit_log('admin.markup.set_model', target_type='model_catalog', target_id=model_id,
@@ -410,32 +405,6 @@ async def set_model_markup(request: Request, model_id: str, payload: dict[str, A
 # Toman quietly entering the pricing pipeline -- floats are rejected here,
 # not just non-negative values.
 
-def _parse_image_price(raw: Any) -> tuple[int | None, str | None]:
-    """Validate an image_price_per_unit payload value.
-
-    Returns (value, error_detail). ``None`` (explicit null) clears the
-    price back to "not set, cannot be served". Anything else must be an
-    integer Toman amount >= 0. Floats are rejected outright -- including a
-    JSON float that happens to be integral (``10.0``) and a bool (a
-    subclass of ``int`` in Python, so ``isinstance(True, int)`` is True and
-    ``True`` would otherwise silently parse as ``1``) -- so the only way to
-    set a price is a JSON integer or a plain-digit string.
-    """
-    if raw is None:
-        return None, None
-    if isinstance(raw, bool) or isinstance(raw, float):
-        return None, 'قیمت باید عدد صحیح تومان باشد (اعشار مجاز نیست)'
-    if isinstance(raw, int):
-        price = raw
-    elif isinstance(raw, str) and re.fullmatch(r'-?\d+', raw.strip()):
-        price = int(raw.strip())
-    else:
-        return None, 'قیمت باید عدد صحیح تومان باشد (اعشار مجاز نیست)'
-    if price < 0:
-        return None, 'قیمت نمی‌تواند منفی باشد'
-    return price, None
-
-
 @router.get('/admin/catalog/media-models')
 async def list_media_models(request: Request) -> JSONResponse:
     """Media (image-output) rows from model_catalog with their current
@@ -447,9 +416,9 @@ async def list_media_models(request: Request) -> JSONResponse:
     modalities alongside images (see migrations/0031_model_modalities.sql).
     """
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(sqlalchemy.text(
             "SELECT id, provider_model_id, display_name, availability, "
@@ -475,20 +444,20 @@ async def set_model_image_price(request: Request, model_id: str, payload: dict[s
     that looks like it should be its own route.
     """
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
-    price, err = _parse_image_price(payload.get('image_price_per_unit'))
-    if err:
-        return JSONResponse({'detail': err}, status_code=400)
+    price, fa_err = _parse_image_price(payload.get('image_price_per_unit'))
+    if fa_err:
+        return err(fa_err, _IMAGE_PRICE_ERR_EN.get(fa_err, fa_err), 400)
 
     async with async_session() as session:
         res = await session.execute(sqlalchemy.text(
             'UPDATE model_catalog SET image_price_per_unit = :p, updated_at = now() WHERE id = :id'
         ), {'p': price, 'id': model_id})
         if res.rowcount == 0:
-            return JSONResponse({'detail': 'مدل در کاتالوگ یافت نشد'}, status_code=404)
+            return err('مدل در کاتالوگ یافت نشد', 'Model not found in catalog.', 404)
         await session.commit()
 
     await _write_audit_log('admin.catalog.set_image_price', target_type='model_catalog', target_id=model_id,

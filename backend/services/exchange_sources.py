@@ -216,20 +216,32 @@ def _bounded_search(pattern: str, text: str):
 _NESTED_QUANTIFIER_RE = re.compile(r'\([^()]*[+*][^()]*\)[+*]')
 
 
-def validate_custom_regex_pattern(pattern: str) -> str | None:
-    """Returns a Persian error string to reject `pattern`, or None to accept."""
+def validate_custom_regex_pattern(pattern: str) -> tuple[str, str] | None:
+    """`(persian, english)` describing why `pattern` is rejected, or None.
+
+    Returns the pair rather than one language for the same reason the rest of
+    this backend does (backend/i18n.py): the caller turns it straight into a
+    response body carrying both, so nothing here has to know who is asking.
+    Callers that only test truthiness are unaffected by the change of shape.
+    """
     if not pattern or not pattern.strip():
-        return 'الگوی استخراج الزامی است'
+        return ('الگوی استخراج الزامی است',
+                'An extraction pattern is required.')
     if len(pattern) > _MAX_REGEX_PATTERN_LEN:
-        return f'الگوی استخراج بیش از حد بلند است (حداکثر {_MAX_REGEX_PATTERN_LEN} نویسه)'
+        return (f'الگوی استخراج بیش از حد بلند است (حداکثر {_MAX_REGEX_PATTERN_LEN} نویسه)',
+                f'The extraction pattern is too long (max {_MAX_REGEX_PATTERN_LEN} characters).')
     if _NESTED_QUANTIFIER_RE.search(pattern):
-        return 'الگوی استخراج شامل تکرار تودرتو است که می‌تواند سرور را کند کند (مثل (.*)+)'
+        return ('الگوی استخراج شامل تکرار تودرتو است که می‌تواند سرور را کند کند (مثل (.*)+)',
+                'The extraction pattern contains nested repetition, which can stall '
+                'the server (for example (.*)+).')
     try:
         compiled = re.compile(pattern)
     except re.error as e:
-        return f'الگوی استخراج نامعتبر است: {e}'
+        return (f'الگوی استخراج نامعتبر است: {e}',
+                f'The extraction pattern is not valid: {e}')
     if compiled.groups < 1:
-        return 'الگوی استخراج باید دست‌کم یک گروه () برای عدد نرخ داشته باشد'
+        return ('الگوی استخراج باید دست‌کم یک گروه () برای عدد نرخ داشته باشد',
+                'The extraction pattern needs at least one () group to capture the rate.')
     return None
 
 
@@ -244,30 +256,33 @@ _BLOCKED_HOSTNAMES = {
 }
 
 
-def validate_source_url(url: str) -> str | None:
-    """Returns a Persian error string to reject `url`, or None to accept.
+def validate_source_url(url: str) -> tuple[str, str] | None:
+    """`(persian, english)` describing why `url` is rejected, or None.
     Best-effort only -- see the module docstring's Trust boundary section
     for what this does and does not defend against."""
     if not url or len(url) > 2048:
-        return 'نشانی نامعتبر یا بیش از حد بلند است'
+        return ('نشانی نامعتبر یا بیش از حد بلند است',
+                'The URL is invalid or too long.')
     try:
         parsed = urlparse(url)
     except ValueError:
-        return 'نشانی قابل تجزیه نیست'
+        return ('نشانی قابل تجزیه نیست', 'The URL could not be parsed.')
     if parsed.scheme != 'https':
-        return 'فقط نشانی https مجاز است'
+        return ('فقط نشانی https مجاز است', 'Only https URLs are allowed.')
     host = (parsed.hostname or '').lower()
     if not host:
-        return 'نشانی بدون میزبان معتبر نیست'
+        return ('نشانی بدون میزبان معتبر نیست', 'A URL without a host is not valid.')
     if host in _BLOCKED_HOSTNAMES or host.endswith('.local') or host.endswith('.internal'):
-        return 'این نشانی به شبکهٔ داخلی سرور اشاره دارد و مجاز نیست'
+        return ('این نشانی به شبکهٔ داخلی سرور اشاره دارد و مجاز نیست',
+                'This URL points at the server\'s internal network and is not allowed.')
     try:
         ip = ipaddress.ip_address(host)
     except ValueError:
         ip = None
     if ip is not None and (ip.is_private or ip.is_loopback or ip.is_link_local
                             or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
-        return 'آدرس IP داخلی/خصوصی مجاز نیست'
+        return ('آدرس IP داخلی/خصوصی مجاز نیست',
+                'Internal or private IP addresses are not allowed.')
     return None
 
 

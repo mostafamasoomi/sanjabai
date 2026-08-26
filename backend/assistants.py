@@ -15,6 +15,7 @@ from database import async_session
 from models import Assistant
 import sqlalchemy
 from dependencies import _get_user_id
+from i18n import err
 
 router = APIRouter()
 
@@ -54,9 +55,9 @@ async def list_assistants(request: Request) -> JSONResponse:
 async def create_assistant(request: Request, payload: AssistantCreate) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         obj = Assistant(
             user_id=uid, name=payload.name, description=payload.description,
@@ -78,7 +79,7 @@ async def get_assistant(assistant_id: int, request: Request) -> JSONResponse:
     # DELETE on the same resource already filter on user_id; GET must match.
     uid = await _get_user_id(request)
     if async_session is None:
-        return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+        return err('یافت نشد', 'Not found.', 404)
     async with async_session() as session:
         res = await session.execute(
             Assistant.__table__.select().where(
@@ -88,7 +89,7 @@ async def get_assistant(assistant_id: int, request: Request) -> JSONResponse:
         )
         row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+            return err('یافت نشد', 'Not found.', 404)
         return JSONResponse(jsonable_encoder(dict(row._mapping)))
 
 
@@ -96,16 +97,27 @@ async def get_assistant(assistant_id: int, request: Request) -> JSONResponse:
 async def update_assistant(assistant_id: int, request: Request, payload: dict[str, Any]) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(
             Assistant.__table__.select().where(Assistant.id == assistant_id, Assistant.user_id == uid)
         )
         row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'not found or not owned | یافت نشد یا متعلق به شما نیست'}, status_code=404)
+            # NOT CONVERTED -- see handoff report. `detail` here is a mixed
+            # EN|FA literal, not a clean Persian string, so byte-identical
+            # conversion isn't well-defined; flagged for the senior instead
+            # of guessing at a split.
+            # Was a single string with both languages jammed together either
+            # side of a pipe -- the hand-rolled version of what err() does
+            # properly. Split at the pipe; the Persian half is unchanged.
+            return err(
+                'یافت نشد یا متعلق به شما نیست',
+                'Not found, or not owned by you.',
+                404,
+            )
         obj = await session.get(Assistant, assistant_id)
         for field in ('name', 'description', 'system_prompt', 'model_id', 'icon', 'is_public'):
             if field in payload:
@@ -119,15 +131,15 @@ async def update_assistant(assistant_id: int, request: Request, payload: dict[st
 async def delete_assistant(assistant_id: int, request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(
             Assistant.__table__.select().where(Assistant.id == assistant_id, Assistant.user_id == uid)
         )
         if not res.fetchone():
-            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+            return err('یافت نشد', 'Not found.', 404)
         await session.execute(Assistant.__table__.delete().where(Assistant.id == assistant_id))
         await session.commit()
     return JSONResponse({'status': 'ok'})

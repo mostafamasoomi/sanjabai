@@ -56,6 +56,13 @@ BLOCK_MESSAGE_FA = (
     'شما پردازش نشد. اگر فکر می‌کنید اشتباهی رخ داده، با پشتیبانی تماس بگیرید.'
 )
 
+# English sibling -- same generic, no-provider/no-rule-name wording as
+# BLOCK_MESSAGE_FA above (see backend/i18n.py's `_en` sibling convention).
+BLOCK_MESSAGE_EN = (
+    'This request was blocked for violating the service usage policy and was '
+    'not processed for you. If you think this is a mistake, please contact support.'
+)
+
 # category == 'self_harm' gets a warm, non-judgmental message instead of the
 # bureaucratic generic one above -- a user in this state should not be told
 # "contact support", they should be told someone is there and given a
@@ -69,6 +76,17 @@ SELF_HARM_MESSAGE_FA = (
     'بگیرید؛ افرادی آموزش‌دیده آنجا هستند تا به شما کمک کنند.'
 )
 
+# English sibling of SELF_HARM_MESSAGE_FA. Iran's social emergency line is a
+# local, Persian-speaking service, so it is named as-is rather than
+# translated; an English-reading user in Iran can still call it.
+SELF_HARM_MESSAGE_EN = (
+    'It seems like things have been hard for you lately, and that is why this '
+    'message was not processed. What you wrote matters, and you are not alone; '
+    'it may help to talk to someone you trust. You can also call Iran\'s social '
+    'emergency line, 123 (اورژانس اجتماعی), free of charge, right now -- trained '
+    'people are there to help you.'
+)
+
 
 def block_message_for_category(category: str | None) -> str:
     """The Persian text sent to the user for a real block, chosen by the
@@ -78,6 +96,16 @@ def block_message_for_category(category: str | None) -> str:
     if category == 'self_harm':
         return SELF_HARM_MESSAGE_FA
     return BLOCK_MESSAGE_FA
+
+
+def block_message_en_for_category(category: str | None) -> str:
+    """English sibling of :func:`block_message_for_category`. A separate
+    function, not a language argument on the existing one, because that one's
+    return type (a bare Persian string) is an already-tested contract (see
+    tests/test_moderation_block_messages.py) this must not disturb."""
+    if category == 'self_harm':
+        return SELF_HARM_MESSAGE_EN
+    return BLOCK_MESSAGE_EN
 
 class _BudgetExceeded(Exception):
     """Rule sweep ran past REGEX_BUDGET_SECONDS -- a detector failure, i.e.
@@ -181,6 +209,8 @@ class Verdict:
     snippet: str = ''
     failed: bool = False
     message_fa: str | None = None
+    message_en: str | None = None    # English sibling of message_fa; see
+                                      # block_message_en_for_category above
     detail: str = ''                 # internal only; never sent to a user
 
 

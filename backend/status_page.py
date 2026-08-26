@@ -34,6 +34,7 @@ from fastapi.responses import JSONResponse
 
 from database import async_session, rds
 from dependencies import admin_required, _write_audit_log
+from i18n import err
 
 logger = logging.getLogger('status_page')
 
@@ -295,17 +296,17 @@ async def upsert_incident(request: Request, payload: dict[str, Any]) -> JSONResp
     status page shows a single banner, not a feed.
     """
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     title = str(payload.get('title') or '').strip()
     if not title:
-        return JSONResponse({'detail': 'عنوان الزامی است'}, status_code=400)
+        return err('عنوان الزامی است', 'Title is required.', 400)
     body = str(payload.get('body') or '')
     severity = str(payload.get('severity') or 'warning')
     if severity not in _VALID_SEVERITY:
-        return JSONResponse({'detail': 'سطح اعلان نامعتبر است'}, status_code=400)
+        return err('سطح اعلان نامعتبر است', 'Invalid severity level.', 400)
 
     async with async_session() as session:
         res = await session.execute(
@@ -348,9 +349,9 @@ async def upsert_incident(request: Request, payload: dict[str, Any]) -> JSONResp
 async def resolve_incident(request: Request) -> JSONResponse:
     """Resolve the currently active incident, if any."""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     async with async_session() as session:
         res = await session.execute(

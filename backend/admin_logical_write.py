@@ -48,28 +48,31 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from database import async_session
+from i18n import err
 
 import admin_logical
 
 
-def _validate_candidate_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
+def _validate_candidate_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], str | None, str | None]:
     cleaned: dict[str, Any] = {}
     if 'state' in payload:
         v = payload['state']
         if v not in admin_logical._CANDIDATE_STATE_VALUES:
-            return {}, f"وضعیت گزینه باید یکی از این مقادیر باشد: {', '.join(admin_logical._CANDIDATE_STATE_VALUES)}"
+            values = ', '.join(admin_logical._CANDIDATE_STATE_VALUES)
+            return ({}, f"وضعیت گزینه باید یکی از این مقادیر باشد: {values}",
+                    f"Candidate state must be one of: {values}")
         cleaned['state'] = v
     if 'enabled' in payload:
         v = payload['enabled']
         if not isinstance(v, bool):
-            return {}, 'فعال/غیرفعال بودن گزینه باید true/false باشد'
+            return {}, 'فعال/غیرفعال بودن گزینه باید true/false باشد', "The candidate's enabled flag must be true or false."
         cleaned['enabled'] = v
     if 'priority' in payload:
         v = payload['priority']
         if isinstance(v, bool) or not isinstance(v, int):
-            return {}, 'اولویت باید عدد صحیح باشد'
+            return {}, 'اولویت باید عدد صحیح باشد', 'Priority must be an integer.'
         cleaned['priority'] = v
-    return cleaned, None
+    return cleaned, None, None
 
 
 @admin_logical.router.post('/admin/logical-models/{key}/candidates/{candidate_id}')
@@ -86,13 +89,14 @@ async def update_candidate(request: Request, key: str, candidate_id: int, payloa
 
     unknown = set(payload) - {'state', 'enabled', 'priority'}
     if unknown:
-        return JSONResponse({'detail': f'فیلد ناشناخته: {", ".join(sorted(unknown))}'}, status_code=400)
+        fields = ", ".join(sorted(unknown))
+        return err(f'فیلد ناشناخته: {fields}', f'Unknown field: {fields}', 400)
 
-    cleaned, err = _validate_candidate_payload(payload)
-    if err:
-        return JSONResponse({'detail': err}, status_code=400)
+    cleaned, fa_err, en_err = _validate_candidate_payload(payload)
+    if fa_err:
+        return err(fa_err, en_err, 400)
     if not cleaned:
-        return JSONResponse({'detail': 'هیچ فیلدی برای بروزرسانی ارسال نشده است'}, status_code=400)
+        return err('هیچ فیلدی برای بروزرسانی ارسال نشده است', 'No fields were sent to update.', 400)
 
     async with async_session() as session:
         res = await session.execute(
@@ -109,7 +113,7 @@ async def update_candidate(request: Request, key: str, candidate_id: int, payloa
         )
         row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'گزینه یافت نشد'}, status_code=404)
+            return err('گزینه یافت نشد', 'Candidate not found.', 404)
         row_map = dict(row._mapping)
 
         # Guard: this candidate is the logical model's current pin (matched
@@ -126,10 +130,12 @@ async def update_candidate(request: Request, key: str, candidate_id: int, payloa
             or cleaned.get('enabled', row_map['enabled']) is False
         )
         if about_to_break:
-            return JSONResponse(
-                {'detail': 'این گزینه هم‌اکنون به‌عنوان مسیر پین‌شدهٔ این مدل منطقی انتخاب شده است؛ '
-                           'ابتدا سیاست مسیریابی را تغییر دهید یا گزینهٔ دیگری را پین کنید.'},
-                status_code=400,
+            return err(
+                'این گزینه هم‌اکنون به‌عنوان مسیر پین‌شدهٔ این مدل منطقی انتخاب شده است؛ '
+                'ابتدا سیاست مسیریابی را تغییر دهید یا گزینهٔ دیگری را پین کنید.',
+                "This candidate is currently pinned as this logical model's route; "
+                'change the routing policy first, or pin a different candidate.',
+                400,
             )
 
         set_parts = [f'{f} = :{f}' for f in cleaned]
@@ -166,24 +172,28 @@ async def update_routing(request: Request, key: str, payload: dict[str, Any]) ->
 
     unknown = set(payload) - {'routing_policy', 'pinned_candidate_id'}
     if unknown:
-        return JSONResponse({'detail': f'فیلد ناشناخته: {", ".join(sorted(unknown))}'}, status_code=400)
+        fields = ", ".join(sorted(unknown))
+        return err(f'فیلد ناشناخته: {fields}', f'Unknown field: {fields}', 400)
 
     cleaned: dict[str, Any] = {}
     if 'routing_policy' in payload:
         v = payload['routing_policy']
         if v not in admin_logical._ROUTING_POLICY_VALUES:
-            return JSONResponse(
-                {'detail': f"سیاست مسیریابی باید یکی از این مقادیر باشد: {', '.join(admin_logical._ROUTING_POLICY_VALUES)}"},
-                status_code=400,
+            values = ', '.join(admin_logical._ROUTING_POLICY_VALUES)
+            return err(
+                f"سیاست مسیریابی باید یکی از این مقادیر باشد: {values}",
+                f"Routing policy must be one of: {values}",
+                400,
             )
         cleaned['routing_policy'] = v
     if 'pinned_candidate_id' in payload:
         v = payload['pinned_candidate_id']
         if v is not None and not isinstance(v, str):
-            return JSONResponse({'detail': 'شناسهٔ گزینهٔ پین‌شده باید رشته یا null باشد'}, status_code=400)
+            return err('شناسهٔ گزینهٔ پین‌شده باید رشته یا null باشد',
+                       'The pinned candidate id must be a string or null.', 400)
         cleaned['pinned_candidate_id'] = v
     if not cleaned:
-        return JSONResponse({'detail': 'هیچ فیلدی برای بروزرسانی ارسال نشده است'}, status_code=400)
+        return err('هیچ فیلدی برای بروزرسانی ارسال نشده است', 'No fields were sent to update.', 400)
 
     async with async_session() as session:
         res = await session.execute(
@@ -191,7 +201,7 @@ async def update_routing(request: Request, key: str, payload: dict[str, Any]) ->
         )
         current = res.fetchone()
         if not current:
-            return JSONResponse({'detail': 'مدل منطقی یافت نشد'}, status_code=404)
+            return err('مدل منطقی یافت نشد', 'Logical model not found.', 404)
         current_map = dict(current._mapping)
         effective = {**current_map, **cleaned}
 
@@ -207,17 +217,21 @@ async def update_routing(request: Request, key: str, payload: dict[str, Any]) ->
                 {'key': key, 'cid': effective['pinned_candidate_id']},
             )
             if not chk.fetchone():
-                return JSONResponse(
-                    {'detail': 'گزینهٔ انتخاب‌شده برای پین باید برای همین مدل منطقی، تأییدشده (approved) '
-                               'و فعال (enabled) باشد. پین‌کردن گزینهٔ رد‌شده یا غیرفعال تله‌ای است که فقط '
-                               'وقتی کاربر واقعی به آن برسد آشکار می‌شود.'},
-                    status_code=400,
+                return err(
+                    'گزینهٔ انتخاب‌شده برای پین باید برای همین مدل منطقی، تأییدشده (approved) '
+                    'و فعال (enabled) باشد. پین‌کردن گزینهٔ رد‌شده یا غیرفعال تله‌ای است که فقط '
+                    'وقتی کاربر واقعی به آن برسد آشکار می‌شود.',
+                    'The candidate selected for pinning must be approved and enabled for this '
+                    'exact logical model. Pinning a rejected or disabled candidate is a trap '
+                    'that only surfaces once a real user hits it.',
+                    400,
                 )
 
         if effective.get('routing_policy') == 'pinned' and effective.get('pinned_candidate_id') is None:
-            return JSONResponse(
-                {'detail': 'سیاست مسیریابی «پین‌شده» بدون انتخاب یک گزینهٔ پین معنا ندارد'},
-                status_code=400,
+            return err(
+                'سیاست مسیریابی «پین‌شده» بدون انتخاب یک گزینهٔ پین معنا ندارد',
+                "Routing policy 'pinned' has no meaning without selecting a pinned candidate.",
+                400,
             )
 
         set_parts = [f'{f} = :{f}' for f in cleaned]
@@ -249,14 +263,17 @@ async def update_availability(request: Request, key: str, payload: dict[str, Any
 
     unknown = set(payload) - {'availability'}
     if unknown:
-        return JSONResponse({'detail': f'فیلد ناشناخته: {", ".join(sorted(unknown))}'}, status_code=400)
+        fields = ", ".join(sorted(unknown))
+        return err(f'فیلد ناشناخته: {fields}', f'Unknown field: {fields}', 400)
     if 'availability' not in payload:
-        return JSONResponse({'detail': 'فیلد availability الزامی است'}, status_code=400)
+        return err('فیلد availability الزامی است', 'The availability field is required.', 400)
     availability = payload['availability']
     if availability not in admin_logical._AVAILABILITY_VALUES:
-        return JSONResponse(
-            {'detail': f"availability باید یکی از این مقادیر باشد: {', '.join(admin_logical._AVAILABILITY_VALUES)}"},
-            status_code=400,
+        values = ', '.join(admin_logical._AVAILABILITY_VALUES)
+        return err(
+            f"availability باید یکی از این مقادیر باشد: {values}",
+            f"availability must be one of: {values}",
+            400,
         )
 
     async with async_session() as session:
@@ -264,7 +281,7 @@ async def update_availability(request: Request, key: str, payload: dict[str, Any
             sqlalchemy.text('SELECT key FROM logical_model WHERE key = :key'), {'key': key}
         )
         if not res.fetchone():
-            return JSONResponse({'detail': 'مدل منطقی یافت نشد'}, status_code=404)
+            return err('مدل منطقی یافت نشد', 'Logical model not found.', 404)
 
         if availability == 'available':
             chk = await session.execute(
@@ -277,10 +294,12 @@ async def update_availability(request: Request, key: str, payload: dict[str, Any
                 {'key': key},
             )
             if chk.fetchone().c == 0:
-                return JSONResponse(
-                    {'detail': 'این مدل منطقی هیچ گزینهٔ تأییدشده و فعالی ندارد؛ نمی‌توان آن را در دسترس قرار داد '
-                               '(هیچ مسیری برای پاسخ‌دادن به کاربر وجود نخواهد داشت).'},
-                    status_code=400,
+                return err(
+                    'این مدل منطقی هیچ گزینهٔ تأییدشده و فعالی ندارد؛ نمی‌توان آن را در دسترس قرار داد '
+                    '(هیچ مسیری برای پاسخ‌دادن به کاربر وجود نخواهد داشت).',
+                    'This logical model has no approved and enabled candidate; it cannot be made '
+                    'available (there would be no route to answer a user).',
+                    400,
                 )
 
         await session.execute(

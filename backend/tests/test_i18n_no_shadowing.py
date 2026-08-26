@@ -113,6 +113,84 @@ def test_no_module_binds_err_as_a_local_at_all():
     )
 
 
+def test_every_caller_of_err_imports_it():
+    """A module that calls err() without importing it raises NameError on the
+    branch that calls it -- and `python -c "import hermes_admin"` is perfectly
+    happy, because the name is only resolved when the line runs. That is
+    exactly how it shipped once during this conversion: twenty call sites were
+    added by a batch edit that never touched the import block, and only a test
+    that exercised one of those branches caught it.
+    """
+    offenders = []
+    for path in sorted(BACKEND.rglob('*.py')):
+        rel = path.relative_to(BACKEND)
+        if rel.parts[0] in {'tests', 'migrations', '__pycache__'}:
+            continue
+        src = path.read_text(encoding='utf-8')
+        tree = ast.parse(src)
+        calls = any(
+            isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == 'err'
+            for n in ast.walk(tree)
+        )
+        if not calls:
+            continue
+        resolvable = any(
+            isinstance(n, ast.ImportFrom) and n.module == 'i18n'
+            and any(a.name == 'err' for a in n.names)
+            for n in ast.walk(tree)
+        ) or any(
+            isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == 'err'
+            for n in ast.walk(tree)
+        )
+        if not resolvable:
+            offenders.append(str(rel))
+    assert offenders == [], (
+        'These call err() but never import it; the call raises NameError at '
+        'runtime:\n  ' + '\n  '.join(offenders)
+    )
+
+
+def test_no_module_uses_a_name_it_never_imported():
+    """Catches the class of bug that only appears when a line runs.
+
+    A module can reference `re`, `json` or any other name it forgot to import
+    and still compile, still pass `python -c "import it"`, and still be flagged
+    green by every type checker -- because the name is resolved at call time,
+    on whichever branch touches it. It happened twice during this work: once
+    when a batch edit added twenty `err()` calls without the import, and once
+    when a helper was split into a new module and left `re` behind.
+
+    This checks the small, high-traffic set of standard modules that are
+    actually used inside function bodies here. It is deliberately not a full
+    static analyser -- it is the cheap version that would have caught both.
+    """
+    WATCHED = ('re', 'json', 'math', 'asyncio', 'logging', 'time', 'os')
+    offenders = []
+    for path in sorted(BACKEND.rglob('*.py')):
+        rel = path.relative_to(BACKEND)
+        if rel.parts[0] in {'tests', 'migrations', '__pycache__', 'scripts'}:
+            continue
+        tree = ast.parse(path.read_text(encoding='utf-8'))
+        bound = set()
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Import):
+                bound.update((a.asname or a.name).split('.')[0] for a in n.names)
+            elif isinstance(n, ast.ImportFrom):
+                bound.update(a.asname or a.name for a in n.names)
+            elif isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store):
+                bound.add(n.id)
+            elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                bound.add(n.name)
+        for n in ast.walk(tree):
+            if (isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name)
+                    and n.value.id in WATCHED and n.value.id not in bound):
+                offenders.append(f'{rel}:{n.lineno} uses `{n.value.id}.` without importing it')
+    assert offenders == [], (
+        'These reference a module they never import; the line raises NameError '
+        'when it runs:\n  ' + '\n  '.join(sorted(set(offenders)))
+    )
+
+
 def test_the_scan_actually_reaches_the_backend():
     # A broken path would make the assertion above vacuously pass.
     seen = list(_modules_importing_err())

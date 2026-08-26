@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from database import async_session
+from i18n import err
 from models import SkillTemplate, SkillTemplateRating, UserSkillActivation
 from dependencies import _get_user_id, _escape_like, admin_required
 from services.skill_injection import MAX_SKILLS_INJECTED
@@ -81,9 +82,9 @@ async def list_my_skill_templates(request: Request) -> JSONResponse:
     """List skill templates owned by the current user."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
     try:
         async with async_session() as session:
             res = await session.execute(
@@ -94,7 +95,7 @@ async def list_my_skill_templates(request: Request) -> JSONResponse:
             rows = [dict(r._mapping) for r in res.fetchall()]
         return JSONResponse(jsonable_encoder(rows))
     except Exception:
-        return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
+        return err('خطای سرور', 'Server error', 500)
 
 
 @router.get('/skills')
@@ -136,7 +137,7 @@ async def list_skill_templates(
             rows = [dict(r._mapping) for r in res.fetchall()]
         return JSONResponse(jsonable_encoder(rows))
     except Exception:
-        return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
+        return err('خطای سرور', 'Server error', 500)
 
 
 @router.get('/skills/active')
@@ -145,9 +146,9 @@ async def list_active_skills(request: Request) -> JSONResponse:
     ordered by position, for the panel to render toggle state."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
     try:
         async with async_session() as session:
             res = await session.execute(
@@ -170,7 +171,7 @@ async def list_active_skills(request: Request) -> JSONResponse:
             rows = [dict(r._mapping) for r in res.fetchall()]
         return JSONResponse(jsonable_encoder(rows))
     except Exception:
-        return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
+        return err('خطای سرور', 'Server error', 500)
 
 
 @router.get('/skills/{template_id}')
@@ -178,22 +179,22 @@ async def get_skill_template(request: Request, template_id: int) -> JSONResponse
     """Get a single skill template by ID."""
     try:
         if async_session is None:
-            return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+            return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
         async with async_session() as session:
             res = await session.execute(
                 SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
             )
             row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+            return err('یافت نشد', 'Not found', 404)
         data = dict(row._mapping)
         if not data.get('is_public'):
             uid = await _get_user_id(request)
             if not uid or (data.get('user_id') != uid and not await admin_required(request)):
-                return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+                return err('یافت نشد', 'Not found', 404)
         return JSONResponse(jsonable_encoder(data))
     except Exception:
-        return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
+        return err('خطای سرور', 'Server error', 500)
 
 
 @router.post('/skills')
@@ -201,9 +202,9 @@ async def create_skill_template(request: Request, payload: SkillTemplateCreate) 
     """Create a new skill template."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
     async with async_session() as session:
         tmpl = SkillTemplate(
             user_id=uid,
@@ -238,19 +239,19 @@ async def update_skill_template(request: Request, template_id: int, payload: Ski
     """Update a skill template (owner only)."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     try:
         if async_session is None:
-            return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+            return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
         async with async_session() as session:
             res = await session.execute(
                 SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
             )
             row = res.fetchone()
             if not row:
-                return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+                return err('یافت نشد', 'Not found', 404)
             if row.user_id != uid:
-                return JSONResponse({'detail': 'دسترسی غیرمجاز'}, status_code=403)
+                return err('دسترسی غیرمجاز', 'Access denied', 403)
             update_data = {}
             for field in ['title', 'title_fa', 'description', 'description_fa', 'category',
                            'prompt_template', 'variables', 'default_model', 'is_public', 'tags']:
@@ -266,7 +267,7 @@ async def update_skill_template(request: Request, template_id: int, payload: Ski
                 await session.commit()
         return JSONResponse({'status': 'ok'})
     except Exception:
-        return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
+        return err('خطای سرور', 'Server error', 500)
 
 
 @router.delete('/skills/{template_id}')
@@ -274,26 +275,26 @@ async def delete_skill_template(request: Request, template_id: int) -> JSONRespo
     """Delete a skill template (owner only)."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     try:
         if async_session is None:
-            return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+            return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
         async with async_session() as session:
             res = await session.execute(
                 SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
             )
             row = res.fetchone()
             if not row:
-                return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+                return err('یافت نشد', 'Not found', 404)
             if row.user_id != uid:
-                return JSONResponse({'detail': 'دسترسی غیرمجاز'}, status_code=403)
+                return err('دسترسی غیرمجاز', 'Access denied', 403)
             await session.execute(
                 SkillTemplate.__table__.delete().where(SkillTemplate.id == template_id)
             )
             await session.commit()
         return JSONResponse({'status': 'deleted'})
     except Exception:
-        return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
+        return err('خطای سرور', 'Server error', 500)
 @router.post('/skills/{template_id}/activate')
 async def activate_skill(request: Request, template_id: int) -> JSONResponse:
     """Switch a skill on for the current user's own chats (idempotent).
@@ -304,9 +305,9 @@ async def activate_skill(request: Request, template_id: int) -> JSONResponse:
     """
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
     try:
         async with async_session() as session:
             res = await session.execute(
@@ -314,7 +315,7 @@ async def activate_skill(request: Request, template_id: int) -> JSONResponse:
             )
             tmpl = res.fetchone()
             if not tmpl or (tmpl.user_id != uid and not tmpl.is_public):
-                return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+                return err('یافت نشد', 'Not found', 404)
 
             count_res = await session.execute(
                 sqlalchemy.select(sqlalchemy.func.count()).select_from(
@@ -327,9 +328,10 @@ async def activate_skill(request: Request, template_id: int) -> JSONResponse:
             )
             enabled_count = count_res.scalar_one()
             if enabled_count >= MAX_SKILLS_INJECTED:
-                return JSONResponse(
-                    {'detail': f'حداکثر {MAX_SKILLS_INJECTED} مهارت را می‌توان همزمان فعال کرد'},
-                    status_code=400,
+                return err(
+                    f'حداکثر {MAX_SKILLS_INJECTED} مهارت را می‌توان همزمان فعال کرد',
+                    f'At most {MAX_SKILLS_INJECTED} skills can be active at the same time',
+                    400,
                 )
 
             await session.execute(
@@ -354,7 +356,7 @@ async def activate_skill(request: Request, template_id: int) -> JSONResponse:
             await session.commit()
         return JSONResponse({'status': 'ok'})
     except Exception:
-        return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
+        return err('خطای سرور', 'Server error', 500)
 
 
 @router.delete('/skills/{template_id}/activate')
@@ -363,9 +365,9 @@ async def deactivate_skill(request: Request, template_id: int) -> JSONResponse:
     set to FALSE) so its position survives a toggle round-trip."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
     try:
         async with async_session() as session:
             res = await session.execute(
@@ -376,7 +378,7 @@ async def deactivate_skill(request: Request, template_id: int) -> JSONResponse:
             )
             row = res.fetchone()
             if not row:
-                return JSONResponse({'detail': 'این مهارت برای شما فعال نشده است'}, status_code=404)
+                return err('این مهارت برای شما فعال نشده است', 'This skill is not enabled for you', 404)
             await session.execute(
                 UserSkillActivation.__table__.update().where(
                     UserSkillActivation.user_id == uid,
@@ -387,7 +389,7 @@ async def deactivate_skill(request: Request, template_id: int) -> JSONResponse:
             await session.commit()
         return JSONResponse({'status': 'ok'})
     except Exception:
-        return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
+        return err('خطای سرور', 'Server error', 500)
 
 
 @router.post('/skills/{template_id}/rate')
@@ -395,18 +397,18 @@ async def rate_skill_template(request: Request, template_id: int, payload: Skill
     """Rate a skill template (1-5)."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if payload.rating < 1 or payload.rating > 5:
-        return JSONResponse({'detail': 'امتیاز باید بین ۱ تا ۵ باشد'}, status_code=400)
+        return err('امتیاز باید بین ۱ تا ۵ باشد', 'Rating must be between 1 and 5', 400)
     try:
         if async_session is None:
-            return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+            return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
         async with async_session() as session:
             res = await session.execute(
                 SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
             )
             if not res.fetchone():
-                return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+                return err('یافت نشد', 'Not found', 404)
             existing = await session.execute(
                 SkillTemplateRating.__table__.select().where(
                     SkillTemplateRating.template_id == template_id,
@@ -448,7 +450,7 @@ async def rate_skill_template(request: Request, template_id: int, payload: Skill
             await session.commit()
         return JSONResponse({'status': 'ok'})
     except Exception:
-        return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
+        return err('خطای سرور', 'Server error', 500)
 
 
 @router.post('/skills/{template_id}/use')
@@ -456,14 +458,14 @@ async def use_skill_template(request: Request, template_id: int, payload: SkillU
     """Use a skill template: increment usage count and return rendered prompt."""
     try:
         if async_session is None:
-            return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+            return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
         async with async_session() as session:
             res = await session.execute(
                 SkillTemplate.__table__.select().where(SkillTemplate.id == template_id)
             )
             row = res.fetchone()
             if not row:
-                return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+                return err('یافت نشد', 'Not found', 404)
             now = datetime.now(timezone.utc).replace(tzinfo=None)
             await session.execute(
                 SkillTemplate.__table__.update().where(SkillTemplate.id == template_id),
@@ -477,4 +479,4 @@ async def use_skill_template(request: Request, template_id: int, payload: SkillU
             'model': model,
         }))
     except Exception:
-        return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
+        return err('خطای سرور', 'Server error', 500)

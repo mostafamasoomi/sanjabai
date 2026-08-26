@@ -20,6 +20,7 @@ from models import (
     Plan, CreditPackage, Subscription, Ledger,
 )
 from dependencies import _get_user_id, _write_audit_log
+from i18n import err
 
 router = APIRouter()
 
@@ -44,7 +45,7 @@ class SubscribeRequest(BaseModel):
 async def list_plans() -> JSONResponse:
     """List all active subscription plans + credit packages (public)"""
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         plans_result = await session.execute(
             select(Plan).where(Plan.active == True).order_by(Plan.sort_order)
@@ -78,7 +79,7 @@ async def list_plans() -> JSONResponse:
 async def get_plan(plan_id: str) -> JSONResponse:
     """Get a single plan by ID (public)"""
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(
             sqlalchemy.text('SELECT * FROM plans WHERE id = :pid AND active = true'),
@@ -86,7 +87,7 @@ async def get_plan(plan_id: str) -> JSONResponse:
         )
         row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'طرح یافت نشد'}, status_code=404)
+            return err('طرح یافت نشد', 'Plan not found.', 404)
     return JSONResponse(jsonable_encoder(dict(row._mapping)))
 
 
@@ -94,7 +95,7 @@ async def get_plan(plan_id: str) -> JSONResponse:
 async def list_credit_packages() -> JSONResponse:
     """List all active credit packages (public)"""
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(
             sqlalchemy.text('SELECT * FROM credit_packages WHERE active = true ORDER BY sort_order')
@@ -107,7 +108,7 @@ async def list_credit_packages() -> JSONResponse:
 async def get_credit_package(pkg_id: str) -> JSONResponse:
     """Get a single credit package by ID (public)"""
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(
             sqlalchemy.text('SELECT * FROM credit_packages WHERE id = :pid AND active = true'),
@@ -115,7 +116,7 @@ async def get_credit_package(pkg_id: str) -> JSONResponse:
         )
         row = res.fetchone()
         if not row:
-            return JSONResponse({'detail': 'بسته یافت نشد'}, status_code=404)
+            return err('بسته یافت نشد', 'Package not found.', 404)
     return JSONResponse(jsonable_encoder(dict(row._mapping)))
 
 
@@ -126,9 +127,9 @@ async def subscribe_to_plan(request: Request, payload: SubscribeRequest) -> JSON
     """Subscribe the current user to a plan."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     async with async_session() as session:
         plan_res = await session.execute(
@@ -137,7 +138,7 @@ async def subscribe_to_plan(request: Request, payload: SubscribeRequest) -> JSON
         )
         plan = plan_res.fetchone()
         if not plan:
-            return JSONResponse({'detail': 'طرح یافت نشد'}, status_code=404)
+            return err('طرح یافت نشد', 'Plan not found.', 404)
 
         plan_data = dict(plan._mapping)
         now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -184,9 +185,9 @@ async def get_subscription(request: Request) -> JSONResponse:
     """Get the user's current active subscription"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     async with async_session() as session:
         res = await session.execute(
@@ -215,9 +216,9 @@ async def cancel_subscription(request: Request) -> JSONResponse:
     """Cancel the user's active subscription"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     async with async_session() as session:
@@ -243,9 +244,9 @@ async def renew_subscription(request: Request) -> JSONResponse:
     """Renew the user's subscription (extend by 30 days, reset token usage)"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     async with async_session() as session:

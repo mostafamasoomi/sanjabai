@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from i18n import err
 from database import async_session
 from models import RagDocument
 from dependencies import _get_user_id
@@ -72,15 +73,16 @@ async def rag_upload(request: Request, file: UploadFile = File(...)) -> JSONResp
     """Upload a document for RAG indexing."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
 
     # CSRF defense-in-depth for cookie-authenticated mutations: require a custom
     # header that cross-origin form submissions cannot set. API-key (Bearer) auth
     # is exempt because it is not vulnerable to browser CSRF.
     if request.cookies.get('session') and not request.headers.get('x-requested-with'):
-        return JSONResponse(
-            {'detail': 'هدر X-Requested-With ارسال نشده (محافظت CSRF)'},
-            status_code=403,
+        return err(
+            'هدر X-Requested-With ارسال نشده (محافظت CSRF)',
+            'Missing X-Requested-With header (CSRF protection).',
+            403,
         )
 
     # Validate file type (operate on a sanitized basename — never a path)
@@ -88,9 +90,10 @@ async def rag_upload(request: Request, file: UploadFile = File(...)) -> JSONResp
     filename = sanitize_filename(raw_filename)
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
     if ext not in SUPPORTED_TYPES:
-        return JSONResponse(
-            {'detail': f'فرمت فایل پشتیبانی نمی‌شود. فرمت‌های مجاز: {", ".join(SUPPORTED_TYPES)}'},
-            status_code=400,
+        return err(
+            f'فرمت فایل پشتیبانی نمی‌شود. فرمت‌های مجاز: {", ".join(SUPPORTED_TYPES)}',
+            f'Unsupported file format. Allowed formats: {", ".join(SUPPORTED_TYPES)}',
+            400,
         )
 
     # Read content
@@ -98,16 +101,17 @@ async def rag_upload(request: Request, file: UploadFile = File(...)) -> JSONResp
         content = await file.read()
     except Exception:
         logger.warning(f'RAG upload file read failed uid={uid}')
-        return JSONResponse({'detail': 'خطا در خواندن فایل'}, status_code=400)
+        return err('خطا در خواندن فایل', 'Error reading the file.', 400)
 
     if len(content) > MAX_FILE_SIZE:
-        return JSONResponse(
-            {'detail': f'حجم فایل از {MAX_FILE_SIZE // (1024*1024)} مگابایت بیشتر است'},
-            status_code=400,
+        return err(
+            f'حجم فایل از {MAX_FILE_SIZE // (1024*1024)} مگابایت بیشتر است',
+            f'File size exceeds {MAX_FILE_SIZE // (1024*1024)} MB.',
+            400,
         )
 
     if len(content) == 0:
-        return JSONResponse({'detail': 'فایل خالی است'}, status_code=400)
+        return err('فایل خالی است', 'The file is empty.', 400)
 
     # Process document
     try:
@@ -117,10 +121,14 @@ async def rag_upload(request: Request, file: UploadFile = File(...)) -> JSONResp
             filename=filename,
         )
     except ValueError as e:
+        # `str(e)` is a services/doc_processor.py-authored message (out of
+        # this module's scope) -- its English sibling is not visible at
+        # this call site, so it stays Persian-only-shaped for now (see
+        # handoff notes).
         return JSONResponse({'detail': str(e)}, status_code=400)
     except Exception as e:
         logger.error(f'RAG upload failed uid={uid}: {e}')
-        return JSONResponse({'detail': 'خطا در پردازش سند'}, status_code=500)
+        return err('خطا در پردازش سند', 'Error processing the document.', 500)
 
     return JSONResponse({
         'document_id': result['document_id'],
@@ -136,13 +144,13 @@ async def rag_query(request: Request, payload: RagQueryRequest) -> JSONResponse:
     """Query documents using RAG."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
 
     if not payload.question or not payload.question.strip():
-        return JSONResponse({'detail': 'لطفاً سوال خود را وارد کنید'}, status_code=400)
+        return err('لطفاً سوال خود را وارد کنید', 'Please enter your question.', 400)
 
     if len(payload.question) > 2000:
-        return JSONResponse({'detail': 'سوال نباید بیشتر از ۲۰۰۰ کاراکتر باشد'}, status_code=400)
+        return err('سوال نباید بیشتر از ۲۰۰۰ کاراکتر باشد', 'The question must not exceed 2000 characters.', 400)
 
     try:
         result = await query_documents(
@@ -154,7 +162,7 @@ async def rag_query(request: Request, payload: RagQueryRequest) -> JSONResponse:
         )
     except Exception as e:
         logger.error(f'RAG query failed uid={uid}: {e}')
-        return JSONResponse({'detail': 'خطا در جستجوی اسناد'}, status_code=500)
+        return err('خطا در جستجوی اسناد', 'Error searching the documents.', 500)
 
     return JSONResponse(result)
 
@@ -164,10 +172,10 @@ async def rag_list_documents(request: Request) -> JSONResponse:
     """List user's RAG documents."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
 
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable.', 500)
 
     async with async_session() as session:
         res = await session.execute(
@@ -205,17 +213,18 @@ async def rag_delete_document(request: Request, document_id: int) -> JSONRespons
     """Soft-delete a RAG document."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
 
     # CSRF defense-in-depth for cookie-authenticated mutations (see upload handler)
     if request.cookies.get('session') and not request.headers.get('x-requested-with'):
-        return JSONResponse(
-            {'detail': 'هدر X-Requested-With ارسال نشده (محافظت CSRF)'},
-            status_code=403,
+        return err(
+            'هدر X-Requested-With ارسال نشده (محافظت CSRF)',
+            'Missing X-Requested-With header (CSRF protection).',
+            403,
         )
 
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable.', 500)
 
     async with async_session() as session:
         res = await session.execute(
@@ -231,7 +240,7 @@ async def rag_delete_document(request: Request, document_id: int) -> JSONRespons
         await session.commit()
 
     if not row:
-        return JSONResponse({'detail': 'سند پیدا نشد'}, status_code=404)
+        return err('سند پیدا نشد', 'Document not found.', 404)
 
     return JSONResponse({'deleted': True})
 
@@ -241,10 +250,10 @@ async def rag_document_status(request: Request, document_id: int) -> JSONRespons
     """Poll document indexing status."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
 
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable.', 500)
 
     async with async_session() as session:
         res = await session.execute(
@@ -258,7 +267,7 @@ async def rag_document_status(request: Request, document_id: int) -> JSONRespons
         row = res.fetchone()
 
     if not row:
-        return JSONResponse({'detail': 'سند پیدا نشد'}, status_code=404)
+        return err('سند پیدا نشد', 'Document not found.', 404)
 
     return JSONResponse({
         'status': row._mapping['status'],

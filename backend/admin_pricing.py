@@ -23,6 +23,7 @@ from database import async_session, rds
 from models import Pricing
 import admin
 from dependencies import _write_audit_log
+from i18n import err
 from services import margin, probe_gate
 
 router = APIRouter()
@@ -59,7 +60,9 @@ async def _refuse_loss_making(session, model_ids, request, **kwargs) -> JSONResp
         return None
     await _write_audit_log('admin.margin.refused', target_type='model_catalog',
                            target_id=refusal.model_id, details=refusal.audit, request=request)
-    return JSONResponse({'detail': refusal.detail}, status_code=400)
+    # `detail_en or detail` -- a refusal built before the English side existed
+    # shows its Persian rather than an empty string.
+    return err(refusal.detail, refusal.detail_en or refusal.detail, 400)
 
 
 async def _refuse_unprobed(session, model_ids, request) -> JSONResponse | None:
@@ -77,7 +80,9 @@ async def _refuse_unprobed(session, model_ids, request) -> JSONResponse | None:
         return None
     await _write_audit_log('admin.model.probe_refused', target_type='model_catalog',
                            target_id=None, details=refusal.audit, request=request)
-    return JSONResponse({'detail': refusal.detail}, status_code=400)
+    # `detail_en or detail` -- a refusal built before the English side existed
+    # shows its Persian rather than an empty string.
+    return err(refusal.detail, refusal.detail_en or refusal.detail, 400)
 
 
 # ── Pricing admin ───────────────────────────────────────────────
@@ -86,9 +91,9 @@ async def _refuse_unprobed(session, model_ids, request) -> JSONResponse | None:
 async def list_pricing(request: Request) -> JSONResponse:
     """List live model prices. Source of truth = model_catalog (used by chat billing)."""
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(sqlalchemy.text(
             "SELECT id AS model, display_name, input_per_million, output_per_million, currency, "
@@ -125,22 +130,23 @@ async def get_active_price(session, model_id: str) -> "Pricing | None":
 async def set_pricing(request: Request, payload: dict[str, Any]) -> JSONResponse:
     """Update live prices on model_catalog (the table chat billing actually reads)."""
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     model = payload.get('model')
     if not model:
-        return JSONResponse({'detail': 'مدل الزامی است'}, status_code=400)
+        return err('مدل الزامی است', 'Model is required.', 400)
     try:
         input_pm = int(payload.get('input_per_million', 0))
         output_pm = int(payload.get('output_per_million', 0))
     except (TypeError, ValueError):
-        return JSONResponse({'detail': 'قیمتها باید عدد صحیح باشند'}, status_code=400)
+        return err('قیمتها باید عدد صحیح باشند', 'Prices must be integers.', 400)
     currency = payload.get('currency', _ALLOWED_CURRENCY)
     if currency != _ALLOWED_CURRENCY:
-        return JSONResponse(
-            {'detail': f'واحد پول باید «{_ALLOWED_CURRENCY}» (تومان) باشد؛ این سامانه فقط تومان می‌فروشد.'},
-            status_code=400,
+        return err(
+            f'واحد پول باید «{_ALLOWED_CURRENCY}» (تومان) باشد؛ این سامانه فقط تومان می‌فروشد.',
+            f'Currency must be "{_ALLOWED_CURRENCY}" (toman); this system only sells in toman.',
+            400,
         )
     async with async_session() as session:
         refused = await _refuse_loss_making(
@@ -154,7 +160,7 @@ async def set_pricing(request: Request, payload: dict[str, Any]) -> JSONResponse
             "currency=:cur, updated_at=now() WHERE id=:m"
         ), {'inp': input_pm, 'out': output_pm, 'cur': currency, 'm': model})
         if res.rowcount == 0:
-            return JSONResponse({'detail': 'مدل در کاتالوگ یافت نشد'}, status_code=404)
+            return err('مدل در کاتالوگ یافت نشد', 'Model not found in catalog.', 404)
         await session.commit()
     await _write_audit_log('admin.pricing.set', target_type='model_catalog', target_id=model,
                            details={'input_per_million': input_pm, 'output_per_million': output_pm})
@@ -182,6 +188,7 @@ _TOGGLE_STATES = {'available', 'disabled'}
 # Same Persian labels as the frontend's ModelsTab.tsx / PricingSection.tsx
 # AVAILABILITY_FA -- one wording for this status across the whole panel.
 _AVAILABILITY_FA = {'maintenance': 'تعمیرات', 'degraded': 'کاهش‌یافته'}
+_AVAILABILITY_EN = {'maintenance': 'maintenance', 'degraded': 'degraded'}
 
 
 @router.post('/admin/models/{model_id:path}/toggle')
@@ -198,25 +205,31 @@ async def toggle_model(request: Request, model_id: str) -> JSONResponse:
     a plain `{model_id}` segment never matches.
     """
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(sqlalchemy.text(
             'SELECT availability FROM model_catalog WHERE id = :id'
         ), {'id': model_id})
         row = res.fetchone()
         if row is None:
-            return JSONResponse({'detail': 'مدل در کاتالوگ یافت نشد'}, status_code=404)
+            return err('مدل در کاتالوگ یافت نشد', 'Model not found in catalog.', 404)
         if row.availability not in _TOGGLE_STATES:
             state_fa = _AVAILABILITY_FA.get(row.availability, row.availability)
+            state_en = _AVAILABILITY_EN.get(row.availability, row.availability)
             await _write_audit_log('admin.model.toggle_refused', target_type='model_catalog',
                                    target_id=model_id, details={'availability': row.availability}, request=request)
-            return JSONResponse({'detail': (
+            return err(
                 f'مدل «{model_id}» در وضعیت «{state_fa}» است. این کلید سریع فقط بین «فعال» و «غیرفعال» '
                 'جابه‌جا می‌کند و برای این وضعیت معنا ندارد؛ فعال‌سازی مدلی که پروب زنده آن را تأیید '
-                'نکرده ممنوع است -- برای تغییر وضعیت از تب «عملیات کاتالوگ» استفاده کنید.'
-            )}, status_code=400)
+                'نکرده ممنوع است -- برای تغییر وضعیت از تب «عملیات کاتالوگ» استفاده کنید.',
+                f'Model "{model_id}" is in the "{state_en}" state. This quick toggle only switches '
+                'between available and disabled and has no meaning for this state; enabling a model '
+                'whose live probe has not confirmed it is not allowed -- use the "Catalog Operations" '
+                'tab to change its state.',
+                400,
+            )
         new_avail = 'disabled' if row.availability == 'available' else 'available'
         # Withdrawing a model can never be loss-making or dishonest; only
         # the flip that puts it back on sale is a margin decision AND an
@@ -260,7 +273,7 @@ async def test_model(request: Request, model_id: str) -> JSONResponse:
     toggle_model above.
     """
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     from chat import _resolve_provider
     from model_health import record_probe_sample
     from providers import probe_model_resilient

@@ -22,6 +22,7 @@ from database import async_session, rds
 from models import User, Quota, Wallet
 import admin
 from dependencies import _write_audit_log
+from i18n import err
 
 router = APIRouter()
 
@@ -63,9 +64,9 @@ async def admin_users(request: Request) -> JSONResponse:
     badge rendered `undefined` for every user and always read "inactive".
     """
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     page = int(request.query_params.get('page', 1))
     limit = min(int(request.query_params.get('limit', 50)), 200)
@@ -102,14 +103,14 @@ async def admin_users(request: Request) -> JSONResponse:
 async def admin_ban_user(request: Request, uid: int) -> JSONResponse:
     """Ban/unban a user"""
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     async with async_session() as session:
         user = await session.get(User, uid)
         if not user:
-            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+            return err('یافت نشد', 'Not found.', 404)
         new_banned = not user.banned
         await session.execute(User.__table__.update().where(User.id == uid), {'banned': new_banned})
         await session.execute(Quota.__table__.update().where(Quota.user_id == uid), {'daily_limit': 0 if new_banned else 200000})
@@ -131,9 +132,9 @@ async def admin_ban_user(request: Request, uid: int) -> JSONResponse:
 async def admin_edit_user(request: Request, uid: int, payload: AdminUserEdit) -> JSONResponse:
     """Edit user details (admin)"""
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     data = payload.model_dump(exclude_none=True)
     async with async_session() as session:
@@ -156,9 +157,10 @@ async def admin_edit_user(request: Request, uid: int, payload: AdminUserEdit) ->
             # the same request (daily_limit/phone/email) are NOT applied when
             # `balance` is present -- nothing is committed before this return,
             # so re-submit without `balance` to apply the rest.
-            return JSONResponse(
-                {'detail': 'ویرایش مستقیم موجودی کیف پول از این مسیر غیرفعال شده است. از POST /admin/users/{uid}/wallet-adjust با ذکر دلیل استفاده کنید.'},
-                status_code=400,
+            return err(
+                'ویرایش مستقیم موجودی کیف پول از این مسیر غیرفعال شده است. از POST /admin/users/{uid}/wallet-adjust با ذکر دلیل استفاده کنید.',
+                'Direct wallet balance edits are disabled on this route. Use POST /admin/users/{uid}/wallet-adjust with a reason instead.',
+                400,
             )
         await session.commit()
     await _write_audit_log('admin.user.edit', target_type='user', target_id=uid, details=data)
@@ -171,13 +173,13 @@ async def admin_edit_user(request: Request, uid: int, payload: AdminUserEdit) ->
 async def admin_user_detail(request: Request, uid: int) -> JSONResponse:
     """Full user detail with stats: balance, tokens, conversations count, payments."""
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         user = await session.get(User, uid)
         if not user:
-            return JSONResponse({'detail': 'یافت نشد'}, status_code=404)
+            return err('یافت نشد', 'Not found.', 404)
         # Balance
         bal_res = await session.execute(
             sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid'),
@@ -242,9 +244,9 @@ async def admin_user_detail(request: Request, uid: int) -> JSONResponse:
 async def admin_user_conversations(request: Request, uid: int) -> JSONResponse:
     """List a user's conversations with message counts."""
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     page = int(request.query_params.get('page', 1))
     limit = min(int(request.query_params.get('limit', 20)), 100)
     offset = (page - 1) * limit
@@ -269,9 +271,9 @@ async def admin_user_conversations(request: Request, uid: int) -> JSONResponse:
 async def admin_user_usage(request: Request, uid: int) -> JSONResponse:
     """Token usage breakdown by model for a user."""
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(
             sqlalchemy.text('''SELECT model, COUNT(*) as calls,
@@ -301,9 +303,9 @@ async def admin_user_usage(request: Request, uid: int) -> JSONResponse:
 async def admin_user_ledger(request: Request, uid: int) -> JSONResponse:
     """Wallet transaction history for a user."""
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     page = int(request.query_params.get('page', 1))
     limit = min(int(request.query_params.get('limit', 50)), 200)
     offset = (page - 1) * limit
@@ -327,9 +329,9 @@ async def admin_user_ledger(request: Request, uid: int) -> JSONResponse:
 async def admin_user_payments(request: Request, uid: int) -> JSONResponse:
     """Payment/purchase history for a user."""
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(
             sqlalchemy.text('''SELECT id, amount, authority, ref_id, status,

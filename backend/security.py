@@ -27,6 +27,8 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from i18n import err
+
 logger = logging.getLogger(__name__)
 
 # ── Lazy Redis import (avoids circular import) ────────────
@@ -182,7 +184,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         lockout_id = await _get_lockout_identifier(request)
         if lockout_id and await check_lockout(lockout_id):
             return JSONResponse(
-                {'detail': 'حساب شما به دلیل تلاش‌های ناموفق زیاد موقتاً قفل شده است', 'retry_after': 900},
+                {
+                    'detail': 'حساب شما به دلیل تلاش‌های ناموفق زیاد موقتاً قفل شده است',
+                    'detail_en': 'Your account is temporarily locked due to too many failed attempts.',
+                    'retry_after': 900,
+                },
                 status_code=423,
                 headers={'Retry-After': '900'},
             )
@@ -208,7 +214,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         if not allowed:
             return JSONResponse(
-                {'detail': 'محدودیت نرخ درخواست. لطفاً بعداً تلاش کنید.', 'retry_after': limiter.window},
+                {
+                    'detail': 'محدودیت نرخ درخواست. لطفاً بعداً تلاش کنید.',
+                    'detail_en': 'Rate limit exceeded. Please try again later.',
+                    'retry_after': limiter.window,
+                },
                 status_code=429,
                 headers={
                     'Retry-After': str(limiter.window),
@@ -336,37 +346,45 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         # Require custom header for cookie-authenticated mutations
         xrw = request.headers.get('x-requested-with', '')
         if not xrw:
-            return JSONResponse(
-                {'detail': 'هدر X-Requested-With ارسال نشده (محافظت CSRF)'},
-                status_code=403,
+            return err(
+                'هدر X-Requested-With ارسال نشده (محافظت CSRF)',
+                'X-Requested-With header was not sent (CSRF protection).', 403,
             )
 
         return await call_next(request)
 
 
-def validate_email(email: str) -> tuple[bool, str]:
-    """Validate email format and domain"""
+def validate_email(email: str) -> tuple[bool, str, str]:
+    """Validate email format and domain.
+
+    Returns ``(ok, persian, english)``. The third element exists because these
+    messages are the ones a user reads when they cannot create an account, and
+    they are the last Persian-only strings on the signup path -- every other
+    refusal there already ships both languages (backend/i18n.py). Callers
+    unpack three values; there is no two-value form left.
+    """
     if not email or len(email) > MAX_EMAIL_LENGTH:
-        return False, 'ایمیل بیش از حد طولانی است'
+        return False, 'ایمیل بیش از حد طولانی است', 'That email address is too long.'
     if '@' not in email or '.' not in email.split('@')[-1]:
-        return False, 'فرمت ایمیل نامعتبر است'
+        return False, 'فرمت ایمیل نامعتبر است', 'That email address is not valid.'
     domain = email.split('@')[-1].lower()
     if domain in BANNED_EMAIL_DOMAINS:
-        return False, 'استفاده از ایمیل موقت مجاز نیست'
-    return True, ''
+        return False, 'استفاده از ایمیل موقت مجاز نیست', 'Disposable email addresses are not allowed.'
+    return True, '', ''
 
 
-def validate_password(password: str) -> tuple[bool, str]:
-    """Validate password strength with complexity requirements."""
+def validate_password(password: str) -> tuple[bool, str, str]:
+    """Validate password strength. Returns ``(ok, persian, english)`` --
+    see :func:`validate_email` for why."""
     if len(password) < 8:
-        return False, 'رمز عبور باید حداقل ۸ کاراکتر باشد'
+        return False, 'رمز عبور باید حداقل ۸ کاراکتر باشد', 'The password must be at least 8 characters.'
     if len(password) > MAX_PASSWORD_LENGTH:
-        return False, 'رمز عبور بیش از حد طولانی است'
+        return False, 'رمز عبور بیش از حد طولانی است', 'That password is too long.'
     if not any(c.isdigit() for c in password):
-        return False, 'رمز عبور باید حداقل شامل یک عدد باشد'
+        return False, 'رمز عبور باید حداقل شامل یک عدد باشد', 'The password must contain at least one digit.'
     if not any(c.isalpha() for c in password):
-        return False, 'رمز عبور باید حداقل شامل یک حرف باشد'
-    return True, ''
+        return False, 'رمز عبور باید حداقل شامل یک حرف باشد', 'The password must contain at least one letter.'
+    return True, '', ''
 
 
 def sanitize_input(text: str, max_length: int = MAX_MESSAGE_LENGTH) -> str:

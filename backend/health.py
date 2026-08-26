@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse, Response
 
 from database import engine, rds, _http, LITELLM_HOST, _start, HealthResponse
 from dependencies import admin_required
+from i18n import err
 
 router = APIRouter()
 
@@ -67,7 +68,7 @@ async def health(request: Request) -> HealthResponse:
 async def health_detailed(request: Request) -> JSONResponse:
     """Detailed health check with metrics"""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
 
     import psutil
     mem = psutil.virtual_memory()

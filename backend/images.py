@@ -49,6 +49,7 @@ from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from i18n import err, err_openai
 from database import async_session, _http
 from dependencies import _get_user_id
 from chat import _resolve_public_model, _resolve_provider, _release_reservation
@@ -128,9 +129,13 @@ def _extract_images(data: dict[str, Any]) -> list[dict[str, Any]]:
     return out
 
 
-def _error(message: str, *, code: str, status: int, err_type: str = 'invalid_request') -> JSONResponse:
+def _error(message: str, message_en: str, *, code: str, status: int, err_type: str = 'invalid_request') -> JSONResponse:
+    """The OpenAI-compatible error shape, plus an English sibling under
+    ``error.message_en`` (frontend/lib/i18n.ts::detailFor reads that path).
+    ``error.message`` stays byte-identical Persian, and ``code``/``type``
+    stay exactly as they are -- OpenAI-compatible clients branch on those."""
     return JSONResponse(
-        {'error': {'message': message, 'type': err_type, 'code': code}},
+        {'error': {'message': message, 'message_en': message_en, 'type': err_type, 'code': code}},
         status_code=status,
     )
 
@@ -139,16 +144,16 @@ def _error(message: str, *, code: str, status: int, err_type: str = 'invalid_req
 async def images_generations(request: Request, payload: ImageGenerationRequest) -> Response:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
     if not await get_site_flag('image_generation_enabled'):
         return _error(
-            'تولید تصویر موقتاً در دسترس نیست', code='image_generation_disabled',
-            status=503, err_type='service_unavailable',
+            'تولید تصویر موقتاً در دسترس نیست', 'Image generation is temporarily unavailable.',
+            code='image_generation_disabled', status=503, err_type='service_unavailable',
         )
 
     model_in = (payload.model or '').strip()
     if not model_in:
-        return _error('مدل مشخص نشده است', code='model_required', status=400)
+        return _error('مدل مشخص نشده است', 'No model was specified.', code='model_required', status=400)
 
     # Gate -1 (content safety, Phase J): screen the image prompt BEFORE any
     # model resolution, availability/price gate, or wallet reservation --
@@ -185,6 +190,7 @@ async def images_generations(request: Request, payload: ImageGenerationRequest) 
     if row is None or row.availability != 'available':
         return _error(
             f'مدل {resolved_model} برای تولید تصویر در دسترس نیست',
+            f'The model {resolved_model} is not available for image generation.',
             code='model_not_available', status=400,
         )
 
@@ -196,6 +202,7 @@ async def images_generations(request: Request, payload: ImageGenerationRequest) 
     if row.image_price_per_unit is None:
         return _error(
             f'قیمتی برای مدل {resolved_model} ثبت نشده است؛ این مدل قابل ارائه نیست',
+            f'No price is set for the model {resolved_model}; this model cannot be served.',
             code='price_not_set', status=400,
         )
 
@@ -210,7 +217,9 @@ async def images_generations(request: Request, payload: ImageGenerationRequest) 
     price_per_image = apply_markup(row.image_price_per_unit, effective_pct)
     if price_per_image <= 0:
         return _error(
-            f'قیمت مدل {resolved_model} نامعتبر است', code='price_not_set', status=400,
+            f'قیمت مدل {resolved_model} نامعتبر است',
+            f'The price for the model {resolved_model} is invalid.',
+            code='price_not_set', status=400,
         )
 
     reserve_amount = price_per_image * n_requested
@@ -227,16 +236,14 @@ async def images_generations(request: Request, payload: ImageGenerationRequest) 
             )
             await _bill_session.commit()
     except InsufficientBalanceError:
-        return JSONResponse(
-            {'error': {
-                'message': 'موجودی کیف پول شما کافی نیست. لطفاً حساب خود را شارژ کنید.',
-                'type': 'quota_exceeded', 'code': 'balance',
-            }},
-            status_code=429,
+        return err_openai(
+            'موجودی کیف پول شما کافی نیست. لطفاً حساب خود را شارژ کنید.',
+            'Your wallet balance is not enough. Please top up your account.',
+            429, code='balance', err_type='quota_exceeded',
         )
     except Exception as e:
         logger.warning(f"images.generations reserve failed uid={uid} model={resolved_model}: {e}")
-        return JSONResponse({'detail': 'سرویس موقتاً در دسترس نیست', 'code': 'gateway_error'}, status_code=502)
+        return err('سرویس موقتاً در دسترس نیست', 'The service is temporarily unavailable.', 502)
 
     upstream_payload: dict[str, Any] = {'model': resolved_model, 'prompt': payload.prompt, 'n': n_requested}
     if payload.size:
@@ -253,7 +260,7 @@ async def images_generations(request: Request, payload: ImageGenerationRequest) 
     except Exception as e:
         logger.warning(f"images.generations upstream error uid={uid} model={resolved_model}: {e}")
         await _release_reservation(reservation, uid, 'on_error')
-        return JSONResponse({'detail': 'سرویس موقتاً در دسترس نیست', 'code': 'gateway_error'}, status_code=502)
+        return err('سرویس موقتاً در دسترس نیست', 'The service is temporarily unavailable.', 502)
 
     if r.status_code != 200:
         # Covers the observed failure modes directly (401 dead key, 402 no
@@ -279,6 +286,7 @@ async def images_generations(request: Request, payload: ImageGenerationRequest) 
         await _release_reservation(reservation, uid, 'empty_result')
         return _error(
             'تولید تصویر ناموفق بود؛ هیچ تصویری از سرویس دریافت نشد',
+            'Image generation failed; no image was received from the service.',
             code='no_images', status=502, err_type='upstream_error',
         )
 

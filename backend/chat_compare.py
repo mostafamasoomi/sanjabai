@@ -35,6 +35,7 @@ from services.money import Money
 from services.entitlement_gate import covering_entitlement
 from middleware.compression import compress_messages
 from model_output import clean_response_dict
+from i18n import err, err_openai
 
 import chat
 from providers import COMPLETION_TIMEOUT_SECONDS
@@ -81,10 +82,13 @@ async def _check_quota_pre(uid: int) -> JSONResponse | None:
             row = res.fetchone()
             balance = row.balance if row else 0
             if balance <= 0:
-                return JSONResponse(
-                    {'error': {'message': 'insufficient wallet balance | موجودی کیف پول کافی نیست', 'type': 'quota_exceeded', 'code': 'balance'}},
-                    status_code=429,
-                )
+                return err_openai(
+            # Was one string with both languages either side of a pipe --
+            # the hand-rolled version of what err_openai does properly.
+            'موجودی کیف پول کافی نیست',
+            'Insufficient wallet balance.',
+            429, code='balance', err_type='quota_exceeded',
+        )
     except Exception as e:
         logger.warning(f"_check_quota_pre failed uid={uid}: {e}")
     return None
@@ -177,7 +181,7 @@ async def compare_models(request: Request, payload: CompareRequest) -> Response:
     """Compare two models side-by-side. Non-streaming first."""
     uid = await chat._get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     _disabled = await chat._chat_preflight(uid, payload.messages)
     if _disabled is not None:
         return _disabled
@@ -187,9 +191,10 @@ async def compare_models(request: Request, payload: CompareRequest) -> Response:
     messages = payload.messages
 
     if not model_a or not model_b:
-        return JSONResponse(
-            {'error': {'message': 'هر دو مدل باید مشخص شوند', 'type': 'invalid_request', 'code': 'missing_models'}},
-            status_code=400,
+        return err_openai(
+            'هر دو مدل باید مشخص شوند',
+            'Both models must be specified.',
+            400, code='missing_models', err_type='invalid_request',
         )
 
     # Canonicalize both public_id(s)/legacy id(s) to provider_model_id FIRST
@@ -206,14 +211,16 @@ async def compare_models(request: Request, payload: CompareRequest) -> Response:
     # Validate both models (error text echoes what the caller sent, not the
     # resolved provider_model_id -- same route-hiding rule as everywhere else).
     if not await chat._is_model_allowed(model_a):
-        return JSONResponse(
-            {'error': {'message': f'مدل {model_a_requested} در دسترس نیست', 'type': 'invalid_request', 'code': 'model_not_available'}},
-            status_code=400,
+        return err_openai(
+            f'مدل {model_a_requested} در دسترس نیست',
+            f'Model {model_a_requested} is not available',
+            400, code='model_not_available', err_type='invalid_request',
         )
     if not await chat._is_model_allowed(model_b):
-        return JSONResponse(
-            {'error': {'message': f'مدل {model_b_requested} در دسترس نیست', 'type': 'invalid_request', 'code': 'model_not_available'}},
-            status_code=400,
+        return err_openai(
+            f'مدل {model_b_requested} در دسترس نیست',
+            f'Model {model_b_requested} is not available',
+            400, code='model_not_available', err_type='invalid_request',
         )
 
     # Free-tier throttle gate — both models checked together in one call so
@@ -258,9 +265,10 @@ async def compare_models(request: Request, payload: CompareRequest) -> Response:
             )
             await _bill_session.commit()
     except InsufficientBalanceError:
-        return JSONResponse(
-            {'error': {'message': 'موجودی کیف پول شما کافی نیست. لطفاً حساب خود را شارژ کنید.', 'type': 'quota_exceeded', 'code': 'balance'}},
-            status_code=429,
+        return err_openai(
+            'موجودی کیف پول شما کافی نیست. لطفاً حساب خود را شارژ کنید.',
+            'Your wallet balance is not enough. Please top up your account.',
+            429, code='balance', err_type='quota_exceeded',
         )
     except Exception as e:
         logger.warning(f"Compare BillingService.reserve failed uid={uid}: {e}")

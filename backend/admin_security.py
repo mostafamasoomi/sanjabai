@@ -30,6 +30,7 @@ from fastapi.responses import JSONResponse
 
 import admin
 from database import async_session, rds
+from i18n import err
 
 logger = logging.getLogger('admin_security')
 
@@ -63,9 +64,9 @@ def _threat_level(failed_24h: int, active_lockouts: int) -> str:
 @router.get('/admin/security/stats')
 async def security_stats(request: Request) -> JSONResponse:
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'The database is unavailable.', 500)
 
     async with async_session() as session:
         failed_res = await session.execute(sqlalchemy.text(

@@ -42,6 +42,7 @@ from fastapi.responses import JSONResponse
 
 from database import async_session, rds
 from dependencies import admin_required
+from i18n import err
 from model_health import health_map
 from providers import configured_providers, upstream_alive
 from status_page import _CACHE_KEY as _KUMA_CACHE_KEY
@@ -406,7 +407,7 @@ def _self_reported_errors(payload: dict[str, Any]) -> list[str]:
 @router.get('/admin/monitoring')
 async def admin_monitoring(request: Request) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
 
     try:
         cached = await rds.get(_CACHE_KEY)

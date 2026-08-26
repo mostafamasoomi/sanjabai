@@ -29,6 +29,7 @@ import secrets
 from fastapi import Request, UploadFile, File, Form
 from fastapi.responses import JSONResponse, Response
 
+from i18n import err, err_openai
 from dependencies import _to_fa
 from services.context_injection import inject_messages
 from services.token_budget import apply_outbound_budget
@@ -74,11 +75,11 @@ async def _chat_disabled_response() -> JSONResponse | None:
     """
     if await get_site_flag('chat_enabled'):
         return None
-    return JSONResponse(
-        {'error': {'message': 'گفتگو موقتاً در دسترس نیست',
-                   'type': 'service_unavailable', 'code': 'chat_disabled'}},
-        status_code=503,
-    )
+    return err_openai(
+            'گفتگو موقتاً در دسترس نیست',
+            'Chat is temporarily unavailable.',
+            503, code='chat_disabled', err_type='service_unavailable',
+        )
 
 
 async def _chat_preflight(uid: int, messages) -> JSONResponse | None:
@@ -190,6 +191,10 @@ def _premium_quota_response(gate: dict) -> JSONResponse:
     return JSONResponse(
         {'error': {
             'message': gate.get('message', 'سهم مدل‌های پیشرفته حساب شما پر شده است.'),
+            # The gate builds a reason-specific pair (services/free_tier.py,
+            # services/premium_quota.py); these defaults only cover a gate
+            # shape that predates them.
+            'message_en': gate.get('message_en', 'Your premium-model allowance is used up.'),
             'type': 'rate_limited',
             'code': gate.get('code', 'premium_quota_exceeded'),
             'retry_after_seconds': int(gate.get('retry_after_seconds', 0)),
@@ -262,7 +267,7 @@ async def chat_with_file(
     """Chat with an attached file."""
     uid = await chat._get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
     _disabled = await chat._chat_preflight(uid, messages)
     if _disabled is not None:
         return _disabled
@@ -314,9 +319,10 @@ async def chat_with_file(
                 )
             await _bill_session.commit()
     except InsufficientBalanceError:
-        return JSONResponse(
-            {'error': {'message': 'موجودی کیف پول شما کافی نیست. لطفاً حساب خود را شارژ کنید.', 'type': 'quota_exceeded', 'code': 'balance'}},
-            status_code=429,
+        return err_openai(
+            'موجودی کیف پول شما کافی نیست. لطفاً حساب خود را شارژ کنید.',
+            'Your wallet balance is not enough. Please top up your account.',
+            429, code='balance', err_type='quota_exceeded',
         )
     except Exception as e:
         import traceback
@@ -345,10 +351,16 @@ async def chat_with_file(
     await chat._apply_persian_style_guard_for_model(_ws_payload, model)
     await _apply_web_search(_ws_payload, handler='chat.with-file')
     msgs = _ws_payload['messages']
-    text, err = await _extract_file_text(file)
-    if err:
+    # NOT named `err`: this function also calls the i18n helper `err()`, and
+    # Python binds a name assigned anywhere in a body as local for the WHOLE
+    # body -- so that call would raise UnboundLocalError before ever reaching
+    # this line. Reproduced, not theorised.
+    text, extract_err = await _extract_file_text(file)
+    if extract_err:
         await _release_reservation(reservation, uid, 'file_error')
-        return JSONResponse({'error': {'message': err, 'type': 'file_error'}}, status_code=400)
+        return JSONResponse(
+            {'error': {'message': extract_err, 'type': 'file_error'}}, status_code=400,
+        )
     if text.strip():
         file_block = f'[Attached file: {file.filename}]\n\n{text[:50000]}'
         msgs.append({'role': 'user', 'content': file_block})
@@ -358,16 +370,18 @@ async def chat_with_file(
         # _safe_default_model() couldn't find anything in the catalog
         # either -- see the identical check/comment in chat().
         await _release_reservation(reservation, uid, 'no_model_available')
-        return JSONResponse(
-            {'error': {'message': 'در حال حاضر مدلی برای انتخاب پیش‌فرض در دسترس نیست. لطفاً یک مدل را به‌صورت دستی انتخاب کنید.', 'type': 'invalid_request', 'code': 'model_not_available'}},
-            status_code=400,
+        return err_openai(
+            'در حال حاضر مدلی برای انتخاب پیش‌فرض در دسترس نیست. لطفاً یک مدل را به‌صورت دستی انتخاب کنید.',
+            'No model is available to pick by default right now. Please choose one manually.',
+            400, code='model_not_available', err_type='invalid_request',
         )
     if not await chat._is_model_allowed(selected_model):
         logger.info(f"chat_with_file blocked model={selected_model} uid={uid}")
         await _release_reservation(reservation, uid, 'model_reject')
-        return JSONResponse(
-            {'error': {'message': f'مدل {selected_model} در دسترس نیست', 'type': 'invalid_request', 'code': 'model_not_available'}},
-            status_code=400,
+        return err_openai(
+            f'مدل {selected_model} در دسترس نیست',
+            f'Model {selected_model} is not available',
+            400, code='model_not_available', err_type='invalid_request',
         )
     payload = {'model': selected_model, 'messages': msgs, 'stream': stream}
     # Use helper for injection (S2)
@@ -425,7 +439,4 @@ async def chat_with_file(
                     await _rel_session.commit()
             except Exception as _rel_e:
                 logger.warning(f"BillingService.release on error failed uid={uid}: {_rel_e}")
-        return JSONResponse(
-            {'detail': 'سرویس موقتاً در دسترس نیست', 'code': 'gateway_error'},
-            status_code=502,
-        )
+        return err('سرویس موقتاً در دسترس نیست', 'The service is temporarily unavailable.', 502)

@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from database import async_session
 from models import Notification, Quota
 from dependencies import _get_user_id, _to_fa
+from i18n import err
 
 router = APIRouter()
 
@@ -21,9 +22,9 @@ async def list_notifications(request: Request) -> JSONResponse:
     """Get user notifications"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     async with async_session() as session:
         quota_res = await session.execute(Quota.__table__.select().where(Quota.user_id == uid))
@@ -71,9 +72,9 @@ async def mark_notification_read(request: Request, nid: int) -> JSONResponse:
     """Mark notification as read"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     async with async_session() as session:
         await session.execute(

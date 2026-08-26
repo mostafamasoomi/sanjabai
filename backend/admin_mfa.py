@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 import admin
 from dependencies import _write_audit_log, ADMIN_COOKIE_NAME
+from i18n import err
 from security import get_lockout_info
 
 router = APIRouter()
@@ -43,7 +44,7 @@ async def admin_mfa_setup(request: Request) -> JSONResponse:
     after the admin verifies a valid TOTP code via /admin/mfa/enable.
     """
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
 
     try:
         import pyotp
@@ -80,7 +81,7 @@ async def admin_mfa_enable(request: Request, payload: MfaEnableRequest) -> JSONR
     After verification the secret is stored in the users table.
     """
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
 
     try:
         import pyotp
@@ -102,7 +103,7 @@ async def admin_mfa_enable(request: Request, payload: MfaEnableRequest) -> JSONR
     # Verify the code
     totp = pyotp.TOTP(secret)
     if not totp.verify(payload.code, valid_window=1):
-        return JSONResponse({'detail': 'کد TOTP نامعتبر است'}, status_code=400)
+        return err('کد TOTP نامعتبر است', 'Invalid TOTP code.', 400)
 
     # Store the secret (would need user_id from admin session; for skeleton, store in Redis)
     try:
@@ -139,18 +140,18 @@ async def admin_mfa_verify(request: Request, payload: MfaVerifyRequest) -> JSONR
         # check for the admin session cookie directly
         sid = request.cookies.get(ADMIN_COOKIE_NAME, '')
         if not sid:
-            return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+            return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
         try:
             from database import rds as _rds
             mfa_key = f'admin_mfa:{sid}'
             secret = await _rds.get(mfa_key)
             if not secret:
-                return JSONResponse({'detail': 'TOTP فعال نیست'}, status_code=400)
+                return err('TOTP فعال نیست', 'TOTP is not enabled.', 400)
 
             import pyotp
             totp = pyotp.TOTP(secret)
             if not totp.verify(payload.code, valid_window=1):
-                return JSONResponse({'detail': 'کد TOTP نامعتبر است'}, status_code=400)
+                return err('کد TOTP نامعتبر است', 'Invalid TOTP code.', 400)
 
             # Mark session as TOTP verified
             sess_key = f'admin_session:{sid}'
@@ -165,7 +166,7 @@ async def admin_mfa_verify(request: Request, payload: MfaVerifyRequest) -> JSONR
             await _write_audit_log('admin.mfa.verified', request=request)
             return JSONResponse({'status': 'ok'})
         except Exception:
-            return JSONResponse({'detail': 'خطای سرور'}, status_code=500)
+            return err('خطای سرور', 'Server error.', 500)
 
     # If admin_required passed (MFA not enabled or already verified)
     return JSONResponse({'status': 'ok', 'message': 'TOTP از قبل تأیید شده'})
@@ -175,7 +176,7 @@ async def admin_mfa_verify(request: Request, payload: MfaVerifyRequest) -> JSONR
 async def admin_mfa_disable(request: Request) -> JSONResponse:
     """Disable TOTP MFA for the admin session."""
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
 
     try:
         from database import rds as _rds
@@ -205,7 +206,7 @@ async def admin_mfa_disable(request: Request) -> JSONResponse:
 async def admin_lockout_status(request: Request) -> JSONResponse:
     """Check lockout status for a given identifier (admin only)."""
     if not await admin.admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
 
     identifier = request.query_params.get('identifier', '')
     if not identifier:

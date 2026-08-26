@@ -47,6 +47,7 @@ from fastapi.responses import JSONResponse
 
 from database import async_session, rds, _http, LITELLM_HOST
 from models import Pricing
+from i18n import err
 
 import content
 
@@ -365,7 +366,7 @@ async def api_pricing(request: Request) -> JSONResponse:
 
     rate_irt, markup_pct = await content._get_exchange_rate()
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     # NOTE: `models_out` is built but deliberately NOT returned below (this
     # endpoint currently answers with `generatedAt` only). It is kept as a

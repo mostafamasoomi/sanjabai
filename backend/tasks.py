@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, text
 
 from database import async_session
+from i18n import err
 from models import ScheduledTask, TaskExecution
 from dependencies import _get_user_id
 from services.task_scheduler import compute_next_run
@@ -116,7 +117,7 @@ class ScheduledTaskUpdate(BaseModel):
 async def list_tasks(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     async with async_session() as session:
         res = await session.execute(
             select(ScheduledTask).where(ScheduledTask.user_id == uid).order_by(ScheduledTask.created_at.desc())
@@ -138,7 +139,7 @@ async def list_tasks(request: Request) -> JSONResponse:
 async def create_task(request: Request, payload: ScheduledTaskCreate) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     async with async_session() as session:
         task = ScheduledTask(
             user_id=uid, title=payload.title, description=payload.description,
@@ -153,7 +154,7 @@ async def create_task(request: Request, payload: ScheduledTaskCreate) -> JSONRes
         try:
             task.next_run_at = compute_next_run(payload.cron_expression, datetime.now(timezone.utc))
         except ValueError as e:
-            return JSONResponse({'detail': f'عبارت زمان‌بندی نامعتبر است: {e}'}, status_code=400)
+            return err(f'عبارت زمان‌بندی نامعتبر است: {e}', f'Invalid schedule expression: {e}', 400)
         session.add(task)
         await session.commit()
         await session.refresh(task)
@@ -171,14 +172,14 @@ async def create_task(request: Request, payload: ScheduledTaskCreate) -> JSONRes
 async def update_task(request: Request, task_id: int, payload: ScheduledTaskUpdate) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     async with async_session() as session:
         res = await session.execute(
             select(ScheduledTask).where(ScheduledTask.id == task_id, ScheduledTask.user_id == uid)
         )
         task = res.scalar_one_or_none()
         if not task:
-            return JSONResponse({'detail': 'task not found | وظیفه یافت نشد'}, status_code=404)
+            return err('وظیفه یافت نشد', 'Task not found.', 404)
         update_data = payload.model_dump(exclude_unset=True)
         for key, val in update_data.items():
             setattr(task, key, val)
@@ -191,7 +192,7 @@ async def update_task(request: Request, task_id: int, payload: ScheduledTaskUpda
             try:
                 task.next_run_at = compute_next_run(task.cron_expression, datetime.now(timezone.utc))
             except ValueError as e:
-                return JSONResponse({'detail': f'عبارت زمان‌بندی نامعتبر است: {e}'}, status_code=400)
+                return err(f'عبارت زمان‌بندی نامعتبر است: {e}', f'Invalid schedule expression: {e}', 400)
         else:
             task.next_run_at = None
         task.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -210,14 +211,14 @@ async def update_task(request: Request, task_id: int, payload: ScheduledTaskUpda
 async def delete_task(request: Request, task_id: int) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     async with async_session() as session:
         res = await session.execute(
             select(ScheduledTask).where(ScheduledTask.id == task_id, ScheduledTask.user_id == uid)
         )
         task = res.scalar_one_or_none()
         if not task:
-            return JSONResponse({'detail': 'task not found | وظیفه یافت نشد'}, status_code=404)
+            return err('وظیفه یافت نشد', 'Task not found.', 404)
         await session.delete(task)
         await session.commit()
         return JSONResponse({'status': 'deleted'})
@@ -227,14 +228,14 @@ async def delete_task(request: Request, task_id: int) -> JSONResponse:
 async def toggle_task(request: Request, task_id: int) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     async with async_session() as session:
         res = await session.execute(
             select(ScheduledTask).where(ScheduledTask.id == task_id, ScheduledTask.user_id == uid)
         )
         task = res.scalar_one_or_none()
         if not task:
-            return JSONResponse({'detail': 'task not found | وظیفه یافت نشد'}, status_code=404)
+            return err('وظیفه یافت نشد', 'Task not found.', 404)
         task.is_active = not task.is_active
         if task.is_active:
             try:
@@ -263,14 +264,14 @@ async def run_task(request: Request, task_id: int) -> JSONResponse:
     """
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     async with async_session() as session:
         res = await session.execute(
             select(ScheduledTask).where(ScheduledTask.id == task_id, ScheduledTask.user_id == uid)
         )
         task = res.scalar_one_or_none()
         if not task:
-            return JSONResponse({'detail': 'task not found | وظیفه یافت نشد'}, status_code=404)
+            return err('وظیفه یافت نشد', 'Task not found.', 404)
 
     result = await task_execution._execute_task(task, uid)
     status_code = 429 if result.get('error_code') == 'insufficient_balance' else 200
@@ -285,14 +286,14 @@ async def run_task(request: Request, task_id: int) -> JSONResponse:
 async def list_task_executions(request: Request, task_id: int) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     async with async_session() as session:
         res = await session.execute(
             select(ScheduledTask).where(ScheduledTask.id == task_id, ScheduledTask.user_id == uid)
         )
         task = res.scalar_one_or_none()
         if not task:
-            return JSONResponse({'detail': 'task not found | وظیفه یافت نشد'}, status_code=404)
+            return err('وظیفه یافت نشد', 'Task not found.', 404)
         res2 = await session.execute(
             select(TaskExecution).where(TaskExecution.task_id == task_id).order_by(TaskExecution.created_at.desc())
         )

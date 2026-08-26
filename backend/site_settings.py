@@ -64,6 +64,7 @@ from fastapi.responses import JSONResponse
 
 from database import async_session, rds
 from dependencies import admin_required, _write_audit_log
+from i18n import err
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +88,9 @@ class FlagMeta:
 
     key: str
     label_fa: str
+    label_en: str
     description_fa: str
+    description_en: str
     default: bool
     wired: bool
     wire_note: str  # human-readable pointer to the call site(s), for the panel
@@ -101,10 +104,16 @@ FLAGS: dict[str, FlagMeta] = {
     'maintenance_mode': FlagMeta(
         key='maintenance_mode',
         label_fa='حالت تعمیر و نگهداری',
+        label_en='Maintenance mode',
         description_fa=(
             'همهٔ درخواست‌های کاربر عادی به API را با خطای ۵۰۳ رد می‌کند؛ ادمین همچنان '
             'دسترسی کامل دارد. مسیرهای /health و /admin و ورود و /status باز می‌مانند تا '
             'سایت در همان حالت هم قابل بازیابی و پایش باشد.'
+        ),
+        description_en=(
+            'Rejects every regular-user request to the API with a 503 error; the admin '
+            'still has full access. The /health, /admin, login and /status routes stay '
+            'open so the site remains recoverable and observable even in this state.'
         ),
         default=False,
         wired=True,
@@ -117,7 +126,9 @@ FLAGS: dict[str, FlagMeta] = {
     'signups_enabled': FlagMeta(
         key='signups_enabled',
         label_fa='ثبت‌نام کاربر جدید',
+        label_en='New user signups',
         description_fa='امکان ساخت حساب کاربری جدید را باز/بسته می‌کند.',
+        description_en='Turns the ability to create a new user account on/off.',
         default=True,
         wired=True,
         wire_note='وصل است: backend/auth.py، اولین دستور signup() -- قبل از چک کپچا، پس کپچا مصرف نمی‌شود. خاموش = ۴۰۳.',
@@ -125,7 +136,9 @@ FLAGS: dict[str, FlagMeta] = {
     'chat_enabled': FlagMeta(
         key='chat_enabled',
         label_fa='گفتگو (چت)',
+        label_en='Chat',
         description_fa='مسیر اصلی گفتگو با مدل‌ها را برای همهٔ کاربران باز/بسته می‌کند.',
+        description_en='Turns the main chat-with-models route on/off for all users.',
         default=True,
         wired=True,
         wire_note=(
@@ -137,7 +150,12 @@ FLAGS: dict[str, FlagMeta] = {
     'image_generation_enabled': FlagMeta(
         key='image_generation_enabled',
         label_fa='تولید تصویر',
+        label_en='Image generation',
         description_fa='مسیر تولید تصویر را برای همهٔ کاربران باز/بسته می‌کند (مستقل از در دسترس بودن هر مدل).',
+        description_en=(
+            'Turns the image-generation route on/off for all users '
+            '(independent of any individual model\'s availability).'
+        ),
         default=True,
         wired=True,
         wire_note='وصل است: backend/images.py، ابتدای /v1/images/generations، قبل از رزرو. خاموش = ۵۰۳.',
@@ -145,9 +163,15 @@ FLAGS: dict[str, FlagMeta] = {
     'task_scheduler_enabled': FlagMeta(
         key='task_scheduler_enabled',
         label_fa='زمان‌بند وظایف (Task Scheduler)',
+        label_en='Task scheduler',
         description_fa=(
             'اجرای حلقهٔ پس‌زمینهٔ وظایف زمان‌بندی‌شده را کنترل می‌کند. روشن‌کردن این کلید '
             'زمان‌بند را بدون ری‌استارت کانتینر فعال می‌کند (حداکثر تا یک تیک، ۶۰ ثانیه).'
+        ),
+        description_en=(
+            'Controls whether the scheduled-task background loop runs. Turning this flag '
+            'on enables the scheduler without a container restart (within one tick, up to '
+            '60 seconds).'
         ),
         default=False,
         wired=True,
@@ -161,10 +185,17 @@ FLAGS: dict[str, FlagMeta] = {
     'logical_routing_enabled': FlagMeta(
         key='logical_routing_enabled',
         label_fa='مسیریابی مدل منطقی',
+        label_en='Logical model routing',
         description_fa=(
             'اجازه می‌دهد یک کلید مدل منطقی (مثل claude-sonnet-5) به بهترین ردیف زندهٔ '
             'کاتالوگ resolve شود. خاموش = رفتار امروز، بایت‌به‌بایت. روشن = فقط مدل‌هایی که '
             'در کاتالوگ هیچ تطبیقی ندارند از لایهٔ منطقی عبور می‌کنند؛ هیچ مدل موجودی مسیرش عوض نمی‌شود.'
+        ),
+        description_en=(
+            'Allows a logical model key (e.g. claude-sonnet-5) to resolve to the best live '
+            'catalog row. Off = today\'s behavior, byte for byte. On = only model keys with '
+            'no match at all in the catalog pass through the logical layer; no existing '
+            'model\'s routing changes.'
         ),
         default=False,
         wired=True,
@@ -180,10 +211,16 @@ FLAGS: dict[str, FlagMeta] = {
     'openrouter_enabled': FlagMeta(
         key='openrouter_enabled',
         label_fa='OpenRouter (تأمین‌کننده)',
+        label_en='OpenRouter (provider)',
         description_fa=(
             'مسیر تأمین OpenRouter را کنترل می‌کند. ⚠️ روشن‌کردن این کلید به‌تنهایی کافی '
             'نیست -- کلید OPENROUTER_API_KEY هم باید ست باشد، وگرنه پروایدر بی‌صدا نادیده '
             'گرفته می‌شود.'
+        ),
+        description_en=(
+            'Controls the OpenRouter supply route. ⚠️ Turning this flag on alone '
+            'is not enough -- the OPENROUTER_API_KEY must also be set, or the provider is '
+            'silently ignored.'
         ),
         default=False,
         wired=True,
@@ -281,9 +318,9 @@ async def get_site_settings(request: Request) -> JSONResponse:
     shown as off when the truth is unknown is a lie the owner could act on.
     """
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     try:
         async with async_session() as session:
@@ -300,7 +337,7 @@ async def get_site_settings(request: Request) -> JSONResponse:
             db_values = {r.flag_key: r.value for r in res.fetchall()}
     except Exception as e:
         logger.warning('GET /admin/site-settings DB read failed: %s', e)
-        return JSONResponse({'detail': 'خطا در خواندن تنظیمات از پایگاه داده'}, status_code=500)
+        return err('خطا در خواندن تنظیمات از پایگاه داده', 'Failed to read settings from the database.', 500)
 
     flags = []
     for meta in FLAGS.values():
@@ -311,7 +348,9 @@ async def get_site_settings(request: Request) -> JSONResponse:
             'value': value,
             'default': meta.default,
             'label_fa': meta.label_fa,
+            'label_en': meta.label_en,
             'description_fa': meta.description_fa,
+            'description_en': meta.description_en,
             'wired': meta.wired,
             'wire_note': meta.wire_note,
             'row_missing': meta.key not in db_values,
@@ -329,23 +368,24 @@ async def update_site_settings(request: Request, payload: dict[str, Any]) -> JSO
     codebase (see admin_packages.py / admin_catalog.py).
     """
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     if not isinstance(payload, dict) or not payload:
-        return JSONResponse({'detail': 'هیچ فیلدی برای بروزرسانی ارسال نشده است'}, status_code=400)
+        return err('هیچ فیلدی برای بروزرسانی ارسال نشده است', 'No fields were submitted to update.', 400)
 
     unknown = set(payload) - set(FLAGS)
     if unknown:
-        return JSONResponse({'detail': f'کلید ناشناخته: {", ".join(sorted(unknown))}'}, status_code=400)
+        return err(
+            f'کلید ناشناخته: {", ".join(sorted(unknown))}',
+            f'Unknown key(s): {", ".join(sorted(unknown))}', 400,
+        )
 
     cleaned: dict[str, bool] = {}
     for k, v in payload.items():
         if not isinstance(v, bool):
-            return JSONResponse(
-                {'detail': f'مقدار {k} باید true/false باشد'}, status_code=400
-            )
+            return err(f'مقدار {k} باید true/false باشد', f'Value of {k} must be true/false.', 400)
         cleaned[k] = v
 
     async with async_session() as session:

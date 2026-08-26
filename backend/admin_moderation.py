@@ -54,6 +54,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
 import admin
+from i18n import err
 from database import async_session, rds
 from dependencies import _write_audit_log
 from services.moderation import (
@@ -72,7 +73,9 @@ ACTIONS = ('warn', 'restrict', 'suspend')
 MAX_PATTERN_CHARS = 200
 MAX_PAGE_LIMIT = 200
 
-_NO_DB = {'detail': 'پایگاه داده در دسترس نیست'}
+def _no_db() -> JSONResponse:
+    """A fresh 500 every time -- see :func:`_denied` for why."""
+    return err('پایگاه داده در دسترس نیست', 'Database is unavailable.', 500)
 
 
 def _denied() -> JSONResponse:
@@ -89,11 +92,11 @@ def _denied() -> JSONResponse:
     later unauthenticated hit on this section would fail as a decode error
     rather than a clean 401. Cheap to build, so build it per request.
     """
-    return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+    return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
 
 
-def _bad(msg: str) -> JSONResponse:
-    return JSONResponse({'detail': msg}, status_code=400)
+def _bad(fa: str, en: str) -> JSONResponse:
+    return err(fa, en, 400)
 
 
 # ── Regex safety ──────────────────────────────────────────────────────────
@@ -108,37 +111,64 @@ _REDOS_PROBE = ('a' * 40 + '!') * 2 + 'ا' * 40 + '!'
 REDOS_PROBE_BUDGET_SECONDS = 0.025
 
 
-def validate_pattern(pattern: Any) -> str | None:
-    """Persian error for a pattern we refuse to store, or ``None``.
+def _validate_pattern_bi(pattern: Any) -> tuple[str, str] | None:
+    """A ``(fa, en)`` error pair for a pattern we refuse to store, or ``None``.
+
+    Bilingual body of :func:`validate_pattern`, split out so that function
+    keeps returning a bare Persian string (its tested contract -- see
+    tests/test_admin_moderation.py) while the HTTP-facing call sites here
+    can still reach the English sibling.
 
     An admin-supplied regex is untrusted input that then runs on the hot
     path of every chat request, so a catastrophic-backtracking pattern is a
     self-inflicted denial of service. Four gates, cheapest first: length,
     structural shapes known to backtrack, compilability, and finally a real
-    timed run against an adversarial subject. The last one is what makes
-    this more than a blocklist of syntax -- a novel pathological pattern
-    that gets past the first three still has to run fast.
+    timed run against an adversarial subject.
     """
     if not isinstance(pattern, str) or not pattern.strip():
-        return 'الگو نمی‌تواند خالی باشد.'
+        return 'الگو نمی‌تواند خالی باشد.', 'The pattern cannot be empty.'
     if len(pattern) > MAX_PATTERN_CHARS:
-        return f'الگو نباید بیش از {MAX_PATTERN_CHARS} نویسه باشد.'
+        return (
+            f'الگو نباید بیش از {MAX_PATTERN_CHARS} نویسه باشد.',
+            f'The pattern must not exceed {MAX_PATTERN_CHARS} characters.',
+        )
     if _BACKREF.search(pattern):
-        return 'استفاده از ارجاع پس‌رو (\\1) در الگو مجاز نیست.'
+        return (
+            'استفاده از ارجاع پس‌رو (\\1) در الگو مجاز نیست.',
+            'Backreferences (\\1) are not allowed in the pattern.',
+        )
     if _NESTED_QUANT.search(pattern) or _STACKED_QUANT.search(pattern):
-        return 'الگو تکرارگر تودرتو دارد و می‌تواند سرویس را از کار بیندازد؛ ساده‌ترش کنید.'
+        return (
+            'الگو تکرارگر تودرتو دارد و می‌تواند سرویس را از کار بیندازد؛ ساده‌ترش کنید.',
+            'The pattern has a nested quantifier that could take down the service; simplify it.',
+        )
     try:
         rx = re.compile(pattern)
     except re.error as e:
-        return f'الگوی نامعتبر است: {e}'
+        return f'الگوی نامعتبر است: {e}', f'Invalid pattern: {e}'
     started = time.monotonic()
     try:
         rx.search(_REDOS_PROBE)
     except Exception as e:  # pragma: no cover
-        return f'الگوی نامعتبر است: {e}'
+        return f'الگوی نامعتبر است: {e}', f'Invalid pattern: {e}'
     if time.monotonic() - started > REDOS_PROBE_BUDGET_SECONDS:
-        return 'اجرای الگو بیش از حد طول کشید؛ الگوی ساده‌تری بنویسید.'
+        return (
+            'اجرای الگو بیش از حد طول کشید؛ الگوی ساده‌تری بنویسید.',
+            'The pattern took too long to run; write a simpler pattern.',
+        )
     return None
+
+
+def validate_pattern(pattern: Any) -> str | None:
+    """Persian error for a pattern we refuse to store, or ``None``.
+
+    Kept returning a bare string -- not the ``(fa, en)`` pair -- because
+    tests/test_admin_moderation.py and tests/test_admin_moderation_api.py
+    call this directly and assert on a string/``None``; see
+    :func:`_validate_pattern_bi` for the bilingual version this wraps.
+    """
+    pair = _validate_pattern_bi(pattern)
+    return pair[0] if pair else None
 
 
 # ── Events ────────────────────────────────────────────────────────────────
@@ -174,9 +204,9 @@ async def list_events(request: Request, page: int = 1, limit: int = 50,
     if not await admin.admin_required(request):
         return _denied()
     if severity and severity not in SEVERITIES:
-        return _bad('شدت نامعتبر است.')
+        return _bad('شدت نامعتبر است.', 'Invalid severity.')
     if decision and decision not in DECISIONS:
-        return _bad('تصمیم نامعتبر است.')
+        return _bad('تصمیم نامعتبر است.', 'Invalid decision.')
     page = max(1, int(page))
     limit = max(1, min(MAX_PAGE_LIMIT, int(limit)))
     params = {
@@ -187,7 +217,7 @@ async def list_events(request: Request, page: int = 1, limit: int = 50,
         'off': (page - 1) * limit,
     }
     if async_session is None:
-        return JSONResponse(_NO_DB, status_code=500)
+        return _no_db()
     async with async_session() as session:
         rows = (await session.execute(_SQL_EVENTS, params)).fetchall()
         total = (await session.execute(_SQL_EVENTS_COUNT, params)).fetchone().c
@@ -228,37 +258,39 @@ async def list_rules(request: Request) -> JSONResponse:
     if not await admin.admin_required(request):
         return _denied()
     if async_session is None:
-        return JSONResponse(_NO_DB, status_code=500)
+        return _no_db()
     async with async_session() as session:
         rows = (await session.execute(_SQL_RULES)).fetchall()
     return JSONResponse(jsonable_encoder(
         {'items': [dict(r._mapping) for r in rows]}))
 
 
-def _clean_rule_body(body: dict, *, require_pattern: bool) -> tuple[dict, str | None]:
-    """Shared validation for create and update. Returns (params, error)."""
+def _clean_rule_body(body: dict, *, require_pattern: bool) -> tuple[dict, tuple[str, str] | None]:
+    """Shared validation for create and update. Returns (params, (fa, en) error)."""
     pattern = body.get('pattern')
     if pattern is None and not require_pattern:
         pat_val = None
     else:
-        err = validate_pattern(pattern)
-        if err:
-            return {}, err
+        bad = _validate_pattern_bi(pattern)
+        if bad:
+            return {}, bad
         pat_val = pattern.strip()
 
     severity = body.get('severity')
     if severity is not None and severity not in SEVERITIES:
-        return {}, 'شدت نامعتبر است؛ یکی از low، medium، high یا critical.'
+        return {}, ('شدت نامعتبر است؛ یکی از low، medium، high یا critical.',
+                     'Invalid severity; must be one of low, medium, high, or critical.')
     category = body.get('category')
     if category is not None and (not isinstance(category, str)
                                  or not category.strip()):
-        return {}, 'دسته نمی‌تواند خالی باشد.'
+        return {}, ('دسته نمی‌تواند خالی باشد.', 'Category cannot be empty.')
     enabled = body.get('enabled')
     if enabled is not None and not isinstance(enabled, bool):
-        return {}, 'مقدار فعال/غیرفعال باید درست یا نادرست باشد.'
+        return {}, ('مقدار فعال/غیرفعال باید درست یا نادرست باشد.',
+                     'The enabled value must be true or false.')
     notes = body.get('notes')
     if notes is not None and not isinstance(notes, str):
-        return {}, 'توضیح باید متن باشد.'
+        return {}, ('توضیح باید متن باشد.', 'Notes must be text.')
     return {
         'pattern': pat_val,
         'category': category.strip()[:64] if isinstance(category, str) else None,
@@ -273,11 +305,11 @@ async def create_rule(request: Request) -> JSONResponse:
     if not await admin.admin_required(request):
         return _denied()
     body = await _json_body(request)
-    params, err = _clean_rule_body(body, require_pattern=True)
-    if err:
-        return _bad(err)
+    params, bad_msg = _clean_rule_body(body, require_pattern=True)
+    if bad_msg:
+        return _bad(*bad_msg)
     if async_session is None:
-        return JSONResponse(_NO_DB, status_code=500)
+        return _no_db()
     params = {
         'pattern': params['pattern'],
         'category': params['category'] or 'other',
@@ -289,7 +321,7 @@ async def create_rule(request: Request) -> JSONResponse:
         row = (await session.execute(_SQL_RULE_INSERT, params)).fetchone()
         await session.commit()
     if row is None:
-        return _bad('این الگو از قبل ثبت شده است.')
+        return _bad('این الگو از قبل ثبت شده است.', 'This pattern is already registered.')
     await invalidate_config_cache()
     await _write_audit_log('admin.moderation.rule_create',
                            target_type='moderation_rule', target_id=row.id,
@@ -302,17 +334,17 @@ async def update_rule(request: Request, rule_id: int) -> JSONResponse:
     if not await admin.admin_required(request):
         return _denied()
     body = await _json_body(request)
-    params, err = _clean_rule_body(body, require_pattern=False)
-    if err:
-        return _bad(err)
+    params, bad_msg = _clean_rule_body(body, require_pattern=False)
+    if bad_msg:
+        return _bad(*bad_msg)
     if async_session is None:
-        return JSONResponse(_NO_DB, status_code=500)
+        return _no_db()
     async with async_session() as session:
         row = (await session.execute(_SQL_RULE_UPDATE,
                                      {**params, 'id': rule_id})).fetchone()
         await session.commit()
     if row is None:
-        return JSONResponse({'detail': 'قاعده پیدا نشد.'}, status_code=404)
+        return err('قاعده پیدا نشد.', 'Rule not found.', 404)
     await invalidate_config_cache()
     await _write_audit_log('admin.moderation.rule_update',
                            target_type='moderation_rule', target_id=rule_id,
@@ -325,12 +357,12 @@ async def delete_rule(request: Request, rule_id: int) -> JSONResponse:
     if not await admin.admin_required(request):
         return _denied()
     if async_session is None:
-        return JSONResponse(_NO_DB, status_code=500)
+        return _no_db()
     async with async_session() as session:
         row = (await session.execute(_SQL_RULE_DELETE, {'id': rule_id})).fetchone()
         await session.commit()
     if row is None:
-        return JSONResponse({'detail': 'قاعده پیدا نشد.'}, status_code=404)
+        return err('قاعده پیدا نشد.', 'Rule not found.', 404)
     await invalidate_config_cache()
     await _write_audit_log('admin.moderation.rule_delete',
                            target_type='moderation_rule', target_id=rule_id,
@@ -375,7 +407,7 @@ async def user_moderation(request: Request, uid: int) -> JSONResponse:
     if not await admin.admin_required(request):
         return _denied()
     if async_session is None:
-        return JSONResponse(_NO_DB, status_code=500)
+        return _no_db()
     async with async_session() as session:
         rollup = (await session.execute(_SQL_USER_ROLLUP, {'uid': uid})).fetchall()
         total = (await session.execute(_SQL_USER_TOTAL, {'uid': uid})).fetchone().c
@@ -416,20 +448,21 @@ async def user_action(request: Request, uid: int) -> JSONResponse:
     body = await _json_body(request)
     action = body.get('action')
     if action not in ACTIONS:
-        return _bad('اقدام نامعتبر است؛ یکی از warn، restrict یا suspend.')
+        return _bad('اقدام نامعتبر است؛ یکی از warn، restrict یا suspend.',
+                    'Invalid action; must be one of warn, restrict, or suspend.')
     reason = body.get('reason')
     if not isinstance(reason, str) or not reason.strip():
-        return _bad('دلیل اقدام باید نوشته شود.')
+        return _bad('دلیل اقدام باید نوشته شود.', 'A reason for the action must be provided.')
     reason = reason.strip()[:500]
     if async_session is None:
-        return JSONResponse(_NO_DB, status_code=500)
+        return _no_db()
 
     title, text = _NOTICE[action]
     async with async_session() as session:
         if action == 'suspend':
             row = (await session.execute(_SQL_BAN, {'uid': uid})).fetchone()
             if row is None:
-                return JSONResponse({'detail': 'کاربر پیدا نشد.'}, status_code=404)
+                return err('کاربر پیدا نشد.', 'User not found.', 404)
         await session.execute(_SQL_NOTIFY, {
             'uid': uid, 'type': 'moderation', 'title': title, 'body': text})
         await session.commit()

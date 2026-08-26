@@ -27,6 +27,7 @@ from fastapi.responses import JSONResponse
 
 from database import async_session
 from dependencies import admin_required, _write_audit_log
+from i18n import err
 from services.free_tier_config import _DEFAULTS, _KEYS, _coerce_int, invalidate
 
 logger = logging.getLogger(__name__)
@@ -55,9 +56,9 @@ async def get_free_tier_settings(request: Request) -> JSONResponse:
     """The three current values, in full, plus which are still at their
     default (row missing). Direct DB read, no cache, no fail-open."""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'The database is unavailable.', 500)
 
     try:
         async with async_session() as session:
@@ -72,8 +73,9 @@ async def get_free_tier_settings(request: Request) -> JSONResponse:
             db_values = {r.setting_key: r.value for r in rows}
     except Exception as e:
         logger.warning('GET /admin/free-tier-settings DB read failed: %s', e)
-        return JSONResponse(
-            {'detail': 'خطا در خواندن تنظیمات از پایگاه داده'}, status_code=500
+        return err(
+            'خطا در خواندن تنظیمات از پایگاه داده',
+            'Failed to read settings from the database.', 500,
         )
 
     values = {
@@ -91,19 +93,21 @@ async def update_free_tier_settings(request: Request, payload: dict[str, Any]) -
     """Write one or more limits. ``{"free_hourly_limit": 3, ...}``; each field
     optional, each a non-negative integer within its bound."""
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'The database is unavailable.', 500)
 
     if not isinstance(payload, dict) or not payload:
-        return JSONResponse(
-            {'detail': 'هیچ فیلدی برای بروزرسانی ارسال نشده است'}, status_code=400
+        return err(
+            'هیچ فیلدی برای بروزرسانی ارسال نشده است',
+            'No field was sent to update.', 400,
         )
 
     unknown = set(payload) - set(_FIELD_TO_KEY)
     if unknown:
-        return JSONResponse(
-            {'detail': f'کلید ناشناخته: {", ".join(sorted(unknown))}'}, status_code=400
+        return err(
+            f'کلید ناشناخته: {", ".join(sorted(unknown))}',
+            f'Unknown key: {", ".join(sorted(unknown))}', 400,
         )
 
     cleaned: dict[str, int] = {}
@@ -117,19 +121,22 @@ async def update_free_tier_settings(request: Request, payload: dict[str, Any]) -
             if isinstance(raw, str) and raw.strip().lstrip('-').isdigit():
                 raw = int(raw.strip())
             else:
-                return JSONResponse(
-                    {'detail': f'مقدار {field} باید یک عدد صحیح باشد'}, status_code=400
+                return err(
+                    f'مقدار {field} باید یک عدد صحیح باشد',
+                    f'The {field} value must be an integer.', 400,
                 )
         lo, hi = _BOUNDS[key]
         if raw < lo or raw > hi:
-            return JSONResponse(
-                {'detail': f'مقدار {field} باید بین {lo} و {hi} باشد'}, status_code=400
+            return err(
+                f'مقدار {field} باید بین {lo} و {hi} باشد',
+                f'The {field} value must be between {lo} and {hi}.', 400,
             )
         cleaned[key] = raw
 
     if not cleaned:
-        return JSONResponse(
-            {'detail': 'هیچ فیلدی برای بروزرسانی ارسال نشده است'}, status_code=400
+        return err(
+            'هیچ فیلدی برای بروزرسانی ارسال نشده است',
+            'No field was sent to update.', 400,
         )
 
     try:
@@ -146,8 +153,9 @@ async def update_free_tier_settings(request: Request, payload: dict[str, Any]) -
             await session.commit()
     except Exception as e:
         logger.warning('POST /admin/free-tier-settings DB write failed: %s', e)
-        return JSONResponse(
-            {'detail': 'خطا در ذخیرهٔ تنظیمات در پایگاه داده'}, status_code=500
+        return err(
+            'خطا در ذخیرهٔ تنظیمات در پایگاه داده',
+            'Failed to save settings to the database.', 500,
         )
 
     invalidate()

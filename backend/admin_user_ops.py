@@ -35,6 +35,7 @@ from models import User
 from dependencies import admin_required, _write_audit_log
 from services.billing import SqlBillingRepo, credit_wallet, InsufficientBalanceError
 from services.money import Money
+from i18n import err
 
 router = APIRouter()
 
@@ -104,9 +105,9 @@ async def wallet_adjust(request: Request, uid: int, payload: dict[str, Any]) -> 
     before.
     """
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     amount = payload.get('amount_toman')
     direction = payload.get('direction')
@@ -114,21 +115,23 @@ async def wallet_adjust(request: Request, uid: int, payload: dict[str, Any]) -> 
     idempotency_key = payload.get('idempotency_key')
 
     if isinstance(amount, bool) or not isinstance(amount, int):
-        return JSONResponse(
-            {'detail': 'مبلغ باید عدد صحیح تومان باشد؛ اعشار مجاز نیست'},
-            status_code=400,
+        return err(
+            'مبلغ باید عدد صحیح تومان باشد؛ اعشار مجاز نیست',
+            'Amount must be an integer number of Toman; decimals are not allowed.',
+            400,
         )
     if amount <= 0:
-        return JSONResponse({'detail': 'مبلغ باید بزرگ‌تر از صفر باشد'}, status_code=400)
+        return err('مبلغ باید بزرگ‌تر از صفر باشد', 'Amount must be greater than zero.', 400)
     if direction not in _VALID_DIRECTIONS:
-        return JSONResponse(
-            {'detail': "جهت تراکنش باید 'credit' یا 'debit' باشد"}, status_code=400,
+        return err(
+            "جهت تراکنش باید 'credit' یا 'debit' باشد",
+            "Direction must be 'credit' or 'debit'.", 400,
         )
     if not isinstance(reason, str) or not reason.strip():
-        return JSONResponse({'detail': 'ذکر دلیل تراکنش الزامی است'}, status_code=400)
+        return err('ذکر دلیل تراکنش الزامی است', 'A reason for the transaction is required.', 400)
     reason = reason.strip()
     if idempotency_key is not None and not isinstance(idempotency_key, str):
-        return JSONResponse({'detail': 'کلید یکتایی نامعتبر است'}, status_code=400)
+        return err('کلید یکتایی نامعتبر است', 'Invalid idempotency key.', 400)
     if not idempotency_key:
         idempotency_key = f"admin_{direction}:{uid}:{secrets.token_hex(16)}"
 
@@ -137,7 +140,7 @@ async def wallet_adjust(request: Request, uid: int, payload: dict[str, Any]) -> 
     async with async_session() as session:
         user = await session.get(User, uid)
         if not user:
-            return JSONResponse({'detail': 'کاربر یافت نشد'}, status_code=404)
+            return err('کاربر یافت نشد', 'User not found.', 404)
 
         repo = SqlBillingRepo(session)
         try:
@@ -153,9 +156,10 @@ async def wallet_adjust(request: Request, uid: int, payload: dict[str, Any]) -> 
                 )
         except InsufficientBalanceError:
             await session.rollback()
-            return JSONResponse(
-                {'detail': 'موجودی کیف پول کافی نیست؛ این کسر موجودی را منفی می‌کند'},
-                status_code=400,
+            return err(
+                'موجودی کیف پول کافی نیست؛ این کسر موجودی را منفی می‌کند',
+                'Insufficient wallet balance; this debit would make the balance negative.',
+                400,
             )
         await session.commit()
         wallet_row = await repo.get_wallet(uid) or {'balance': 0, 'reserved': 0}
@@ -194,20 +198,21 @@ async def set_user_panel(request: Request, uid: int, payload: dict[str, Any]) ->
     without a read-modify-write race.
     """
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     panel = payload.get('panel')
     if panel not in _VALID_PANELS:
-        return JSONResponse(
-            {'detail': "مقدار پنل باید 'consumer' یا 'developer' باشد"}, status_code=400,
+        return err(
+            "مقدار پنل باید 'consumer' یا 'developer' باشد",
+            "Panel value must be 'consumer' or 'developer'.", 400,
         )
 
     async with async_session() as session:
         user = await session.get(User, uid)
         if not user:
-            return JSONResponse({'detail': 'کاربر یافت نشد'}, status_code=404)
+            return err('کاربر یافت نشد', 'User not found.', 404)
         await session.execute(
             sqlalchemy.text(
                 "UPDATE users SET preferences = COALESCE(preferences, '{}'::jsonb) "

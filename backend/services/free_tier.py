@@ -256,6 +256,10 @@ async def check_and_consume(uid: int, models: list[str]) -> Optional[dict]:
                         'مدل‌های پیشرفته لطفاً حساب خود را شارژ کنید؛ مدل‌های '
                         'اقتصادی همچنان به‌صورت رایگان در اختیار شماست.'
                     ),
+                    'message_en': (
+                        'This model is not available on a free account. Top up to use '
+                        'the advanced models; the economy models stay free.'
+                    ),
                 }
 
         # ── Check 2: lifetime cap (durable, a hard paywall) ──
@@ -269,6 +273,10 @@ async def check_and_consume(uid: int, models: list[str]) -> Optional[dict]:
                     f'سقف {_to_fa(lifetime_limit)} پیام رایگان شما به پایان رسیده '
                     'است. برای ادامهٔ گفتگو لطفاً حساب خود را شارژ کنید یا یک بستهٔ '
                     'پیام تهیه کنید.'
+                ),
+                'message_en': (
+                    f'You have used all {lifetime_limit:,} of your free messages. '
+                    'Top up your account or buy a message package to carry on.'
                 ),
             }
 
@@ -291,6 +299,13 @@ async def check_and_consume(uid: int, models: list[str]) -> Optional[dict]:
                     f'سقف {_to_fa(hourly_limit)} پیام در ساعت برای حساب رایگان پر '
                     f'شده است. حدود {_fa_duration(int(ttl))} دیگر می‌توانید ادامه '
                     'دهید، یا با شارژ حساب این محدودیت برداشته می‌شود.'
+                ),
+                # The countdown uses seconds rather than _fa_duration's Persian
+                # words -- the same number, spelled for the other reader.
+                'message_en': (
+                    f'You have hit the free-account limit of {hourly_limit:,} messages '
+                    f'per hour. You can continue in about {max(1, int(ttl) // 60)} minute(s), '
+                    'or top up to remove the limit.'
                 ),
             }
 

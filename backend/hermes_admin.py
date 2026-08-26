@@ -36,6 +36,7 @@ from sqlalchemy import select
 
 import hermes
 from database import async_session
+from i18n import err
 from models import ApiKey, HermesOffering, HermesSkillCatalog, HermesOrder, HermesServer, HermesServerSkill, Notification
 from dependencies import admin_required, _write_audit_log, _hash_api_key
 from hermes import _utcnow
@@ -92,9 +93,9 @@ class SkillCatalogUpsert(BaseModel):
 @hermes.router.get('/admin/hermes/orders')
 async def admin_list_orders(request: Request, status: str | None = None) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
     async with async_session() as session:
         query = select(HermesOrder).order_by(HermesOrder.created_at.desc())
         if status:
@@ -107,9 +108,9 @@ async def admin_list_orders(request: Request, status: str | None = None) -> JSON
 @hermes.router.post('/admin/hermes/orders/{order_id}/provision')
 async def admin_provision_order(request: Request, order_id: int, payload: ProvisionRequest) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
 
     raw_agent_token = f'hsa-{secrets.token_urlsafe(32)}'
     raw_api_key = f'sk-{secrets.token_urlsafe(32)}'
@@ -118,9 +119,9 @@ async def admin_provision_order(request: Request, order_id: int, payload: Provis
         order_res = await session.execute(select(HermesOrder).where(HermesOrder.id == order_id))
         order = order_res.scalar_one_or_none()
         if not order:
-            return JSONResponse({'detail': 'سفارش یافت نشد'}, status_code=404)
+            return err('سفارش یافت نشد', 'Order not found', 404)
         if order.status != 'paid':
-            return JSONResponse({'detail': 'سفارش در وضعیت قابل تحویل نیست'}, status_code=400)
+            return err('سفارش در وضعیت قابل تحویل نیست', 'Order is not in a deliverable state', 400)
 
         api_key = ApiKey(
             user_id=order.user_id, name=f'hermes-server-order-{order.id}',
@@ -165,13 +166,13 @@ async def admin_provision_order(request: Request, order_id: int, payload: Provis
 @hermes.router.post('/admin/hermes/servers/{server_id}/suspend')
 async def admin_suspend_server(request: Request, server_id: int) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
     async with async_session() as session:
         server = await session.get(HermesServer, server_id)
         if not server:
-            return JSONResponse({'detail': 'سرور یافت نشد'}, status_code=404)
+            return err('سرور یافت نشد', 'Server not found', 404)
         server.status = 'suspended'
         server.updated_at = _utcnow()
         await session.commit()
@@ -182,13 +183,13 @@ async def admin_suspend_server(request: Request, server_id: int) -> JSONResponse
 @hermes.router.post('/admin/hermes/servers/{server_id}/terminate')
 async def admin_terminate_server(request: Request, server_id: int) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
     async with async_session() as session:
         server = await session.get(HermesServer, server_id)
         if not server:
-            return JSONResponse({'detail': 'سرور یافت نشد'}, status_code=404)
+            return err('سرور یافت نشد', 'Server not found', 404)
         server.status = 'terminated'
         server.updated_at = _utcnow()
         await session.commit()
@@ -199,9 +200,9 @@ async def admin_terminate_server(request: Request, server_id: int) -> JSONRespon
 @hermes.router.get('/admin/hermes/offerings')
 async def admin_list_offerings(request: Request) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
     async with async_session() as session:
         res = await session.execute(select(HermesOffering).order_by(HermesOffering.sort_order))
         rows = [row[0] for row in res.fetchall()]
@@ -211,9 +212,9 @@ async def admin_list_offerings(request: Request) -> JSONResponse:
 @hermes.router.post('/admin/hermes/offerings')
 async def admin_upsert_offering(request: Request, payload: OfferingUpsert) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
     async with async_session() as session:
         existing = await session.get(HermesOffering, payload.id)
         data = payload.model_dump()
@@ -233,9 +234,9 @@ async def admin_upsert_offering(request: Request, payload: OfferingUpsert) -> JS
 @hermes.router.get('/admin/hermes/skill-catalog')
 async def admin_list_skill_catalog(request: Request) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
     async with async_session() as session:
         res = await session.execute(select(HermesSkillCatalog).order_by(HermesSkillCatalog.sort_order))
         rows = [row[0] for row in res.fetchall()]
@@ -245,9 +246,9 @@ async def admin_list_skill_catalog(request: Request) -> JSONResponse:
 @hermes.router.post('/admin/hermes/skill-catalog')
 async def admin_upsert_skill_catalog(request: Request, payload: SkillCatalogUpsert) -> JSONResponse:
     if not await admin_required(request):
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database is unavailable', 500)
     async with async_session() as session:
         existing = await session.get(HermesSkillCatalog, payload.id)
         data = payload.model_dump()

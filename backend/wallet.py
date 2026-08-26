@@ -12,6 +12,7 @@ from database import async_session
 from models import Ledger
 from dependencies import _get_user_id
 from services.free_tier import get_status as _free_tier_status
+from i18n import err
 
 router = APIRouter()
 
@@ -20,9 +21,9 @@ router = APIRouter()
 async def get_wallet(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(
             sqlalchemy.text('SELECT COALESCE(SUM(amount), 0) as balance FROM ledger WHERE user_id = :uid'),
@@ -37,9 +38,9 @@ async def get_wallet(request: Request) -> JSONResponse:
 async def get_ledger(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     page = int(request.query_params.get('page', 1))
     limit = min(int(request.query_params.get('limit', 20)), 100)
     offset = (page - 1) * limit
@@ -64,6 +65,6 @@ async def free_tier_status(request: Request) -> JSONResponse:
     rules; this endpoint is read-only and never consumes budget."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     status = await _free_tier_status(uid)
     return JSONResponse(status)

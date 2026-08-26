@@ -52,6 +52,7 @@ from security import (
     record_failed_attempt, clear_lockout, _get_lockout_identifier,
     track_session, get_lockout_info,
 )
+from i18n import err
 
 router = APIRouter()
 
@@ -91,7 +92,7 @@ class AuthLogin(BaseModel):
 async def admin_login(payload: AdminLogin) -> JSONResponse:
     """Validate admin token and establish an isolated server-side session."""
     if not ADMIN_TOKEN or not hmac.compare_digest(payload.token, ADMIN_TOKEN):
-        return JSONResponse({'detail': 'توکن ادمین نامعتبر است'}, status_code=401)
+        return err('توکن ادمین نامعتبر است', 'Invalid admin token', 401)
     sid, csrf = await _create_admin_session()
     # Capture request info for audit (admin_login doesn't have request param, skip)
     response = JSONResponse({'status': 'ok', 'csrf': csrf})
@@ -129,17 +130,18 @@ async def signup(payload: AuthSignup, request: Request) -> JSONResponse:
     # signups_enabled gate (site_settings.py) -- must run before the captcha
     # check so a closed signup window never consumes a captcha token.
     if not await get_site_flag('signups_enabled'):
-        return JSONResponse(
-            {'detail': 'ثبت‌نام کاربران جدید موقتاً غیرفعال است. لطفاً بعداً دوباره تلاش کنید.'},
-            status_code=403,
+        return err(
+            'ثبت‌نام کاربران جدید موقتاً غیرفعال است. لطفاً بعداً دوباره تلاش کنید.',
+            'Sign-ups are temporarily disabled. Please try again later.',
+            403,
         )
     from security import validate_email, validate_password
     # Verify captcha
     if not payload.captcha_token or not payload.captcha_answer:
-        return JSONResponse({"detail": "کپچا الزامی است"}, status_code=400)
+        return err('کپچا الزامی است', 'Captcha is required', 400)
     stored = await rds.get(f"captcha:{payload.captcha_token}")
     if not stored or str(stored) != str(payload.captcha_answer):
-        return JSONResponse({"detail": "کپچا اشتباه است"}, status_code=400)
+        return err('کپچا اشتباه است', 'Incorrect captcha', 400)
     await rds.delete(f"captcha:{payload.captcha_token}")
 
     # Rate limiting: max 3 signups per minute per email/IP to prevent abuse
@@ -150,26 +152,27 @@ async def signup(payload: AuthSignup, request: Request) -> JSONResponse:
             await rds.expire(rate_key, 60)
         if count > 3:
             await rds.decr(rate_key)
-            return JSONResponse(
-                {"detail": "ثبت‌نام سریع است. بعداً دوباره تلاش کنید"},
-                status_code=429,
+            return err(
+                'ثبت‌نام سریع است. بعداً دوباره تلاش کنید',
+                'Too many sign-up attempts. Try again later.',
+                429,
             )
     except Exception:
         pass
 
-    valid, err = validate_email(payload.email)
+    valid, verr_fa, verr_en = validate_email(payload.email)
     if not valid:
-        return JSONResponse({'detail': err}, status_code=400)
-    valid, err = validate_password(payload.password)
+        return err(verr_fa, verr_en, 400)
+    valid, verr_fa, verr_en = validate_password(payload.password)
     if not valid:
-        return JSONResponse({'detail': err}, status_code=400)
+        return err(verr_fa, verr_en, 400)
 
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         existing = await session.execute(User.__table__.select().where(User.email == payload.email))
         if existing.fetchone():
-            return JSONResponse({'detail': 'email already registered | ایمیل قبلا ثبت شده است'}, status_code=409)
+            return err('ایمیل قبلا ثبت شده است', 'This email is already registered.', 409)
         user = User(email=payload.email, password_hash=_hash_password(payload.password), referral_code=secrets.token_hex(4))
         session.add(user)
         await session.commit()
@@ -213,10 +216,10 @@ async def signup(payload: AuthSignup, request: Request) -> JSONResponse:
 async def login(payload: AuthLogin, request: Request) -> JSONResponse:
     # Verify captcha
     if not payload.captcha_token or not payload.captcha_answer:
-        return JSONResponse({"detail": "کپچا الزامی است"}, status_code=400)
+        return err('کپچا الزامی است', 'Captcha is required', 400)
     stored = await rds.get(f"captcha:{payload.captcha_token}")
     if not stored or str(stored) != str(payload.captcha_answer):
-        return JSONResponse({"detail": "کپچا اشتباه است"}, status_code=400)
+        return err('کپچا اشتباه است', 'Incorrect captcha', 400)
     await rds.delete(f"captcha:{payload.captcha_token}")
 
     # Rate limiting: max 5 attempts per 60 seconds per email
@@ -227,24 +230,29 @@ async def login(payload: AuthLogin, request: Request) -> JSONResponse:
             await rds.expire(rate_key, 60)
         if count > 5:
             await rds.decr(rate_key)
-            return JSONResponse(
-                {"detail": "تعداد تلاش‌ها زیاد است. بعداً دوباره تلاش کنید"},
-                status_code=429,
+            return err(
+                'تعداد تلاش‌ها زیاد است. بعداً دوباره تلاش کنید',
+                'Too many attempts. Try again later.',
+                429,
             )
     except Exception:
         pass  # Redis failure -> allow through
 
     """Authenticate user with email/password. Includes account lockout protection."""
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     # Check lockout before attempting authentication
     lockout_id = f'login_ip:{payload.email}'  # Use email as primary identifier
     lockout_info = await get_lockout_info(lockout_id)
     if lockout_info['locked']:
         remaining = lockout_info['lockout_remaining_seconds']
+        # Carries an extra `retry_after` field alongside the bilingual detail,
+        # so this is built by hand rather than via err() (which only ever
+        # returns {detail, detail_en}) -- see handoff report.
         return JSONResponse(
             {'detail': 'حساب شما به دلیل تلاش‌های ناموفق زیاد موقتاً قفل شده است',
+             'detail_en': 'Your account is temporarily locked due to too many failed attempts.',
              'retry_after': remaining},
             status_code=423,
         )
@@ -256,9 +264,9 @@ async def login(payload: AuthLogin, request: Request) -> JSONResponse:
             # Record failed attempt for lockout tracking
             await record_failed_attempt(lockout_id)
             await _write_audit_log('auth.login_failed', details={'email': payload.email})
-            return JSONResponse({'detail': 'ایمیل یا رمز عبور اشتباه است'}, status_code=401)
+            return err('ایمیل یا رمز عبور اشتباه است', 'Incorrect email or password.', 401)
         if user.banned:
-            return JSONResponse({'detail': 'حساب شما مسدود شده است'}, status_code=403)
+            return err('حساب شما مسدود شده است', 'Your account has been suspended.', 403)
 
         # Successful login: clear any lockout
         await clear_lockout(lockout_id)
@@ -280,14 +288,14 @@ async def login(payload: AuthLogin, request: Request) -> JSONResponse:
 async def me(request: Request) -> JSONResponse:
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
     async with async_session() as session:
         res = await session.execute(User.__table__.select().where(User.id == uid))
         user = res.fetchone()
         if not user:
-            return JSONResponse({'detail': 'user not found | کاربر یافت نشد'}, status_code=404)
+            return err('کاربر یافت نشد', 'User not found.', 404)
         from fastapi.encoders import jsonable_encoder
         return JSONResponse(jsonable_encoder({
             'id': user.id, 'email': user.email, 'created_at': user.created_at,
@@ -306,9 +314,9 @@ async def referral_stats(request: Request) -> JSONResponse:
     """Get user's referral stats"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     async with async_session() as session:
         res = await session.execute(User.__table__.select().where(User.id == uid))
@@ -356,7 +364,7 @@ async def logout_all(request: Request) -> JSONResponse:
     """Revoke every active session for the authenticated user."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     raw_members = await rds.smembers(f'sessions:{uid}')
     tokens = list(raw_members or [])
     for tok in tokens:

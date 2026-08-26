@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from database import async_session
 from models import ApiKey
 from dependencies import _get_user_id, _hash_api_key, _write_audit_log
+from i18n import err
 
 router = APIRouter()
 
@@ -29,9 +30,9 @@ async def create_api_key(request: Request, payload: ApiKeyCreate) -> JSONRespons
     """Generate a new API key. The secret is shown only once."""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     raw_key = f'sk-{secrets.token_urlsafe(32)}'
     key_hash = _hash_api_key(raw_key)
@@ -42,7 +43,7 @@ async def create_api_key(request: Request, payload: ApiKeyCreate) -> JSONRespons
         try:
             expires_at = datetime.fromisoformat(payload.expires_at)
         except ValueError:
-            return JSONResponse({'detail': 'تاریخ انقضا نامعتبر است (فرمت ISO8601 مورد انتظار)'}, status_code=400)
+            return err('تاریخ انقضا نامعتبر است (فرمت ISO8601 مورد انتظار)', 'Invalid expiration date (ISO8601 format expected).', 400)
 
     async with async_session() as session:
         key = ApiKey(
@@ -67,9 +68,9 @@ async def list_api_keys(request: Request) -> JSONResponse:
     """List user's API keys (never expose raw key)"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     async with async_session() as session:
         res = await session.execute(
@@ -107,9 +108,9 @@ async def rotate_api_key(request: Request, key_id: int) -> JSONResponse:
     """
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     async with async_session() as session:
         res = await session.execute(
@@ -117,9 +118,9 @@ async def rotate_api_key(request: Request, key_id: int) -> JSONResponse:
         )
         row = res.fetchone()
         if row is None:
-            return JSONResponse({'detail': 'کلید یافت نشد'}, status_code=404)
+            return err('کلید یافت نشد', 'Key not found.', 404)
         if not row.active:
-            return JSONResponse({'detail': 'کلید غیرفعال است و قابل چرخش نیست'}, status_code=400)
+            return err('کلید غیرفعال است و قابل چرخش نیست', 'Key is inactive and cannot be rotated.', 400)
 
         raw_key = f'sk-{secrets.token_urlsafe(32)}'
         key_hash = _hash_api_key(raw_key)
@@ -146,9 +147,9 @@ async def revoke_api_key(request: Request, key_id: int) -> JSONResponse:
     """Revoke (deactivate) an API key"""
     uid = await _get_user_id(request)
     if not uid:
-        return JSONResponse({'detail': 'لطفاً وارد حساب خود شوید'}, status_code=401)
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
     if async_session is None:
-        return JSONResponse({'detail': 'پایگاه داده در دسترس نیست'}, status_code=500)
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
 
     async with async_session() as session:
         await session.execute(

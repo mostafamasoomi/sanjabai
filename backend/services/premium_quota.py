@@ -275,6 +275,11 @@ async def check_and_consume(uid: int, models: list[str]) -> Optional[dict]:
                     f'است. حدود {_fa_duration(int(ttl))} دیگر دوباره فعال '
                     'می‌شود. مدل‌های دیگر همچنان در دسترس شما هستند.'
                 ),
+                'message_en': (
+                    'Your premium-model allowance for this window is used up. It '
+                    f'resets in about {max(1, int(ttl) // 60)} minute(s). The other '
+                    'models are still available to you.'
+                ),
             }
 
         # Phase 2 -- consume. The first premium message of a bucket anchors

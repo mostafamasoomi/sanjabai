@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import sqlalchemy
@@ -53,7 +53,11 @@ class ProbeRefusal:
     PriceRefusal."""
 
     detail: str
-    audit: dict[str, Any]
+    #: The same refusal in English. Defaulted so an older construction still
+    #: type-checks; the endpoints fall back to `detail` when it is empty, so a
+    #: missing translation shows the Persian rather than nothing.
+    detail_en: str = ''
+    audit: dict[str, Any] = field(default_factory=dict)
 
 
 async def refuse_if_unprobed(session, model_ids: Sequence[str]) -> ProbeRefusal | None:
@@ -101,6 +105,11 @@ async def refuse_if_unprobed(session, model_ids: Sequence[str]) -> ProbeRefusal 
                 'پروب زنده موفق ارائه می‌شود، و تا وقتی این بررسی ممکن نباشد '
                 'فعال‌سازی پذیرفته نمی‌شود.'
             ),
+            detail_en=(
+                'The live-probe check could not be run, so nothing was enabled. '
+                'A model is only served after a successful live probe, and while '
+                'that check is unavailable the change is refused.'
+            ),
             audit={'model_count': len(ids), 'ids': ids[:50],
                    'reason': f'probe gate could not read model_health_state: {type(e).__name__}'},
         )
@@ -114,14 +123,21 @@ async def refuse_if_unprobed(session, model_ids: Sequence[str]) -> ProbeRefusal 
 
     shown = unprobed[:_MAX_NAMED_IDS]
     names = '، '.join(f'«{m}»' for m in shown)
+    names_en = ', '.join(f'"{m}"' for m in shown)
     remainder = len(unprobed) - len(shown)
     if remainder > 0:
         names += f' و {remainder} مدل دیگر'
+        names_en += f' and {remainder} more'
     return ProbeRefusal(
         detail=(
             f'این مدل‌ها هنوز پروب زنده موفق ندارند و قابل فعال‌سازی نیستند: {names}. '
             'مدل فقط بعد از پروب زنده موفق به کاربر ارائه می‌شود -- ابتدا «تست زنده» '
             'را روی این مدل‌ها اجرا کنید.'
+        ),
+        detail_en=(
+            f'These models have no successful live probe yet and cannot be '
+            f'enabled: {names_en}. A model is only offered to users after a '
+            f'successful live probe -- run "Live test" on them first.'
         ),
         audit={'model_count': len(ids), 'unprobed_count': len(unprobed), 'unprobed_ids': unprobed[:50],
                'reason': "no confirmed live probe (model_health_state.last_ok_at IS NULL or no row)"},

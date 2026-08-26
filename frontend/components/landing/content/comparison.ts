@@ -1,4 +1,8 @@
 import { dict } from '@/lib/i18n'
+import type { Lang } from '@/components/LanguageToggle'
+import { faNum } from '@/lib/format'
+import { useCatalog } from '@/lib/useCatalog'
+import { modelCount } from '@/lib/claims'
 
 /* ── Comparison ───────────────────────────────────────────────────────────
    Every "sanjabai" cell restates a claim already established elsewhere in
@@ -13,11 +17,20 @@ export interface ComparisonRow {
   subscription: string
 }
 
+/** Same shape as `ComparisonRow`, but the first row's `sanjabai` cell is a
+ *  function of the live model count instead of a fixed string — it used to
+ *  hardcode a fixed model count (docs/product-contract.md §4). Resolved to a plain
+ *  `ComparisonRow[]` in `useComparisonContent()` below before it reaches the
+ *  component. */
+type ComparisonRowTemplate = Omit<ComparisonRow, 'sanjabai'> & {
+  sanjabai: string | ((count: number | null) => string)
+}
+
 const FA = {
   rows: [
     {
       label: 'تعداد مدل‌های در دسترس',
-      sanjabai: '۲۳ مدل، با یک حساب',
+      sanjabai: (count: number | null) => (count != null ? `${faNum(count)} مدل، با یک حساب` : 'مدل‌های متعدد، با یک حساب'),
       subscription: 'معمولاً محدود به یک خانواده‌ی مدل',
     },
     {
@@ -40,14 +53,14 @@ const FA = {
       sanjabai: 'API سازگار با OpenAI؛ فقط آدرس پایه را عوض کنید',
       subscription: 'بسته به سرویس، متفاوت',
     },
-  ] satisfies ComparisonRow[],
+  ] satisfies ComparisonRowTemplate[],
 }
 
 const EN: typeof FA = {
   rows: [
     {
       label: 'Models available',
-      sanjabai: '23 models, one account',
+      sanjabai: (count) => (count != null ? `${count} model${count === 1 ? '' : 's'}, one account` : 'Multiple models, one account'),
       subscription: 'Usually limited to one model family',
     },
     {
@@ -73,4 +86,21 @@ const EN: typeof FA = {
   ],
 }
 
-export const comparisonContent = dict(FA, EN)
+const comparisonContentFor = dict(FA, EN)
+
+/** Resolves the comparison table for a language, filling in the live model
+ *  count in the first row — see the hook-inside-a-plain-name note in
+ *  Hero.strings.ts. */
+function useComparisonContent(lang: Lang): { rows: ComparisonRow[] } {
+  const { models, loading } = useCatalog()
+  const count = !loading && modelCount(models) > 0 ? modelCount(models) : null
+  const base = comparisonContentFor(lang)
+  return {
+    rows: base.rows.map((row) => ({
+      ...row,
+      sanjabai: typeof row.sanjabai === 'function' ? row.sanjabai(count) : row.sanjabai,
+    })),
+  }
+}
+
+export const comparisonContent = useComparisonContent

@@ -1,4 +1,8 @@
 import { dict } from '@/lib/i18n'
+import type { Lang } from '@/components/LanguageToggle'
+import { faNum } from '@/lib/format'
+import { useCatalog } from '@/lib/useCatalog'
+import { modelCount } from '@/lib/claims'
 import {
   API_BASE_URL,
   MIN_TOPUP_LABEL_FA,
@@ -7,11 +11,21 @@ import {
 
 /* ── FAQ ──────────────────────────────────────────────────────────────────── */
 
+/* The first answer used to hardcode a fixed model count (docs/product-contract.md
+   §4: model-count claims require a live catalog query). That one answer's
+   `a` is now a function of the live count; every other item stays a plain
+   string. `count` is `null` while the catalog is loading or on fetch
+   failure (see `FAQ()` below for the Server Component / JSON-LD path, and
+   `faqContent()` for the client-rendered accordion), in which case the
+   answer omits the number rather than flashing "0". */
 const FA = {
   items: [
     {
       q: 'چه مدل‌هایی در دسترس است؟',
-      a: 'در حال حاضر ۲۳ مدل گفتگو، از جمله DeepSeek V4، Mistral Large، Gemini Flash، Llama 3.3، GPT-OSS، Gemma، MiMo، Kimi و Tencent Hy3. فهرست کامل به همراه تعرفه و اندازه‌ی زمینه‌ی هر مدل در صفحه‌ی مدل‌ها آمده است.',
+      a: (count: number | null) =>
+        count != null
+          ? `در حال حاضر ${faNum(count)} مدل گفتگو، از جمله DeepSeek V4، Mistral Large، Gemini Flash، Llama 3.3، GPT-OSS، Gemma، MiMo، Kimi و Tencent Hy3. فهرست کامل به همراه تعرفه و اندازه‌ی زمینه‌ی هر مدل در صفحه‌ی مدل‌ها آمده است.`
+          : 'در حال حاضر چند مدل گفتگو، از جمله DeepSeek V4، Mistral Large، Gemini Flash، Llama 3.3، GPT-OSS، Gemma، MiMo، Kimi و Tencent Hy3. فهرست کامل به همراه تعرفه و اندازه‌ی زمینه‌ی هر مدل در صفحه‌ی مدل‌ها آمده است.',
     },
     {
       q: 'چطور هزینه محاسبه می‌شود؟',
@@ -40,7 +54,10 @@ const EN: typeof FA = {
   items: [
     {
       q: 'Which models are available?',
-      a: '23 chat models today, including DeepSeek V4, Mistral Large, Gemini Flash, Llama 3.3, GPT-OSS, Gemma, MiMo, Kimi, and Tencent Hy3. The full list, with pricing and context size for each model, is on the models page.',
+      a: (count) =>
+        count != null
+          ? `${count} chat model${count === 1 ? '' : 's'} today, including DeepSeek V4, Mistral Large, Gemini Flash, Llama 3.3, GPT-OSS, Gemma, MiMo, Kimi, and Tencent Hy3. The full list, with pricing and context size for each model, is on the models page.`
+          : 'Multiple chat models are available today, including DeepSeek V4, Mistral Large, Gemini Flash, Llama 3.3, GPT-OSS, Gemma, MiMo, Kimi, and Tencent Hy3. The full list, with pricing and context size for each model, is on the models page.',
     },
     {
       q: 'How is cost calculated?',
@@ -65,11 +82,31 @@ const EN: typeof FA = {
   ],
 }
 
-export const faqContent = dict(FA, EN)
+const faqContentFor = dict(FA, EN)
+
+/** Resolves the FAQ items for a language, filling in the live model count in
+ *  the first answer — see the hook-inside-a-plain-name note in
+ *  Hero.strings.ts. */
+function useFaqContent(lang: Lang) {
+  const { models, loading } = useCatalog()
+  const count = !loading && modelCount(models) > 0 ? modelCount(models) : null
+  const base = faqContentFor(lang)
+  return { items: base.items.map((item) => ({ q: item.q, a: typeof item.a === 'function' ? item.a(count) : item.a })) }
+}
+
+export const faqContent = useFaqContent
 
 /** Backward-compatible flat array for the JSON-LD FAQ schema in app/page.tsx
  *  (a Server Component outside this scope). Structured data isn't rendered
  *  through the language toggle, so it stays Persian — the same array the
  *  Persian UI already showed, just re-derived from FA.items instead of
- *  duplicated. */
-export const FAQ = FA.items
+ *  duplicated.
+ *
+ *  Now a function of the live model count instead of a flat array: a Server
+ *  Component can't call the `useCatalog()` hook the client-rendered accordion
+ *  above uses, so app/page.tsx fetches the count itself
+ *  (`fetchLiveModelCount()`) and passes it in here. `count` is `null` when
+ *  that fetch fails, in which case the first answer omits the number. */
+export function FAQ(count: number | null) {
+  return FA.items.map((item) => ({ q: item.q, a: typeof item.a === 'function' ? item.a(count) : item.a }))
+}

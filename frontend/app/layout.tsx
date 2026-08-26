@@ -1,28 +1,48 @@
 import type { Metadata, Viewport } from 'next'
 import { AppShell } from '@/components/AppShell'
+import { fetchLiveModelCount } from '@/lib/claims'
+import { faNum } from '@/lib/format'
 import './globals.css'
 import '../styles-chat-sidebar.css'
 
-export const metadata: Metadata = {
-  metadataBase: new URL('https://sanjabai.com'),
-  title: {
-    default: 'Sanjabai — پلتفرم هوش مصنوعی فارسی',
-    template: '%s | Sanjabai',
-  },
-  description:
-    'دسترسی به ۲۳ مدل هوش مصنوعی از یک پنل: چت چندمدلی، ساخت عامل، و API سازگار با OpenAI — با پرداخت به تومان به‌ازای مصرف و پشتیبانی فارسی.',
-  applicationName: 'Sanjabai',
-  // Only models the platform actually serves (backend/litellm_config.yaml).
-  keywords: ['هوش مصنوعی', 'DeepSeek', 'Mistral', 'Gemini', 'Llama', 'API هوش مصنوعی'],
-  openGraph: {
-    type: 'website',
-    locale: 'fa_IR',
-    siteName: 'Sanjabai',
-    title: 'Sanjabai — پلتفرم هوش مصنوعی فارسی',
-    description:
-      'چت با ۲۳ مدل هوش مصنوعی، ساخت عامل، و یک API سازگار با OpenAI. پرداخت به تومان به‌ازای مصرف، بدون فیلترشکن.',
-  },
-  robots: { index: true, follow: true },
+/**
+ * Model-count claims require a live catalog query (docs/product-contract.md
+ * §4) — the number used to be hand-typed here and drifted from the real
+ * catalog every time a model was added or pulled. `fetchLiveModelCount()`
+ * hits the backend directly (this runs before any Next.js rewrite exists)
+ * and returns `null` on any failure, in which case the copy below omits the
+ * number entirely rather than showing a stale or fabricated one.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const count = await fetchLiveModelCount()
+  const description =
+    count != null
+      ? `دسترسی به ${faNum(count)} مدل هوش مصنوعی از یک پنل: چت چندمدلی، ساخت عامل، و API سازگار با OpenAI — با پرداخت به تومان به‌ازای مصرف و پشتیبانی فارسی.`
+      : 'دسترسی به مدل‌های متعدد هوش مصنوعی از یک پنل: چت چندمدلی، ساخت عامل، و API سازگار با OpenAI — با پرداخت به تومان به‌ازای مصرف و پشتیبانی فارسی.'
+  const ogDescription =
+    count != null
+      ? `چت با ${faNum(count)} مدل هوش مصنوعی، ساخت عامل، و یک API سازگار با OpenAI. پرداخت به تومان به‌ازای مصرف، بدون فیلترشکن.`
+      : 'چت با مدل‌های متعدد هوش مصنوعی، ساخت عامل، و یک API سازگار با OpenAI. پرداخت به تومان به‌ازای مصرف، بدون فیلترشکن.'
+
+  return {
+    metadataBase: new URL('https://sanjabai.com'),
+    title: {
+      default: 'Sanjabai — پلتفرم هوش مصنوعی فارسی',
+      template: '%s | Sanjabai',
+    },
+    description,
+    applicationName: 'Sanjabai',
+    // Only models the platform actually serves (backend/litellm_config.yaml).
+    keywords: ['هوش مصنوعی', 'DeepSeek', 'Mistral', 'Gemini', 'Llama', 'API هوش مصنوعی'],
+    openGraph: {
+      type: 'website',
+      locale: 'fa_IR',
+      siteName: 'Sanjabai',
+      title: 'Sanjabai — پلتفرم هوش مصنوعی فارسی',
+      description: ogDescription,
+    },
+    robots: { index: true, follow: true },
+  }
 }
 
 export const viewport: Viewport = {

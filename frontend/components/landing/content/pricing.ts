@@ -1,4 +1,8 @@
 import { dict } from '@/lib/i18n'
+import type { Lang } from '@/components/LanguageToggle'
+import { faNum } from '@/lib/format'
+import { useCatalog } from '@/lib/useCatalog'
+import { modelCount } from '@/lib/claims'
 import { MIN_TOPUP_LABEL_FA, MIN_TOPUP_LABEL_EN } from './constants'
 
 /* ── Pricing ──────────────────────────────────────────────────────────────────
@@ -16,6 +20,14 @@ export interface PricingColumn {
   href: string
   featured?: boolean
 }
+
+/** Same shape as `PricingColumn`, but one `features` line ("Access to all
+ *  N models") is a function of the live model count instead of a fixed
+ *  string (docs/product-contract.md §4). Resolved to a plain
+ *  `PricingColumn[]` in `usePricingContent()` below before it reaches the
+ *  component. */
+type FeatureLine = string | ((count: number | null) => string)
+type PricingColumnTemplate = Omit<PricingColumn, 'features'> & { features: FeatureLine[] }
 
 const FA = {
   columns: [
@@ -41,7 +53,7 @@ const FA = {
         'قیمت هر مدل جداگانه، به تومان به ازای هر ۱ میلیون توکن',
         'هزینه‌ی تخمینی هر پیام پیش از ارسال',
         'بدون اشتراک ماهانه و بدون انقضای اعتبار',
-        'دسترسی به هر ۲۳ مدل',
+        (count: number | null) => (count != null ? `دسترسی به هر ${faNum(count)} مدل` : 'دسترسی به همه‌ی مدل‌ها'),
         'کلید API با سقف مصرف',
       ],
       cta: 'شارژ کیف پول',
@@ -61,7 +73,7 @@ const FA = {
       cta: 'تماس با ما',
       href: '/profile',
     },
-  ] satisfies PricingColumn[],
+  ] satisfies PricingColumnTemplate[],
 }
 
 const EN: typeof FA = {
@@ -88,7 +100,7 @@ const EN: typeof FA = {
         'Separate price per model, in Toman per 1M tokens',
         'Estimated cost per message shown before sending',
         'No monthly subscription, balance never expires',
-        'Access to all 23 models',
+        (count) => (count != null ? `Access to all ${count} model${count === 1 ? '' : 's'}` : 'Access to all models'),
         'API key with a usage cap',
       ],
       cta: 'Top up wallet',
@@ -111,4 +123,21 @@ const EN: typeof FA = {
   ],
 }
 
-export const pricingContent = dict(FA, EN)
+const pricingContentFor = dict(FA, EN)
+
+/** Resolves the pricing columns for a language, filling in the live model
+ *  count in the "Access to all N models" feature line — see the
+ *  hook-inside-a-plain-name note in Hero.strings.ts. */
+function usePricingContent(lang: Lang): { columns: PricingColumn[] } {
+  const { models, loading } = useCatalog()
+  const count = !loading && modelCount(models) > 0 ? modelCount(models) : null
+  const base = pricingContentFor(lang)
+  return {
+    columns: base.columns.map((column) => ({
+      ...column,
+      features: column.features.map((line) => (typeof line === 'function' ? line(count) : line)),
+    })),
+  }
+}
+
+export const pricingContent = usePricingContent

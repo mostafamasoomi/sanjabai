@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 
+import { fetchLiveModelCount } from '@/lib/claims'
+import { faNum } from '@/lib/format'
 import { LandingHeader } from '@/components/landing/LandingHeader'
 import { Hero } from '@/components/landing/Hero'
 import { ProviderMarquee } from '@/components/landing/ProviderMarquee'
@@ -17,24 +19,38 @@ import { FAQ } from '@/components/landing/content'
 
 import './landing.css'
 
-export const metadata: Metadata = {
-  title: 'Sanjabai — دسترسی به همه‌ی مدل‌های هوش مصنوعی با یک اشتراک',
-  description:
-    'با ۲۳ مدل هوش مصنوعی — DeepSeek، Mistral، Gemini، Llama و بیشتر — چت کنید، عامل بسازید و همه را با یک API سازگار با OpenAI به محصولتان وصل کنید. پرداخت به تومان به‌ازای مصرف، بدون اشتراک ماهانه و بدون نیاز به فیلترشکن.',
-  alternates: { canonical: '/' },
+// Model-count claim requires a live catalog query (docs/product-contract.md
+// §4) — see the identical note in app/layout.tsx. Falls back to count-free
+// copy rather than a stale hardcoded number when the catalog fetch fails.
+export async function generateMetadata(): Promise<Metadata> {
+  const count = await fetchLiveModelCount()
+  const description =
+    count != null
+      ? `با ${faNum(count)} مدل هوش مصنوعی — DeepSeek، Mistral، Gemini، Llama و بیشتر — چت کنید، عامل بسازید و همه را با یک API سازگار با OpenAI به محصولتان وصل کنید. پرداخت به تومان به‌ازای مصرف، بدون اشتراک ماهانه و بدون نیاز به فیلترشکن.`
+      : 'با مدل‌های متعدد هوش مصنوعی — DeepSeek، Mistral، Gemini، Llama و بیشتر — چت کنید، عامل بسازید و همه را با یک API سازگار با OpenAI به محصولتان وصل کنید. پرداخت به تومان به‌ازای مصرف، بدون اشتراک ماهانه و بدون نیاز به فیلترشکن.'
+
+  return {
+    title: 'Sanjabai — دسترسی به همه‌ی مدل‌های هوش مصنوعی با یک اشتراک',
+    description,
+    alternates: { canonical: '/' },
+  }
 }
 
-const faqJsonLd = {
-  '@context': 'https://schema.org',
-  '@type': 'FAQPage',
-  mainEntity: FAQ.map((item) => ({
-    '@type': 'Question',
-    name: item.q,
-    acceptedAnswer: { '@type': 'Answer', text: item.a },
-  })),
-}
+export default async function LandingPage() {
+  // Structured data isn't language-toggle-aware (stays Persian, see the note
+  // on `FAQ` in components/landing/content/faq.ts) but it must still reflect
+  // the live model count rather than a hardcoded one.
+  const count = await fetchLiveModelCount()
+  const faqJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: FAQ(count).map((item) => ({
+      '@type': 'Question',
+      name: item.q,
+      acceptedAnswer: { '@type': 'Answer', text: item.a },
+    })),
+  }
 
-export default function LandingPage() {
   return (
     <div className="lp">
       <LandingHeader />

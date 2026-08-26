@@ -8,6 +8,7 @@ import { useCatalog, priceBand, PRICE_BAND_LABEL } from '@/lib/useCatalog'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
+import { navIcon } from '@/lib/i18n'
 import { newAssistantPageStrings } from './page.strings'
 
 /* ═══════════════════════════════════════════════════════════════
@@ -98,7 +99,7 @@ export default function CreateAssistantPage() {
         onClick={() => router.push('/assistants')}
         style={{ marginBottom: '1rem', fontSize: '0.8125rem' }}
       >
-        <Icon name="arrowLeft" size={14} />
+        <Icon name={navIcon(lang, 'back')} size={14} />
         {s.backAction}
       </button>
 

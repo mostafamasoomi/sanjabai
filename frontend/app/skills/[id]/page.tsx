@@ -7,7 +7,7 @@ import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
-import { fmt } from '@/lib/i18n'
+import { fmt, navIcon } from '@/lib/i18n'
 import {
   type Skill,
   type UseResult,
@@ -173,7 +173,7 @@ export default function SkillDetailPage() {
           </p>
         </div>
         <button className="btn btn-primary" onClick={() => router.push('/skills')}>
-          <Icon name="arrowLeft" size={16} />
+          <Icon name={navIcon(lang, 'back')} size={16} />
           {s.backToMarketplace}
         </button>
       </div>
@@ -190,7 +190,7 @@ export default function SkillDetailPage() {
         onClick={() => router.push('/skills')}
         style={{ marginBottom: '1rem', fontSize: '0.8125rem' }}
       >
-        <Icon name="arrowLeft" size={14} />
+        <Icon name={navIcon(lang, 'back')} size={14} />
         {s.backToMarketplace}
       </button>
 

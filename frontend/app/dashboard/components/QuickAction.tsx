@@ -1,4 +1,6 @@
 import { Icon, type IconName } from '@/components/ui/Icon'
+import { navIcon } from '@/lib/i18n'
+import { type Lang } from '@/components/LanguageToggle'
 
 /* ═══════════════════════════════════════════════════════════════
    Quick Action Button
@@ -9,11 +11,13 @@ export function QuickAction({
   label,
   description,
   onClick,
+  lang,
 }: {
   icon: IconName
   label: string
   description: string
   onClick: () => void
+  lang: Lang
 }) {
   return (
     <button
@@ -52,7 +56,7 @@ export function QuickAction({
         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>{description}</div>
       </div>
       <span className="shrink-0 text-[var(--text-muted)]">
-        <Icon name="arrowLeft" size={16} />
+        <Icon name={navIcon(lang, 'forward')} size={16} />
       </span>
     </button>
   )

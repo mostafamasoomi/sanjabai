@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
+import { navIcon } from '@/lib/i18n'
 import { walletPageStrings } from './page.strings'
 import EntitlementPanel from './components/EntitlementPanel'
 import { BalanceSkeleton, TopupSkeleton, TableSkeleton, PackagesSkeleton } from './components/WalletSkeletons'
@@ -86,7 +87,7 @@ export default function WalletPage() {
           <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>{s.needLoginDesc}</p>
           <Link href="/login" className="btn btn-lg btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             {s.login}
-            <Icon name="arrowLeft" size={16} />
+            <Icon name={navIcon(lang, 'forward')} size={16} />
           </Link>
         </div>
       </div>

@@ -149,6 +149,19 @@ export function dirFor(lang: Lang): 'rtl' | 'ltr' {
   return lang === 'en' ? 'ltr' : 'rtl'
 }
 
+/** Which `Icon` name points the right way for a directional action.
+ *
+ *  `arrowLeft`/`arrowRight` in components/ui/Icon.tsx are plain SVGs with no
+ *  dir-awareness of their own -- a "back" action needs the arrow pointing
+ *  toward reading-start, and "forward" needs it pointing toward reading-end,
+ *  which flips between rtl and ltr. Call sites pick 'back' or 'forward' by
+ *  meaning; this picks the icon name. */
+export function navIcon(lang: Lang, direction: 'back' | 'forward'): 'arrowLeft' | 'arrowRight' {
+  const rtl = dirFor(lang) === 'rtl'
+  if (direction === 'back') return rtl ? 'arrowRight' : 'arrowLeft'
+  return rtl ? 'arrowLeft' : 'arrowRight'
+}
+
 /** The refusal text from a failed API response body, in the active language.
  *
  *  The backend answers `{"detail": "<fa>", "detail_en": "<en>"}` — the Persian

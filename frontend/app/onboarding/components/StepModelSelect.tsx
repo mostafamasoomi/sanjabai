@@ -5,7 +5,7 @@ import { type ModelCatalogItem } from '@/types/catalog'
 import { Icon } from '@/components/ui/Icon'
 import { Skeleton } from '@/components/ui'
 import { useLang } from '@/components/LanguageToggle'
-import { fmt } from '@/lib/i18n'
+import { fmt, navIcon } from '@/lib/i18n'
 import { formatPriceShort, formatContext } from '../onboardingHelpers'
 import { onboardingHelpersStrings } from '../onboardingHelpers.strings'
 import { stepModelSelectStrings } from './StepModelSelect.strings'
@@ -106,7 +106,7 @@ export function StepModelSelect({
 
       <div className="flex items-center justify-between mt-8 gap-3">
         <button className="btn btn-ghost" onClick={onBack}>
-          <Icon name="arrowRight" size={16} />
+          <Icon name={navIcon(lang, 'back')} size={16} />
           {s.back}
         </button>
         <button
@@ -114,7 +114,7 @@ export function StepModelSelect({
           onClick={onNext}
         >
           {s.next}
-          <Icon name="arrowLeft" size={18} />
+          <Icon name={navIcon(lang, 'forward')} size={18} />
         </button>
       </div>
     </div>

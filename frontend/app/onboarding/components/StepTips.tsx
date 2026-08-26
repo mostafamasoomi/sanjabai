@@ -2,6 +2,7 @@
 
 import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
+import { navIcon } from '@/lib/i18n'
 import { stepTipsStrings } from './StepTips.strings'
 
 export function StepTips({
@@ -61,7 +62,7 @@ export function StepTips({
 
       <div className="flex items-center justify-between mt-8 gap-3">
         <button className="btn btn-ghost" onClick={onBack}>
-          <Icon name="arrowRight" size={16} />
+          <Icon name={navIcon(lang, 'back')} size={16} />
           {s.back}
         </button>
         <button className="btn btn-primary btn-lg" onClick={onFinish} disabled={redirecting}>

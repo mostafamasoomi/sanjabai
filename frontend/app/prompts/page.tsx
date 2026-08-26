@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
-import { fmt } from '@/lib/i18n'
+import { fmt, navIcon } from '@/lib/i18n'
 import { promptsPageStrings } from './page.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -233,7 +233,7 @@ export default function PromptsPage() {
                 <div className="prompt-card-footer">
                   <span className="prompt-card-cta">
                     {s.useAction}
-                    <Icon name="arrowLeft" size={14} />
+                    <Icon name={navIcon(lang, 'forward')} size={14} />
                   </span>
                 </div>
               </button>

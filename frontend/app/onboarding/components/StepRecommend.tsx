@@ -3,6 +3,7 @@
 import { Icon } from '@/components/ui/Icon'
 import { Skeleton } from '@/components/ui'
 import { useLang } from '@/components/LanguageToggle'
+import { navIcon } from '@/lib/i18n'
 import { formatPrice, formatContext } from '../onboardingHelpers'
 import { stepRecommendStrings } from './StepRecommend.strings'
 import { type Goal, type Recommendation } from '../types'
@@ -92,7 +93,7 @@ export function StepRecommend({
 
       <div className="flex items-center justify-between mt-8 gap-3">
         <button className="btn btn-ghost" onClick={onBack} disabled={catalogLoading}>
-          <Icon name="arrowRight" size={16} />
+          <Icon name={navIcon(lang, 'back')} size={16} />
           {s.back}
         </button>
         <div className="flex items-center gap-3">

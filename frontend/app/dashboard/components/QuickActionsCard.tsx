@@ -43,30 +43,35 @@ export function QuickActionsCard({
           label={s.chatLabel}
           description={s.chatDesc}
           onClick={onChat}
+          lang={lang}
         />
         <QuickAction
           icon="wallet"
           label={s.walletLabel}
           description={s.walletDesc}
           onClick={onWallet}
+          lang={lang}
         />
         <QuickAction
           icon="models"
           label={s.modelsLabel}
           description={s.modelsDesc(f.num(modelCount))}
           onClick={onModels}
+          lang={lang}
         />
         <QuickAction
           icon="payment"
           label={s.creditLabel}
           description={s.creditDesc}
           onClick={onCreditPackages}
+          lang={lang}
         />
         <QuickAction
           icon="settings"
           label={s.billingLabel}
           description={s.billingDesc}
           onClick={onBillingSettings}
+          lang={lang}
         />
       </div>
     </div>

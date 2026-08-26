@@ -2,6 +2,7 @@
 
 import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
+import { navIcon } from '@/lib/i18n'
 import { GOALS } from '../constants'
 import { stepGoalStrings } from './StepGoal.strings'
 
@@ -60,7 +61,7 @@ export function StepGoal({
       </div>
       <div className="flex items-center justify-between mt-8 gap-3">
         <button className="btn btn-ghost" onClick={onBack}>
-          <Icon name="arrowRight" size={16} />
+          <Icon name={navIcon(lang, 'back')} size={16} />
           {s.back}
         </button>
         <button
@@ -69,7 +70,7 @@ export function StepGoal({
           onClick={onNext}
         >
           {s.next}
-          <Icon name="arrowLeft" size={18} />
+          <Icon name={navIcon(lang, 'forward')} size={18} />
         </button>
       </div>
     </div>

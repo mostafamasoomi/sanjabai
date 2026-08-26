@@ -2,6 +2,7 @@
 
 import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
+import { navIcon } from '@/lib/i18n'
 import { stepWelcomeStrings } from './StepWelcome.strings'
 
 export function StepWelcome({ userName, onNext }: { userName: string; onNext: () => void }) {
@@ -29,7 +30,7 @@ export function StepWelcome({ userName, onNext }: { userName: string; onNext: ()
       </p>
       <button className="btn btn-primary btn-lg mt-8" onClick={onNext}>
         {s.start}
-        <Icon name="arrowLeft" size={18} />
+        <Icon name={navIcon(lang, 'forward')} size={18} />
       </button>
     </div>
   )

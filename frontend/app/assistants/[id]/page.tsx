@@ -8,7 +8,7 @@ import { useCatalog, priceBand, PRICE_BAND_LABEL } from '@/lib/useCatalog'
 import { toast } from '@/components/ui'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
-import { fmt } from '@/lib/i18n'
+import { fmt, navIcon } from '@/lib/i18n'
 import { assistantDetailPageStrings } from './page.strings'
 
 /* ═══════════════════════════════════════════════════════════════
@@ -213,7 +213,7 @@ export default function AssistantDetailPage() {
           </p>
         </div>
         <button className="btn btn-primary" onClick={() => router.push('/assistants')}>
-          <Icon name="arrowLeft" size={16} />
+          <Icon name={navIcon(lang, 'back')} size={16} />
           {s.backToAssistants}
         </button>
       </div>
@@ -228,7 +228,7 @@ export default function AssistantDetailPage() {
         onClick={() => router.push('/assistants')}
         style={{ marginBottom: '1rem', fontSize: '0.8125rem' }}
       >
-        <Icon name="arrowLeft" size={14} />
+        <Icon name={navIcon(lang, 'back')} size={14} />
         {s.backToAssistants}
       </button>
 

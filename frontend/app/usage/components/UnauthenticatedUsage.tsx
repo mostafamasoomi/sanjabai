@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
+import { navIcon } from '@/lib/i18n'
 import { unauthenticatedUsageStrings } from './UnauthenticatedUsage.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -24,7 +25,7 @@ export function UnauthenticatedUsage() {
         <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>{s.desc}</p>
         <Link href="/login" className="btn btn-lg btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           {s.login}
-          <Icon name="arrowLeft" size={16} />
+          <Icon name={navIcon(lang, 'forward')} size={16} />
         </Link>
       </div>
     </div>

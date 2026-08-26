@@ -2,6 +2,7 @@
 
 import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
+import { navIcon } from '@/lib/i18n'
 import { recentActivityCardStrings } from './RecentActivityCard.strings'
 import { LedgerRow } from './LedgerRow'
 import type { LedgerEntry } from '../types'
@@ -38,7 +39,7 @@ export function RecentActivityCard({
           style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem' }}
         >
           {s.viewAll}
-          <Icon name="arrowLeft" size={12} />
+          <Icon name={navIcon(lang, 'forward')} size={12} />
         </button>
       </div>
 

@@ -24,7 +24,7 @@ from i18n import err
 from database import async_session
 from models import RagDocument
 from dependencies import _get_user_id
-from services.doc_processor import process_document, SUPPORTED_TYPES, MAX_FILE_SIZE
+from services.doc_processor import process_document, DocProcessorError, SUPPORTED_TYPES, MAX_FILE_SIZE
 from services.rag import query_documents
 
 logger = logging.getLogger(__name__)
@@ -120,12 +120,8 @@ async def rag_upload(request: Request, file: UploadFile = File(...)) -> JSONResp
             file_content=content,
             filename=filename,
         )
-    except ValueError as e:
-        # `str(e)` is a services/doc_processor.py-authored message (out of
-        # this module's scope) -- its English sibling is not visible at
-        # this call site, so it stays Persian-only-shaped for now (see
-        # handoff notes).
-        return JSONResponse({'detail': str(e)}, status_code=400)
+    except DocProcessorError as e:
+        return err(e.fa, e.en, 400)
     except Exception as e:
         logger.error(f'RAG upload failed uid={uid}: {e}')
         return err('خطا در پردازش سند', 'Error processing the document.', 500)

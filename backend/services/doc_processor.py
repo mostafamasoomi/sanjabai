@@ -27,6 +27,20 @@ MAX_CHUNKS_PER_USER = 1000
 SUPPORTED_TYPES = {'pdf', 'txt', 'md', 'csv', 'json'}
 
 
+class DocProcessorError(ValueError):
+    """A bilingual ValueError raised by this module.
+
+    Carries both a Persian message (`fa`, used as `str(e)` for backward
+    compatibility) and its English sibling (`en`), so callers can surface
+    both via the `err()`/`bi()` pattern instead of a Persian-only string.
+    """
+
+    def __init__(self, fa: str, en: str):
+        super().__init__(fa)
+        self.fa = fa
+        self.en = en
+
+
 def _extract_text(content: bytes, filename: str) -> str:
     """Extract text from file content."""
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
@@ -36,7 +50,10 @@ def _extract_text(content: bytes, filename: str) -> str:
     elif ext in ('txt', 'md', 'csv', 'json'):
         return content.decode('utf-8', errors='replace')
     else:
-        raise ValueError(f'Unsupported file type: {ext}')
+        raise DocProcessorError(
+            fa=f'نوع فایل پشتیبانی نمی‌شود: {ext}',
+            en=f'Unsupported file type: {ext}',
+        )
 
 
 def _extract_pdf(content: bytes) -> str:
@@ -95,7 +112,10 @@ async def _check_limits(user_id: int) -> None:
         )
         doc_count = res.scalar()
         if doc_count and doc_count >= MAX_DOCUMENTS_PER_USER:
-            raise ValueError(f'حداکثر {MAX_DOCUMENTS_PER_USER} سند مجاز است')
+            raise DocProcessorError(
+                fa=f'حداکثر {MAX_DOCUMENTS_PER_USER} سند مجاز است',
+                en=f'A maximum of {MAX_DOCUMENTS_PER_USER} documents is allowed.',
+            )
 
         # Chunk count
         res = await session.execute(
@@ -106,7 +126,10 @@ async def _check_limits(user_id: int) -> None:
         )
         chunk_count = res.scalar()
         if chunk_count and chunk_count >= MAX_CHUNKS_PER_USER:
-            raise ValueError(f'حداکثر {MAX_CHUNKS_PER_USER} بخش مجاز است')
+            raise DocProcessorError(
+                fa=f'حداکثر {MAX_CHUNKS_PER_USER} بخش مجاز است',
+                en=f'A maximum of {MAX_CHUNKS_PER_USER} chunks is allowed.',
+            )
 
 
 async def process_document(
@@ -121,7 +144,10 @@ async def process_document(
     """
     # Validate size
     if len(file_content) > MAX_FILE_SIZE:
-        raise ValueError(f'حجم فایل از {MAX_FILE_SIZE // (1024*1024)} مگابایت بیشتر است')
+        raise DocProcessorError(
+            fa=f'حجم فایل از {MAX_FILE_SIZE // (1024*1024)} مگابایت بیشتر است',
+            en=f'File size exceeds {MAX_FILE_SIZE // (1024*1024)} MB.',
+        )
 
     # Check limits
     await _check_limits(user_id)
@@ -129,11 +155,19 @@ async def process_document(
     # Extract text
     try:
         text = _extract_text(file_content, filename)
+    except DocProcessorError:
+        raise
     except Exception as e:
-        raise ValueError(f'خطا در استخراج متن: {e}')
+        raise DocProcessorError(
+            fa=f'خطا در استخراج متن: {e}',
+            en=f'Error extracting text: {e}',
+        )
 
     if not text or len(text.strip()) < 10:
-        raise ValueError('فایل خالی است یا متن قابل استخراج نیست')
+        raise DocProcessorError(
+            fa='فایل خالی است یا متن قابل استخراج نیست',
+            en='The file is empty or contains no extractable text.',
+        )
 
     content_hash = hashlib.sha256(text.encode()).hexdigest()
 

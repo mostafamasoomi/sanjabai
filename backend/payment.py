@@ -100,10 +100,11 @@ class CallbackResult:
     """Structured outcome of :func:`handle_payment_callback`."""
 
     def __init__(self, *, ok: bool, code: int = 200, detail: str = "",
-                 ref_id=None, amount=None):
+                 detail_en: str = "", ref_id=None, amount=None):
         self.ok = ok
         self.code = code
         self.detail = detail
+        self.detail_en = detail_en
         self.ref_id = ref_id
         self.amount = amount
 
@@ -113,6 +114,7 @@ class CallbackResult:
             "ref_id": self.ref_id,
             "amount": self.amount,
             "detail": self.detail,
+            "detail_en": self.detail_en,
         }
 
 
@@ -156,7 +158,11 @@ async def handle_payment_callback(
     :class:`SqlBillingRepo(session)`).
     """
     if status != "OK" or not authority:
-        return CallbackResult(ok=False, code=400, detail="payment cancelled or invalid")
+        return CallbackResult(
+            ok=False, code=400,
+            detail="پرداخت لغو شد یا نامعتبر است",
+            detail_en="payment cancelled or invalid",
+        )
 
     if verify_fn is None:
         verify_fn = verify_payment
@@ -167,7 +173,8 @@ async def handle_payment_callback(
         if payment is None:
             return CallbackResult(
                 ok=False, code=409,
-                detail="order not found or already processed (replay rejected)",
+                detail="سفارش یافت نشد یا قبلاً پردازش شده است",
+                detail_en="order not found or already processed (replay rejected)",
             )
 
         # 2. Amount integrity check (optional but recommended).
@@ -176,7 +183,8 @@ async def handle_payment_callback(
             if payment["amount"] != expected:
                 return CallbackResult(
                     ok=False, code=400,
-                    detail=f"amount mismatch: order={payment['amount']} expected={expected}",
+                    detail="مبلغ پرداخت‌شده با مبلغ مورد انتظار مطابقت ندارد",
+                    detail_en=f"amount mismatch: order={payment['amount']} expected={expected}",
                 )
 
         # 2b. Authority verification with the gateway.
@@ -186,7 +194,8 @@ async def handle_payment_callback(
             await repo.commit()
             return CallbackResult(
                 ok=False, code=400,
-                detail=verify.get("error", "verification failed") if verify else "verification failed",
+                detail="تأیید پرداخت با خطا مواجه شد",
+                detail_en=verify.get("error", "verification failed") if verify else "verification failed",
             )
 
         # 3. Atomically credit wallet + ledger, then mark completed.
@@ -208,6 +217,10 @@ async def handle_payment_callback(
         return CallbackResult(ok=True, code=200, ref_id=verify["ref_id"], amount=payment["amount"])
     except Exception as exc:  # pragma: no cover - defensive
         await repo.rollback()
-        return CallbackResult(ok=False, code=500, detail=f"internal error: {exc}")
+        return CallbackResult(
+            ok=False, code=500,
+            detail="خطای داخلی رخ داد",
+            detail_en=f"internal error: {exc}",
+        )
     finally:
         await repo.release_pending_lock(authority)

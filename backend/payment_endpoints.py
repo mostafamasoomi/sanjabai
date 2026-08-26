@@ -20,7 +20,7 @@ from dependencies import _get_user_id, _write_audit_log
 from payment import create_payment, verify_payment, PaymentRequest, handle_payment_callback, CallbackResult
 from services.billing import SqlBillingRepo
 from services.money import Money
-from i18n import err
+from i18n import bi, err
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -151,11 +151,13 @@ async def payment_callback(request: Request) -> JSONResponse:
             'credit_package': f'{BASE_URL}/wallet?payment=failed',
             'hermes_order': f'{BASE_URL}/hermes/order?payment=failed',
         }.get(payment_type, f'{BASE_URL}/wallet?payment=failed')
-        # NOT CONVERTED -- result.detail (payment.CallbackResult, out of
-        # scope) is English-only with no Persian sibling defined, and this
-        # response also carries a 'redirect' key err() doesn't support. See
-        # handoff report.
-        return JSONResponse({'detail': result.detail, 'redirect': fail_redirect}, status_code=result.code)
+        # result.detail/result.detail_en (payment.CallbackResult) are already
+        # bilingual; bi() is used instead of err() because this response also
+        # carries a 'redirect' key that err() doesn't support.
+        return JSONResponse(
+            bi({'redirect': fail_redirect}, detail=(result.detail, result.detail_en)),
+            status_code=result.code,
+        )
 
     redirect_path = '/wallet?payment=success'
     extra_data = {}

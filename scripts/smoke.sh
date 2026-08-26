@@ -132,10 +132,12 @@ fi
 # ── 6. Verify effective runtime mode ───────────────────────────────────────
 log "==> Checking effective runtime mode"
 mock_mode=$(docker compose -f "$COMPOSE_FILE" exec -T sanjabai_api sh -c 'printf "%s" "${MOCK_MODE:-}"' 2>/dev/null || true)
-if [ "$mock_mode" = "false" ]; then
-  ok "backend MOCK_MODE=false"
+# Nothing in the repo consumes MOCK_MODE anymore; unset means mock mode is off.
+# Fail only if it is explicitly set to something other than "false".
+if [ -z "$mock_mode" ] || [ "$mock_mode" = "false" ]; then
+  ok "backend MOCK_MODE=${mock_mode:-<unset>} (mock off)"
 else
-  bad "backend MOCK_MODE=${mock_mode:-<unset>} (expected false)"
+  bad "backend MOCK_MODE=${mock_mode} (expected false or unset)"
 fi
 
 # ── Summary ────────────────────────────────────────────────────────────────

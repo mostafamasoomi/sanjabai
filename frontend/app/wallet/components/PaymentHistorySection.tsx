@@ -33,7 +33,7 @@ export function PaymentHistorySection({ payments }: { payments: PaymentRecord[] 
               <tr>
                 <th>{s.colDate}</th>
                 <th>{s.colId}</th>
-                <th style={{ textAlign: 'left' }}>{s.colAmount}</th>
+                <th style={{ textAlign: 'start' }}>{s.colAmount}</th>
                 <th>{s.colStatus}</th>
               </tr>
             </thead>

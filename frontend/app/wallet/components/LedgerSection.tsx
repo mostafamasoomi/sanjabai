@@ -68,8 +68,8 @@ export function LedgerSection({
               <tr>
                 <th>{s.colDate}</th>
                 <th>{s.colDescription}</th>
-                <th style={{ textAlign: 'left' }}>{s.colAmount}</th>
-                <th style={{ textAlign: 'left' }}>{s.colBalance}</th>
+                <th style={{ textAlign: 'start' }}>{s.colAmount}</th>
+                <th style={{ textAlign: 'start' }}>{s.colBalance}</th>
               </tr>
             </thead>
             <tbody>

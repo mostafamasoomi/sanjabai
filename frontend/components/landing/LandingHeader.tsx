@@ -2,12 +2,16 @@
 
 import { useEffect, useState } from 'react'
 import { Icon } from '../ui/Icon'
-import { LanguageToggle } from '../LanguageToggle'
+import { LanguageToggle, useLang } from '../LanguageToggle'
 import { ThemeToggle } from '../ThemeToggle'
 import { BrandMark } from './primitives'
-import { NAV_LINKS } from './content'
+import { navContent } from './content'
+import { landingHeaderStrings } from './LandingHeader.strings'
 
 export function LandingHeader() {
+  const lang = useLang()
+  const s = landingHeaderStrings(lang)
+  const { links } = navContent(lang)
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -43,8 +47,8 @@ export function LandingHeader() {
             <BrandMark />
           </a>
 
-          <nav className="lp-nav" aria-label="پیمایش اصلی">
-            {NAV_LINKS.map((link) => (
+          <nav className="lp-nav" aria-label={s.navAria}>
+            {links.map((link) => (
               <a key={link.href} href={link.href} className="lp-nav__link">
                 {link.label}
               </a>
@@ -55,15 +59,15 @@ export function LandingHeader() {
             <ThemeToggle />
             <LanguageToggle />
             <a href="/login" className="lp-nav__link">
-              ورود
+              {s.signIn}
             </a>
             <a href="/signup" className="lp-btn lp-btn--primary">
-              شروع رایگان
+              {s.signUp}
             </a>
             <button
               type="button"
               className="lp-icon-btn lp-burger"
-              aria-label="باز کردن منو"
+              aria-label={s.openMenuAria}
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen(true)}
             >
@@ -74,7 +78,7 @@ export function LandingHeader() {
       </header>
 
       {menuOpen && (
-        <div className="lp-drawer" role="dialog" aria-modal="true" aria-label="منوی پیمایش">
+        <div className="lp-drawer" role="dialog" aria-modal="true" aria-label={s.menuDialogAria}>
           <div className="lp-drawer__top">
             <a href="/" className="lp-brand" onClick={() => setMenuOpen(false)}>
               <BrandMark />
@@ -82,7 +86,7 @@ export function LandingHeader() {
             <button
               type="button"
               className="lp-icon-btn"
-              aria-label="بستن منو"
+              aria-label={s.closeMenuAria}
               onClick={() => setMenuOpen(false)}
             >
               <Icon name="close" size={22} />
@@ -90,7 +94,7 @@ export function LandingHeader() {
           </div>
 
           <div className="lp-drawer__body">
-            {NAV_LINKS.map((link) => (
+            {links.map((link) => (
               <a
                 key={link.href}
                 href={link.href}
@@ -103,10 +107,10 @@ export function LandingHeader() {
 
             <div className="lp-drawer__actions">
               <a href="/signup" className="lp-btn lp-btn--primary lp-btn--lg lp-btn--block">
-                شروع رایگان
+                {s.signUp}
               </a>
               <a href="/login" className="lp-btn lp-btn--secondary lp-btn--lg lp-btn--block">
-                ورود به حساب
+                {s.drawerSignIn}
               </a>
             </div>
           </div>

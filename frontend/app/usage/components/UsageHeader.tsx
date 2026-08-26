@@ -1,4 +1,8 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
+import { usageHeaderStrings } from './UsageHeader.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Page header: title + export/refresh actions, and the "this month" scope
@@ -16,6 +20,9 @@ export function UsageHeader({
   onExport: () => void
   onRefresh: () => void
 }) {
+  const lang = useLang()
+  const s = usageHeaderStrings(lang)
+
   return (
     <>
       <div className="usage-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, gap: 12, flexWrap: 'wrap' }}>
@@ -24,8 +31,8 @@ export function UsageHeader({
             <Icon name="chart" size={18} className="text-accent" />
           </div>
           <div>
-            <h1 className="page-title">گزارش مصرف</h1>
-            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>تحلیل هزینه، توکن و عملکرد مدل‌ها</p>
+            <h1 className="page-title">{s.title}</h1>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>{s.subtitle}</p>
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -34,10 +41,10 @@ export function UsageHeader({
             onClick={onExport}
             disabled={!hasAnyData}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-            aria-label="خروجی CSV"
+            aria-label={s.exportCsv}
           >
             <Icon name="external" size={14} />
-            خروجی CSV
+            {s.exportCsv}
           </button>
           <button
             className="btn btn-sm btn-secondary"
@@ -46,7 +53,7 @@ export function UsageHeader({
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >
             <Icon name="refresh" size={14} className={refreshing ? 'spin' : ''} />
-            بروزرسانی
+            {s.refresh}
           </button>
         </div>
       </div>
@@ -58,7 +65,7 @@ export function UsageHeader({
           with more history. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24, flexWrap: 'wrap' }}>
         <Icon name="calendar" size={16} className="text-muted" />
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>آمار این ماه</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>{s.scopeNote}</span>
       </div>
     </>
   )

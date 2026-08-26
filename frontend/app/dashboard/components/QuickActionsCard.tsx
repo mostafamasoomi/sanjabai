@@ -1,5 +1,9 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { quickActionsCardStrings } from './QuickActionsCard.strings'
 import { QuickAction } from './QuickAction'
 
 /* ═══════════════════════════════════════════════════════════════
@@ -21,43 +25,47 @@ export function QuickActionsCard({
   onCreditPackages: () => void
   onBillingSettings: () => void
 }) {
+  const lang = useLang()
+  const s = quickActionsCardStrings(lang)
+  const f = fmt(lang)
+
   return (
     <div className="card dash-span-4">
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
         <span className="text-[var(--accent)]">
           <Icon name="dashboard" size={18} />
         </span>
-        <h2 className="card-title">دسترسی سریع</h2>
+        <h2 className="card-title">{s.title}</h2>
       </div>
       <div className="flex flex-col gap-3">
         <QuickAction
           icon="chat"
-          label="شروع مکالمه"
-          description="گفتگو با هوش مصنوعی"
+          label={s.chatLabel}
+          description={s.chatDesc}
           onClick={onChat}
         />
         <QuickAction
           icon="wallet"
-          label="کیف پول"
-          description="شارژ و مدیریت حساب"
+          label={s.walletLabel}
+          description={s.walletDesc}
           onClick={onWallet}
         />
         <QuickAction
           icon="models"
-          label="مدل‌ها"
-          description={`${faNum(modelCount)} مدل در دسترس`}
+          label={s.modelsLabel}
+          description={s.modelsDesc(f.num(modelCount))}
           onClick={onModels}
         />
         <QuickAction
           icon="payment"
-          label="خرید بسته اعتباری"
-          description="خرید بسته اعتباری ویژه"
+          label={s.creditLabel}
+          description={s.creditDesc}
           onClick={onCreditPackages}
         />
         <QuickAction
           icon="settings"
-          label="تنظیمات صورتحساب"
-          description="مدیریت پرداخت به ازای مصرف"
+          label={s.billingLabel}
+          description={s.billingDesc}
           onClick={onBillingSettings}
         />
       </div>

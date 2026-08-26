@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import type { ReadonlyURLSearchParams } from 'next/navigation'
+import { useLang } from '@/components/LanguageToggle'
+import { usePaymentBannerStrings } from './usePaymentBanner.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Payment-return banner. The gateway callback redirects here with
@@ -10,6 +12,10 @@ import type { ReadonlyURLSearchParams } from 'next/navigation'
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export function usePaymentBanner(searchParams: ReadonlyURLSearchParams) {
+  // Itself a hook (called from DashboardPage) -- safe to read the language
+  // directly rather than take it as a parameter, see the i18n spec note.
+  const lang = useLang()
+  const s = usePaymentBannerStrings(lang)
   const [paymentBanner, setPaymentBanner] = useState<{ ok: boolean; text: string } | null>(null)
 
   useEffect(() => {
@@ -17,13 +23,13 @@ export function usePaymentBanner(searchParams: ReadonlyURLSearchParams) {
     const subscription = searchParams.get('subscription')
     let banner: { ok: boolean; text: string } | null = null
     if (subscription === 'active') {
-      banner = { ok: true, text: 'اشتراک شما با موفقیت فعال شد.' }
+      banner = { ok: true, text: s.subscriptionActive }
     } else if (payment === 'success') {
-      banner = { ok: true, text: 'پرداخت با موفقیت انجام شد.' }
+      banner = { ok: true, text: s.paymentSuccess }
     } else if (payment === 'failed') {
-      banner = { ok: false, text: 'پرداخت ناموفق بود یا لغو شد. مبلغی از حساب شما کسر نشده است.' }
+      banner = { ok: false, text: s.paymentFailed }
     } else if (payment === 'error') {
-      banner = { ok: false, text: 'خطایی در پردازش پرداخت رخ داد. اگر مبلغی کسر شده باشد، به‌زودی بازمی‌گردد.' }
+      banner = { ok: false, text: s.paymentError }
     }
     if (banner) {
       setPaymentBanner(banner)
@@ -34,7 +40,7 @@ export function usePaymentBanner(searchParams: ReadonlyURLSearchParams) {
       url.searchParams.delete('subscription')
       window.history.replaceState(null, '', url.pathname + url.search + url.hash)
     }
-  }, [searchParams])
+  }, [searchParams, s])
 
   return { paymentBanner, setPaymentBanner }
 }

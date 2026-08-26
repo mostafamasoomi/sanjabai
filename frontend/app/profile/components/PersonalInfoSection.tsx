@@ -1,9 +1,12 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
 import { TIMEZONES } from '../types'
+import { personalInfoSectionStrings } from './PersonalInfoSection.strings'
 
 type PersonalInfoSectionProps = {
-  isFa: boolean
   displayName: string
   setDisplayName: (v: string) => void
   bio: string
@@ -13,45 +16,49 @@ type PersonalInfoSectionProps = {
 }
 
 export default function PersonalInfoSection({
-  isFa, displayName, setDisplayName, bio, setBio, timezone, setTimezone,
+  displayName, setDisplayName, bio, setBio, timezone, setTimezone,
 }: PersonalInfoSectionProps) {
+  const lang = useLang()
+  const s = personalInfoSectionStrings(lang)
+  const f = fmt(lang)
+
   return (
     <div className="card profile-section-card">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
         <Icon name="user" size={16} className="text-accent" />
         <h2 className="card-title">
-          {isFa ? 'اطلاعات شخصی' : 'Personal Info'}
+          {s.title}
         </h2>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div className="profile-input-group">
-          <label className="profile-input-label">{isFa ? 'نام نمایشی' : 'Display Name'}</label>
+          <label className="profile-input-label">{s.displayName}</label>
           <input
             type="text"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            placeholder={isFa ? 'نام شما' : 'Your name'}
+            placeholder={s.displayNamePlaceholder}
             className="input"
             maxLength={100}
           />
         </div>
         <div className="profile-input-group">
-          <label className="profile-input-label">{isFa ? 'بیوگرافی' : 'Bio'}</label>
-          <textarea dir="rtl"
+          <label className="profile-input-label">{s.bio}</label>
+          <textarea dir={lang === 'fa' ? 'rtl' : 'ltr'}
             value={bio}
             onChange={(e) => setBio(e.target.value)}
-            placeholder={isFa ? 'درباره خودتان بنویسید...' : 'Tell us about yourself...'}
+            placeholder={s.bioPlaceholder}
             className="input"
             rows={3}
             maxLength={500}
             style={{ resize: 'vertical', minHeight: 80 }}
           />
           <span style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'left', display: 'block' }}>
-            {faNum(bio.length)}/۵۰۰
+            {f.num(bio.length)}/{f.num(500)}
           </span>
         </div>
         <div className="profile-input-group">
-          <label className="profile-input-label">{isFa ? 'منطقه زمانی' : 'Timezone'}</label>
+          <label className="profile-input-label">{s.timezone}</label>
           <select
             value={timezone}
             onChange={(e) => setTimezone(e.target.value)}
@@ -59,7 +66,7 @@ export default function PersonalInfoSection({
             style={{ appearance: 'auto' }}
           >
             {TIMEZONES.map((tz) => (
-              <option key={tz.value} value={tz.value}>{tz.label}</option>
+              <option key={tz.value} value={tz.value}>{lang === 'fa' ? tz.label_fa : tz.label_en}</option>
             ))}
           </select>
         </div>

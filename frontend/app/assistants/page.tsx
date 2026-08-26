@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon, type IconName } from '@/components/ui/Icon'
-import { faDate } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { assistantsPageStrings } from './page.strings'
 
 /* ═══════════════════════════════════════════════════════════════
    Types
@@ -52,6 +54,10 @@ function CardSkeleton() {
    ═══════════════════════════════════════════════════════════════ */
 
 function AssistantCard({ assistant, onClick }: { assistant: Assistant; onClick: () => void }) {
+  const lang = useLang()
+  const s = assistantsPageStrings(lang)
+  const f = fmt(lang)
+
   return (
     <div
       className="card card-interactive"
@@ -120,16 +126,16 @@ function AssistantCard({ assistant, onClick }: { assistant: Assistant; onClick: 
         {assistant.is_public ? (
           <span className="badge aurora-cap-green" style={{ fontSize: '0.625rem' }}>
             <Icon name="eye" size={10} />
-            عمومی
+            {s.publicBadge}
           </span>
         ) : (
           <span className="badge aurora-cap-default" style={{ fontSize: '0.625rem' }}>
             <Icon name="lock" size={10} />
-            خصوصی
+            {s.privateBadge}
           </span>
         )}
         <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginRight: 'auto' }}>
-          {faDate(assistant.created_at)}
+          {f.date(assistant.created_at)}
         </span>
       </div>
     </div>
@@ -143,6 +149,8 @@ function AssistantCard({ assistant, onClick }: { assistant: Assistant; onClick: 
 export default function AssistantsPage() {
   const { token, user, loading: authLoading } = useAuth()
   const router = useRouter()
+  const lang = useLang()
+  const s = assistantsPageStrings(lang)
 
   const [assistants, setAssistants] = useState<Assistant[]>([])
   const [loading, setLoading] = useState(true)
@@ -160,14 +168,14 @@ export default function AssistantsPage() {
         // Backend may return array or paginated {items: [...]} format
         setAssistants(Array.isArray(data) ? data : (data?.items ?? []))
       } else {
-        toast('خطا در دریافت دستیارها', 'error')
+        toast(s.toastFetchError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.toastServerError, 'error')
     } finally {
       setLoading(false)
     }
-  }, [token])
+  }, [token, s])
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -184,9 +192,9 @@ export default function AssistantsPage() {
   })
 
   const filters: { key: typeof filter; label: string }[] = [
-    { key: 'all', label: 'همه' },
-    { key: 'mine', label: 'دستیارهای من' },
-    { key: 'public', label: 'عمومی' },
+    { key: 'all', label: s.filterAll },
+    { key: 'mine', label: s.filterMine },
+    { key: 'public', label: s.filterPublic },
   ]
 
   if (authLoading) {
@@ -205,10 +213,10 @@ export default function AssistantsPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
         <div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
-            دستیارها
+            {s.pageTitle}
           </h1>
           <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-            دستیارهای هوشمند خود را بسازید و مدیریت کنید
+            {s.pageSubtitle}
           </p>
         </div>
         <button
@@ -216,20 +224,20 @@ export default function AssistantsPage() {
           onClick={() => router.push('/assistants/new')}
         >
           <Icon name="plus" size={16} />
-          دستیار جدید
+          {s.newAssistant}
         </button>
       </div>
 
       {/* Filters */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
-        {filters.map((f) => (
+        {filters.map((flt) => (
           <button
-            key={f.key}
-            className={`btn btn-sm ${filter === f.key ? 'btn-primary' : 'btn-ghost'}`}
-            onClick={() => setFilter(f.key)}
+            key={flt.key}
+            className={`btn btn-sm ${filter === flt.key ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setFilter(flt.key)}
             style={{ fontSize: '0.8125rem' }}
           >
-            {f.label}
+            {flt.label}
           </button>
         ))}
       </div>
@@ -253,17 +261,15 @@ export default function AssistantsPage() {
           <Icon name="sparkles" size={48} className="text-[var(--text-muted)]" style={{ opacity: 0.3 }} />
           <div className="text-center">
             <h3 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-              دستیاری یافت نشد
+              {s.emptyTitle}
             </h3>
             <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-              {filter === 'mine'
-                ? 'هنوز دستیاری نساخته‌اید. یک دستیار جدید بسازید!'
-                : 'دستیاری در این دسته‌بندی وجود ندارد.'}
+              {filter === 'mine' ? s.emptyMineDesc : s.emptyOtherDesc}
             </p>
             {filter === 'mine' && (
               <button className="btn btn-primary btn-sm" onClick={() => router.push('/assistants/new')}>
                 <Icon name="plus" size={14} />
-                ساخت دستیار
+                {s.createAction}
               </button>
             )}
           </div>

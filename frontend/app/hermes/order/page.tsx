@@ -6,7 +6,9 @@ import { useAuth } from '@/lib/auth'
 import { apiFetch } from '@/lib/apiFetch'
 import { Icon } from '@/components/ui/Icon'
 import { Spinner, toast } from '@/components/ui'
-import { faPrice, faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { hermesOrderStrings } from './page.strings'
 
 /* ═══════════════════════════════════════════════════════════════
    Order wizard: pick a server offering, attach skills (with options
@@ -17,6 +19,7 @@ import { faPrice, faNum } from '@/lib/format'
 type Offering = {
   id: string
   name_fa: string
+  name_en: string
   vcpu: number
   ram_mb: number
   max_skills: number
@@ -34,7 +37,9 @@ type OptionField = {
 type SkillCatalogItem = {
   id: string
   name_fa: string
+  name_en: string
   description_fa: string
+  description_en: string
   category: string
   options_schema: Record<string, OptionField>
   requires_cron: boolean
@@ -49,6 +54,10 @@ export default function HermesOrderPage() {
   const { token, user } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const lang = useLang()
+  const s = hermesOrderStrings(lang)
+  const f = fmt(lang)
+  const offeringName = (o: Offering) => (lang === 'en' ? o.name_en : o.name_fa)
 
   const [offerings, setOfferings] = useState<Offering[]>([])
   const [catalog, setCatalog] = useState<SkillCatalogItem[]>([])
@@ -66,9 +75,9 @@ export default function HermesOrderPage() {
     const payment = searchParams.get('payment')
     let banner: { ok: boolean; text: string } | null = null
     if (payment === 'failed') {
-      banner = { ok: false, text: 'پرداخت سفارش ناموفق بود یا لغو شد. مبلغی از حساب شما کسر نشده است؛ می‌توانید دوباره تلاش کنید.' }
+      banner = { ok: false, text: s.paymentFailed }
     } else if (payment === 'error') {
-      banner = { ok: false, text: 'خطایی در پردازش پرداخت رخ داد. اگر مبلغی کسر شده باشد، به‌زودی بازمی‌گردد.' }
+      banner = { ok: false, text: s.paymentError }
     }
     if (banner) {
       setPaymentBanner(banner)
@@ -76,6 +85,7 @@ export default function HermesOrderPage() {
       url.searchParams.delete('payment')
       window.history.replaceState(null, '', url.pathname + url.search + url.hash)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
   useEffect(() => {
@@ -93,7 +103,7 @@ export default function HermesOrderPage() {
         setCatalog(Array.isArray(skillData) ? skillData : [])
         if (!offeringId && offData?.length) setOfferingId(offData[0].id)
       } catch {
-        if (!cancelled) toast('خطا در دریافت اطلاعات سرویس', 'error')
+        if (!cancelled) toast(s.loadError, 'error')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -112,7 +122,7 @@ export default function HermesOrderPage() {
         return prev.filter((s) => s.skill_id !== skillId)
       }
       if (offering && prev.length >= offering.max_skills) {
-        toast(`این پلن حداکثر ${offering.max_skills} اسکیل پشتیبانی می‌کند`, 'error')
+        toast(s.maxSkillsReached(f.num(offering.max_skills)), 'error')
         return prev
       }
       return [...prev, { skill_id: skillId, options: {} }]
@@ -134,7 +144,7 @@ export default function HermesOrderPage() {
       })
       const data = await res.json()
       if (!res.ok) {
-        toast(data?.detail || 'خطا در ثبت سفارش', 'error')
+        toast(data?.detail || s.submitError, 'error')
         return
       }
       if (data.url) {
@@ -143,7 +153,7 @@ export default function HermesOrderPage() {
         router.push(`/hermes/orders`)
       }
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.networkError, 'error')
     } finally {
       setSubmitting(false)
     }
@@ -152,9 +162,9 @@ export default function HermesOrderPage() {
   if (!user) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '1rem' }}>
-        <h1 className="page-title">وارد شوید</h1>
-        <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>برای سفارش سرور هرمس ابتدا وارد حساب کاربری خود شوید.</p>
-        <a href="/login" className="btn btn-primary">ورود به حساب</a>
+        <h1 className="page-title">{s.signIn}</h1>
+        <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>{s.loginPrompt}</p>
+        <a href="/login" className="btn btn-primary">{s.loginToAccount}</a>
       </div>
     )
   }
@@ -165,7 +175,7 @@ export default function HermesOrderPage() {
 
   return (
     <div className="flex flex-col gap-6" style={{ maxWidth: '48rem' }}>
-      <h1 className="page-title">سفارش سرور هرمس</h1>
+      <h1 className="page-title">{s.pageTitle}</h1>
 
       {/* Payment-return banner */}
       {paymentBanner && (
@@ -187,7 +197,7 @@ export default function HermesOrderPage() {
           <span style={{ flex: 1, fontSize: '0.875rem', color: 'var(--text-primary)' }}>{paymentBanner.text}</span>
           <button
             onClick={() => setPaymentBanner(null)}
-            aria-label="بستن"
+            aria-label={s.close}
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'inline-flex' }}
           >
             <Icon name="close" size={16} />
@@ -197,7 +207,7 @@ export default function HermesOrderPage() {
 
       {/* ── Step 1: offering ── */}
       <section className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-        <h2 style={{ fontWeight: 700 }}>۱. انتخاب پلن سرور</h2>
+        <h2 style={{ fontWeight: 700 }}>{s.step1Title(f.num(1))}</h2>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
           {offerings.map((o) => (
             <button
@@ -205,7 +215,7 @@ export default function HermesOrderPage() {
               onClick={() => { setOfferingId(o.id); setSelected([]) }}
               className={`btn ${o.id === offeringId ? 'btn-primary' : 'btn-secondary'} btn-sm`}
             >
-              {o.name_fa} — {faPrice(o.monthly_price_irt)}/ماه
+              {offeringName(o)} — {f.price(o.monthly_price_irt)}{s.perMonth}
             </button>
           ))}
         </div>
@@ -214,15 +224,15 @@ export default function HermesOrderPage() {
       {/* ── Step 2: skills ── */}
       <section className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         <h2 style={{ fontWeight: 700 }}>
-          ۲. انتخاب اسکیل‌ها {offering && <span style={{ fontWeight: 400, fontSize: '0.75rem', color: 'var(--text-muted)' }}>(حداکثر {faNum(offering.max_skills)})</span>}
+          {s.step2Title(f.num(2))} {offering && <span style={{ fontWeight: 400, fontSize: '0.75rem', color: 'var(--text-muted)' }}>{s.maxSkillsHint(f.num(offering.max_skills))}</span>}
         </h2>
         <div className="flex flex-col gap-3">
           {catalog.map((skill) => (
             <SkillPicker
               key={skill.id}
               skill={skill}
-              checked={selected.some((s) => s.skill_id === skill.id)}
-              options={selected.find((s) => s.skill_id === skill.id)?.options ?? {}}
+              checked={selected.some((sel) => sel.skill_id === skill.id)}
+              options={selected.find((sel) => sel.skill_id === skill.id)?.options ?? {}}
               onToggle={() => toggleSkill(skill.id)}
               onOptionChange={(key, value) => setSkillOption(skill.id, key, value)}
             />
@@ -232,28 +242,28 @@ export default function HermesOrderPage() {
 
       {/* ── Step 3: invoice ── */}
       <section className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        <h2 style={{ fontWeight: 700 }}>۳. فاکتور</h2>
+        <h2 style={{ fontWeight: 700 }}>{s.step3Title(f.num(3))}</h2>
         {offering && (
           <>
             {offering.setup_price_irt > 0 && (
               <div className="flex items-center justify-between" style={{ fontSize: '0.875rem' }}>
-                <span style={{ color: 'var(--text-muted)' }}>هزینه راه‌اندازی</span>
-                <span>{faPrice(offering.setup_price_irt)}</span>
+                <span style={{ color: 'var(--text-muted)' }}>{s.setupCost}</span>
+                <span>{f.price(offering.setup_price_irt)}</span>
               </div>
             )}
             <div className="flex items-center justify-between" style={{ fontSize: '0.875rem' }}>
-              <span style={{ color: 'var(--text-muted)' }}>ماه اول</span>
-              <span>{faPrice(offering.monthly_price_irt)}</span>
+              <span style={{ color: 'var(--text-muted)' }}>{s.firstMonth}</span>
+              <span>{f.price(offering.monthly_price_irt)}</span>
             </div>
             <div className="flex items-center justify-between" style={{ borderTop: '1px solid var(--border)', paddingTop: '0.5rem', fontWeight: 700 }}>
-              <span>مجموع پرداختی</span>
-              <span style={{ color: 'var(--accent)' }}>{faPrice(total)}</span>
+              <span>{s.totalPayable}</span>
+              <span style={{ color: 'var(--accent)' }}>{f.price(total)}</span>
             </div>
           </>
         )}
         <button className="btn btn-primary" disabled={!offering || submitting} onClick={handleSubmit} style={{ marginTop: '0.75rem', justifyContent: 'center' }}>
           {submitting ? <Spinner size="sm" /> : <Icon name="payment" size={16} />}
-          پرداخت و ثبت سفارش
+          {s.payAndSubmit}
         </button>
       </section>
     </div>
@@ -269,6 +279,9 @@ function SkillPicker({
   onToggle: () => void
   onOptionChange: (key: string, value: unknown) => void
 }) {
+  const lang = useLang()
+  const name = lang === 'en' ? skill.name_en : skill.name_fa
+  const description = lang === 'en' ? skill.description_en : skill.description_fa
   return (
     <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '0.875rem' }}>
       <label className="flex items-center gap-2" style={{ cursor: 'pointer' }}>
@@ -278,8 +291,8 @@ function SkillPicker({
           onChange={onToggle}
           style={{ width: '1.5rem', height: '1.5rem', accentColor: 'var(--accent)', flexShrink: 0 }}
         />
-        <span style={{ fontWeight: 600 }}>{skill.name_fa}</span>
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{skill.description_fa}</span>
+        <span style={{ fontWeight: 600 }}>{name}</span>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{description}</span>
       </label>
 
       {checked && (
@@ -301,6 +314,10 @@ function OptionInput({
   value: unknown
   onChange: (value: unknown) => void
 }) {
+  const lang = useLang()
+  const s = hermesOrderStrings(lang)
+  const f = fmt(lang)
+
   if (field.type === 'multiselect' && field.values) {
     const current = Array.isArray(value) ? (value as string[]) : []
     return (
@@ -320,7 +337,7 @@ function OptionInput({
                   } else if (!field.max || current.length < field.max) {
                     onChange([...current, v])
                   } else {
-                    toast(`حداکثر ${field.max} مورد قابل انتخاب است`, 'error')
+                    toast(s.maxOptionsReached(f.num(field.max)), 'error')
                   }
                 }}
                 style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}
@@ -335,15 +352,22 @@ function OptionInput({
   }
 
   if (field.type === 'tags') {
-    const current = Array.isArray(value) ? (value as string[]).join('، ') : ''
+    // Arabic/Persian comma (U+060C) when joining for display in a Persian UI,
+    // plain comma in English; written as an escape rather than the literal
+    // character so it reads as the delimiter it is, not a translatable
+    // string the coverage scanner (tests/lib/productI18nCoverage.test.ts)
+    // should flag. The split on blur accepts either regardless of `lang`, so
+    // switching languages mid-edit never breaks parsing.
+    const joiner = lang === 'en' ? ', ' : '\u060C '
+    const current = Array.isArray(value) ? (value as string[]).join(joiner) : ''
     return (
       <div>
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>{fieldKey} (با ، جدا کنید)</span>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>{fieldKey} {s.commaSeparated}</span>
         <input
           type="text"
           defaultValue={current}
           onBlur={(e) => {
-            const tags = e.target.value.split(/[،,]/).map((t) => t.trim()).filter(Boolean)
+            const tags = e.target.value.split(/[\u060C,]/).map((t) => t.trim()).filter(Boolean)
             onChange(field.max ? tags.slice(0, field.max) : tags)
           }}
           className="input"
@@ -356,7 +380,7 @@ function OptionInput({
   if (field.type === 'cron') {
     return (
       <div>
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>زمان‌بندی (cron)</span>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>{s.schedule}</span>
         <input
           type="text"
           defaultValue={typeof value === 'string' ? value : (field.default as string) || '0 9 * * *'}

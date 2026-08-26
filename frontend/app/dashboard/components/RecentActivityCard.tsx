@@ -1,4 +1,8 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
+import { recentActivityCardStrings } from './RecentActivityCard.strings'
 import { LedgerRow } from './LedgerRow'
 import type { LedgerEntry } from '../types'
 
@@ -16,6 +20,9 @@ export function RecentActivityCard({
   onViewAll: () => void
   onTopUp: () => void
 }) {
+  const lang = useLang()
+  const s = recentActivityCardStrings(lang)
+
   return (
     <div className="card dash-span-8 overflow-hidden">
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
@@ -23,14 +30,14 @@ export function RecentActivityCard({
           <span className="text-[var(--accent)]">
             <Icon name="history" size={18} />
           </span>
-          <h2 className="card-title">فعالیت اخیر</h2>
+          <h2 className="card-title">{s.title}</h2>
         </div>
         <button
           className="btn btn-sm"
           onClick={onViewAll}
           style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem' }}
         >
-          مشاهده همه
+          {s.viewAll}
           <Icon name="arrowLeft" size={12} />
         </button>
       </div>
@@ -40,13 +47,13 @@ export function RecentActivityCard({
           <span className="empty-state__icon">
             <Icon name="history" size={22} />
           </span>
-          <p className="empty-state__title">هنوز تراکنشی ثبت نشده است</p>
+          <p className="empty-state__title">{s.emptyTitle}</p>
           <p className="empty-state__desc">
-            پس از اولین شارژ یا مصرف، تراکنش‌ها اینجا فهرست می‌شوند.
+            {s.emptyDesc}
           </p>
           <button className="btn btn-sm btn-secondary" onClick={onTopUp}>
             <Icon name="wallet" size={14} />
-            شارژ کیف پول
+            {s.topUp}
           </button>
         </div>
       ) : (

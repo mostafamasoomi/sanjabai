@@ -5,7 +5,9 @@ import { useAuth } from '@/lib/auth'
 import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { skillActivationPanelStrings } from './SkillActivationPanel.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Skill activation — until today "skill" meant a prompt-template library:
@@ -46,6 +48,9 @@ const MAX_ACTIVE_SKILLS = 3
 
 export default function SkillActivationPanel() {
   const { token } = useAuth()
+  const lang = useLang()
+  const s = skillActivationPanelStrings(lang)
+  const f = fmt(lang)
 
   const [skills, setSkills] = useState<ActiveSkill[]>([])
   const [loading, setLoading] = useState(true)
@@ -105,16 +110,16 @@ export default function SkillActivationPanel() {
         }
         setSkills((prev) => prev.map((s) => (s.id === skill.id ? { ...s, enabled: wasEnabled } : s)))
         toast(
-          detail || (nextEnabled ? 'فعال‌سازی مهارت ناموفق بود' : 'غیرفعال‌سازی مهارت ناموفق بود'),
+          detail || (nextEnabled ? s.toggleFailedEnable : s.toggleFailedDisable),
           'error',
         )
         return
       }
 
-      toast(nextEnabled ? 'مهارت فعال شد' : 'مهارت غیرفعال شد', 'success')
+      toast(nextEnabled ? s.toggleSuccessEnable : s.toggleSuccessDisable, 'success')
     } catch {
       setSkills((prev) => prev.map((s) => (s.id === skill.id ? { ...s, enabled: wasEnabled } : s)))
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.serverError, 'error')
     } finally {
       setPending((prev) => {
         const next = new Set(prev)
@@ -133,12 +138,12 @@ export default function SkillActivationPanel() {
         <div className="flex items-center gap-2">
           <Icon name="cpu" size={18} className="text-[var(--accent)]" />
           <h2 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-            مهارت‌های فعال
+            {s.heading}
           </h2>
         </div>
         {!loading && !loadFailed && skills.length > 0 && (
           <span className="badge">
-            {faNum(activeCount)} از {faNum(MAX_ACTIVE_SKILLS)} مهارت فعال
+            {s.activeBadge(f.num(activeCount), f.num(MAX_ACTIVE_SKILLS))}
           </span>
         )}
       </div>
@@ -159,8 +164,7 @@ export default function SkillActivationPanel() {
       >
         <Icon name="info" size={15} className="text-[var(--accent)]" style={{ flexShrink: 0, marginTop: '0.1rem' }} />
         <span>
-          هر مهارتی که فعال کنید، به‌طور خودکار به <strong>تمام پیام‌های</strong> شما اضافه می‌شود — نه فقط وقتی از آن استفاده می‌کنید.
-          این یعنی همان توکن‌های اضافه در هر پیام مصرف و از کیف پول شما کسر می‌شود. مهارتی که استفاده نمی‌کنید را غیرفعال نگه دارید.
+          {s.noticeBefore}<strong>{s.noticeStrong}</strong>{s.noticeAfter}
         </span>
       </div>
 
@@ -188,10 +192,10 @@ export default function SkillActivationPanel() {
             color: 'var(--text-secondary)',
           }}
         >
-          <span>خطا در دریافت مهارت‌های فعال.</span>
+          <span>{s.loadErrorText}</span>
           <button className="btn btn-sm" onClick={load}>
             <Icon name="refresh" size={14} />
-            تلاش دوباره
+            {s.retry}
           </button>
         </div>
       )}
@@ -210,7 +214,7 @@ export default function SkillActivationPanel() {
         >
           <Icon name="sparkles" size={28} className="text-[var(--text-muted)]" style={{ opacity: 0.4 }} />
           <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-            هنوز هیچ مهارتی ندارید تا فعال کنید.
+            {s.emptyText}
           </p>
           <a
             href="#top"
@@ -221,7 +225,7 @@ export default function SkillActivationPanel() {
             className="btn btn-sm btn-primary"
           >
             <Icon name="plus" size={14} />
-            ایجاد اسکیل جدید از بالای صفحه
+            {s.createFromTop}
           </a>
         </div>
       )}
@@ -253,9 +257,9 @@ export default function SkillActivationPanel() {
                   className={`profile-toggle ${skill.enabled ? 'active' : ''}`}
                   role="switch"
                   aria-checked={skill.enabled}
-                  aria-label={`${skill.enabled ? 'غیرفعال کردن' : 'فعال کردن'} ${skill.title_fa || skill.title}`}
+                  aria-label={`${skill.enabled ? s.disableAction : s.enableAction} ${skill.title_fa || skill.title}`}
                   disabled={isPending || (atCap && !skill.enabled)}
-                  title={atCap && !skill.enabled ? `برای فعال کردن این مهارت، ابتدا یکی از ${faNum(MAX_ACTIVE_SKILLS)} مهارت فعال را غیرفعال کنید` : undefined}
+                  title={atCap && !skill.enabled ? s.capHint(f.num(MAX_ACTIVE_SKILLS)) : undefined}
                   onClick={() => toggle(skill)}
                   style={isPending ? { opacity: 0.5, cursor: 'wait' } : undefined}
                 >

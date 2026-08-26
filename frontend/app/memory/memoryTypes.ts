@@ -1,6 +1,13 @@
+import type { Lang } from '@/components/LanguageToggle'
+import { memoryCategoryStrings } from './memoryTypes.strings'
+
 /* ═══════════════════════════════════════════════════════════════
    Types
    Split out of page.tsx verbatim -- no behaviour change.
+
+   CATEGORIES/CATEGORY_MAP became functions of `lang`: this file is not a
+   component, so it takes `lang` as an explicit parameter rather than
+   calling `useLang()` (see the i18n spec).
    ═══════════════════════════════════════════════════════════════ */
 
 export type Memory = {
@@ -15,20 +22,26 @@ export type Memory = {
 
 export type Category = { key: string; label: string }
 
-export const CATEGORIES: Category[] = [
-  { key: '', label: 'همه' },
-  { key: 'preferences', label: 'ترجیحات' },
-  { key: 'projects', label: 'پروژه‌ها' },
-  { key: 'skills', label: 'مهارت‌ها' },
-  { key: 'personal', label: 'شخصی' },
-  { key: 'other', label: 'سایر' },
-]
+export function categories(lang: Lang): Category[] {
+  const l = memoryCategoryStrings(lang)
+  return [
+    { key: '', label: l.all },
+    { key: 'preferences', label: l.preferences },
+    { key: 'projects', label: l.projects },
+    { key: 'skills', label: l.skills },
+    { key: 'personal', label: l.personal },
+    { key: 'other', label: l.other },
+  ]
+}
 
-export const CATEGORY_MAP: Record<string, string> = {
-  '': 'همه',
-  preferences: 'ترجیحات',
-  projects: 'پروژه‌ها',
-  skills: 'مهارت‌ها',
-  personal: 'شخصی',
-  other: 'سایر',
+export function categoryMap(lang: Lang): Record<string, string> {
+  const l = memoryCategoryStrings(lang)
+  return {
+    '': l.all,
+    preferences: l.preferences,
+    projects: l.projects,
+    skills: l.skills,
+    personal: l.personal,
+    other: l.other,
+  }
 }

@@ -1,25 +1,29 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
 import { AUTONOMY_LEVELS } from '../types'
+import { autonomySectionStrings } from './AutonomySection.strings'
 
 type AutonomySectionProps = {
-  isFa: boolean
   autonomyLevel: string
   setAutonomyLevel: (v: string) => void
 }
 
-export default function AutonomySection({ isFa, autonomyLevel, setAutonomyLevel }: AutonomySectionProps) {
+export default function AutonomySection({ autonomyLevel, setAutonomyLevel }: AutonomySectionProps) {
+  const lang = useLang()
+  const s = autonomySectionStrings(lang)
+
   return (
     <div className="card profile-section-card">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
         <Icon name="rocket" size={16} className="text-accent" />
         <h2 className="card-title">
-          {isFa ? 'سطح خودمختاری' : 'Autonomy Level'}
+          {s.title}
         </h2>
       </div>
       <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-        {isFa
-          ? 'سطح آزادی عمل هوش مصنوعی را تنظیم کنید. این تنظیم مشخص می‌کند هوش مصنوعی چقدر بدون تأیید شما عمل کند.'
-          : 'Set how much freedom the AI has to act on your behalf. This controls when the AI asks for confirmation.'}
+        {s.intro}
       </p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {AUTONOMY_LEVELS.map((level) => (
@@ -49,10 +53,10 @@ export default function AutonomySection({ isFa, autonomyLevel, setAutonomyLevel 
             </div>
             <div className="flex-1">
               <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', marginBottom: 4 }}>
-                {isFa ? level.label_fa : level.label_en}
+                {lang === 'fa' ? level.label_fa : level.label_en}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                {isFa ? level.desc_fa : level.desc_en}
+                {lang === 'fa' ? level.desc_fa : level.desc_en}
               </div>
             </div>
           </div>

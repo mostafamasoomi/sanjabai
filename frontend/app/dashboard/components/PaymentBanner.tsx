@@ -1,7 +1,12 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
+import { paymentBannerStrings } from './PaymentBanner.strings'
 
 /* ═══════════════════════════════════════════════════════════════
-   Payment-return banner
+   Payment-return banner. `banner.text` is already translated by
+   usePaymentBanner (it owns that dictionary).
    ═══════════════════════════════════════════════════════════════ */
 
 export function PaymentBanner({
@@ -11,6 +16,8 @@ export function PaymentBanner({
   banner: { ok: boolean; text: string }
   onClose: () => void
 }) {
+  const lang = useLang()
+  const s = paymentBannerStrings(lang)
   return (
     <div
       className="dash-span-12"
@@ -33,7 +40,7 @@ export function PaymentBanner({
       <span style={{ flex: 1, fontSize: '0.875rem', color: 'var(--text-primary)' }}>{banner.text}</span>
       <button
         onClick={onClose}
-        aria-label="بستن"
+        aria-label={s.close}
         style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'inline-flex' }}
       >
         <Icon name="close" size={16} />

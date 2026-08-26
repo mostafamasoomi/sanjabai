@@ -6,15 +6,17 @@ import { useAuth } from '@/lib/auth'
 import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
-import { faNum, faDate } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
 import {
   type Skill,
   type UseResult,
   CATEGORY_BADGES,
-  CATEGORY_LABELS,
+  categoryLabel,
   renderStars,
   getAverageRating,
 } from '../types'
+import { skillDetailPageStrings } from './page.strings'
 
 /* ═══════════════════════════════════════════════════════════════
    Loading Skeleton
@@ -47,6 +49,9 @@ export default function SkillDetailPage() {
   const params = useParams()
   const router = useRouter()
   const { token, user, loading: authLoading } = useAuth()
+  const lang = useLang()
+  const s = skillDetailPageStrings(lang)
+  const f = fmt(lang)
 
   const skillId = params?.id as string
 
@@ -103,10 +108,10 @@ export default function SkillDetailPage() {
         const data: UseResult = await res.json()
         setResult(data)
       } else {
-        toast('خطا در اجرای اسکیل', 'error')
+        toast(s.toastUseError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.toastServerError, 'error')
     } finally {
       setExecuting(false)
     }
@@ -122,18 +127,18 @@ export default function SkillDetailPage() {
       })
       if (res.ok) {
         setUserRating(rating)
-        toast('امتیاز شما ثبت شد', 'success')
+        toast(s.toastRateSuccess, 'success')
       } else {
-        toast('خطا در ثبت امتیاز', 'error')
+        toast(s.toastRateError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.toastServerError, 'error')
     }
   }
 
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href)
-    toast('لینک کپی شد', 'success')
+    toast(s.toastLinkCopied, 'success')
   }
 
   // Loading state
@@ -161,15 +166,15 @@ export default function SkillDetailPage() {
         <Icon name="warning" size={48} className="text-[var(--text-muted)]" style={{ opacity: 0.4 }} />
         <div className="text-center">
           <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
-            اسکیل یافت نشد
+            {s.notFoundTitle}
           </h2>
           <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-            اسکیل مورد نظر وجود ندارد یا حذف شده است.
+            {s.notFoundDesc}
           </p>
         </div>
         <button className="btn btn-primary" onClick={() => router.push('/skills')}>
           <Icon name="arrowLeft" size={16} />
-          بازگشت به مارکتپلیس
+          {s.backToMarketplace}
         </button>
       </div>
     )
@@ -186,7 +191,7 @@ export default function SkillDetailPage() {
         style={{ marginBottom: '1rem', fontSize: '0.8125rem' }}
       >
         <Icon name="arrowLeft" size={14} />
-        بازگشت به مارکتپلیس
+        {s.backToMarketplace}
       </button>
 
       {/* ── Header ── */}
@@ -196,16 +201,16 @@ export default function SkillDetailPage() {
             className={`badge ${CATEGORY_BADGES[skill.category] || 'aurora-cap-default'}`}
             style={{ fontSize: '0.6875rem' }}
           >
-            {CATEGORY_LABELS[skill.category] || skill.category}
+            {categoryLabel(skill.category, lang)}
           </span>
           {skill.is_featured && (
             <span className="badge badge-accent" style={{ fontSize: '0.6875rem' }}>
               <Icon name="sparkles" size={10} />
-              ویژه
+              {s.featuredBadge}
             </span>
           )}
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginRight: 'auto' }}>
-            {faDate(skill.created_at)}
+            {f.date(skill.created_at)}
           </span>
         </div>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.4, marginBottom: '0.5rem' }}>
@@ -236,13 +241,13 @@ export default function SkillDetailPage() {
             {avg > 0 ? avg.toFixed(1) : '—'}
           </span>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            ({faNum(skill.rating_count)} نظر)
+            {s.reviewsCount(f.num(skill.rating_count))}
           </span>
         </div>
         <div style={{ width: '1px', height: '1.25rem', background: 'var(--border)' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
           <Icon name="user" size={14} />
-          {faNum(skill.usage_count)} استفاده
+          {s.usageCount(f.num(skill.usage_count))}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
           <Icon name="key" size={14} />
@@ -254,7 +259,7 @@ export default function SkillDetailPage() {
           style={{ marginRight: 'auto', fontSize: '0.75rem' }}
         >
           <Icon name="link" size={14} />
-          اشتراک‌گذاری
+          {s.shareAction}
         </button>
       </div>
 
@@ -294,11 +299,11 @@ export default function SkillDetailPage() {
           }}
         >
           <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
-            برای استفاده از این اسکیل، ابتدا وارد حساب کاربری خود شوید.
+            {s.notAuthText}
           </p>
           <a href="/login" className="btn btn-primary btn-sm">
             <Icon name="profile" size={14} />
-            ورود به حساب
+            {s.signInAction}
           </a>
         </div>
       )}
@@ -315,20 +320,20 @@ export default function SkillDetailPage() {
           }}
         >
           <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '1rem' }}>
-            اجرای اسکیل
+            {s.runSkillHeading}
           </h3>
 
           {/* Model */}
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-              مدل
+              {s.modelLabel}
             </label>
             <input
               type="text"
               className="input"
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              placeholder="نام مدل"
+              placeholder={s.modelPlaceholder}
               style={{ width: '100%', fontSize: '0.875rem' }}
             />
           </div>
@@ -337,7 +342,7 @@ export default function SkillDetailPage() {
           {skill.variables && skill.variables.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
               <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                متغیرها
+                {s.variablesLabel}
               </label>
               {skill.variables.map((v) => (
                 <div key={v.name}>
@@ -366,12 +371,12 @@ export default function SkillDetailPage() {
             {executing ? (
               <span className="flex items-center gap-2">
                 <span className="animate-spin" style={{ width: '1rem', height: '1rem', border: '2px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', display: 'inline-block' }} />
-                در حال اجرا...
+                {s.runningText}
               </span>
             ) : (
               <>
                 <Icon name="send" size={16} />
-                اجرا
+                {s.runAction}
               </>
             )}
           </button>
@@ -388,17 +393,17 @@ export default function SkillDetailPage() {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>خروجی</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{s.outputLabel}</span>
                 <button
                   className="btn btn-ghost btn-sm"
                   onClick={() => {
                     navigator.clipboard.writeText(result.rendered_prompt)
-                    toast('کپی شد', 'success')
+                    toast(s.copiedToast, 'success')
                   }}
                   style={{ fontSize: '0.75rem', padding: '0.125rem 0.5rem' }}
                 >
                   <Icon name="copy" size={12} />
-                  کپی
+                  {s.copyAction}
                 </button>
               </div>
               <pre
@@ -414,7 +419,7 @@ export default function SkillDetailPage() {
                 {result.rendered_prompt}
               </pre>
               <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-                مدل: {result.model}
+                {s.modelResultLabel(result.model)}
               </div>
             </div>
           )}
@@ -432,15 +437,15 @@ export default function SkillDetailPage() {
         }}
       >
         <h3 style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
-          امتیازدهی
+          {s.ratingHeading}
         </h3>
         <div className="flex items-center gap-3">
-          <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>امتیاز شما:</span>
+          <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>{s.yourRating}</span>
           <div className="flex gap-1">
             {[1, 2, 3, 4, 5].map((r) => (
               <button
                 key={r}
-                onClick={() => user ? handleRate(r) : toast('ابتدا وارد شوید', 'error')}
+                onClick={() => user ? handleRate(r) : toast(s.toastSignInFirst, 'error')}
                 style={{
                   background: 'none',
                   border: 'none',
@@ -450,7 +455,7 @@ export default function SkillDetailPage() {
                   opacity: r <= userRating ? 1 : 0.4,
                   transition: 'all 0.15s ease',
                 }}
-                aria-label={`${r} ستاره`}
+                aria-label={s.starAria(r)}
               >
                 <Icon name="sparkles" size={20} />
               </button>
@@ -469,7 +474,7 @@ export default function SkillDetailPage() {
         }}
       >
         <h3 style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
-          الگوی پرامپت
+          {s.promptTemplateHeading}
         </h3>
         <pre
           style={{

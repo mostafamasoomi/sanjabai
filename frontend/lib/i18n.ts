@@ -1,7 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   The admin panel's translation contract.
+   The product's translation contract.
 
-   Two problems, both solved here so 45 section files solve them the same way.
+   Two problems, both solved here so every screen solves them the same way.
+   Started life as the admin panel's; the landing page and the user-facing app
+   use the identical shape, so it is not admin-specific and no longer named
+   as though it were.
 
    ── 1. Completeness is checked by the compiler, not by reading ─────────────
 
@@ -144,4 +147,32 @@ export function fmt(lang: Lang): Formatters {
  *  strings in either language and have nothing to do with the UI direction. */
 export function dirFor(lang: Lang): 'rtl' | 'ltr' {
   return lang === 'en' ? 'ltr' : 'rtl'
+}
+
+/** The refusal text from a failed API response body, in the active language.
+ *
+ *  The backend answers `{"detail": "<fa>", "detail_en": "<en>"}` — the Persian
+ *  key keeps its original name and value so nothing that read it before
+ *  notices, and the English is a sibling (backend/i18n.py explains why both
+ *  travel together instead of the server picking one). A body that predates
+ *  that change, or an endpoint not yet converted, has no `detail_en`; falling
+ *  back to the Persian is correct — the server's explanation of what went
+ *  wrong is worth more than a generic English sentence.
+ *
+ *  The OpenAI-compatible routes nest their text under `error.message`
+ *  instead; the same sibling convention applies there. */
+export function detailFor(body: unknown, lang: Lang): string | null {
+  if (!body || typeof body !== 'object') return null
+  const b = body as Record<string, unknown>
+  const pickPair = (fa: unknown, en: unknown): string | null => {
+    if (lang === 'en' && typeof en === 'string' && en.trim()) return en.trim()
+    return typeof fa === 'string' && fa.trim() ? fa.trim() : null
+  }
+  const detail = pickPair(b.detail, b.detail_en)
+  if (detail) return detail
+  const nested = b.error as Record<string, unknown> | undefined
+  if (nested && typeof nested === 'object') {
+    return pickPair(nested.message, nested.message_en)
+  }
+  return null
 }

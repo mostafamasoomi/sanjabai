@@ -22,6 +22,8 @@
 
 import { useRef, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
+import { apiKeyRevealModalStrings } from './ApiKeyRevealModal.strings'
 
 type ApiKeyRevealModalProps = {
   open: boolean
@@ -33,6 +35,8 @@ type ApiKeyRevealModalProps = {
 }
 
 export function ApiKeyRevealModal({ open, rawKey, isRotation, onAcknowledge }: ApiKeyRevealModalProps) {
+  const lang = useLang()
+  const s = apiKeyRevealModalStrings(lang)
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -72,7 +76,7 @@ export function ApiKeyRevealModal({ open, rawKey, isRotation, onAcknowledge }: A
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Icon name="check" size={18} className="text-positive" />
           <h2 id="apikey-reveal-title" style={{ fontSize: 16, fontWeight: 700, color: 'var(--positive)' }}>
-            {isRotation ? 'کلید چرخانده شد' : 'کلید جدید ساخته شد'}
+            {isRotation ? s.rotated : s.created}
           </h2>
         </div>
 
@@ -83,14 +87,13 @@ export function ApiKeyRevealModal({ open, rawKey, isRotation, onAcknowledge }: A
         }}>
           <Icon name="warning" size={16} className="text-danger" style={{ marginTop: 2, flexShrink: 0 }} />
           <p style={{ fontSize: 13, color: 'var(--danger)', margin: 0, lineHeight: 1.7 }}>
-            این کلید فقط همین یک بار نمایش داده می‌شود و در هیچ جای دیگری (حتی برای خودتان) دوباره قابل مشاهده نیست.
-            همین حالا آن را در جای امنی ذخیره کنید.
-            {isRotation && ' کلید قبلی از این لحظه دیگر کار نمی‌کند.'}
+            {s.warning}
+            {isRotation && s.rotationWarningSuffix}
           </p>
         </div>
 
         <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
-          کلید API
+          {s.apiKeyLabel}
         </label>
         <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
           <input
@@ -113,18 +116,18 @@ export function ApiKeyRevealModal({ open, rawKey, isRotation, onAcknowledge }: A
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}
           >
             <Icon name={copyState === 'copied' ? 'check' : 'copy'} size={14} />
-            {copyState === 'copied' ? 'کپی شد' : 'کپی'}
+            {copyState === 'copied' ? s.copied : s.copy}
           </button>
         </div>
 
         {copyState === 'failed' && (
           <p style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 12 }}>
-            کپی خودکار انجام نشد. متن کلید انتخاب شد — با Ctrl+C (یا Cmd+C) آن را کپی کنید.
+            {s.copyFailed}
           </p>
         )}
         {copyState !== 'failed' && (
           <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 12 }}>
-            در صورت خطای کپی خودکار، روی کادر کلید کلیک کنید تا متن انتخاب شود.
+            {s.copyHint}
           </p>
         )}
 
@@ -134,7 +137,7 @@ export function ApiKeyRevealModal({ open, rawKey, isRotation, onAcknowledge }: A
           className="btn btn-primary"
           style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}
         >
-          کلید را ذخیره کردم
+          {s.acknowledge}
         </button>
       </div>
     </div>

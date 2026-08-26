@@ -31,10 +31,10 @@ export const AUTONOMY_LEVELS = [
 ]
 
 export const TIMEZONES = [
-  { value: 'Asia/Tehran', label: 'تهران (IRST)' },
-  { value: 'Asia/Dubai', label: 'دوبی (GST)' },
-  { value: 'Europe/London', label: 'لندن (GMT)' },
-  { value: 'America/New_York', label: 'نیویورک (EST)' },
-  { value: 'Asia/Tokyo', label: 'توکیو (JST)' },
-  { value: 'UTC', label: 'UTC' },
+  { value: 'Asia/Tehran', label_fa: 'تهران (IRST)', label_en: 'Tehran (IRST)' },
+  { value: 'Asia/Dubai', label_fa: 'دوبی (GST)', label_en: 'Dubai (GST)' },
+  { value: 'Europe/London', label_fa: 'لندن (GMT)', label_en: 'London (GMT)' },
+  { value: 'America/New_York', label_fa: 'نیویورک (EST)', label_en: 'New York (EST)' },
+  { value: 'Asia/Tokyo', label_fa: 'توکیو (JST)', label_en: 'Tokyo (JST)' },
+  { value: 'UTC', label_fa: 'UTC', label_en: 'UTC' },
 ]

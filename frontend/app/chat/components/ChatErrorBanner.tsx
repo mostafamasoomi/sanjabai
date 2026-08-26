@@ -1,10 +1,13 @@
 import { Icon } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
+import { chatErrorBannerStrings } from './ChatErrorBanner.strings'
 
 type ChatErrorBannerProps = {
   error: string
 }
 
 export default function ChatErrorBanner({ error }: ChatErrorBannerProps) {
+  const s = chatErrorBannerStrings(useLang())
   if (!error) return null
   if (error !== 'INSUFFICIENT_BALANCE') {
     return (
@@ -29,19 +32,19 @@ export default function ChatErrorBanner({ error }: ChatErrorBannerProps) {
     }}>
       <div style={{ fontSize: '2rem' }}>💳</div>
       <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)' }}>
-        اعتبار شما تمام شده!
+        {s.balanceTitle}
       </div>
       <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.7 }}>
-        برای ادامه استفاده از مدل‌های هوش مصنوعی، نیاز به شارژ حساب دارید.
+        {s.balanceBody}
         <br />
-        با شارژ حساب میتونید بدون محدودیت از تمام مدل‌ها استفاده کنید.
+        {s.balanceBody2}
       </div>
       <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
         <a href="/pricing" className="btn btn-primary" style={{ textDecoration: 'none', padding: '10px 24px', borderRadius: '10px', fontWeight: 600, fontSize: '0.9rem' }}>
-          🚀 مشاهده پلنها و شارژ حساب
+          🚀 {s.viewPlans}
         </a>
         <a href="/wallet" className="btn btn-ghost" style={{ textDecoration: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: 500, fontSize: '0.9rem' }}>
-          💰 کیف پول
+          💰 {s.wallet}
         </a>
       </div>
     </div>

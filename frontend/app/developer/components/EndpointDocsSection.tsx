@@ -1,16 +1,23 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
-import { ENDPOINTS } from '../constants'
+import { useLang } from '@/components/LanguageToggle'
+import { endpoints } from '../constants'
+import { endpointDocsSectionStrings } from './EndpointDocsSection.strings'
 
 export function EndpointDocsSection() {
+  const lang = useLang()
+  const s = endpointDocsSectionStrings(lang)
+
   return (
     <div className="card">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
         <Icon name="external" size={16} className="text-accent" />
-        <h2 className="card-title">مستندات endpoint‌ها</h2>
+        <h2 className="card-title">{s.title}</h2>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {ENDPOINTS.map((ep) => (
+        {endpoints(lang).map((ep) => (
           <div key={ep.path} style={{
             padding: '16px 18px', borderRadius: 10,
             border: '1px solid var(--border)',
@@ -32,7 +39,7 @@ export function EndpointDocsSection() {
 
             {ep.body && (
               <div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>نمونه درخواست:</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>{s.sampleRequest}</div>
                 <pre style={{
                   padding: '10px 14px', borderRadius: 8,
                   background: 'var(--bg-surface, var(--bg-elev))',

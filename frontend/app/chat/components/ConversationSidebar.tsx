@@ -1,7 +1,9 @@
 import { Icon } from '@/components/ui/Icon'
 import { Skeleton } from '@/components/ui'
+import { useLang } from '@/components/LanguageToggle'
 import { CheckIcon, TrashIcon } from './ChatIcons'
-import { formatDate } from '../chatHelpers'
+import { formatDate, dateGroupLabel, type DateGroupKey } from '../chatHelpers'
+import { conversationSidebarStrings } from './ConversationSidebar.strings'
 import type { Conversation } from '../chatTypes'
 
 type ConversationSidebarProps = {
@@ -11,7 +13,7 @@ type ConversationSidebarProps = {
   loadingConversations: boolean
   conversationsCount: number
   filteredConversations: Conversation[]
-  groupedConversations: [string, Conversation[]][]
+  groupedConversations: [DateGroupKey, Conversation[]][]
   activeConversationId: string | null
   loadConversation: (id: string) => void
   confirmDeleteId: string | null
@@ -37,12 +39,14 @@ export default function ConversationSidebar({
   deletingId,
   deleteConversation,
 }: ConversationSidebarProps) {
+  const lang = useLang()
+  const s = conversationSidebarStrings(lang)
   return (
     <div className="conv-sidebar-content">
       {/* New chat button */}
       <button onClick={startNewChat} className="conv-new-chat-btn">
         <Icon name="plus" size={16} />
-        چت جدید
+        {s.newChat}
       </button>
 
       {/* Search input */}
@@ -51,16 +55,15 @@ export default function ConversationSidebar({
         <input
           type="text"
           className="conv-search-input"
-          placeholder="جستجوی مکالمه..."
+          placeholder={s.searchPlaceholder}
           value={sidebarSearchQuery}
           onChange={e => setSidebarSearchQuery(e.target.value)}
-          dir="rtl"
         />
         {sidebarSearchQuery && (
           <button
             className="conv-search-clear"
             onClick={() => setSidebarSearchQuery('')}
-            aria-label="پاک کردن جستجو"
+            aria-label={s.clearSearch}
           >
             <Icon name="close" size={12} />
           </button>
@@ -78,12 +81,12 @@ export default function ConversationSidebar({
         ) : filteredConversations.length === 0 ? (
           <div className="conv-list-empty">
             <Icon name={sidebarSearchQuery ? 'search' : 'chat'} size={20} className="text-[var(--text-muted)]" />
-            <span>{sidebarSearchQuery ? 'مکالمه‌ای یافت نشد' : 'هنوز مکالمهای ندارید'}</span>
+            <span>{sidebarSearchQuery ? s.noConversationsFound : s.noConversationsYet}</span>
           </div>
         ) : (
           groupedConversations.map(([group, items]) => (
             <div key={group} className="conv-date-group">
-              <div className="conv-date-header">{group}</div>
+              <div className="conv-date-header">{dateGroupLabel(group, lang)}</div>
               {items.map(conv => (
                 <div
                   key={conv.id}
@@ -93,7 +96,7 @@ export default function ConversationSidebar({
                   <div className="conv-item-content">
                     <span className="conv-item-title">{conv.title}</span>
                     <span className="conv-item-meta">
-                      <span className="conv-item-date">{formatDate(conv.updated_at || conv.created_at)}</span>
+                      <span className="conv-item-date">{formatDate(conv.updated_at || conv.created_at, lang)}</span>
                       {conv.model && <span className="conv-item-model">{conv.model}</span>}
                     </span>
                   </div>
@@ -109,7 +112,7 @@ export default function ConversationSidebar({
                       }
                     }}
                     disabled={deletingId === conv.id}
-                    title={confirmDeleteId === conv.id ? 'برای تأیید دوباره کلیک کنید' : 'حذف'}
+                    title={confirmDeleteId === conv.id ? s.confirmDelete : s.delete}
                   >
                     {deletingId === conv.id ? (
                       <span className="conv-delete-spin" />

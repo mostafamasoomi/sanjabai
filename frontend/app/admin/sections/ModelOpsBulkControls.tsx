@@ -2,7 +2,7 @@
 
 import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
-import { fmt } from '@/lib/adminI18n'
+import { fmt } from '@/lib/i18n'
 import { AVAILABILITY_OPTIONS, availabilityLabel, type Availability } from './availability'
 import { modelOpsStrings } from './ModelOpsSection.strings'
 

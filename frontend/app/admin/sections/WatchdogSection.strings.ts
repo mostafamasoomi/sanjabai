@@ -1,4 +1,4 @@
-import { dict } from '@/lib/adminI18n'
+import { dict } from '@/lib/i18n'
 
 /* Dictionary for WatchdogSection.tsx — the Telegram alert credential shared
  * by the account-lockout, financial-watchdog and content-moderation alert

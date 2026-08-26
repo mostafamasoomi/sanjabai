@@ -1,4 +1,4 @@
-import { dict } from '@/lib/adminI18n'
+import { dict } from '@/lib/i18n'
 
 const FA = {
   loadError: 'خطا در دریافت فهرست کاتالوگ — اتصال یا سرور مشکل دارد.',

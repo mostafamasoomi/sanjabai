@@ -1,8 +1,17 @@
-// Shared Persian message for the (expected-rare) CSRF-rejection path — the
+import type { Lang } from '@/components/LanguageToggle'
+import { developerConstantsStrings } from './constants.strings'
+
+// Forbidden-request toast for the (expected-rare) CSRF-rejection path — the
 // backend returns 403 with "هدر X-Requested-With ارسال نشده" if a mutating
 // request ever reaches it without the header apiFetch adds automatically.
-export const FORBIDDEN_MESSAGE = 'درخواست شما رد شد (خطای امنیتی). لطفاً صفحه را تازه‌سازی کرده و دوباره تلاش کنید.'
+export function forbiddenMessage(lang: Lang): string {
+  return developerConstantsStrings(lang).forbiddenMessage
+}
 
+// The code samples are code, not prose -- including the Persian message
+// content inside them, which demonstrates a Persian chat request and is left
+// untranslated per the i18n handoff spec (only the surrounding prose in
+// CodeExamplesSection is translated).
 export const CODE_EXAMPLES = {
   python: {
     label: 'Python',
@@ -65,17 +74,24 @@ console.log(response.choices[0].message.content);`,
 // show (those numbers existed nowhere in the backend; a daily token quota
 // table exists in the schema but its enforcement is unreachable on the
 // normal request path, so it is not a real limit and is not listed here).
-export const RATE_LIMITS = [
-  { plan: 'رایگان / بدون اشتراک', requests: '۳۰ درخواست در دقیقه' },
-  { plan: 'پایه (pro)', requests: '۱۲۰ درخواست در دقیقه' },
-  { plan: 'سازمانی (enterprise)', requests: '۳۰۰ درخواست در دقیقه' },
-]
+export function rateLimits(lang: Lang) {
+  return developerConstantsStrings(lang).rateLimits
+}
 
-export const ENDPOINTS = [
+export function endpoints(lang: Lang) {
+  const desc = developerConstantsStrings(lang).endpointDescs
+  // Falls back to the path itself (never fabricated prose) if a description
+  // is ever missing for a language -- the map above is the source of truth.
+  return ENDPOINT_DEFS.map((ep) => ({ ...ep, desc: desc[ep.path] ?? ep.path }))
+}
+
+// method/path/body are code -- Latin and untranslated in both languages.
+// The "پیام شما" placeholder inside `body` is code-sample content, not
+// prose, and is left untranslated per the i18n handoff spec.
+const ENDPOINT_DEFS = [
   {
     method: 'POST',
     path: '/v1/chat/completions',
-    desc: 'ارسال درخواست چت — سازگار با OpenAI',
     body: `{
   "model": "gpt-4o",
   "messages": [
@@ -87,7 +103,6 @@ export const ENDPOINTS = [
   {
     method: 'GET',
     path: '/v1/models',
-    desc: 'دریافت لیست مدل‌های موجود',
     body: null,
   },
 ]

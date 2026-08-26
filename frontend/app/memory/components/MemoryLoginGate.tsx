@@ -1,4 +1,8 @@
+'use client'
+
 import { EmptyState } from '@/components/ui'
+import { useLang } from '@/components/LanguageToggle'
+import { memoryLoginGateStrings } from './MemoryLoginGate.strings'
 
 /* ═══════════════════════════════════════════════════════════════
    Login gate: auth-loading skeleton, or the logged-out empty state.
@@ -13,6 +17,9 @@ import { EmptyState } from '@/components/ui'
    ═══════════════════════════════════════════════════════════════ */
 
 export function MemoryLoginGate({ authLoading }: { authLoading: boolean }) {
+  const lang = useLang()
+  const s = memoryLoginGateStrings(lang)
+
   return (
     <div style={{ maxWidth: 800, margin: '0 auto', padding: '0 16px' }}>
       {authLoading ? (
@@ -25,7 +32,7 @@ export function MemoryLoginGate({ authLoading }: { authLoading: boolean }) {
           ))}
         </div>
       ) : (
-        <EmptyState icon="lock" title="برای مشاهده حافظه وارد شوید" description="ابتدا باید وارد حساب خود شوید." />
+        <EmptyState icon="lock" title={s.title} description={s.description} />
       )}
     </div>
   )

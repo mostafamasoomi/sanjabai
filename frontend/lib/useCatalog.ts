@@ -1,5 +1,6 @@
 'use client'
 
+import type { Lang } from '@/components/LanguageToggle'
 import { useEffect, useState } from 'react'
 import { type ModelCatalogItem, type CatalogResponse } from '@/types/catalog'
 
@@ -68,9 +69,26 @@ function fetchCatalog(): Promise<CatalogResponse> {
    is the truth. Consequence: 'free' no longer exists as a price band. */
 export type PriceBand = 'standard' | 'premium'
 
-export const PRICE_BAND_LABEL: Record<PriceBand, string> = {
+const PRICE_BAND_LABEL_FA: Record<PriceBand, string> = {
   standard: 'استاندارد',
   premium: 'حرفه‌ای',
+}
+
+const PRICE_BAND_LABEL_EN: Record<PriceBand, string> = {
+  standard: 'Standard',
+  premium: 'Premium',
+}
+
+/** Kept as the Persian map so call sites written before the language toggle
+ *  keep compiling and rendering exactly as they did. New code should call
+ *  `priceBandLabel(band, lang)`. */
+export const PRICE_BAND_LABEL = PRICE_BAND_LABEL_FA
+
+/** The band's label in the active language. Same shape as
+ *  `availabilityLabel` in the admin panel, for the same reason: one lookup
+ *  table per concept, not one per screen. */
+export function priceBandLabel(band: PriceBand, lang: Lang = 'fa'): string {
+  return (lang === 'en' ? PRICE_BAND_LABEL_EN : PRICE_BAND_LABEL_FA)[band] || band
 }
 
 export const PRICE_BAND_ORDER: PriceBand[] = ['standard', 'premium']
@@ -114,11 +132,26 @@ export function priceBand(
    whole catalog rather than one chip per exact number. */
 export type ContextBand = 'small' | 'medium' | 'large' | 'xlarge'
 
-export const CONTEXT_BAND_LABEL: Record<ContextBand, string> = {
+const CONTEXT_BAND_LABEL_FA: Record<ContextBand, string> = {
   small: 'کوچک (تا ۳۲ هزار توکن)',
   medium: 'متوسط (تا ۱۵۰ هزار توکن)',
   large: 'بزرگ (تا ۶۰۰ هزار توکن)',
   xlarge: 'خیلی‌بزرگ (بیش از ۶۰۰ هزار توکن)',
+}
+
+const CONTEXT_BAND_LABEL_EN: Record<ContextBand, string> = {
+  small: 'Small (up to 32K tokens)',
+  medium: 'Medium (up to 150K tokens)',
+  large: 'Large (up to 600K tokens)',
+  xlarge: 'Very large (over 600K tokens)',
+}
+
+/** Kept as the Persian map for call sites written before the toggle. */
+export const CONTEXT_BAND_LABEL = CONTEXT_BAND_LABEL_FA
+
+/** The band's label in the active language. Pair of `priceBandLabel`. */
+export function contextBandLabel(band: ContextBand, lang: Lang = 'fa'): string {
+  return (lang === 'en' ? CONTEXT_BAND_LABEL_EN : CONTEXT_BAND_LABEL_FA)[band] || band
 }
 
 export const CONTEXT_BAND_ORDER: ContextBand[] = ['small', 'medium', 'large', 'xlarge']

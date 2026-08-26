@@ -6,7 +6,9 @@ import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { Icon } from '@/components/ui/Icon'
 import { Spinner, EmptyState, toast } from '@/components/ui'
-import { faPrice, faDate } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { hermesOrdersStrings } from './page.strings'
 
 type Order = {
   id: number
@@ -16,16 +18,6 @@ type Order = {
   monthly_price_irt: number
   created_at: string
   delivered_at: string | null
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  pending_payment: 'در انتظار پرداخت',
-  paid: 'پرداخت شد — در صف تحویل',
-  provisioning: 'در حال راه‌اندازی',
-  active: 'فعال',
-  suspended: 'متوقف‌شده',
-  cancelled: 'لغوشده',
-  expired: 'منقضی‌شده',
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -41,6 +33,9 @@ const STATUS_BADGE: Record<string, string> = {
 export default function HermesOrdersPage() {
   const { token, user, loading: authLoading } = useAuth()
   const searchParams = useSearchParams()
+  const lang = useLang()
+  const s = hermesOrdersStrings(lang)
+  const f = fmt(lang)
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -53,11 +48,11 @@ export default function HermesOrdersPage() {
     const payment = searchParams.get('payment')
     let banner: { ok: boolean; text: string } | null = null
     if (payment === 'success') {
-      banner = { ok: true, text: 'پرداخت با موفقیت انجام شد و سفارش شما ثبت شد. سفارش در صف تحویل قرار گرفت.' }
+      banner = { ok: true, text: s.paymentSuccess }
     } else if (payment === 'failed') {
-      banner = { ok: false, text: 'پرداخت ناموفق بود یا لغو شد. مبلغی از حساب شما کسر نشده است.' }
+      banner = { ok: false, text: s.paymentFailed }
     } else if (payment === 'error') {
-      banner = { ok: false, text: 'خطایی در پردازش پرداخت رخ داد. اگر مبلغی کسر شده باشد، به‌زودی بازمی‌گردد.' }
+      banner = { ok: false, text: s.paymentError }
     }
     if (banner) {
       setPaymentBanner(banner)
@@ -65,6 +60,7 @@ export default function HermesOrdersPage() {
       url.searchParams.delete('payment')
       window.history.replaceState(null, '', url.pathname + url.search + url.hash)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
   useEffect(() => {
@@ -77,19 +73,20 @@ export default function HermesOrdersPage() {
         const data = await res.json()
         if (!cancelled) setOrders(Array.isArray(data) ? data : [])
       } catch {
-        if (!cancelled) toast('خطا در دریافت سفارش‌ها', 'error')
+        if (!cancelled) toast(s.loadError, 'error')
       } finally {
         if (!cancelled) setLoading(false)
       }
     })()
     return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
   if (!authLoading && !user) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '1rem' }}>
-        <h1 className="page-title">وارد شوید</h1>
-        <a href="/login" className="btn btn-primary">ورود به حساب</a>
+        <h1 className="page-title">{s.signIn}</h1>
+        <a href="/login" className="btn btn-primary">{s.loginToAccount}</a>
       </div>
     )
   }
@@ -97,10 +94,10 @@ export default function HermesOrdersPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="page-title">سفارش‌های سرور هرمس</h1>
+        <h1 className="page-title">{s.pageTitle}</h1>
         <Link href="/hermes" className="btn btn-primary btn-sm">
           <Icon name="plus" size={14} />
-          سفارش جدید
+          {s.newOrder}
         </Link>
       </div>
 
@@ -126,7 +123,7 @@ export default function HermesOrdersPage() {
           <span style={{ flex: 1, fontSize: '0.875rem', color: 'var(--text-primary)' }}>{paymentBanner.text}</span>
           <button
             onClick={() => setPaymentBanner(null)}
-            aria-label="بستن"
+            aria-label={s.close}
             style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, display: 'inline-flex' }}
           >
             <Icon name="close" size={16} />
@@ -137,8 +134,8 @@ export default function HermesOrdersPage() {
       {loading ? (
         <div className="flex items-center justify-center" style={{ minHeight: '30vh' }}><Spinner size="lg" /></div>
       ) : orders.length === 0 ? (
-        <EmptyState icon="rocket" title="هنوز سفارشی ثبت نکرده‌اید" description="یک سرور هرمس سفارش دهید تا اینجا نمایش داده شود.">
-          <Link href="/hermes" className="btn btn-primary">مشاهده پلن‌ها</Link>
+        <EmptyState icon="rocket" title={s.emptyTitle} description={s.emptyDescription}>
+          <Link href="/hermes" className="btn btn-primary">{s.viewPlans}</Link>
         </EmptyState>
       ) : (
         <div className="flex flex-col gap-3">
@@ -146,17 +143,17 @@ export default function HermesOrdersPage() {
             <div key={o.id} className="card" style={{ padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-2">
-                  <span style={{ fontWeight: 700 }}>سفارش #{o.id}</span>
+                  <span style={{ fontWeight: 700 }}>{s.orderNumber(f.num(o.id))}</span>
                   <span className={`badge ${STATUS_BADGE[o.status] || 'aurora-cap-default'}`} style={{ fontSize: '0.6875rem' }}>
-                    {STATUS_LABEL[o.status] || o.status}
+                    {s.status[o.status] || o.status}
                   </span>
                 </div>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{faDate(o.created_at)}</span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{f.date(o.created_at)}</span>
               </div>
               <div className="flex items-center gap-4">
-                <span style={{ fontWeight: 600 }}>{faPrice(o.setup_price_irt + o.monthly_price_irt)}</span>
+                <span style={{ fontWeight: 600 }}>{f.price(o.setup_price_irt + o.monthly_price_irt)}</span>
                 {o.status === 'active' && (
-                  <Link href="/hermes/servers" className="btn btn-secondary btn-sm">مشاهده سرور</Link>
+                  <Link href="/hermes/servers" className="btn btn-secondary btn-sm">{s.viewServer}</Link>
                 )}
               </div>
             </div>

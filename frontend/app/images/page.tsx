@@ -6,6 +6,9 @@ import { apiFetch } from '@/lib/apiFetch'
 import { useCatalog } from '@/lib/useCatalog'
 import { type ModelCatalogItem } from '@/types/catalog'
 import { EmptyState, Skeleton } from '@/components/ui'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { toFaDigits } from '@/lib/format'
 import {
   ImageModelPicker,
   ImageCountPicker,
@@ -16,6 +19,8 @@ import {
   type ImagesErrorInfo,
   type ImagesResult,
 } from './ImageGenPanels'
+import { imageGenPanelsStrings } from './ImageGenPanels.strings'
+import { imagesPageStrings } from './page.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    /images — POST /v1/images/generations against the live catalog.
@@ -35,12 +40,18 @@ import {
 // bound for the stepper, not the enforcement point.
 const MAX_N_IMAGES = 4
 
-const SIZE_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: 'پیش‌فرض' },
-  { value: '1024x1024', label: '۱۰۲۴×۱۰۲۴' },
-  { value: '1024x1792', label: '۱۰۲۴×۱۷۹۲' },
-  { value: '1792x1024', label: '۱۷۹۲×۱۰۲۴' },
-]
+// Raw pixel dimensions — Latin digits always; localised for display via
+// `sizeLabel` below, same rule as a model id or an API value.
+const SIZE_VALUES = ['', '1024x1024', '1024x1792', '1792x1024']
+
+/** `1024x1024` -> `۱۰۲۴×۱۰۲۴` (fa) / `1024×1024` (en). Not a plain number —
+ *  a raw dimension string — so it goes through `toFaDigits` directly rather
+ *  than `f.num`, but still must not stay Persian-digit in English mode. */
+function sizeLabel(value: string, lang: 'fa' | 'en', defaultLabel: string): string {
+  if (!value) return defaultLabel
+  const pretty = value.replace('x', '×')
+  return lang === 'en' ? pretty : toFaDigits(pretty)
+}
 
 type Status = 'idle' | 'generating' | 'success' | 'error'
 
@@ -49,6 +60,10 @@ function isImageModel(m: ModelCatalogItem): boolean {
 }
 
 export default function ImagesPage() {
+  const lang = useLang()
+  const f = fmt(lang)
+  const s = imagesPageStrings(lang)
+  const panelStrings = imageGenPanelsStrings(lang)
   const { token } = useAuth()
   const { models, loading: catalogLoading, error: catalogError } = useCatalog()
 
@@ -112,7 +127,7 @@ export default function ImagesPage() {
       }
 
       if (!res.ok) {
-        setErrorInfo(buildErrorInfo(res.status, data))
+        setErrorInfo(buildErrorInfo(res.status, data, lang))
         setStatus('error')
         return
       }
@@ -120,14 +135,14 @@ export default function ImagesPage() {
       const d = (data ?? {}) as { data?: { url?: string; b64_json?: string }[]; billing?: { cost?: number } }
       const images = Array.isArray(d.data) ? d.data : []
       if (images.length === 0) {
-        setErrorInfo({ message: 'تولید تصویر ناموفق بود؛ هیچ تصویری از سرویس دریافت نشد' })
+        setErrorInfo({ message: s.noImagesReceived })
         setStatus('error')
         return
       }
       setResult({ images, cost: d.billing?.cost ?? null })
       setStatus('success')
     } catch {
-      setErrorInfo({ message: 'خطا در ارتباط با سرور. اتصال اینترنت خود را بررسی کنید و دوباره تلاش کنید.' })
+      setErrorInfo({ message: s.networkError })
       setStatus('error')
     }
   }
@@ -136,8 +151,8 @@ export default function ImagesPage() {
     <div className="compare-page">
       <div className="compare-header">
         <div>
-          <h1 className="page-title">تولید تصویر</h1>
-          <p className="page-subtitle">توضیح متنی خود را بنویسید و از یک مدل تولید تصویر فعال، تصویر بسازید</p>
+          <h1 className="page-title">{s.title}</h1>
+          <p className="page-subtitle">{s.subtitle}</p>
         </div>
       </div>
 
@@ -149,35 +164,33 @@ export default function ImagesPage() {
       )}
 
       {!catalogLoading && catalogError && (
-        <EmptyState
-          icon="warning"
-          title="خطا در دریافت فهرست مدل‌ها"
-          description="اتصال به سرور برقرار نشد. لطفاً صفحه را دوباره بارگذاری کنید."
-        />
+        <EmptyState icon="warning" title={s.catalogErrorTitle} description={s.catalogErrorDesc} />
       )}
 
       {noModelsAvailable && (
-        <EmptyState
-          icon="camera"
-          title="در حال حاضر هیچ مدل تولید تصویری فعال نیست"
-          description="مدل‌های تولید تصویر پس از تأیید با پروب زنده و ثبت قیمت، اینجا نمایش داده می‌شوند."
-        />
+        <EmptyState icon="camera" title={s.noModelsTitle} description={s.noModelsDesc} />
       )}
 
       {!catalogLoading && !catalogError && (
         <div className="card space-y-4">
           <div>
-            <label className="compare-picker-label">مدل</label>
-            <ImageModelPicker models={imageModels} selected={selected} onSelect={setSelected} disabled={formDisabled} />
+            <label className="compare-picker-label">{s.modelLabel}</label>
+            <ImageModelPicker
+              models={imageModels}
+              selected={selected}
+              onSelect={setSelected}
+              disabled={formDisabled}
+              s={panelStrings}
+            />
           </div>
 
           <div>
-            <label className="compare-picker-label">توضیح تصویر</label>
+            <label className="compare-picker-label">{s.promptLabel}</label>
             <textarea
               dir="auto"
               className="input w-full"
               rows={4}
-              placeholder="مثلاً: یک منظره کوهستانی در غروب آفتاب"
+              placeholder={s.promptPlaceholder}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               disabled={formDisabled}
@@ -186,20 +199,20 @@ export default function ImagesPage() {
 
           <div className="flex items-center gap-8 flex-wrap">
             <div>
-              <label className="compare-picker-label">تعداد تصویر (حداکثر ۴)</label>
-              <ImageCountPicker value={n} onChange={setN} max={MAX_N_IMAGES} disabled={formDisabled} />
+              <label className="compare-picker-label">{s.countLabel(f.num(MAX_N_IMAGES))}</label>
+              <ImageCountPicker value={n} onChange={setN} max={MAX_N_IMAGES} disabled={formDisabled} f={f} />
             </div>
             <div>
-              <label className="compare-picker-label">اندازه تصویر</label>
+              <label className="compare-picker-label">{s.sizeLabel}</label>
               <select
                 className="input"
                 value={size}
                 onChange={(e) => setSize(e.target.value)}
                 disabled={formDisabled}
               >
-                {SIZE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
+                {SIZE_VALUES.map((value) => (
+                  <option key={value} value={value}>
+                    {sizeLabel(value, lang, s.sizeDefault)}
                   </option>
                 ))}
               </select>
@@ -207,14 +220,14 @@ export default function ImagesPage() {
           </div>
 
           <button className="btn btn-primary" onClick={handleSubmit} disabled={!canSubmit}>
-            تولید تصویر
+            {s.submit}
           </button>
         </div>
       )}
 
-      {status === 'generating' && <GeneratingPanel />}
+      {status === 'generating' && <GeneratingPanel s={panelStrings} />}
       {status === 'error' && errorInfo && <ErrorPanel info={errorInfo} />}
-      {status === 'success' && result && <ResultGrid result={result} />}
+      {status === 'success' && result && <ResultGrid result={result} f={f} s={panelStrings} />}
     </div>
   )
 }

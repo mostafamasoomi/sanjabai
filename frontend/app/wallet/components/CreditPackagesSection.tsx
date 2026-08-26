@@ -1,13 +1,16 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
-import { fmtToman } from '../walletHelpers'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
 import { EmptyStateIcon } from './WalletEmptyState'
+import { creditPackagesSectionStrings } from './CreditPackagesSection.strings'
 import type { CreditPackage } from '../walletTypes'
 
 // ─── Credit Packages Section ────────────────────────────────────────────────
 // Every money value here (base_amount, total_credits, the bonus delta) is a
 // raw, whole-toman integer straight from the API, passed straight into
-// faNum / fmtToman -- no division, no multiplication, no unit conversion.
+// f.num / f.price -- no division, no multiplication, no unit conversion.
 export function CreditPackagesSection({
   creditPackages,
   purchasingPkgId,
@@ -19,28 +22,37 @@ export function CreditPackagesSection({
   modelOutputRates: Record<string, number>
   onPurchase: (pkgId: string) => void
 }) {
+  const lang = useLang()
+  const s = creditPackagesSectionStrings(lang)
+  const f = fmt(lang)
+
   return (
     <div className="card" style={{ marginBottom: 24 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
         <Icon name="gift" size={16} className="text-accent" />
-        <h2 className="card-title">بسته‌های اعتباری</h2>
+        <h2 className="card-title">{s.title}</h2>
         {creditPackages.length > 0 && (
-          <span className="badge badge-accent" style={{ marginLeft: 4 }}>{faNum(creditPackages.length)}</span>
+          <span className="badge badge-accent" style={{ marginLeft: 4 }}>{f.num(creditPackages.length)}</span>
         )}
       </div>
 
       {creditPackages.length === 0 ? (
-        <EmptyStateIcon icon="gift" title="بسته‌ای موجود نیست" desc="در حال حاضر بسته اعتباری برای خرید وجود ندارد." />
+        <EmptyStateIcon icon="gift" title={s.noneTitle} desc={s.noneDesc} />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
           {creditPackages.map((pkg) => {
             const isPurchasing = purchasingPkgId === pkg.id
-            const baseToman = faNum(pkg.base_amount)
+            const baseToman = f.num(pkg.base_amount)
             const bonusToman = pkg.bonus_percent > 0
-              ? faNum(pkg.total_credits - pkg.base_amount)
+              ? f.num(pkg.total_credits - pkg.base_amount)
               : null
             const outputRate = pkg.model_id ? modelOutputRates[pkg.model_id] : undefined
             const approxTokens = outputRate ? Math.round((pkg.total_credits / outputRate) * 1_000_000) : null
+            // The API already sends both names; pick the one that matches
+            // the UI language for the headline and keep the other as the
+            // smaller subtitle, instead of always showing Persian on top.
+            const primaryName = lang === 'fa' ? pkg.name_fa : pkg.name_en
+            const secondaryName = lang === 'fa' ? pkg.name_en : pkg.name_fa
             return (
               <div
                 key={pkg.id}
@@ -69,15 +81,15 @@ export function CreditPackagesSection({
                       borderRadius: 'var(--radius-sm)',
                     }}
                   >
-                    +{pkg.bonus_percent}% بونوس
+                    {s.bonus(pkg.bonus_percent)}
                   </span>
                 )}
 
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
-                  {pkg.name_fa}
+                  {primaryName}
                 </h3>
                 <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: pkg.model_id ? 6 : 16 }}>
-                  {pkg.name_en}
+                  {secondaryName}
                 </p>
                 {pkg.model_id && (
                   <span
@@ -90,22 +102,25 @@ export function CreditPackagesSection({
 
                 <div className="flex-1">
                   <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 4, fontFeatureSettings: '"tnum"' }}>
-                    {faNum(pkg.total_credits)} <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)' }}>تومان</span>
+                    {/* Unit split into its own smaller/muted span, same as
+                        before -- f.price would fold it into the number at
+                        the same size and lose that styling. */}
+                    {f.num(pkg.total_credits)} <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-muted)' }}>{s.tomanUnit}</span>
                   </div>
                   <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                    شما {baseToman} تومان پرداخت می‌کنید
+                    {s.youPay(baseToman)}
                   </p>
                   {bonusToman && (
                     <p style={{ fontSize: 12, color: 'var(--positive)', marginBottom: 8 }}>
-                      + {bonusToman} تومان بونوس
+                      {s.bonusAmount(bonusToman)}
                     </p>
                   )}
                   <p style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    معادل {fmtToman(pkg.total_credits)}
+                    {s.equivalent(f.price(pkg.total_credits))}
                   </p>
                   {approxTokens !== null && (
                     <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
-                      ≈ {faNum(Math.round(approxTokens / 1_000_000))} میلیون توکن {pkg.model_id} (بر اساس نرخ خروجی فعلی)
+                      {s.approxTokens(f.num(Math.round(approxTokens / 1_000_000)), pkg.model_id!)}
                     </p>
                   )}
                 </div>
@@ -125,7 +140,7 @@ export function CreditPackagesSection({
                   }}
                 >
                   <Icon name={isPurchasing ? 'refresh' : 'payment'} size={14} className={isPurchasing ? 'spin' : ''} />
-                  {isPurchasing ? 'در حال پردازش...' : 'خرید بسته'}
+                  {isPurchasing ? s.processing : s.buyPackage}
                 </button>
               </div>
             )

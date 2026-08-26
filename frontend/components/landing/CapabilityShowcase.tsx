@@ -2,15 +2,17 @@
 
 import { useRef, useState } from 'react'
 import { Icon } from '../ui/Icon'
+import { useLang } from '../LanguageToggle'
 import { Reveal } from './Reveal'
 import { useTilt } from './useTilt'
 import { ForwardArrow } from './primitives'
-import { CAPABILITY_TABS, MEMORY_SAMPLES, DOCUMENT_TYPES, TASK_SAMPLES } from './content'
+import { capabilitiesContent } from './content'
+import { capabilityShowcaseStrings } from './CapabilityShowcase.strings'
 
-function MemoryPanel() {
+function MemoryPanel({ samples }: { samples: { category: string; text: string }[] }) {
   return (
     <ul className="lp-capshow__list">
-      {MEMORY_SAMPLES.map((m) => (
+      {samples.map((m) => (
         <li key={m.text} className="lp-capshow__row">
           <span>{m.text}</span>
           <span className="lp-capshow__tag">{m.category}</span>
@@ -20,10 +22,10 @@ function MemoryPanel() {
   )
 }
 
-function DocumentsPanel() {
+function DocumentsPanel({ types }: { types: { ext: string; label: string; desc: string }[] }) {
   return (
     <div className="lp-capshow__doctypes">
-      {DOCUMENT_TYPES.map((d) => (
+      {types.map((d) => (
         <div key={d.ext} className="lp-capshow__doctype">
           <span className="lp-capshow__ext" dir="ltr">
             {d.ext}
@@ -38,10 +40,10 @@ function DocumentsPanel() {
   )
 }
 
-function TasksPanel() {
+function TasksPanel({ tasks }: { tasks: { title: string; schedule: string; channel: string }[] }) {
   return (
     <ul className="lp-capshow__list">
-      {TASK_SAMPLES.map((t) => (
+      {tasks.map((t) => (
         <li key={t.title} className="lp-capshow__row">
           <div>
             <strong>{t.title}</strong>
@@ -60,8 +62,11 @@ function TasksPanel() {
  * interaction (tabs swap panel content) rather than inventing a new pattern.
  */
 export function CapabilityShowcase() {
+  const lang = useLang()
+  const s = capabilityShowcaseStrings(lang)
+  const content = capabilitiesContent(lang)
   const [active, setActive] = useState(0)
-  const tab = CAPABILITY_TABS[active]
+  const tab = content.tabs[active]
   const panelRef = useRef<HTMLDivElement>(null)
   useTilt(panelRef, true, 4)
 
@@ -70,19 +75,15 @@ export function CapabilityShowcase() {
       <div className="lp-container">
         <Reveal>
           <header className="lp-head">
-            <span className="lp-eyebrow">فراتر از چت</span>
-            <h2 className="lp-title">
-              دستیاری که یادش می‌ماند، برایتان می‌سازد و به‌موقع کارش را انجام می‌دهد
-            </h2>
-            <p className="lp-lead">
-              همه در همان فضای کاری — بدون افزونه‌ی جدا و بدون نرم‌افزار اضافه.
-            </p>
+            <span className="lp-eyebrow">{s.eyebrow}</span>
+            <h2 className="lp-title">{s.title}</h2>
+            <p className="lp-lead">{s.lead}</p>
           </header>
         </Reveal>
 
         <Reveal delay={80} className="lp-capshow">
-          <div className="lp-capshow__tabs" role="tablist" aria-label="قابلیت‌ها">
-            {CAPABILITY_TABS.map((t, i) => (
+          <div className="lp-capshow__tabs" role="tablist" aria-label={s.tabsAria}>
+            {content.tabs.map((t, i) => (
               <button
                 key={t.id}
                 type="button"
@@ -107,9 +108,9 @@ export function CapabilityShowcase() {
             </div>
 
             <div className="lp-capshow__panel-body">
-              {tab.id === 'memory' && <MemoryPanel />}
-              {tab.id === 'documents' && <DocumentsPanel />}
-              {tab.id === 'tasks' && <TasksPanel />}
+              {tab.id === 'memory' && <MemoryPanel samples={content.memorySamples} />}
+              {tab.id === 'documents' && <DocumentsPanel types={content.documentTypes} />}
+              {tab.id === 'tasks' && <TasksPanel tasks={content.taskSamples} />}
             </div>
 
             <a href={tab.href} className="lp-feature__link">

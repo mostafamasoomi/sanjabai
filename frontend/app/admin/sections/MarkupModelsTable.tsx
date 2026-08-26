@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
-import { fmt } from '@/lib/adminI18n'
+import { fmt } from '@/lib/i18n'
 import { previewPrice, PercentInput, type ModelMarkupRow } from './MarkupSection'
 import { markupModelsTableStrings } from './MarkupModelsTable.strings'
 

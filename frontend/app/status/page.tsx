@@ -3,10 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { Skeleton } from '@/components/ui'
-import { faNum } from '@/lib/format'
-import { HEALTH_LABEL, HEALTH_TONE } from '@/app/chat/components/modelUtils'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt, type Formatters } from '@/lib/i18n'
+import { HEALTH_TONE, healthLabel } from '@/app/chat/components/modelUtils'
 import type { HealthStatus, HealthSummary, ModelHealthEntry } from '@/types/catalog'
 import { useStatusSummary, StatusOverviewSections, SupportSection } from './StatusSections'
+import { statusPageStrings } from './page.strings'
+
+type Strings = ReturnType<typeof statusPageStrings>
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Live model status.
@@ -18,47 +22,52 @@ import { useStatusSummary, StatusOverviewSections, SupportSection } from './Stat
 
 const REFRESH_MS = 30_000
 
-const OVERALL_COPY: Record<HealthSummary['overall'], { label: string; tone: string }> = {
-  operational: { label: 'همه‌ی سرویس‌ها فعال هستند', tone: 'var(--positive)' },
-  degraded: { label: 'بخشی از مدل‌ها ناپایدار هستند', tone: 'var(--warning)' },
-  down: { label: 'اختلال گسترده', tone: 'var(--danger)' },
-}
-
-/** Copy for the model-supply aggregate. Deliberately says nothing about
- *  WHICH gateway or HOW MANY there are — that is admin-only information. */
-const GATEWAY_COPY: Record<
-  NonNullable<HealthSummary['gateways']>['status'],
-  { label: string; hint: string; dot: string }
-> = {
-  operational: { label: 'برقرار', hint: 'همهٔ مسیرهای تأمین پاسخ می‌دهند', dot: 'var(--positive)' },
-  degraded: { label: 'ناپایدار', hint: 'بخشی از مدل‌ها ممکن است پاسخ ندهند', dot: 'var(--warning)' },
-  down: { label: 'قطع', hint: 'تأمین مدل در دسترس نیست', dot: 'var(--danger)' },
-  unknown: { label: 'نامشخص', hint: 'وضعیت تأمین قابل تشخیص نیست', dot: 'var(--muted, #8b8b8b)' },
-}
-
 const STATUS_ORDER: HealthStatus[] = ['down', 'degraded', 'unknown', 'healthy']
 
-/** Thin wrapper: this page always rounds before formatting. */
-function fa(n: number | null | undefined, fallback = '—'): string {
-  if (n == null || Number.isNaN(n)) return fallback
-  return faNum(Math.round(n), { fallback })
+const OVERALL_TONE: Record<HealthSummary['overall'], string> = {
+  operational: 'var(--positive)',
+  degraded: 'var(--warning)',
+  down: 'var(--danger)',
 }
 
-function relativeTime(iso: string | null): string {
+const GATEWAY_DOT: Record<NonNullable<HealthSummary['gateways']>['status'], string> = {
+  operational: 'var(--positive)',
+  degraded: 'var(--warning)',
+  down: 'var(--danger)',
+  unknown: 'var(--muted, #8b8b8b)',
+}
+
+/** Thin wrapper: this page always rounds before formatting. */
+function num(f: Formatters, n: number | null | undefined, fallback = '—'): string {
+  if (n == null || Number.isNaN(n)) return fallback
+  return f.num(Math.round(n), { fallback })
+}
+
+function relativeTime(iso: string | null, f: Formatters, s: Strings): string {
   if (!iso) return '—'
   const then = new Date(iso).getTime()
   if (Number.isNaN(then)) return '—'
   const seconds = Math.max(0, Math.floor((Date.now() - then) / 1000))
-  if (seconds < 60) return 'همین الان'
-  if (seconds < 3600) return `${fa(seconds / 60)} دقیقه پیش`
-  if (seconds < 86_400) return `${fa(seconds / 3600)} ساعت پیش`
-  return `${fa(seconds / 86_400)} روز پیش`
+  if (seconds < 60) return s.justNow
+  if (seconds < 3600) return s.minutesAgo(num(f, seconds / 60))
+  if (seconds < 86_400) return s.hoursAgo(num(f, seconds / 3600))
+  return s.daysAgo(num(f, seconds / 86_400))
 }
 
-function StatusRow({ model }: { model: ModelHealthEntry }) {
+function StatusRow({
+  model,
+  f,
+  s,
+  health,
+}: {
+  model: ModelHealthEntry
+  f: Formatters
+  s: Strings
+  health: Record<HealthStatus, string>
+}) {
   return (
     <tr className="status-row">
-      <td data-label="مدل">
+      <td data-label={s.colModel} data-col="model">
         <div className="status-model">
           <span
             className="model-health-dot"
@@ -77,27 +86,27 @@ function StatusRow({ model }: { model: ModelHealthEntry }) {
           </div>
         </div>
       </td>
-      <td data-label="وضعیت">
+      <td data-label={s.colStatus}>
         <span className={`model-health-badge model-health-${model.status}`}>
-          {HEALTH_LABEL[model.status]}
+          {health[model.status]}
         </span>
       </td>
-      <td className="status-num" data-label="نرخ موفقیت">
-        {model.successRate == null ? '—' : `${fa(model.successRate * 100)}٪`}
+      <td className="status-num" data-label={s.colSuccessRate}>
+        {model.successRate == null ? '—' : f.percent(model.successRate * 100)}
       </td>
-      <td className="status-num" data-label="تأخیر میانه">
+      <td className="status-num" data-label={s.colLatency}>
         {model.latencyP50Ms == null ? (
           '—'
         ) : (
           // dir="ltr" so the unit stays after the number; the RTL paragraph
           // otherwise reorders it to "ms ۷۸۰".
-          <span dir="ltr">{fa(model.latencyP50Ms)} ms</span>
+          <span dir="ltr">{num(f, model.latencyP50Ms)} ms</span>
         )}
       </td>
-      <td className="status-num" data-label="نمونه">{fa(model.sampleCount, '۰')}</td>
-      <td data-label="آخرین رویداد">
+      <td className="status-num" data-label={s.colSamples}>{num(f, model.sampleCount, f.num(0))}</td>
+      <td data-label={s.colLastEvent}>
         {model.status === 'healthy' || !model.lastError ? (
-          <span className="status-muted">{relativeTime(model.lastOkAt)}</span>
+          <span className="status-muted">{relativeTime(model.lastOkAt, f, s)}</span>
         ) : (
           <span className="status-error" dir="ltr" title={model.lastError}>
             {model.lastError}
@@ -109,6 +118,10 @@ function StatusRow({ model }: { model: ModelHealthEntry }) {
 }
 
 export default function StatusPage() {
+  const lang = useLang()
+  const f = fmt(lang)
+  const s = statusPageStrings(lang)
+  const health = healthLabel(lang)
   const [data, setData] = useState<HealthSummary | null>(null)
   const [error, setError] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -151,22 +164,22 @@ export default function StatusPage() {
     })
   }, [data])
 
-  const overall = data ? OVERALL_COPY[data.overall] : null
+  const overallTone = data ? OVERALL_TONE[data.overall] : null
+  const overallLabel = data ? s.overall[data.overall] : null
 
   return (
     <div className="status-page">
       <header className="status-header">
         <div>
-          <h1 className="page-title">وضعیت مدل‌ها</h1>
+          <h1 className="page-title">{s.title}</h1>
           <p className="page-subtitle">
-            سلامت هر مدل به‌صورت زنده اندازه‌گیری می‌شود — از درخواست‌های واقعی کاربران و
-            بررسی‌های دوره‌ای.
-            {data && ` بازه‌ی محاسبه: ${fa(data.windowMinutes)} دقیقه‌ی گذشته.`}
+            {s.subtitle}
+            {data && s.subtitleWindow(f.num(data.windowMinutes))}
           </p>
         </div>
         <button type="button" className="btn btn-secondary btn-sm" onClick={load}>
           <Icon name="refresh" size={14} />
-          به‌روزرسانی
+          {s.refresh}
         </button>
       </header>
 
@@ -184,33 +197,30 @@ export default function StatusPage() {
         <div className="card status-error-card">
           <Icon name="warning" size={20} />
           <div>
-            <strong>وضعیت در دسترس نیست</strong>
-            <p className="card-desc">
-              گزارش سلامت خوانده نشد. این یعنی خود سرویس وضعیت مشکل دارد، نه لزوماً
-              مدل‌ها.
-            </p>
+            <strong>{s.unavailableTitle}</strong>
+            <p className="card-desc">{s.unavailableDesc}</p>
           </div>
         </div>
       )}
 
-      {!loading && !error && data && overall && (
+      {!loading && !error && data && overallTone && overallLabel && (
         <>
-          <div className="card status-banner" style={{ borderColor: overall.tone }}>
+          <div className="card status-banner" style={{ borderColor: overallTone }}>
             <span
               className="model-health-dot status-banner-dot"
-              style={{ background: overall.tone }}
+              style={{ background: overallTone }}
               aria-hidden
             />
             <div>
-              <strong style={{ color: overall.tone }}>{overall.label}</strong>
+              <strong style={{ color: overallTone }}>{overallLabel}</strong>
               {/* Separate elements rather than a "·" between each pair: in RTL
                   a middle dot sits right against the preceding digit, so
                   "۱ ناپایدار · ۱ down" renders as though it read "۱۰". */}
               <p className="card-desc status-counts">
-                {STATUS_ORDER.map((s) => (
-                  <span key={s} className="status-count">
-                    <span className="status-count-value">{fa(data.counts[s])}</span>
-                    {HEALTH_LABEL[s]}
+                {STATUS_ORDER.map((st) => (
+                  <span key={st} className="status-count">
+                    <span className="status-count-value">{f.num(data.counts[st])}</span>
+                    {health[st]}
                   </span>
                 ))}
               </p>
@@ -227,20 +237,20 @@ export default function StatusPage() {
               the page should say so without naming anything. */}
           {data.gateways && (
             <section className="status-section">
-              <h2 className="aurora-section-title">تأمین مدل‌ها</h2>
+              <h2 className="aurora-section-title">{s.supplySection}</h2>
               <div className="status-upstreams">
                 <div className="card status-upstream">
                   <span
                     className="model-health-dot"
-                    style={{ background: GATEWAY_COPY[data.gateways.status].dot }}
+                    style={{ background: GATEWAY_DOT[data.gateways.status] }}
                     aria-hidden
                   />
                   <div className="status-upstream-text">
                     <span className="status-model-name">
-                      {GATEWAY_COPY[data.gateways.status].label}
+                      {s.gateway[data.gateways.status].label}
                     </span>
                     <span className="status-muted">
-                      {GATEWAY_COPY[data.gateways.status].hint}
+                      {s.gateway[data.gateways.status].hint}
                     </span>
                   </div>
                 </div>
@@ -249,38 +259,32 @@ export default function StatusPage() {
           )}
 
           <section className="status-section">
-            <h2 className="aurora-section-title">مدل‌ها</h2>
+            <h2 className="aurora-section-title">{s.modelsSection}</h2>
             <div className="card status-table-wrap">
               <table className="status-table">
                 <thead>
                   <tr>
-                    <th>مدل</th>
-                    <th>وضعیت</th>
-                    <th>نرخ موفقیت</th>
-                    <th>تأخیر میانه</th>
-                    <th>نمونه</th>
-                    <th>آخرین رویداد</th>
+                    <th>{s.colModel}</th>
+                    <th>{s.colStatus}</th>
+                    <th>{s.colSuccessRate}</th>
+                    <th>{s.colLatency}</th>
+                    <th>{s.colSamples}</th>
+                    <th>{s.colLastEvent}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {models.map((m) => (
-                    <StatusRow key={m.id} model={m} />
+                    <StatusRow key={m.id} model={m} f={f} s={s} health={health} />
                   ))}
                 </tbody>
               </table>
 
-              {models.length === 0 && (
-                <p className="status-empty">
-                  هنوز نمونه‌ای ثبت نشده است. اولین بررسی دوره‌ای پس از راه‌اندازی سرویس
-                  انجام می‌شود.
-                </p>
-              )}
+              {models.length === 0 && <p className="status-empty">{s.noSamples}</p>}
             </div>
           </section>
 
           <p className="status-footnote">
-            آخرین به‌روزرسانی: {relativeTime(data.generatedAt)} · این صفحه هر{' '}
-            {fa(REFRESH_MS / 1000)} ثانیه تازه می‌شود.
+            {s.footnote(relativeTime(data.generatedAt, f, s), f.num(REFRESH_MS / 1000))}
           </p>
         </>
       )}

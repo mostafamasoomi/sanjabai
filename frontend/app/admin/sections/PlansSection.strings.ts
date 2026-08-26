@@ -1,4 +1,4 @@
-import { dict } from '@/lib/adminI18n'
+import { dict } from '@/lib/i18n'
 
 const FA = {
   headerTitle: 'پلن‌ها و اشتراک‌ها',

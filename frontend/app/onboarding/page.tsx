@@ -6,7 +6,9 @@ import { useAuth } from '@/lib/auth'
 import { useCatalog } from '@/lib/useCatalog'
 import { Skeleton } from '@/components/ui'
 import { BrandLockup } from '@/components/BrandLockup'
+import { useLang } from '@/components/LanguageToggle'
 import { markOnboarded, isOnboarded, displayName } from '@/lib/onboarding'
+import { onboardingPageStrings } from './page.strings'
 import { GOALS } from './constants'
 import { recommendFor, saveFavorites } from './onboardingHelpers'
 import { useFavorites } from './hooks/useFavorites'
@@ -36,6 +38,8 @@ import { StepTips } from './components/StepTips'
 
 export default function OnboardingPage() {
   const router = useRouter()
+  const lang = useLang()
+  const s = onboardingPageStrings(lang)
   const { user, loading: authLoading } = useAuth()
   const { models, loading: catalogLoading } = useCatalog()
 
@@ -45,7 +49,7 @@ export default function OnboardingPage() {
   const [redirecting, setRedirecting] = useState(false)
 
   const goal = GOALS.find((g) => g.id === goalId) || null
-  const recommendation = goal ? recommendFor(goal, models, favoriteIds) : null
+  const recommendation = goal ? recommendFor(goal, models, favoriteIds, lang) : null
 
   // ── First-visit / auth guards ────────────────────────────────────────────
   useEffect(() => {
@@ -105,8 +109,8 @@ export default function OnboardingPage() {
           {/* The real lockup. This corner was still a rounded tile with the
               letter «M» in it -- a leftover mark from before the rebrand --
               next to "Sanjabai" set in the page font. */}
-          <BrandLockup height={26} />
-          <span className="badge badge-accent">تنظیمات اولیه</span>
+          <BrandLockup height={30} />
+          <span className="badge badge-accent">{s.setupBadge}</span>
         </div>
 
         <StepProgress step={step} />

@@ -2,8 +2,10 @@
 
 import { useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
 import { fmtPct } from '../usageHelpers'
+import { modelDistributionCardStrings } from './ModelDistributionCard.strings'
 import { FadeInCard } from './FadeInCard'
 import { DonutChart } from './DonutChart'
 import type { ModelStat } from '../usageTypes'
@@ -29,6 +31,9 @@ export function ModelDistributionCard({
   totalModelCost: number
   donutData: { label: string; value: number; color: string }[]
 }) {
+  const lang = useLang()
+  const s = modelDistributionCardStrings(lang)
+  const f = fmt(lang)
   const [hoveredLegend, setHoveredLegend] = useState<number | null>(null)
 
   return (
@@ -37,14 +42,14 @@ export function ModelDistributionCard({
       <FadeInCard className="card" delay={260} style={{ padding: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="chart" size={16} className="text-accent" />
-          <h2 className="card-title">توزیع هزینه مدل‌ها</h2>
+          <h2 className="card-title">{s.title}</h2>
         </div>
         {modelStats.length > 0 ? (
           <>
             <DonutChart
               data={donutData}
-              centerValue={faNum(totalModelCost)}
-              centerLabel="تومان"
+              centerValue={f.num(totalModelCost)}
+              centerLabel={s.centerLabel}
             />
             <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
               {modelStats.map((m, i) => (
@@ -65,14 +70,14 @@ export function ModelDistributionCard({
                 >
                   <div style={{ width: 10, height: 10, borderRadius: 'var(--radius-full)', background: m.color, flexShrink: 0 }} />
                   <span style={{ flex: 1, color: 'var(--text-secondary)', fontWeight: 600 }}>{m.name}</span>
-                  <span style={{ color: 'var(--text-muted)', fontFeatureSettings: '"tnum"' }}>{fmtPct(m.cost / totalModelCost)}</span>
-                  <span style={{ color: 'var(--text-primary)', fontWeight: 700, fontFeatureSettings: '"tnum"', minWidth: 72, textAlign: 'left' }}>{faNum(m.cost)}</span>
+                  <span style={{ color: 'var(--text-muted)', fontFeatureSettings: '"tnum"' }}>{fmtPct(m.cost / totalModelCost, lang)}</span>
+                  <span style={{ color: 'var(--text-primary)', fontWeight: 700, fontFeatureSettings: '"tnum"', minWidth: 72, textAlign: 'left' }}>{f.num(m.cost)}</span>
                 </div>
               ))}
             </div>
           </>
         ) : (
-          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>داده‌ای برای نمایش نمودار وجود ندارد</div>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>{s.noData}</div>
         )}
       </FadeInCard>
     </div>

@@ -14,6 +14,7 @@
  */
 
 import { getLang } from '@/components/LanguageToggle'
+import { detailFor } from '@/lib/i18n'
 
 /** The generic fallback shown when the response carries no usable message.
  *
@@ -61,19 +62,18 @@ export async function errorDetail(res: Response): Promise<string> {
   }
   if (!body || typeof body !== 'object') return generic
 
-  // FastAPI's own refusals use `detail`. The OpenAI-compatible routes
+  // FastAPI's own refusals use `detail`; the OpenAI-compatible routes
   // (/v1/chat/completions, /v1/images/generations) nest the text under
-  // `error.message` instead. Accept either shape; ignore anything else.
-  const detail = (body as { detail?: unknown }).detail
-  if (typeof detail === 'string' && detail.trim()) return detail.trim()
+  // `error.message`. `detailFor` handles both shapes and prefers the
+  // `_en` sibling when the panel is in English, falling back to the
+  // Persian for any endpoint not yet converted (backend/i18n.py).
+  const detail = detailFor(body, getLang())
+  if (detail) return detail
 
   // FastAPI request-validation errors put a *list* of objects in `detail`.
   // Those carry `msg` strings that are English pydantic text, not something
   // to show an admin — so they deliberately fall through to the generic
   // message rather than leaking "value is not a valid integer" into the UI.
-
-  const message = (body as { error?: { message?: unknown } }).error?.message
-  if (typeof message === 'string' && message.trim()) return message.trim()
 
   return generic
 }

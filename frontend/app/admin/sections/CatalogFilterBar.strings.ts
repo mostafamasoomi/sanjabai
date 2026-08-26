@@ -1,7 +1,7 @@
-import { dict } from '@/lib/adminI18n'
+import { dict } from '@/lib/i18n'
 
 /* The reference dictionary — every other *.strings.ts in this directory
-   follows this shape. See lib/adminI18n.ts for why `EN: typeof FA` (and the
+   follows this shape. See lib/i18n.ts for why `EN: typeof FA` (and the
    absence of `as const` on FA) is what makes a missing key a build error. */
 
 const FA = {

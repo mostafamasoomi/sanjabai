@@ -3,7 +3,9 @@
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { Icon } from '@/components/ui/Icon'
-import { planLabels, planBadgeClass } from './types'
+import { useLang } from '@/components/LanguageToggle'
+import { planBadgeClass } from './types'
+import { dashboardPageStrings } from './page.strings'
 import { useDashboardData } from './hooks/useDashboardData'
 import { usePaymentBanner } from './hooks/usePaymentBanner'
 import { useBillingSettings } from './hooks/useBillingSettings'
@@ -30,6 +32,8 @@ export default function DashboardPage() {
   const { token, user, loading: authLoading } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const lang = useLang()
+  const s = dashboardPageStrings(lang)
 
   const {
     profile,
@@ -71,19 +75,23 @@ export default function DashboardPage() {
 
   // Deliberately no email-local-part fallback: it produced greetings like
   // "سلام، user" — a Latin fragment of an address presented as a person's
-  // name. A generic Persian noun is less wrong than a wrong name.
-  const displayName = profile?.username || 'کاربر'
+  // name. A generic noun is less wrong than a wrong name.
+  const displayName = profile?.username || s.defaultUser
   const plan = profile?.plan || 'free'
   const recentLedger = ledger.slice(0, 10)
 
   // Subscription derived values
   const subStatus = subscription?.status || 'none'
   const subStatusColor = subStatus === 'active' ? 'var(--positive)' : subStatus === 'cancelled' ? 'var(--danger)' : 'var(--text-muted)'
-  const subStatusLabel = subStatus === 'active' ? 'فعال' : subStatus === 'cancelled' ? 'لغو شده' : 'بدون اشتراک'
+  const subStatusLabel = s.subStatus[subStatus] ?? s.subStatus.none
   const tokenQuota = subscription?.monthly_token_quota ?? 0
   const tokensUsed = subscription?.tokens_used_this_period ?? 0
   const tokenPct = tokenQuota > 0 ? Math.min((tokensUsed / tokenQuota) * 100, 100) : 0
-  const planName = subscriptionPlan?.name_fa || planLabels[plan] || plan
+  // subscriptionPlan carries both name_fa and name_en from the backend
+  // already -- no client-side translation needed here, just picking the
+  // field that matches the current language.
+  const planName = (lang === 'en' ? subscriptionPlan?.name_en : subscriptionPlan?.name_fa)
+    || s.planLabels[plan] || plan
 
   return (
     // One 12-column grid for the whole page. Each card declares how much of
@@ -99,43 +107,43 @@ export default function DashboardPage() {
       <header className="dash-span-12" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 className="page-title">
-            سلام، {displayName}
+            {s.greeting(displayName)}
           </h1>
           <p className="page-subtitle">
-            خوش آمدید به داشبورد مولتیای
+            {s.subtitle}
           </p>
         </div>
         <div className="flex items-center gap-3">
           <span className={planBadgeClass[plan] || 'badge'}>
-            {planLabels[plan] || plan}
+            {s.planLabels[plan] || plan}
           </span>
           <button
             className="btn btn-sm"
             onClick={() => fetchData(true)}
             disabled={refreshing}
-            title="بروزرسانی"
+            title={s.refresh}
             style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}
           >
             <span className={refreshing ? 'animate-spin' : ''}>
               <Icon name="refresh" size={14} />
             </span>
-            بروزرسانی
+            {s.refresh}
           </button>
         </div>
       </header>
 
       {/* ─── Stat row: four equal columns across the full measure ─── */}
       <div className="dash-span-3">
-        <StatCard icon="wallet" label="موجودی کیف پول" value={balance ?? 0} unit="تومان" lead />
+        <StatCard icon="wallet" label={s.statBalance} value={balance ?? 0} unit={s.unitToman} lead />
       </div>
       <div className="dash-span-3">
-        <StatCard icon="payment" label="کل هزینه" value={usage?.total_spent_this_month ?? 0} unit="تومان" />
+        <StatCard icon="payment" label={s.statSpent} value={usage?.total_spent_this_month ?? 0} unit={s.unitToman} />
       </div>
       <div className="dash-span-3">
-        <StatCard icon="chat" label="تعداد مکالمات" value={usage?.event_count_this_month ?? 0} unit="مکالمه" />
+        <StatCard icon="chat" label={s.statConversations} value={usage?.event_count_this_month ?? 0} unit={s.unitConversation} />
       </div>
       <div className="dash-span-3">
-        <StatCard icon="code" label="کل توکن‌ها" value={usage?.total_input_tokens_this_month ?? 0} unit="توکن" />
+        <StatCard icon="code" label={s.statTokens} value={usage?.total_input_tokens_this_month ?? 0} unit={s.unitToken} />
       </div>
 
       {/* ─── Subscription + activity row ─── */}

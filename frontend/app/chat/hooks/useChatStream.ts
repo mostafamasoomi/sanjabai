@@ -1,10 +1,13 @@
 import { useRef, useCallback, useEffect, type MutableRefObject } from 'react'
 import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
+import { useLang } from '@/components/LanguageToggle'
 import { type ModelCatalogItem } from '@/types/catalog'
 import { StreamAccumulator } from '../useStreamAccumulator'
 import type { Message, UsageStats, Assistant } from '../chatTypes'
 import { generateId, hasSearchIntent } from '../chatHelpers'
+import { chatHelpersStrings } from '../chatHelpers.strings'
+import { useChatStreamStrings } from './useChatStream.strings'
 
 type SearchHint = { userMsgId: string; content: string } | null
 
@@ -56,6 +59,8 @@ export function useChatStream(params: UseChatStreamParams) {
     searchHintFor, setSearchHintFor,
   } = params
 
+  const lang = useLang()
+  const s = useChatStreamStrings(lang)
   const streamStartTimeRef = useRef<number>(0)
 
   const cancel = useCallback(() => {
@@ -73,7 +78,7 @@ export function useChatStream(params: UseChatStreamParams) {
         setModel(models[0]); // Ensure model state is updated
     }
     if (!currentModel) {
-      toast('لطفاً یک مدل را انتخاب کنید.', 'error');
+      toast(s.selectModelFirst, 'error');
       return;
     }
     const effectiveWebSearch = forceWebSearch ?? webSearch
@@ -152,7 +157,10 @@ export function useChatStream(params: UseChatStreamParams) {
         if (code === 'balance') {
           throw new Error('INSUFFICIENT_BALANCE')
         }
-        throw new Error(errorBody?.error?.message || errorBody?.detail || `خطای سرور: ${res.status}`)
+        // errorBody?.error?.message / .detail are backend-sourced Persian
+        // strings (already localized server-side) -- only the frontend's own
+        // fallback below needs translating here.
+        throw new Error(errorBody?.error?.message || errorBody?.detail || s.serverError(res.status))
       }
 
       const reader = res.body?.getReader()
@@ -206,7 +214,7 @@ export function useChatStream(params: UseChatStreamParams) {
           // user sees the specific cause. A bare-string `error` is the older
           // shape and may carry a raw exception, so it never reaches the UI.
           const fromBackend = typeof obj.error?.message === 'string' ? obj.error.message : ''
-          const errText = fromBackend || 'دریافت پاسخ از سرویس با خطا مواجه شد. لطفاً دوباره تلاش کنید.'
+          const errText = fromBackend || s.upstreamErrorFallback
           // Cancel any pending throttled flush -- it would otherwise fire
           // after this and overwrite the error text.
           accumulator.cancel()
@@ -318,7 +326,7 @@ export function useChatStream(params: UseChatStreamParams) {
         }))
       }
     } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : 'خطا در ارتباط'
+      const errMsg = err instanceof Error ? err.message : s.connectionError
       if (err instanceof Error && err.name === 'AbortError') {
         // Flush pending throttled tokens first, or the check below could
         // see a stale empty `last.content` and wrongly stamp "تولید متوقف
@@ -328,7 +336,7 @@ export function useChatStream(params: UseChatStreamParams) {
           const copy = [...prev]
           const last = copy[copy.length - 1]
           if (last?.role === 'assistant' && !last.content.trim()) {
-            copy[copy.length - 1] = { ...last, content: 'تولید متوقف شد.' }
+            copy[copy.length - 1] = { ...last, content: s.generationStopped }
           }
           return copy
         })
@@ -343,7 +351,7 @@ export function useChatStream(params: UseChatStreamParams) {
       setStreaming(false)
       abortRef.current = null
     }
-  }, [messages, model, models, token, smartMode, webSearch, setWebSearch, setModel, createConversation, saveMessages, attachedFile, setAttachedFile, activeAssistant, setMessages, setInput, setShowPresets, setSmartModel, setWalletBalance, messagesRef, activeConversationIdRef, abortRef, setStreaming, setError, setUsageStats, setTokensPerSec, setSearchHintFor])
+  }, [messages, model, models, token, smartMode, webSearch, setWebSearch, setModel, createConversation, saveMessages, attachedFile, setAttachedFile, activeAssistant, setMessages, setInput, setShowPresets, setSmartModel, setWalletBalance, messagesRef, activeConversationIdRef, abortRef, setStreaming, setError, setUsageStats, setTokensPerSec, setSearchHintFor, s])
 
   // Keep ref in sync so retry() can call sendMessage without circular deps
   useEffect(() => { sendMessageRef.current = sendMessage }, [sendMessage])
@@ -358,14 +366,17 @@ export function useChatStream(params: UseChatStreamParams) {
     if (sendMessageRef.current) await sendMessageRef.current(userMsg.content, newMsgs)
   }, [messages, model, setMessages, setError])
 
-  // "ادامه بده" button on a length-capped reply. Deliberately reuses the
+  // "Continue" button on a length-capped reply. Deliberately reuses the
   // normal sendMessage codepath (no bespoke "continue" request/endpoint):
   // it appends a plain user turn asking the model to continue, using the
   // full current transcript -- including the truncated reply itself -- as
-  // context, exactly like any other follow-up message.
+  // context, exactly like any other follow-up message. The literal text
+  // sent as that turn follows the panel's language (chatHelpers.strings.ts's
+  // `continueMessage`, kept in sync by hand with the button's own label in
+  // ChatMessageItem.strings.ts).
   const handleContinue = useCallback(() => {
-    if (sendMessageRef.current) sendMessageRef.current('ادامه بده')
-  }, [])
+    if (sendMessageRef.current) sendMessageRef.current(chatHelpersStrings(lang).continueMessage)
+  }, [lang])
 
   // Explicit user action from the search-intent hint: drop the non-search
   // turn and re-send the same question with web search forced on.

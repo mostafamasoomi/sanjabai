@@ -1,13 +1,19 @@
 import { useState, useEffect, useCallback } from 'react'
 import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
-import { FORBIDDEN_MESSAGE } from '../constants'
+import { useLang } from '@/components/LanguageToggle'
+import { forbiddenMessage } from '../constants'
+import { useApiKeysStrings } from './useApiKeys.strings'
 import { type ApiKeyInfo } from '../types'
 
 /** Fetches/creates/rotates/revokes the user's API keys. `ready` gates the
     initial fetch until auth has resolved and a user is present, matching
     the page's previous `!authLoading && user` effect condition. */
 export function useApiKeys(token: string | null, ready: boolean) {
+  // Itself a hook (called from DeveloperPage) -- safe to read the language
+  // directly rather than take it as a parameter, see the i18n spec note.
+  const lang = useLang()
+  const s = useApiKeysStrings(lang)
   const [keys, setKeys] = useState<ApiKeyInfo[]>([])
   const [newKeyName, setNewKeyName] = useState('')
   const [keyLoading, setKeyLoading] = useState(false)
@@ -30,12 +36,12 @@ export function useApiKeys(token: string | null, ready: boolean) {
         // Backend may return array or paginated {items: [...]} format
         setKeys(Array.isArray(data) ? data : (data?.items ?? []))
       } else {
-        toast('خطا در دریافت کلیدهای API', 'error')
+        toast(s.fetchError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.serverError, 'error')
     }
-  }, [token, headers])
+  }, [token, headers, s])
 
   useEffect(() => {
     if (ready) fetchKeys()
@@ -43,7 +49,7 @@ export function useApiKeys(token: string | null, ready: boolean) {
 
   const createKey = async () => {
     if (!newKeyName.trim()) {
-      toast('نام کلید را وارد کنید', 'error')
+      toast(s.nameRequired, 'error')
       return
     }
     setKeyLoading(true)
@@ -53,58 +59,60 @@ export function useApiKeys(token: string | null, ready: boolean) {
         headers: headers(),
         body: JSON.stringify({ name: newKeyName }),
       })
-      if (r.status === 403) { toast(FORBIDDEN_MESSAGE, 'error'); return }
+      if (r.status === 403) { toast(forbiddenMessage(lang), 'error'); return }
       const data = await r.json()
       if (r.ok) {
         setReveal({ key: data.key, isRotation: false })
         setNewKeyName('')
         fetchKeys()
       } else {
-        toast(data.detail || 'خطا', 'error')
+        // data.detail is a backend-sourced error message (Persian only for
+        // now) -- see the i18n handoff report.
+        toast(data.detail || s.genericError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط', 'error')
+      toast(s.connectionError, 'error')
     } finally {
       setKeyLoading(false)
     }
   }
 
   const rotateKey = async (id: number) => {
-    if (!confirm('با چرخاندن این کلید، کلید فعلی بلافاصله از کار می‌افتد و باید کلید جدید را در همه جا جایگزین کنید. ادامه می‌دهید؟')) return
+    if (!confirm(s.rotateConfirm)) return
     setRotatingId(id)
     try {
       const r = await apiFetch(`/api/api-keys/${id}/rotate`, {
         method: 'POST', headers: headers(),
       })
-      if (r.status === 403) { toast(FORBIDDEN_MESSAGE, 'error'); return }
+      if (r.status === 403) { toast(forbiddenMessage(lang), 'error'); return }
       const data = await r.json()
       if (r.ok) {
         setReveal({ key: data.key, isRotation: true })
         fetchKeys()
       } else {
-        toast(data.detail || 'خطا', 'error')
+        toast(data.detail || s.genericError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط', 'error')
+      toast(s.connectionError, 'error')
     } finally {
       setRotatingId(null)
     }
   }
 
   const revokeKey = async (id: number) => {
-    if (!confirm('آیا از غیرفعال کردن این کلید مطمئن هستید؟')) return
+    if (!confirm(s.revokeConfirm)) return
     setRevokingId(id)
     try {
       const r = await apiFetch(`/api/api-keys/${id}`, {
         method: 'DELETE', headers: headers(),
       })
-      if (r.status === 403) { toast(FORBIDDEN_MESSAGE, 'error'); return }
+      if (r.status === 403) { toast(forbiddenMessage(lang), 'error'); return }
       if (r.ok) {
-        toast('کلید غیرفعال شد', 'success')
+        toast(s.revoked, 'success')
         fetchKeys()
       }
     } catch {
-      toast('خطا', 'error')
+      toast(s.genericError, 'error')
     } finally {
       setRevokingId(null)
     }

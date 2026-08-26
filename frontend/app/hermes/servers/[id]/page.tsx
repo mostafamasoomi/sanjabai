@@ -7,7 +7,9 @@ import { useAuth } from '@/lib/auth'
 import { apiFetch } from '@/lib/apiFetch'
 import { Icon } from '@/components/ui/Icon'
 import { Spinner, Modal, toast } from '@/components/ui'
-import { faPrice, faDate, faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { hermesServerDetailStrings } from './page.strings'
 
 /* ═══════════════════════════════════════════════════════════════
    Server dashboard: connection info, sync status, and skill
@@ -44,11 +46,8 @@ type ServerDetail = {
   skills: ServerSkill[]
 }
 
-type CatalogItem = { id: string; name_fa: string }
+type CatalogItem = { id: string; name_fa: string; name_en: string }
 
-const SKILL_STATE_LABEL: Record<string, string> = {
-  pending: 'در حال اعمال', installed: 'نصب‌شده', failed: 'خطا', removing: 'در حال حذف',
-}
 const SKILL_STATE_BADGE: Record<string, string> = {
   pending: 'badge-accent', installed: 'badge-positive', failed: 'badge-danger', removing: 'aurora-cap-default',
 }
@@ -57,6 +56,10 @@ export default function HermesServerDetailPage() {
   const params = useParams()
   const serverId = params?.id as string
   const { token, user, loading: authLoading } = useAuth()
+  const lang = useLang()
+  const s = hermesServerDetailStrings(lang)
+  const f = fmt(lang)
+  const skillName = (item: CatalogItem) => (lang === 'en' ? item.name_en : item.name_fa)
 
   const [server, setServer] = useState<ServerDetail | null>(null)
   const [catalog, setCatalog] = useState<CatalogItem[]>([])
@@ -70,10 +73,11 @@ export default function HermesServerDetailPage() {
       if (!res.ok) throw new Error('failed')
       setServer(await res.json())
     } catch {
-      toast('خطا در دریافت اطلاعات سرور', 'error')
+      toast(s.loadError, 'error')
     } finally {
       setLoading(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, serverId])
 
   useEffect(() => { fetchServer() }, [fetchServer])
@@ -90,13 +94,13 @@ export default function HermesServerDetailPage() {
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        toast(data?.detail || 'خطا در حذف اسکیل', 'error')
+        toast(data?.detail || s.removeSkillError, 'error')
         return
       }
-      toast('درخواست حذف اسکیل ثبت شد', 'success')
+      toast(s.removeSkillSuccess, 'success')
       fetchServer()
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.networkError, 'error')
     }
   }
 
@@ -109,20 +113,20 @@ export default function HermesServerDetailPage() {
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        toast(data?.detail || 'خطا در بروزرسانی اسکیل', 'error')
+        toast(data?.detail || s.updateSkillError, 'error')
         return
       }
       fetchServer()
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.networkError, 'error')
     }
   }
 
   if (!authLoading && !user) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '1rem' }}>
-        <h1 className="page-title">وارد شوید</h1>
-        <a href="/login" className="btn btn-primary">ورود به حساب</a>
+        <h1 className="page-title">{s.signIn}</h1>
+        <a href="/login" className="btn btn-primary">{s.loginToAccount}</a>
       </div>
     )
   }
@@ -131,51 +135,51 @@ export default function HermesServerDetailPage() {
     return <div className="flex items-center justify-center" style={{ minHeight: '40vh' }}><Spinner size="lg" /></div>
   }
 
-  const attachedSkillIds = new Set(server.skills.map((s) => s.skill_id))
+  const attachedSkillIds = new Set(server.skills.map((sk) => sk.skill_id))
   const availableToAdd = catalog.filter((c) => !attachedSkillIds.has(c.id))
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-2">
-        <Link href="/hermes/servers" className="btn btn-secondary btn-sm"><Icon name="close" size={14} /> بازگشت</Link>
-        <h1 className="page-title" style={{ margin: 0 }}>{server.hostname || `سرور #${server.id}`}</h1>
+        <Link href="/hermes/servers" className="btn btn-secondary btn-sm"><Icon name="close" size={14} /> {s.back}</Link>
+        <h1 className="page-title" style={{ margin: 0 }}>{server.hostname || s.serverNumber(f.num(server.id))}</h1>
       </div>
 
       {/* ── Connection & status ── */}
       <div className="card" style={{ padding: '1.25rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem' }}>
-        <Info label="آی‌پی" value={server.ip_address ? `${server.ip_address}:${server.ssh_port}` : '—'} ltr />
-        <Info label="وضعیت" value={server.status === 'active' ? 'فعال' : server.status === 'suspended' ? 'متوقف‌شده' : server.status === 'provisioning' ? 'در حال راه‌اندازی' : 'خاتمه‌یافته'} />
-        <Info label="همگام‌سازی" value={server.in_sync ? 'همگام' : `در انتظار (${faNum(server.applied_state_version)}/${faNum(server.desired_state_version)})`} />
-        <Info label="آخرین اتصال ایجنت" value={server.last_heartbeat_at ? faDate(server.last_heartbeat_at) : 'هنوز متصل نشده'} />
-        <Info label="هزینه ماهانه" value={faPrice(server.monthly_price_irt)} />
-        <Info label="پرداخت‌شده تا" value={server.paid_through_at ? faDate(server.paid_through_at) : '—'} />
+        <Info label={s.ip} value={server.ip_address ? `${server.ip_address}:${server.ssh_port}` : '—'} ltr />
+        <Info label={s.status} value={s.statusLabel[server.status]} />
+        <Info label={s.sync} value={server.in_sync ? s.inSync : s.pendingSync(f.num(server.applied_state_version), f.num(server.desired_state_version))} />
+        <Info label={s.lastAgentHeartbeat} value={server.last_heartbeat_at ? f.date(server.last_heartbeat_at) : s.neverConnected} />
+        <Info label={s.monthlyCost} value={f.price(server.monthly_price_irt)} />
+        <Info label={s.paidThrough} value={server.paid_through_at ? f.date(server.paid_through_at) : '—'} />
       </div>
 
       {/* ── Skills ── */}
       <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         <div className="flex items-center justify-between">
-          <h2 style={{ fontWeight: 700 }}>اسکیل‌های نصب‌شده</h2>
+          <h2 style={{ fontWeight: 700 }}>{s.installedSkills}</h2>
           <button className="btn btn-primary btn-sm" onClick={() => setShowAddModal(true)} disabled={availableToAdd.length === 0}>
-            <Icon name="plus" size={14} /> افزودن اسکیل
+            <Icon name="plus" size={14} /> {s.addSkill}
           </button>
         </div>
 
         {server.skills.length === 0 ? (
-          <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>هنوز اسکیلی روی این سرور نصب نشده است.</p>
+          <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>{s.noSkillsInstalled}</p>
         ) : (
           <div className="flex flex-col gap-2">
-            {server.skills.map((s) => (
-              <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 0.75rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
+            {server.skills.map((sk) => (
+              <div key={sk.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.625rem 0.75rem', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)' }}>
                 <div className="flex items-center gap-2">
-                  <span style={{ fontWeight: 600 }}>{catalog.find((c) => c.id === s.skill_id)?.name_fa || s.skill_id}</span>
-                  <span className={`badge ${SKILL_STATE_BADGE[s.state]}`} style={{ fontSize: '0.6875rem' }}>{SKILL_STATE_LABEL[s.state]}</span>
-                  {s.error && <span style={{ fontSize: '0.6875rem', color: 'var(--danger)' }}>{s.error}</span>}
+                  <span style={{ fontWeight: 600 }}>{(() => { const item = catalog.find((c) => c.id === sk.skill_id); return item ? skillName(item) : sk.skill_id })()}</span>
+                  <span className={`badge ${SKILL_STATE_BADGE[sk.state]}`} style={{ fontSize: '0.6875rem' }}>{s.skillState[sk.state]}</span>
+                  {sk.error && <span style={{ fontSize: '0.6875rem', color: 'var(--danger)' }}>{sk.error}</span>}
                 </div>
                 <div className="flex items-center gap-2">
-                  <button className="btn btn-secondary btn-sm" onClick={() => toggleSkill(s.skill_id, !s.enabled)}>
-                    {s.enabled ? 'غیرفعال کردن' : 'فعال کردن'}
+                  <button className="btn btn-secondary btn-sm" onClick={() => toggleSkill(sk.skill_id, !sk.enabled)}>
+                    {sk.enabled ? s.disable : s.enable}
                   </button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => removeSkill(s.skill_id)} style={{ color: 'var(--danger)' }}>
+                  <button className="btn btn-secondary btn-sm" onClick={() => removeSkill(sk.skill_id)} style={{ color: 'var(--danger)' }}>
                     <Icon name="trash" size={14} />
                   </button>
                 </div>
@@ -216,6 +220,9 @@ function AddSkillModal({
   serverId: number
   onAdded: () => void
 }) {
+  const lang = useLang()
+  const s = hermesServerDetailStrings(lang)
+  const skillName = (item: CatalogItem) => (lang === 'en' ? item.name_en : item.name_fa)
   const [skillId, setSkillId] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -231,27 +238,27 @@ function AddSkillModal({
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        toast(data?.detail || 'خطا در افزودن اسکیل', 'error')
+        toast(data?.detail || s.addSkillError, 'error')
         return
       }
-      toast('اسکیل به سرور اضافه شد', 'success')
+      toast(s.addSkillSuccess, 'success')
       onAdded()
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.networkError, 'error')
     } finally {
       setSubmitting(false)
     }
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="افزودن اسکیل">
+    <Modal open={open} onClose={onClose} title={s.addSkillModalTitle}>
       <div className="flex flex-col gap-3">
         <select className="input" value={skillId} onChange={(e) => setSkillId(e.target.value)}>
-          {options.map((o) => <option key={o.id} value={o.id}>{o.name_fa}</option>)}
+          {options.map((o) => <option key={o.id} value={o.id}>{skillName(o)}</option>)}
         </select>
         <button className="btn btn-primary" disabled={submitting || !skillId} onClick={submit} style={{ justifyContent: 'center' }}>
           {submitting ? <Spinner size="sm" /> : <Icon name="plus" size={16} />}
-          افزودن
+          {s.add}
         </button>
       </div>
     </Modal>

@@ -1,5 +1,9 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
-import { CATEGORIES } from '../memoryTypes'
+import { useLang } from '@/components/LanguageToggle'
+import { categories } from '../memoryTypes'
+import { addMemoryFormStrings } from './AddMemoryForm.strings'
 
 /* ═══════════════════════════════════════════════════════════════
    Add-memory button + inline form. Split out of page.tsx verbatim
@@ -29,6 +33,10 @@ export function AddMemoryForm({
   saving: boolean
   onSave: () => void
 }) {
+  const lang = useLang()
+  const s = addMemoryFormStrings(lang)
+  const cats = categories(lang)
+
   return (
     <div style={{ marginBottom: 20 }}>
       {!showAddForm ? (
@@ -38,7 +46,7 @@ export function AddMemoryForm({
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
         >
           <Icon name="plus" size={14} />
-          افزودن حافظه
+          {s.addMemory}
         </button>
       ) : (
         <div
@@ -49,7 +57,7 @@ export function AddMemoryForm({
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <Icon name="sparkles" size={16} className="text-accent" />
               <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
-                حافظه جدید
+                {s.newMemory}
               </h3>
             </div>
             <button onClick={() => setShowAddForm(false)} className="btn btn-ghost btn-sm" style={{ padding: '2px 6px' }}>
@@ -57,10 +65,10 @@ export function AddMemoryForm({
             </button>
           </div>
 
-          <textarea dir="rtl"
+          <textarea
             value={newContent}
             onChange={(e) => setNewContent(e.target.value)}
-            placeholder="محتوای حافظه (مثلاً: زبان برنامه‌نویسی ترجیحی من Python است)"
+            placeholder={s.contentPlaceholder}
             className="input"
             rows={3}
             style={{ width: '100%', resize: 'vertical', marginBottom: 10 }}
@@ -73,7 +81,7 @@ export function AddMemoryForm({
               className="input"
               style={{ flex: 1, fontSize: 13 }}
             >
-              {CATEGORIES.filter((c) => c.key).map((c) => (
+              {cats.filter((c) => c.key).map((c) => (
                 <option key={c.key} value={c.key}>{c.label}</option>
               ))}
             </select>
@@ -81,7 +89,7 @@ export function AddMemoryForm({
             <input
               value={newTags}
               onChange={(e) => setNewTags(e.target.value)}
-              placeholder="برچسب‌ها (با کاما جدا کنید)"
+              placeholder={s.tagsPlaceholder}
               className="input"
               style={{ flex: 2, fontSize: 13 }}
             />
@@ -99,10 +107,10 @@ export function AddMemoryForm({
               ) : (
                 <Icon name="check" size={14} />
               )}
-              ذخیره
+              {s.save}
             </button>
             <button onClick={() => setShowAddForm(false)} className="btn btn-ghost btn-sm">
-              انصراف
+              {s.cancel}
             </button>
           </div>
         </div>

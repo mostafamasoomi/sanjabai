@@ -4,7 +4,7 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
 import { useLang } from '@/components/LanguageToggle'
-import { fmt } from '@/lib/adminI18n'
+import { fmt } from '@/lib/i18n'
 import { SectionHeader, StatCard } from './shared'
 import { upstreamOverheadStrings } from './UpstreamOverheadSection.strings'
 import {

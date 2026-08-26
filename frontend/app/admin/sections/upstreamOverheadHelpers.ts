@@ -12,7 +12,7 @@
  *
  * `elapsedParts` deliberately returns numbers, not a Persian string — the
  * component formats those through `f.num` itself so the actual rendered
- * digits still go through the language-bound formatter (see lib/adminI18n.ts).
+ * digits still go through the language-bound formatter (see lib/i18n.ts).
  *
  * This file is plain .ts, not .tsx, so it cannot call the `useLang` hook
  * (see the header note above on why Vitest can't parse .tsx at all here).

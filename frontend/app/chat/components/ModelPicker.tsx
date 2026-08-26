@@ -3,18 +3,20 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { type HealthStatus, type ModelCatalogItem } from '@/types/catalog'
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
-import { priceBand, PRICE_BAND_LABEL, PRICE_BAND_ORDER, type PriceBand } from '@/lib/useCatalog'
+import { useLang, type Lang } from '@/components/LanguageToggle'
+import { fmt, dirFor } from '@/lib/i18n'
+import { priceBand, priceBandLabel, PRICE_BAND_ORDER, type PriceBand } from '@/lib/useCatalog'
 import {
   healthOf,
   isUsableModel,
-  HEALTH_LABEL,
+  healthLabel,
   HEALTH_TONE,
   getModelIcon,
   formatPriceIRT,
   formatContextWindow,
   isRecommendedModel,
 } from './modelUtils'
+import { modelPickerStrings } from './ModelPicker.strings'
 
 const STORAGE_KEY = 'sanjabai_selected_model'
 
@@ -44,6 +46,10 @@ function uniqueById(list: ModelCatalogItem[]): ModelCatalogItem[] {
 }
 
 export default function ModelPicker({ models, selected, onSelect, loading, disabled, smartModeActive }: Props) {
+  const lang = useLang()
+  const s = modelPickerStrings(lang)
+  const f = fmt(lang)
+  const health = healthLabel(lang)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [focusedIdx, setFocusedIdx] = useState(0)
@@ -229,7 +235,7 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
   const selectedHealth = selected ? healthOf(selected) : null
 
   return (
-    <div className="model-picker-root" ref={rootRef} dir="rtl" onKeyDown={onKeyDown}>
+    <div className="model-picker-root" ref={rootRef} dir={dirFor(lang)} onKeyDown={onKeyDown}>
       {/* Trigger */}
       <button
         ref={triggerRef}
@@ -248,8 +254,8 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
           {selected ? getModelIcon(selected.capabilities, selected.recommendedFor) : '🤖'}
         </span>
         <span className="model-picker-trigger-main">
-          <span className="model-picker-trigger-name" dir="ltr" title={selected?.displayName || 'انتخاب مدل'}>
-            {selected?.displayName || 'انتخاب مدل'}
+          <span className="model-picker-trigger-name" dir="ltr" title={selected?.displayName || s.noModelSelected}>
+            {selected?.displayName || s.noModelSelected}
           </span>
           <span className="model-picker-trigger-sub">
             {selected ? (
@@ -259,8 +265,8 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
                   <span
                     className="model-health-dot"
                     style={{ background: HEALTH_TONE[selectedHealth.status] }}
-                    title={`وضعیت: ${HEALTH_LABEL[selectedHealth.status]}`}
-                    aria-label={`وضعیت مدل: ${HEALTH_LABEL[selectedHealth.status]}`}
+                    title={s.statusLabel(health[selectedHealth.status])}
+                    aria-label={s.statusLabel(health[selectedHealth.status])}
                   />
                 )}
               </>
@@ -280,14 +286,14 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
           <div
             className="model-picker-dropdown"
             role="dialog"
-            aria-label="انتخاب مدل"
-            dir="rtl"
+            aria-label={s.selectModel}
+            dir={dirFor(lang)}
           >
             {/* Header: search + smart note */}
             <div className="model-picker-header">
               {smartModeActive && (
-                <div className="model-picker-smart-note" dir="rtl">
-                  <span>🧠 Smart Mode فعال — انتخاب خودکار مدل</span>
+                <div className="model-picker-smart-note" dir={dirFor(lang)}>
+                  <span>🧠 {s.smartModeNote}</span>
                 </div>
               )}
               <div className="model-picker-search-wrapper">
@@ -296,13 +302,13 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
                   ref={inputRef}
                   type="text"
                   className="model-picker-search"
-                  placeholder="جستجوی مدل، قابلیت..."
+                  placeholder={s.searchPlaceholder}
                   value={query}
                   onChange={e => {
                     setQuery(e.target.value)
                     setFocusedIdx(0)
                   }}
-                  dir="rtl"
+                  dir={dirFor(lang)}
                   data-testid="model-picker-search"
                 />
                 {query && (
@@ -317,15 +323,15 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
               {flatList.length === 0 ? (
                 <div className="model-picker-empty">
                   <Icon name="search" size={20} className="text-muted" />
-                  <span>مدلی با &quot;{query}&quot; یافت نشد</span>
+                  <span>{s.noModelFound(query)}</span>
                 </div>
               ) : (
                 <>
                   {recommended.length > 0 && (
                     <div className="model-picker-section">
                       <div className="model-picker-section-title">
-                        <span>⭐ پیشنهادی</span>
-                        <span className="model-picker-section-count">{faNum(recommended.length)}</span>
+                        <span>⭐ {s.recommended}</span>
+                        <span className="model-picker-section-count">{f.num(recommended.length)}</span>
                       </div>
                       <div className="model-picker-cards">
                         {recommended.map(m => {
@@ -351,8 +357,8 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
 
                   <div className="model-picker-section">
                     <div className="model-picker-section-title">
-                      <span>همه مدل‌ها</span>
-                      <span className="model-picker-section-count">{faNum(filtered.length)}</span>
+                      <span>{s.allModels}</span>
+                      <span className="model-picker-section-count">{f.num(filtered.length)}</span>
                     </div>
 
                     {groupedByBand.map(([band, groupModels]) => (
@@ -360,9 +366,9 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
                         {groupedByBand.length > 1 && (
                           <div className="model-picker-provider-group-title">
                             <span className="model-provider-badge">
-                              {PRICE_BAND_LABEL[band]}
+                                                            {priceBandLabel(band, lang)}
                             </span>
-                            <span className="text-muted" style={{ fontSize: '10px' }}>{faNum(groupModels.length)} مدل</span>
+                            <span className="text-muted" style={{ fontSize: '10px' }}>{s.modelsCount(f.num(groupModels.length))}</span>
                           </div>
                         )}
                         <div className="model-picker-cards">
@@ -392,9 +398,9 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
               )}
             </div>
 
-            <div className="model-picker-footer" dir="rtl">
-              <span className="model-picker-footer-hint"><kbd>↑↓</kbd> پیمایش · <kbd>Enter</kbd> انتخاب · <kbd>Esc</kbd> بستن</span>
-              <span className="model-picker-footer-count">{faNum(models.length)} مدل</span>
+            <div className="model-picker-footer" dir={dirFor(lang)}>
+              <span className="model-picker-footer-hint"><kbd>↑↓</kbd> {s.navigate} · <kbd>Enter</kbd> {s.select} · <kbd>Esc</kbd> {s.close}</span>
+              <span className="model-picker-footer-count">{s.modelsCount(f.num(models.length))}</span>
             </div>
           </div>
         </>
@@ -411,6 +417,9 @@ function ModelCard({ model: m, isSelected, isFocused, healthStatus, focusIdx, on
   focusIdx: number
   onClick: () => void
 }) {
+  const lang = useLang()
+  const s = modelPickerStrings(lang)
+  const health = healthLabel(lang)
   const icon = getModelIcon(m.capabilities, m.recommendedFor)
   return (
     <button
@@ -419,7 +428,7 @@ function ModelCard({ model: m, isSelected, isFocused, healthStatus, focusIdx, on
       onClick={onClick}
       data-idx={focusIdx}
       data-model-id={m.id}
-      dir="rtl"
+      dir={dirFor(lang)}
       role="option"
       aria-selected={isSelected}
     >
@@ -433,10 +442,10 @@ function ModelCard({ model: m, isSelected, isFocused, healthStatus, focusIdx, on
           </div>
         </div>
         {/* Reports measured health rather than a yes/no guess from a static
-            list, so "نامشخص" is now distinguishable from "ناپایدار". */}
+            list, so "unknown" is now distinguishable from "degraded". */}
         <span className={`model-health-badge model-health-${healthStatus}`}>
           <span className="model-health-dot" style={{ background: HEALTH_TONE[healthStatus] }} />
-          {HEALTH_LABEL[healthStatus]}
+          {health[healthStatus]}
         </span>
       </div>
 
@@ -454,23 +463,23 @@ function ModelCard({ model: m, isSelected, isFocused, healthStatus, focusIdx, on
       </div>
 
       {m.description && (
-        <div className="model-card-desc" dir="rtl" title={m.description}>
+        <div className="model-card-desc" dir={dirFor(lang)} title={m.description}>
           {m.description.length > 90 ? m.description.slice(0, 90) + '…' : m.description}
         </div>
       )}
 
-      {/* dir stays with the document: the labels and the unit are Persian
-          now, so forcing LTR here would put "تومان/میلیون" on the wrong side
-          of its amount. */}
+      {/* dir stays with the document: the labels and the unit follow the
+          panel's own language, so forcing LTR here would put the unit word
+          on the wrong side of its amount. */}
       <div className="model-card-pricing">
-        <span className="model-card-pricing-item" title="ورودی هر میلیون توکن">
-          <span className="model-card-pricing-label">ورودی</span>
-          <span className="model-card-pricing-value">{formatPriceIRT(m.pricing?.inputPerMillion ?? 0)}</span>
+        <span className="model-card-pricing-item" title={s.inputPricing}>
+          <span className="model-card-pricing-label">{s.input}</span>
+          <span className="model-card-pricing-value">{formatPriceIRT(m.pricing?.inputPerMillion ?? 0, lang)}</span>
         </span>
         <span className="model-card-pricing-sep">·</span>
-        <span className="model-card-pricing-item" title="خروجی هر میلیون توکن">
-          <span className="model-card-pricing-label">خروجی</span>
-          <span className="model-card-pricing-value">{formatPriceIRT(m.pricing?.outputPerMillion ?? 0)}</span>
+        <span className="model-card-pricing-item" title={s.outputPricing}>
+          <span className="model-card-pricing-label">{s.output}</span>
+          <span className="model-card-pricing-value">{formatPriceIRT(m.pricing?.outputPerMillion ?? 0, lang)}</span>
         </span>
       </div>
     </button>

@@ -1,4 +1,4 @@
-import { dict } from '@/lib/adminI18n'
+import { dict } from '@/lib/i18n'
 
 /* Error fallbacks for the two independent feeds this hook drives. See
    SecuritySection.strings.ts for the screen's own dictionary -- kept

@@ -29,7 +29,14 @@
   /* ── Ink ──────────────────────────────────────────────────────────────── */
   --lp-ink: #f6efe2;
   --lp-ink-2: #b3a08c;
-  --lp-ink-3: #645630;
+  /* Third-tier ink. Was #645630, which is 2.75:1 on this surface -- below the
+     4.5:1 floor for normal text, and the reason the footer line under the
+     brand lockup read as absent rather than quiet. #907f60 is 4.98:1 and
+     still sits a clear step below --lp-ink-2 (7.85:1). Eighteen rules take
+     this token, so the whole third tier of landing copy was affected, not
+     just the footer. The light theme's counterpart was already 5.36:1 and is
+     unchanged. */
+  --lp-ink-3: #907f60;
 
   /* The bright stop the hero headline's gradient opens on. A token rather
      than a literal because the literal was #fff, which is correct on this

@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLang } from '../LanguageToggle'
 import { CheckGlyph, ForwardArrow, ProviderLogo } from './primitives'
-import { HERO_ROTATION, HERO_TRUST, PREVIEW_THREADS } from './content'
+import { heroContent } from './content'
+import { heroStrings } from './Hero.strings'
 import { useTilt } from './useTilt'
 import { useScrollParallax } from './useScrollParallax'
 import { Constellation } from './Constellation'
@@ -17,26 +19,28 @@ const AURA_DEPTHS = [
 /* ── Rotating headline word ───────────────────────────────────────────────── */
 
 function Rotator() {
+  const lang = useLang()
+  const { rotation } = heroContent(lang)
   const [index, setIndex] = useState(0)
 
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const timer = window.setInterval(
-      () => setIndex((i) => (i + 1) % HERO_ROTATION.length),
+      () => setIndex((i) => (i + 1) % rotation.length),
       2600,
     )
     return () => window.clearInterval(timer)
-  }, [])
+  }, [rotation.length])
 
   return (
     <span className="lp-hero__rotator">
       <span className="lp-hero__rotator-sizer" aria-hidden="true">
-        {HERO_ROTATION.map((word) => (
+        {rotation.map((word) => (
           <span key={word}>{word}</span>
         ))}
       </span>
       <span key={index} className="lp-hero__rotator-word">
-        {HERO_ROTATION[index]}
+        {rotation[index]}
       </span>
     </span>
   )
@@ -45,8 +49,11 @@ function Rotator() {
 /* ── Product preview ──────────────────────────────────────────────────────── */
 
 function ProductPreview() {
+  const lang = useLang()
+  const s = heroStrings(lang)
+  const { previewThreads } = heroContent(lang)
   const [active, setActive] = useState(0)
-  const thread = PREVIEW_THREADS[active]
+  const thread = previewThreads[active]
   const previewRef = useRef<HTMLDivElement>(null)
   useTilt(previewRef, true, 5)
 
@@ -93,8 +100,8 @@ function ProductPreview() {
             <i />
           </span>
 
-          <div className="lp-preview__tabs" role="tablist" aria-label="انتخاب مدل">
-            {PREVIEW_THREADS.map((t, i) => (
+          <div className="lp-preview__tabs" role="tablist" aria-label={s.previewTabsAria}>
+            {previewThreads.map((t, i) => (
               <button
                 key={t.id}
                 type="button"
@@ -112,13 +119,13 @@ function ProductPreview() {
 
         <div className="lp-preview__body">
           <div className="lp-msg lp-msg--user">
-            <span className="lp-msg__avatar">شما</span>
+            <span className="lp-msg__avatar">{s.youLabel}</span>
             <p className="lp-msg__bubble">{thread.question}</p>
           </div>
 
           <div className="lp-msg lp-msg--ai">
             <span className="lp-msg__avatar">
-              {thread.logo ? <ProviderLogo src={thread.logo} size={15} /> : '؟'}
+              {thread.logo ? <ProviderLogo src={thread.logo} size={15} /> : s.unknownAvatar}
             </span>
             <p className="lp-msg__bubble">
               {typed}
@@ -128,9 +135,9 @@ function ProductPreview() {
 
           <div className="lp-preview__meta">
             <span>
-              مدل: <b dir="ltr">{thread.label}</b>
+              {s.modelLabel} <b dir="ltr">{thread.label}</b>
             </span>
-            <span>هزینه‌ی تخمینی هر پیام، پیش از ارسال نمایش داده می‌شود</span>
+            <span>{s.costNote}</span>
           </div>
         </div>
       </div>
@@ -141,6 +148,9 @@ function ProductPreview() {
 /* ── Hero ─────────────────────────────────────────────────────────────────── */
 
 export function Hero() {
+  const lang = useLang()
+  const s = heroStrings(lang)
+  const { trust } = heroContent(lang)
   const sectionRef = useRef<HTMLElement>(null)
   useTilt(sectionRef, true, 2.5)
 
@@ -176,33 +186,29 @@ export function Hero() {
         <div className="lp-hero__inner">
           <a href="/signup" className="lp-pill lp-pill--glow">
             <span className="lp-pill__dot" />
-            <span className="lp-pill__text">دسترسی مستقیم به ۲۳ مدل پیشرفته</span>
+            <span className="lp-pill__text">{s.pillText}</span>
           </a>
 
           <h1 className="lp-hero__title">
-            <span className="lp-hero__title-highlight">۲۳ مدل هوش مصنوعی،</span>
+            <span className="lp-hero__title-highlight">{s.titleHighlight}</span>
             <br />
             <Rotator />
           </h1>
 
-          <p className="lp-hero__lead">
-            با DeepSeek، Mistral، Gemini، Llama و ۱۹ مدل دیگر در یک فضای کاری فارسی کار
-            کنید. مدل ایده‌آل را بیابید و همه را با یک API به محصول خودتان وصل کنید —
-            با پرداخت به تومان و بدون نیاز به فیلترشکن.
-          </p>
+          <p className="lp-hero__lead">{s.lead}</p>
 
           <div className="lp-hero__actions">
             <a href="/signup" className="lp-btn lp-btn--primary lp-btn--lg lp-btn--glow">
-              شروع رایگان
+              {s.ctaPrimary}
               <ForwardArrow />
             </a>
             <a href="/models" className="lp-btn lp-btn--secondary lp-btn--lg">
-              مشاهده‌ی مدل‌ها
+              {s.ctaSecondary}
             </a>
           </div>
 
           <ul className="lp-hero__trust">
-            {HERO_TRUST.map((item) => (
+            {trust.map((item) => (
               <li key={item}>
                 <CheckGlyph size={13} />
                 {item}

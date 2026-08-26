@@ -1,5 +1,9 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
-import { faNum, faPercent } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { paygSectionStrings } from './PaygSection.strings'
 import type { BillingSettings } from '../types'
 
 /* ═══════════════════════════════════════════════════════════════
@@ -27,13 +31,17 @@ export function PaygSection({
   hardLimitLoading: boolean
   setHardLimit: () => void
 }) {
+  const lang = useLang()
+  const s = paygSectionStrings(lang)
+  const f = fmt(lang)
+
   return (
     <div className="card dash-span-4" id="payg-section">
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
         <span className="text-[var(--accent)]">
           <Icon name="payment" size={18} />
         </span>
-        <h2 className="card-title">پرداخت به ازای مصرف</h2>
+        <h2 className="card-title">{s.title}</h2>
       </div>
 
       {/* Toggle row */}
@@ -47,10 +55,10 @@ export function PaygSection({
       >
         <div>
           <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text-primary)' }}>
-            پرداخت به ازای مصرف (PAYG)
+            {s.toggleLabel}
           </div>
           <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-            {billingSettings?.payg_enabled ? 'فعال' : 'غیرفعال'}
+            {billingSettings?.payg_enabled ? s.enabled : s.disabled}
           </div>
         </div>
         <button
@@ -89,11 +97,11 @@ export function PaygSection({
       {/* Hard limit display */}
       <div style={{ padding: '0.5rem 0', borderTop: '1px solid var(--border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>سقف هزینه</span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{s.hardLimit}</span>
           <span className="num" style={{ fontSize: 'var(--fs-sm)', fontWeight: 500, color: 'var(--text-primary)' }}>
             {billingSettings?.payg_hard_limit != null
-              ? `${faNum(billingSettings.payg_hard_limit)} تومان`
-              : 'تعیین نشده'
+              ? f.price(billingSettings.payg_hard_limit)
+              : s.hardLimitUnset
             }
           </span>
         </div>
@@ -103,7 +111,7 @@ export function PaygSection({
               type="number"
               value={hardLimitValue}
               onChange={(e) => setHardLimitValue(e.target.value)}
-              placeholder="مبلغ (تومان)"
+              placeholder={s.hardLimitPlaceholder}
               style={{
                 flex: 1,
                 padding: '0.5rem 0.75rem',
@@ -121,14 +129,14 @@ export function PaygSection({
               onClick={setHardLimit}
               disabled={hardLimitLoading}
             >
-              {hardLimitLoading ? '...' : 'ذخیره'}
+              {hardLimitLoading ? s.saving : s.save}
             </button>
             <button
               className="btn btn-sm"
               onClick={() => { setShowHardLimitInput(false); setHardLimitValue('') }}
               style={{ flexShrink: 0, background: 'transparent', border: '1px solid var(--border)' }}
             >
-              لغو
+              {s.cancel}
             </button>
           </div>
         ) : (
@@ -138,7 +146,7 @@ export function PaygSection({
             style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.375rem', marginTop: '0.25rem' }}
           >
             <Icon name="settings" size={14} />
-            تنظیم سقف هزینه
+            {s.setHardLimit}
           </button>
         )}
       </div>
@@ -146,9 +154,9 @@ export function PaygSection({
       {/* Notify percentage */}
       {billingSettings?.notify_on_usage_pct != null && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0', borderTop: '1px solid var(--border)' }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>اعلام درصد مصرف</span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{s.notifyPct}</span>
           <span className="num" style={{ fontSize: 'var(--fs-sm)', fontWeight: 500, color: 'var(--text-primary)' }}>
-            {faPercent(billingSettings.notify_on_usage_pct)}
+            {f.percent(billingSettings.notify_on_usage_pct)}
           </span>
         </div>
       )}
@@ -165,7 +173,7 @@ export function PaygSection({
           lineHeight: 1.6,
         }}
       >
-        با فعال بودن پرداخت به ازای مصرف، از موجودی کیف پول شما کسر می‌شود
+        {s.infoText}
       </div>
     </div>
   )

@@ -1,14 +1,16 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
-import { faDate } from '@/lib/format'
-import { CATEGORY_MAP, CATEGORIES } from '../memoryTypes'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { categoryMap, categories } from '../memoryTypes'
 import type { Memory } from '../memoryTypes'
+import { memoryCardStrings } from './MemoryCard.strings'
 
 /* ═══════════════════════════════════════════════════════════════
    A single memory card: view mode, and edit mode. Split out of
    page.tsx verbatim -- no behaviour change.
    ═══════════════════════════════════════════════════════════════ */
-
-const formatDate = (s: string) => faDate(s)
 
 export function MemoryCard({
   memory: m,
@@ -37,12 +39,18 @@ export function MemoryCard({
   onStartEdit: (m: Memory) => void
   onDelete: (id: number) => void
 }) {
+  const lang = useLang()
+  const s = memoryCardStrings(lang)
+  const f = fmt(lang)
+  const catMap = categoryMap(lang)
+  const cats = categories(lang)
+
   return (
     <div className="card" style={{ padding: 16 }}>
       {isEditing ? (
         /* Edit mode */
         <div>
-          <textarea dir="rtl"
+          <textarea
             value={editingContent}
             onChange={(e) => setEditingContent(e.target.value)}
             className="input"
@@ -56,14 +64,14 @@ export function MemoryCard({
               className="input"
               style={{ flex: 1, fontSize: 13 }}
             >
-              {CATEGORIES.filter((c) => c.key).map((c) => (
+              {cats.filter((c) => c.key).map((c) => (
                 <option key={c.key} value={c.key}>{c.label}</option>
               ))}
             </select>
             <input
               value={editingTags}
               onChange={(e) => setEditingTags(e.target.value)}
-              placeholder="برچسب‌ها (با کاما)"
+              placeholder={s.tagsPlaceholder}
               className="input"
               style={{ flex: 2, fontSize: 13 }}
             />
@@ -71,10 +79,10 @@ export function MemoryCard({
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={onSaveEdit} className="btn btn-primary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
               <Icon name="check" size={14} />
-              ذخیره
+              {s.save}
             </button>
             <button onClick={onCancelEdit} className="btn btn-ghost btn-sm">
-              انصراف
+              {s.cancel}
             </button>
           </div>
         </div>
@@ -91,7 +99,7 @@ export function MemoryCard({
               className="badge badge-accent"
               style={{ fontSize: 11, padding: '2px 8px' }}
             >
-              {CATEGORY_MAP[m.category] || m.category}
+              {catMap[m.category] || m.category}
             </span>
 
             {/* Source indicator */}
@@ -108,7 +116,7 @@ export function MemoryCard({
               }}
             >
               <Icon name={m.source === 'manual' ? 'user' : 'sparkles'} size={10} />
-              {m.source === 'manual' ? 'دستی' : 'خودکار'}
+              {m.source === 'manual' ? s.manual : s.automatic}
             </span>
 
             {/* Tags */}
@@ -132,12 +140,12 @@ export function MemoryCard({
             <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <Icon name="calendar" size={11} />
-                {formatDate(m.created_at)}
+                {f.date(m.created_at)}
               </span>
               {m.updated_at !== m.created_at && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                   <Icon name="refresh" size={11} />
-                  ویرایش: {formatDate(m.updated_at)}
+                  {s.edited(f.date(m.updated_at))}
                 </span>
               )}
             </div>
@@ -146,7 +154,7 @@ export function MemoryCard({
               <button
                 onClick={() => onStartEdit(m)}
                 className="btn btn-ghost btn-sm"
-                title="ویرایش"
+                title={s.edit}
                 style={{ padding: '4px 8px' }}
               >
                 <Icon name="profile" size={14} />
@@ -154,7 +162,7 @@ export function MemoryCard({
               <button
                 onClick={() => onDelete(m.id)}
                 className="btn btn-ghost btn-sm"
-                title="حذف"
+                title={s.delete}
                 style={{ padding: '4px 8px', color: 'var(--danger)' }}
               >
                 <Icon name="trash" size={14} />

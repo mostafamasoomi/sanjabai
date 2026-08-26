@@ -5,7 +5,9 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { Icon } from '@/components/ui/Icon'
 import { Spinner, EmptyState, toast } from '@/components/ui'
-import { faPrice, faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { hermesLandingStrings } from './page.strings'
 
 /* ═══════════════════════════════════════════════════════════════
    Hermes server catalog — landing page.
@@ -20,6 +22,7 @@ type Offering = {
   name_fa: string
   name_en: string
   description_fa: string
+  description_en: string
   arch: string
   vcpu: number
   ram_mb: number
@@ -34,6 +37,8 @@ type Offering = {
 
 export default function HermesLandingPage() {
   const { user } = useAuth()
+  const lang = useLang()
+  const s = hermesLandingStrings(lang)
   const [offerings, setOfferings] = useState<Offering[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -46,12 +51,13 @@ export default function HermesLandingPage() {
         const data = await res.json()
         if (!cancelled) setOfferings(Array.isArray(data) ? data : [])
       } catch {
-        if (!cancelled) toast('خطا در دریافت پلن‌های سرور هرمس', 'error')
+        if (!cancelled) toast(s.loadError, 'error')
       } finally {
         if (!cancelled) setLoading(false)
       }
     })()
     return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (
@@ -67,9 +73,9 @@ export default function HermesLandingPage() {
           <Icon name="rocket" size={20} className="text-[var(--accent)]" />
         </div>
         <div>
-          <h1 className="page-title">سرور هرمس</h1>
+          <h1 className="page-title">{s.title}</h1>
           <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-            یک سرور آماده با ایجنت هرمس، از پیش نصب‌شده — اسکیل‌هایتان (برنامه‌نویسی، رصد اخبار، ...) را انتخاب کنید و تحویل بگیرید.
+            {s.subtitle}
           </p>
         </div>
       </div>
@@ -79,7 +85,7 @@ export default function HermesLandingPage() {
           <Spinner size="lg" />
         </div>
       ) : offerings.length === 0 ? (
-        <EmptyState icon="rocket" title="در حال حاضر پلنی موجود نیست" description="لطفاً بعداً دوباره سر بزنید." />
+        <EmptyState icon="rocket" title={s.emptyTitle} description={s.emptyDescription} />
       ) : (
         <div
           style={{
@@ -97,12 +103,10 @@ export default function HermesLandingPage() {
       <div className="card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
         <div className="flex items-center gap-2">
           <Icon name="info" size={16} className="text-[var(--text-muted)]" />
-          <span style={{ fontWeight: 600 }}>بعد از خرید چه اتفاقی می‌افتد؟</span>
+          <span style={{ fontWeight: 600 }}>{s.afterPurchaseTitle}</span>
         </div>
         <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', lineHeight: 1.8 }}>
-          پس از پرداخت، سرور برای شما راه‌اندازی و اسکیل‌های انتخابی روی هرمس نصب می‌شود. سپس می‌توانید از
-          صفحه‌ی مدیریت سرور، اسکیل‌های جدید اضافه یا اسکیل‌های موجود را حذف کنید و کلید API اختصاصی سرورتان
-          را برای شارژ اعتبار مصرفی مدیریت نمایید.
+          {s.afterPurchaseBody}
         </p>
       </div>
     </div>
@@ -110,6 +114,12 @@ export default function HermesLandingPage() {
 }
 
 function OfferingCard({ offering, loggedIn }: { offering: Offering; loggedIn: boolean }) {
+  const lang = useLang()
+  const s = hermesLandingStrings(lang)
+  const f = fmt(lang)
+  const name = lang === 'en' ? offering.name_en : offering.name_fa
+  const description = lang === 'en' ? offering.description_en : offering.description_fa
+
   return (
     <div className="card card-interactive" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', padding: '1.25rem' }}>
       <div className="flex items-center justify-between">
@@ -118,30 +128,30 @@ function OfferingCard({ offering, loggedIn }: { offering: Offering; loggedIn: bo
         </span>
         {offering.included_credit > 0 && (
           <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-            + {faPrice(offering.included_credit)} اعتبار هدیه
+            {s.includedCredit(f.price(offering.included_credit))}
           </span>
         )}
       </div>
 
-      <h2 style={{ fontSize: 'var(--fs-md)', fontWeight: 700 }}>{offering.name_fa}</h2>
-      <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>{offering.description_fa}</p>
+      <h2 style={{ fontSize: 'var(--fs-md)', fontWeight: 700 }}>{name}</h2>
+      <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>{description}</p>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.375rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-        <span>{faNum(offering.vcpu)} هسته پردازشی</span>
-        <span>{faNum(offering.ram_mb / 1024)} گیگابایت رم</span>
-        <span>{faNum(offering.disk_gb)} گیگابایت دیسک</span>
-        <span>{faNum(offering.traffic_tb)} ترابایت ترافیک</span>
-        <span>تا {faNum(offering.max_skills)} اسکیل هم‌زمان</span>
+        <span>{s.vcpu(f.num(offering.vcpu))}</span>
+        <span>{s.ram(f.num(offering.ram_mb / 1024))}</span>
+        <span>{s.disk(f.num(offering.disk_gb))}</span>
+        <span>{s.traffic(f.num(offering.traffic_tb))}</span>
+        <span>{s.maxSkills(f.num(offering.max_skills))}</span>
       </div>
 
       <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
         {offering.setup_price_irt > 0 && (
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            راه‌اندازی: {faPrice(offering.setup_price_irt)}
+            {s.setupFee(f.price(offering.setup_price_irt))}
           </span>
         )}
         <span style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, color: 'var(--accent)' }}>
-          {faPrice(offering.monthly_price_irt)} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>/ ماه</span>
+          {f.price(offering.monthly_price_irt)} <span style={{ fontSize: '0.75rem', fontWeight: 400, color: 'var(--text-muted)' }}>{s.perMonth}</span>
         </span>
       </div>
 
@@ -151,7 +161,7 @@ function OfferingCard({ offering, loggedIn }: { offering: Offering; loggedIn: bo
         style={{ justifyContent: 'center' }}
       >
         <Icon name="rocket" size={16} />
-        {loggedIn ? 'سفارش این سرور' : 'ورود برای سفارش'}
+        {loggedIn ? s.orderThis : s.loginToOrder}
       </Link>
     </div>
   )

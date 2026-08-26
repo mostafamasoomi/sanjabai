@@ -1,20 +1,29 @@
+'use client'
+
+import { useLang } from '../LanguageToggle'
 import { CheckGlyph } from './primitives'
-import { COMPARISON_ROWS } from './content'
+import { comparisonContent } from './content'
+import { comparisonSectionStrings } from './ComparisonSection.strings'
 
 /**
- * Restates claims already established elsewhere on the page (STATS,
- * PRICING_COLUMNS, HERO_TRUST, FAQ) side-by-side with the general pattern
- * subscription services share — see the header comment on COMPARISON_ROWS
- * in content.ts for why the right column stays unnamed and unquantified.
+ * Restates claims already established elsewhere on the page (stats,
+ * pricing, hero trust list, FAQ) side-by-side with the general pattern
+ * subscription services share — see the header comment on comparisonContent
+ * in content/comparison.ts for why the right column stays unnamed and
+ * unquantified.
  */
 export function ComparisonSection() {
+  const lang = useLang()
+  const s = comparisonSectionStrings(lang)
+  const { rows } = comparisonContent(lang)
+
   return (
     <section className="lp-section lp-section--soft" id="comparison">
       <div className="lp-container">
         <header className="lp-head">
-          <span className="lp-eyebrow">مقایسه</span>
-          <h2 className="lp-title">چرا پرداخت به‌ازای مصرف، نه اشتراک ماهانه؟</h2>
-          <p className="lp-lead">تفاوت سنجوبای با سرویس‌های اشتراکی رایج، در یک نگاه.</p>
+          <span className="lp-eyebrow">{s.eyebrow}</span>
+          <h2 className="lp-title">{s.title}</h2>
+          <p className="lp-lead">{s.lead}</p>
         </header>
 
         {/* The table is wider than a phone screen (3 columns of real content
@@ -22,7 +31,7 @@ export function ComparisonSection() {
             scroll affordance nobody notices is the same as no affordance, so
             this is a plain-text hint rather than a subtle edge gradient. Only
             shown under the breakpoint where scrolling is actually needed. */}
-        <p className="lp-compare__hint">برای مقایسه‌ی کامل، جدول را به چپ بکشید ⟵</p>
+        <p className="lp-compare__hint">{s.scrollHint}</p>
 
         <div className="lp-compare">
           <table className="lp-compare__table">
@@ -32,11 +41,11 @@ export function ComparisonSection() {
                 <th scope="col" className="lp-compare__col--brand">
                   <span dir="ltr">Sanjabai</span>
                 </th>
-                <th scope="col">سرویس‌های اشتراکی رایج</th>
+                <th scope="col">{s.subscriptionColumnHeading}</th>
               </tr>
             </thead>
             <tbody>
-              {COMPARISON_ROWS.map((row) => (
+              {rows.map((row) => (
                 <tr key={row.label}>
                   <th scope="row">{row.label}</th>
                   <td className="lp-compare__col--brand">

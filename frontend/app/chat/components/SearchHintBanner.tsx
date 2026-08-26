@@ -1,4 +1,7 @@
 import { Icon } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
+import { dirFor } from '@/lib/i18n'
+import { searchHintBannerStrings } from './SearchHintBanner.strings'
 
 type SearchHintBannerProps = {
   visible: boolean
@@ -9,10 +12,12 @@ type SearchHintBannerProps = {
 // Offered when the user typed a search-intent message but the globe toggle
 // was off -- never auto-enables search or auto-resends, only this click does.
 export default function SearchHintBanner({ visible, onResend, onDismiss }: SearchHintBannerProps) {
+  const lang = useLang()
+  const s = searchHintBannerStrings(lang)
   if (!visible) return null
   return (
     <div
-      dir="rtl"
+      dir={dirFor(lang)}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -28,7 +33,7 @@ export default function SearchHintBanner({ visible, onResend, onDismiss }: Searc
     >
       <Icon name="globe" size={14} />
       <span style={{ flex: 1 }}>
-        به نظر می‌رسد می‌خواهید در اینترنت جستجو شود، ولی جستجوی وب خاموش است.
+        {s.hint}
       </span>
       <button
         type="button"
@@ -36,12 +41,12 @@ export default function SearchHintBanner({ visible, onResend, onDismiss }: Searc
         className="btn btn-ghost btn-sm"
         style={{ fontSize: '0.75rem', color: 'var(--accent)', whiteSpace: 'nowrap', fontWeight: 600 }}
       >
-        فعال‌سازی جستجوی وب و ارسال دوباره
+        {s.enableAndResend}
       </button>
       <button
         type="button"
         onClick={onDismiss}
-        aria-label="بستن"
+        aria-label={s.close}
         style={{ display: 'inline-flex', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: '2px' }}
       >
         <Icon name="close" size={12} />

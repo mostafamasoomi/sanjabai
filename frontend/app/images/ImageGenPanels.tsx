@@ -4,7 +4,11 @@ import Link from 'next/link'
 import { type ModelCatalogItem } from '@/types/catalog'
 import { Icon } from '@/components/ui/Icon'
 import { Spinner } from '@/components/ui'
-import { faPrice } from '@/lib/format'
+import type { Lang } from '@/components/LanguageToggle'
+import { fmt, type Formatters } from '@/lib/i18n'
+import { imageGenPanelsStrings } from './ImageGenPanels.strings'
+
+type Strings = ReturnType<typeof imageGenPanelsStrings>
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Small presentational pieces for /images. Split out of page.tsx to keep
@@ -25,14 +29,16 @@ export function ImageModelPicker({
   selected,
   onSelect,
   disabled,
+  s,
 }: {
   models: ModelCatalogItem[]
   selected: ModelCatalogItem | null
   onSelect: (m: ModelCatalogItem) => void
   disabled?: boolean
+  s: Strings
 }) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="radiogroup" aria-label="انتخاب مدل تولید تصویر">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" role="radiogroup" aria-label={s.pickerAriaLabel}>
       {models.map((m) => {
         const active = selected?.id === m.id
         return (
@@ -43,7 +49,7 @@ export function ImageModelPicker({
             aria-checked={active}
             disabled={disabled}
             onClick={() => onSelect(m)}
-            className="card card-interactive text-right"
+            className="card card-interactive text-start"
             style={{
               padding: 'var(--space-4)',
               borderColor: active ? 'var(--accent)' : undefined,
@@ -78,15 +84,15 @@ export function ImageCountPicker({
   onChange,
   max,
   disabled,
+  f,
 }: {
   value: number
   onChange: (n: number) => void
   max: number
   disabled?: boolean
+  f: Formatters
 }) {
   const options = Array.from({ length: max }, (_, i) => i + 1)
-  const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹'
-  const fa = (n: number) => String(n).replace(/[0-9]/g, (d) => FA_DIGITS[Number(d)])
   return (
     <div className="flex items-center gap-2">
       {options.map((n) => (
@@ -97,7 +103,7 @@ export function ImageCountPicker({
           onClick={() => onChange(n)}
           className={`btn btn-sm ${value === n ? 'btn-primary' : 'btn-secondary'}`}
         >
-          {fa(n)}
+          {f.num(n)}
         </button>
       ))}
     </div>
@@ -116,38 +122,41 @@ export type ImagesErrorInfo = {
   actionHref?: string
 }
 
-export function buildErrorInfo(status: number, body: unknown): ImagesErrorInfo {
+export function buildErrorInfo(status: number, body: unknown, lang: Lang): ImagesErrorInfo {
+  const s = imageGenPanelsStrings(lang)
   const b = (body ?? {}) as {
     error?: { message?: string; code?: string }
     detail?: string
     code?: string
   }
   const code = b.error?.code || b.code
+  // Server message (error.message / detail) is backend-sourced Persian and
+  // is rendered verbatim in both languages — see the file header comment.
   const serverMessage = b.error?.message || b.detail
 
   if (status === 401) {
-    return { message: serverMessage || 'لطفاً وارد حساب خود شوید', actionLabel: 'ورود', actionHref: '/login' }
+    return { message: serverMessage || s.loginPrompt, actionLabel: s.loginAction, actionHref: '/login' }
   }
   if (code === 'balance' || status === 429) {
     return {
-      message: serverMessage || 'موجودی کیف پول شما کافی نیست. لطفاً حساب خود را شارژ کنید.',
-      actionLabel: 'شارژ کیف پول',
+      message: serverMessage || s.insufficientBalance,
+      actionLabel: s.topUpAction,
       actionHref: '/wallet',
     }
   }
   if (code === 'model_not_available') {
-    return { message: serverMessage || 'این مدل برای تولید تصویر در دسترس نیست' }
+    return { message: serverMessage || s.modelNotAvailable }
   }
   if (code === 'price_not_set') {
-    return { message: serverMessage || 'قیمتی برای این مدل ثبت نشده است؛ این مدل قابل ارائه نیست' }
+    return { message: serverMessage || s.priceNotSet }
   }
   if (code === 'no_images') {
-    return { message: serverMessage || 'تولید تصویر ناموفق بود؛ هیچ تصویری از سرویس دریافت نشد' }
+    return { message: serverMessage || s.noImages }
   }
   if (code === 'model_required') {
-    return { message: serverMessage || 'مدل مشخص نشده است' }
+    return { message: serverMessage || s.modelRequired }
   }
-  return { message: serverMessage || `سرویس موقتاً در دسترس نیست (کد ${status})` }
+  return { message: serverMessage || s.serviceUnavailable(String(status)) }
 }
 
 export function ErrorPanel({ info }: { info: ImagesErrorInfo }) {
@@ -175,13 +184,11 @@ export function ErrorPanel({ info }: { info: ImagesErrorInfo }) {
    THE headline trap this page must not fall into: a real generation took
    103s on the one route that ever reached a provider, and the backend
    allows up to 300s. No spinner here ever auto-gives-up. */
-export function GeneratingPanel() {
+export function GeneratingPanel({ s }: { s: Strings }) {
   return (
     <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
       <Spinner size="sm" />
-      <p className="card-desc" style={{ color: 'var(--text-primary)' }}>
-        در حال تولید تصویر... تولید تصویر ممکن است تا چند دقیقه طول بکشد. این صفحه را نبندید.
-      </p>
+      <p className="card-desc" style={{ color: 'var(--text-primary)' }}>{s.generating}</p>
     </div>
   )
 }
@@ -194,7 +201,7 @@ export type ImagesResult = {
   cost: number | null
 }
 
-export function ResultGrid({ result }: { result: ImagesResult }) {
+export function ResultGrid({ result, f, s }: { result: ImagesResult; f: Formatters; s: Strings }) {
   return (
     <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -206,15 +213,13 @@ export function ResultGrid({ result }: { result: ImagesResult }) {
             <img
               key={i}
               src={src}
-              alt={`تصویر تولیدشده ${i + 1}`}
+              alt={s.generatedImageAlt(f.num(i + 1))}
               style={{ width: '100%', height: 'auto', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}
             />
           )
         })}
       </div>
-      {result.cost != null && (
-        <p className="card-meta">هزینه این درخواست: {faPrice(result.cost)}</p>
-      )}
+      {result.cost != null && <p className="card-meta">{s.requestCost(f.price(result.cost))}</p>}
     </div>
   )
 }

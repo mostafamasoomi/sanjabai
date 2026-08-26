@@ -1,7 +1,24 @@
+'use client'
+
+import { useLang } from '../LanguageToggle'
+import { toFaDigits } from '@/lib/format'
 import { BrandMark } from './primitives'
-import { FOOTER_COLUMNS } from './content'
+import { footerContent } from './content'
+import { siteFooterStrings } from './SiteFooter.strings'
 
 export function SiteFooter() {
+  const lang = useLang()
+  const s = siteFooterStrings(lang)
+  const { columns } = footerContent(lang)
+  // Persian goes through Intl for the calendar conversion and then through
+  // toFaDigits, because the production Node image is built with small-icu and
+  // returns Latin digits from a fa-IR format (the reason lib/format.tsx
+  // normalises every Intl result it produces).
+  const now = new Date()
+  const year = lang === 'en'
+    ? String(now.getFullYear())
+    : toFaDigits(now.toLocaleDateString('fa-IR', { year: 'numeric' }))
+
   return (
     <footer className="lp-footer">
       <div className="lp-container">
@@ -10,13 +27,10 @@ export function SiteFooter() {
             <a href="/" className="lp-brand">
               <BrandMark />
             </a>
-            <p className="lp-footer__tagline">
-              پلتفرم فارسی دسترسی به مدل‌های هوش مصنوعی. چت کنید، عامل بسازید و با یک API
-              به محصولتان وصل شوید — با پرداخت ریالی و پشتیبانی محلی.
-            </p>
+            <p className="lp-footer__tagline">{s.tagline}</p>
           </div>
 
-          {FOOTER_COLUMNS.map((column) => (
+          {columns.map((column) => (
             <nav key={column.title} className="lp-footer__col" aria-label={column.title}>
               <h3>{column.title}</h3>
               {column.links.map((link) => (
@@ -29,8 +43,8 @@ export function SiteFooter() {
         </div>
 
         <div className="lp-footer__bottom">
-          <span>© ۱۴۰۴ Sanjabai — تمامی حقوق محفوظ است.</span>
-          <span>ساخته‌شده برای کاربران فارسی‌زبان</span>
+          <span>{s.copyright(year)}</span>
+          <span>{s.madeFor}</span>
         </div>
       </div>
     </footer>

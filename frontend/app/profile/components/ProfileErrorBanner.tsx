@@ -1,13 +1,18 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
+import { profileErrorBannerStrings } from './ProfileErrorBanner.strings'
 
 type ProfileErrorBannerProps = {
-  isFa: boolean
   onRetry: () => void
 }
 
 // Profile load error — the fetch used to fail silently, leaving the
 // form blank with no explanation.
-export default function ProfileErrorBanner({ isFa, onRetry }: ProfileErrorBannerProps) {
+export default function ProfileErrorBanner({ onRetry }: ProfileErrorBannerProps) {
+  const lang = useLang()
+  const s = profileErrorBannerStrings(lang)
   return (
     <div
       role="alert"
@@ -22,14 +27,14 @@ export default function ProfileErrorBanner({ isFa, onRetry }: ProfileErrorBanner
         <Icon name="warning" size={18} />
       </span>
       <span style={{ flex: 1, fontSize: 13, color: 'var(--text-primary)' }}>
-        {isFa ? 'خطا در بارگذاری اطلاعات پروفایل. لطفاً صفحه را تازه‌سازی کنید.' : 'Failed to load your profile. Please refresh the page.'}
+        {s.loadFailed}
       </span>
       <button
         onClick={onRetry}
         className="btn btn-sm btn-secondary"
         style={{ flexShrink: 0 }}
       >
-        {isFa ? 'تلاش مجدد' : 'Retry'}
+        {s.retry}
       </button>
     </div>
   )

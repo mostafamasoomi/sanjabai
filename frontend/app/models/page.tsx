@@ -6,15 +6,19 @@ import { Skeleton, EmptyState, toast } from '@/components/ui'
 import {
   useCatalog,
   priceBand,
-  PRICE_BAND_LABEL,
+  priceBandLabel,
   PRICE_BAND_ORDER,
   contextBand,
-  CONTEXT_BAND_LABEL,
   CONTEXT_BAND_ORDER,
+  type PriceBand,
 } from '@/lib/useCatalog'
-import { Num, faNum } from '@/lib/format'
-import { HEALTH_LABEL, healthOf, isUsableModel } from '@/app/chat/components/modelUtils'
-import type { Availability, ModelCatalogItem } from '@/types/catalog'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt, type Formatters } from '@/lib/i18n'
+import { healthOf, isUsableModel, healthLabel } from '@/app/chat/components/modelUtils'
+import type { HealthStatus, ModelCatalogItem } from '@/types/catalog'
+import { modelsPageStrings } from './page.strings'
+
+type Strings = ReturnType<typeof modelsPageStrings>
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Model catalog.
@@ -28,24 +32,63 @@ import type { Availability, ModelCatalogItem } from '@/types/catalog'
    (maintenance, withdrawn).
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/** Editorial availability, shown only when it is not the ordinary case. */
-const AVAILABILITY_NOTE: Partial<Record<Availability, string>> = {
-  maintenance: 'در حال نگهداری',
-  disabled: 'غیرفعال',
-}
-
 /* Capability tags used to map to eight per-capability colour classes, seven of
    which were never defined in the stylesheet. They are metadata, not status —
    the only coloured thing on a card should be the health badge — so they are
    uniformly neutral now. */
 
+/** Renders a value with an optional unit, isolated in an LTR run when the
+ *  unit is Latin — the bilingual equivalent of `<Num>` from lib/format,
+ *  which is hard-wired to Persian digits and cannot be reused in English
+ *  mode (see lib/i18n.ts's note on `<Num>` in the i18n spec). */
+function BiNum({
+  f,
+  value,
+  unit,
+  compact,
+}: {
+  f: Formatters
+  value: number | null | undefined
+  unit?: string
+  compact?: boolean
+}) {
+  const text = compact ? f.compact(value) : f.num(value)
+  if (!unit) return <span className="num">{text}</span>
+  if (/[A-Za-z]/.test(unit)) {
+    return (
+      <span className="num" dir="ltr">
+        {text} {unit}
+      </span>
+    )
+  }
+  return (
+    <span className="num">
+      {text} <span className="num-unit">{unit}</span>
+    </span>
+  )
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Card
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function ModelTile({ model, allModels }: { model: ModelCatalogItem; allModels: ModelCatalogItem[] }) {
+function ModelTile({
+  model,
+  allModels,
+  f,
+  s,
+  healthLabels,
+  priceBandLabels,
+}: {
+  model: ModelCatalogItem
+  allModels: ModelCatalogItem[]
+  f: Formatters
+  s: Strings
+  healthLabels: Record<HealthStatus, string>
+  priceBandLabels: Record<PriceBand, string>
+}) {
   const health = healthOf(model)
-  const note = AVAILABILITY_NOTE[model.availability]
+  const note = s.availabilityNote[model.availability]
   const band = priceBand(model, allModels)
   // Same usability check ModelPicker filters chat model selection by
   // (status !== 'down') — this link must not offer a chat that the picker
@@ -59,42 +102,42 @@ function ModelTile({ model, allModels }: { model: ModelCatalogItem; allModels: M
           {/* h2, not h3: the page h1 is the only level above it, and an
               h1 → h3 jump broke the outline for heading navigation. */}
           <h2 className="model-tile__name" dir="ltr">{model.displayName}</h2>
-          <p className="model-tile__provider">{PRICE_BAND_LABEL[band]}</p>
+          <p className="model-tile__provider">{priceBandLabels[band]}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <span className={`model-health-badge model-health-${health.status}`}>
             <span className="model-health-dot" style={{ background: 'currentColor' }} aria-hidden />
-            {HEALTH_LABEL[health.status]}
+            {healthLabels[health.status]}
           </span>
         </div>
       </div>
 
-      <p className="model-tile__desc">{model.description || 'بدون توضیح'}</p>
+      <p className="model-tile__desc">{model.description || s.noDescription}</p>
 
       <div className="model-tile__specs">
         <div className="model-tile__spec">
-          <span className="model-tile__spec-label">پنجره‌ی متن</span>
-          {/* Persian unit rather than a bare "token": the Latin word is an
-              LTR run and the RTL paragraph was placing it *before* the
-              number — "token ۱٬۰۰۰٬۰۰۰". */}
+          <span className="model-tile__spec-label">{s.contextWindow}</span>
+          {/* A Persian/localized unit rather than a bare "token": the Latin
+              word is an LTR run and the RTL paragraph was placing it
+              *before* the number — "token ۱٬۰۰۰٬۰۰۰". BiNum isolates it. */}
           <span className="model-tile__spec-value">
-            <Num value={model.contextWindow} compact unit="توکن" />
+            <BiNum f={f} value={model.contextWindow} compact unit={s.tokenUnit} />
           </span>
         </div>
         <div className="model-tile__spec">
-          <span className="model-tile__spec-label">تأخیر میانه</span>
+          <span className="model-tile__spec-label">{s.latency}</span>
           <span className="model-tile__spec-value">
             {health.latencyP50Ms == null ? (
               '—'
             ) : (
-              <Num value={health.latencyP50Ms} unit="ms" />
+              <BiNum f={f} value={health.latencyP50Ms} unit="ms" />
             )}
           </span>
         </div>
         <div className="model-tile__spec">
-          <span className="model-tile__spec-label">ورودی / میلیون</span>
+          <span className="model-tile__spec-label">{s.inputPerMillion}</span>
           <span className="model-tile__spec-value">
-            <Num value={model.pricing.inputPerMillion} unit="تومان" />
+            <span className="num">{f.price(model.pricing.inputPerMillion)}</span>
           </span>
         </div>
       </div>
@@ -125,21 +168,21 @@ function ModelTile({ model, allModels }: { model: ModelCatalogItem; allModels: M
           <a
             href={`/chat?model=${encodeURIComponent(model.id)}`}
             className="btn btn-secondary btn-sm"
-            aria-label={`شروع چت با ${model.displayName}`}
+            aria-label={s.startChatAria(model.displayName)}
           >
             <Icon name="chat" size={14} />
-            شروع چت
+            {s.startChat}
           </a>
         ) : (
           <button
             type="button"
             className="btn btn-secondary btn-sm"
             disabled
-            title="این مدل در حال حاضر در دسترس نیست"
-            aria-label={`${model.displayName} در حال حاضر در دسترس نیست`}
+            title={s.unavailableTitle}
+            aria-label={s.unavailableAria(model.displayName)}
           >
             <Icon name="chat" size={14} />
-            در دسترس نیست
+            {s.unavailable}
           </button>
         )}
       </div>
@@ -152,6 +195,14 @@ function ModelTile({ model, allModels }: { model: ModelCatalogItem; allModels: M
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function ModelsPage() {
+  const lang = useLang()
+  const f = fmt(lang)
+  const s = modelsPageStrings(lang)
+  const healthLabels = healthLabel(lang)
+  const priceBandLabels: Record<PriceBand, string> = {
+    standard: priceBandLabel('standard', lang),
+    premium: priceBandLabel('premium', lang),
+  }
   const { models, loading, error } = useCatalog()
   const [filter, setFilter] = useState('all')
   const [contextFilter, setContextFilter] = useState('all')
@@ -159,7 +210,8 @@ export default function ModelsPage() {
 
   // Surface catalog load failures as a toast (design-system error state).
   useEffect(() => {
-    if (error) toast('خطا در دریافت فهرست مدل‌ها', 'error')
+    if (error) toast(s.loadErrorToast, 'error')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [error])
 
   // Grouping/filtering used to be by `provider` (an internal routing id).
@@ -168,15 +220,15 @@ export default function ModelsPage() {
   // honest, user-meaningful substitute: it's derived from data the item
   // already carries (pricing.inputPerMillion) and actually varies.
   const bands = PRICE_BAND_ORDER.filter((b) => models.some((m) => priceBand(m, models) === b))
-  const chips = [{ key: 'all', label: 'همه' }, ...bands.map((b) => ({ key: b, label: PRICE_BAND_LABEL[b] }))]
+  const chips = [{ key: 'all', label: s.all }, ...bands.map((b) => ({ key: b, label: priceBandLabels[b] }))]
 
   // Same pattern as the price chips: only offer bands that at least one
   // model on screen actually falls into, so the control never shows a
   // choice that would immediately empty the grid.
   const ctxBands = CONTEXT_BAND_ORDER.filter((b) => models.some((m) => contextBand(m.contextWindow) === b))
   const ctxChips = [
-    { key: 'all', label: 'همه' },
-    ...ctxBands.map((b) => ({ key: b, label: CONTEXT_BAND_LABEL[b] })),
+    { key: 'all', label: s.all },
+    ...ctxBands.map((b) => ({ key: b, label: s.contextBand[b] })),
   ]
 
   const searchQuery = search.trim().toLowerCase()
@@ -207,9 +259,9 @@ export default function ModelsPage() {
   const header = (
     <header className="models-header">
       <div>
-        <h1 className="page-title">مدل‌های هوش مصنوعی</h1>
+        <h1 className="page-title">{s.pageTitle}</h1>
         <p className="page-subtitle" style={{ maxWidth: '32rem' }}>
-          همه مدل‌ها از یک پنل — وضعیت هر مدل به‌صورت زنده اندازه‌گیری می‌شود.
+          {s.pageSubtitle}
         </p>
       </div>
     </header>
@@ -247,11 +299,7 @@ export default function ModelsPage() {
     return (
       <div className="models-page">
         {header}
-        <EmptyState
-          icon="close"
-          title="خطا در بارگذاری"
-          description="در حال حاضر امکان دریافت فهرست مدل‌ها وجود ندارد. لطفاً بعداً تلاش کنید."
-        />
+        <EmptyState icon="close" title={s.loadErrorTitle} description={s.loadErrorDesc} />
       </div>
     )
   }
@@ -275,8 +323,8 @@ export default function ModelsPage() {
             type="text"
             className="input"
             style={{ paddingInlineStart: '2.25rem' }}
-            placeholder="جستجو در نام یا توضیح مدل..."
-            aria-label="جستجوی مدل"
+            placeholder={s.searchPlaceholder}
+            aria-label={s.searchAriaLabel}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -286,60 +334,60 @@ export default function ModelsPage() {
               onClick={() => setSearch('')}
               className="btn btn-ghost btn-icon absolute top-1/2 -translate-y-1/2"
               style={{ insetInlineEnd: '0.25rem' }}
-              aria-label="پاک کردن جستجو"
+              aria-label={s.clearSearchAriaLabel}
             >
               <Icon name="close" size={14} />
             </button>
           )}
         </div>
         <div className="models-filters">
-          <span className="models-filter-label">قیمت:</span>
-          {chips.map((f) => (
+          <span className="models-filter-label">{s.priceFilterLabel}</span>
+          {chips.map((c) => (
             <button
-              key={f.key}
-              onClick={() => setFilter(f.key)}
-              className={`aurora-chip ${filter === f.key ? 'active' : ''}`}
-              aria-pressed={filter === f.key}
+              key={c.key}
+              onClick={() => setFilter(c.key)}
+              className={`aurora-chip ${filter === c.key ? 'active' : ''}`}
+              aria-pressed={filter === c.key}
             >
-              {f.label}
+              {c.label}
             </button>
           ))}
         </div>
         <div className="models-filters">
-          <span className="models-filter-label">پنجره‌ی متن:</span>
-          {ctxChips.map((f) => (
+          <span className="models-filter-label">{s.contextFilterLabel}</span>
+          {ctxChips.map((c) => (
             <button
-              key={f.key}
-              onClick={() => setContextFilter(f.key)}
-              className={`aurora-chip ${contextFilter === f.key ? 'active' : ''}`}
-              aria-pressed={contextFilter === f.key}
+              key={c.key}
+              onClick={() => setContextFilter(c.key)}
+              className={`aurora-chip ${contextFilter === c.key ? 'active' : ''}`}
+              aria-pressed={contextFilter === c.key}
             >
-              {f.label}
+              {c.label}
             </button>
           ))}
         </div>
         {hasActiveFilters && (
           <button type="button" onClick={clearFilters} className="btn btn-ghost btn-sm">
             <Icon name="close" size={12} />
-            پاک کردن فیلترها
+            {s.clearFilters}
           </button>
         )}
-        <p className="models-count">{faNum(filtered.length)} مدل{hasActiveFilters ? ` از ${faNum(models.length)}` : ''}</p>
+        <p className="models-count">
+          {hasActiveFilters
+            ? s.resultCountOfTotal(f.num(filtered.length), f.num(models.length))
+            : s.resultCount(f.num(filtered.length))}
+        </p>
       </div>
 
       {filtered.length === 0 ? (
         <EmptyState
           icon="search"
-          title="مدلی یافت نشد"
-          description={
-            hasActiveFilters
-              ? 'برای فیلترها و عبارت جستجوی انتخابی شما مدلی موجود نیست.'
-              : 'در حال حاضر مدلی در فهرست موجود نیست.'
-          }
+          title={s.emptyTitle}
+          description={hasActiveFilters ? s.emptyDescFiltered : s.emptyDescUnfiltered}
         >
           {hasActiveFilters && (
             <button type="button" className="btn btn-secondary btn-sm" onClick={clearFilters}>
-              پاک کردن فیلترها
+              {s.clearFilters}
             </button>
           )}
         </EmptyState>
@@ -350,6 +398,10 @@ export default function ModelsPage() {
               key={m.id}
               model={m}
               allModels={models}
+              f={f}
+              s={s}
+              healthLabels={healthLabels}
+              priceBandLabels={priceBandLabels}
             />
           ))}
         </div>

@@ -1,8 +1,10 @@
 import type { RefObject } from 'react'
 import Link from 'next/link'
 import { Icon } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
 import ModelPicker from './ModelPicker'
 import { type ModelCatalogItem } from '@/types/catalog'
+import { chatModelBarStrings } from './ChatModelBar.strings'
 
 type ChatModelBarProps = {
   isMobile: boolean
@@ -32,16 +34,18 @@ export default function ChatModelBar({
   activeConversationId, exportMenuOpen, setExportMenuOpen, exportMenuRef, exportConversation,
   streaming, cancel,
 }: ChatModelBarProps) {
+  const lang = useLang()
+  const s = chatModelBarStrings(lang)
   return (
     <div className="chat-model-bar">
       <div className="flex items-center gap-2">
         {/* Sidebar toggle (desktop) / hamburger (mobile) */}
         {isMobile ? (
-          <button onClick={() => setMobileDrawerOpen(true)} className="conv-toggle-btn" title="مکالمات">
+          <button onClick={() => setMobileDrawerOpen(true)} className="conv-toggle-btn" title={s.conversations}>
             <Icon name="menu" size={18} />
           </button>
         ) : (
-          <button onClick={() => setSidebarOpen(prev => !prev)} className="conv-toggle-btn" title={sidebarOpen ? 'بستن سایدبار' : 'باز کردن سایدبار'}>
+          <button onClick={() => setSidebarOpen(prev => !prev)} className="conv-toggle-btn" title={sidebarOpen ? s.closeSidebar : s.openSidebar}>
             <Icon name={sidebarOpen ? 'close' : 'menu'} size={16} />
           </button>
         )}
@@ -49,7 +53,7 @@ export default function ChatModelBar({
         <Icon name="models" size={18} className="text-[var(--accent)]" />
         {catalogError ? (
           <span className="text-sm text-[var(--danger)] flex items-center gap-1">
-            <Icon name="close" size={14} /> خطا در بارگذاری مدل‌ها
+            <Icon name="close" size={14} /> {s.modelsLoadError}
           </span>
         ) : (
           <ModelPicker
@@ -71,7 +75,7 @@ export default function ChatModelBar({
           aria-checked={smartMode}
           onClick={() => setSmartMode(prev => !prev)}
           className="smart-mode-toggle"
-          title={smartMode ? 'حالت هوشمند فعال' : 'حالت هوشمند غیرفعال'}
+          title={smartMode ? s.smartModeActive : s.smartModeInactive}
         >
           <span className={`smart-mode-switch ${smartMode ? 'smart-mode-on' : ''}`}>
             <span className="smart-mode-knob" />
@@ -79,7 +83,7 @@ export default function ChatModelBar({
           <span className="select-none">Smart Mode</span>
         </button>
         {smartMode && smartModel && (
-          <span className="badge badge-accent text-[9px]" dir="ltr" title="مدل انتخابی توسط Smart Mode">
+          <span className="badge badge-accent text-[9px]" dir="ltr" title={s.smartModePicked}>
             🧠 {smartModel}
           </span>
         )}
@@ -88,7 +92,7 @@ export default function ChatModelBar({
         <Link
           href="/compare"
           className="conv-toggle-btn no-underline"
-          title="مقایسه مدل‌ها"
+          title={s.compareModels}
         >
           <Icon name="compare" size={16} />
         </Link>
@@ -99,7 +103,7 @@ export default function ChatModelBar({
             <button
               onClick={() => setExportMenuOpen(prev => !prev)}
               className="conv-toggle-btn"
-              title="خروجی گرفتن"
+              title={s.export}
             >
               <Icon name="external" size={16} />
             </button>
@@ -122,7 +126,7 @@ export default function ChatModelBar({
         {streaming && (
           <button onClick={cancel} className="btn btn-ghost btn-sm text-[var(--danger)]">
             <Icon name="close" size={14} />
-            توقف
+            {s.stop}
           </button>
         )}
       </div>

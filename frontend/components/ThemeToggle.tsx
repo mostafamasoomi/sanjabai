@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useLang } from '@/components/LanguageToggle'
+import { themeToggleStrings } from './ThemeToggle.strings'
 
 function SunGlyph() {
   return (
@@ -30,6 +32,7 @@ function MoonGlyph() {
 }
 
 export function ThemeToggle() {
+  const s = themeToggleStrings(useLang())
   const [dark, setDark] = useState(true)
 
   // The theme itself is applied before first paint by the bootstrap script in
@@ -48,7 +51,7 @@ export function ThemeToggle() {
     document.documentElement.setAttribute('data-theme', next ? 'dark' : 'light')
   }
 
-  const label = dark ? 'تغییر به حالت روشن' : 'تغییر به حالت تاریک'
+  const label = dark ? s.toLight : s.toDark
 
   return (
     <button onClick={toggle} className="btn btn-ghost btn-icon" aria-label={label} title={label}>

@@ -1,7 +1,9 @@
 'use client'
 
 import { Icon } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
 import { useProfileData } from './hooks/useProfileData'
+import { profilePageStrings } from './page.strings'
 import ProfileErrorBanner from './components/ProfileErrorBanner'
 import ProfileAvatarCard from './components/ProfileAvatarCard'
 import PersonalInfoSection from './components/PersonalInfoSection'
@@ -25,6 +27,8 @@ import DangerZoneSection from './components/DangerZoneSection'
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function ProfilePage() {
+  const lang = useLang()
+  const s = profilePageStrings(lang)
   const {
     user,
     displayName, setDisplayName,
@@ -57,7 +61,7 @@ export default function ProfilePage() {
     handleAvatarUpload,
     handleChangePassword,
     handleLinkTelegram,
-    userInitial, isFa, isDirty,
+    userInitial, isDirty,
   } = useProfileData()
 
   if (loadingProfile) {
@@ -77,20 +81,18 @@ export default function ProfilePage() {
             <Icon name="user" size={20} className="text-accent" />
           </div>
           <h1 className="page-title">
-            {isFa ? 'پروفایل کاربری' : 'User Profile'}
+            {s.title}
           </h1>
         </div>
       </div>
 
       {profileError && (
         <ProfileErrorBanner
-          isFa={isFa}
           onRetry={() => { setLoadingProfile(true); fetchProfile() }}
         />
       )}
 
       <ProfileAvatarCard
-        isFa={isFa}
         avatarUrl={avatarUrl}
         avatarUploading={avatarUploading}
         handleAvatarUpload={handleAvatarUpload}
@@ -104,7 +106,6 @@ export default function ProfilePage() {
       />
 
       <PersonalInfoSection
-        isFa={isFa}
         displayName={displayName}
         setDisplayName={setDisplayName}
         bio={bio}
@@ -114,7 +115,6 @@ export default function ProfilePage() {
       />
 
       <AIPreferencesSection
-        isFa={isFa}
         defaultModel={defaultModel}
         setDefaultModel={setDefaultModel}
         models={models}
@@ -128,13 +128,11 @@ export default function ProfilePage() {
       />
 
       <AutonomySection
-        isFa={isFa}
         autonomyLevel={autonomyLevel}
         setAutonomyLevel={setAutonomyLevel}
       />
 
       <AppearanceSection
-        isFa={isFa}
         theme={theme}
         setTheme={setTheme}
         language={language}
@@ -142,7 +140,6 @@ export default function ProfilePage() {
       />
 
       <NotificationsSection
-        isFa={isFa}
         emailNotif={emailNotif}
         setEmailNotif={setEmailNotif}
         telegramNotif={telegramNotif}
@@ -162,12 +159,11 @@ export default function ProfilePage() {
           ) : (
             <Icon name="check" size={14} />
           )}
-          {isFa ? 'ذخیره تغییرات' : 'Save Changes'}
+          {s.saveChanges}
         </button>
       </div>
 
       <ChangePasswordSection
-        isFa={isFa}
         currentPassword={currentPassword}
         setCurrentPassword={setCurrentPassword}
         newPassword={newPassword}
@@ -179,16 +175,15 @@ export default function ProfilePage() {
       />
 
       <TelegramLinkSection
-        isFa={isFa}
         telegramId={telegramId}
         setTelegramId={setTelegramId}
         linkingTelegram={linkingTelegram}
         handleLinkTelegram={handleLinkTelegram}
       />
 
-      <ReferralSection isFa={isFa} user={user} />
+      <ReferralSection user={user} />
 
-      <DangerZoneSection isFa={isFa} />
+      <DangerZoneSection />
     </div>
   )
 }

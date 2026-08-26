@@ -6,10 +6,12 @@ import { apiFetch } from '@/lib/apiFetch'
 import { useCatalog } from '@/lib/useCatalog'
 import { type ModelCatalogItem } from '@/types/catalog'
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
 import { Skeleton, EmptyState, toast } from '@/components/ui'
 import MarkdownRenderer from '@/app/chat/components/MarkdownRenderer'
 import ModelPicker from '@/app/chat/components/ModelPicker'
+import { playgroundPageStrings } from './page.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Playground — send a raw /v1/chat/completions request and inspect the
@@ -26,6 +28,9 @@ type ChatResponse = {
 
 export default function PlaygroundPage() {
   const { token } = useAuth()
+  const lang = useLang()
+  const s = playgroundPageStrings(lang)
+  const f = fmt(lang)
   const { models, loading: catalogLoading, error: catalogError } = useCatalog()
   const [model, setModel] = useState<ModelCatalogItem | null>(null)
   const [systemPrompt, setSystemPrompt] = useState('')
@@ -85,11 +90,13 @@ export default function PlaygroundPage() {
       })
       const data: ChatResponse = await res.json()
       if (!res.ok) {
-        throw new Error(data?.error?.message || data?.detail || `خطای سرور: ${res.status}`)
+        // data?.error?.message / data?.detail are backend-sourced error
+        // messages (Persian only for now) -- see the i18n handoff report.
+        throw new Error(data?.error?.message || data?.detail || s.serverError(f.num(res.status)))
       }
       setResponse(data)
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'خطا در ارتباط'
+      const msg = err instanceof Error ? err.message : s.connectionError
       setError(msg)
       toast(msg, 'error')
     } finally {
@@ -99,7 +106,7 @@ export default function PlaygroundPage() {
 
   const copySnippet = () => {
     navigator.clipboard.writeText(curlSnippet)
-    toast('کد کپی شد', 'success')
+    toast(s.copied, 'success')
   }
 
   const content = response?.choices?.[0]?.message?.content
@@ -110,14 +117,14 @@ export default function PlaygroundPage() {
         <div>
           <h1 className="text-2xl font-bold text-gradient">Playground</h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1">
-            یک درخواست واقعی به /v1/chat/completions بفرستید و پاسخ خام API را ببینید
+            {s.subtitle}
           </p>
         </div>
       </div>
 
       <div className="card space-y-3">
         <div>
-          <label className="compare-picker-label">مدل</label>
+          <label className="compare-picker-label">{s.model}</label>
           {catalogLoading ? (
             <Skeleton className="w-full" height="2.5rem" />
           ) : (
@@ -128,7 +135,7 @@ export default function PlaygroundPage() {
         <textarea dir="auto"
           className="input w-full"
           rows={2}
-          placeholder="system prompt (اختیاری)"
+          placeholder={s.systemPromptPlaceholder}
           value={systemPrompt}
           onChange={(e) => setSystemPrompt(e.target.value)}
           disabled={busy}
@@ -137,7 +144,7 @@ export default function PlaygroundPage() {
         <textarea dir="auto"
           className="input w-full"
           rows={4}
-          placeholder="prompt خود را بنویسید..."
+          placeholder={s.promptPlaceholder}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           disabled={busy}
@@ -166,7 +173,7 @@ export default function PlaygroundPage() {
           </label>
           <button className="btn btn-primary" onClick={handleSend} disabled={!canSend}>
             <Icon name="send" size={16} />
-            {busy ? 'در حال ارسال...' : 'ارسال درخواست'}
+            {busy ? s.sending : s.send}
           </button>
         </div>
 
@@ -179,29 +186,29 @@ export default function PlaygroundPage() {
       </div>
 
       {!catalogLoading && !catalogError && models.length === 0 && (
-        <EmptyState icon="playground" title="مدلی در دسترس نیست" description="فهرست مدلها خالی است." />
+        <EmptyState icon="playground" title={s.noModelsTitle} description={s.noModelsDesc} />
       )}
 
       <div className="compare-results">
         <div className="compare-panel">
           <div className="compare-panel-header">
-            <span className="compare-model-name">پاسخ</span>
+            <span className="compare-model-name">{s.response}</span>
           </div>
           <div className="compare-content">
             {busy ? (
-              <div className="compare-loading">در حال دریافت پاسخ...</div>
+              <div className="compare-loading">{s.receiving}</div>
             ) : content ? (
               <MarkdownRenderer content={content} />
             ) : (
-              <div className="compare-placeholder">پاسخ مدل در اینجا نمایش داده می‌شود</div>
+              <div className="compare-placeholder">{s.placeholder}</div>
             )}
           </div>
         </div>
 
         <div className="compare-panel">
           <div className="compare-panel-header">
-            <span className="compare-model-name">درخواست (curl)</span>
-            <button className="btn btn-ghost" onClick={copySnippet} title="کپی">
+            <span className="compare-model-name">{s.request}</span>
+            <button className="btn btn-ghost" onClick={copySnippet} title={s.copy}>
               <Icon name="copy" size={16} />
             </button>
           </div>
@@ -214,7 +221,7 @@ export default function PlaygroundPage() {
       {response && (
         <div className="card">
           <div className="compare-panel-header">
-            <span className="compare-model-name">پاسخ خام JSON</span>
+            <span className="compare-model-name">{s.rawJson}</span>
           </div>
           <pre dir="ltr" style={{ overflowX: 'auto', fontSize: '0.8rem' }}>
             {JSON.stringify(response, null, 2)}
@@ -222,16 +229,16 @@ export default function PlaygroundPage() {
           {response.usage && (
             <div className="compare-stats mt-2">
               <div className="compare-stat">
-                <span className="compare-stat-label">توکن ورودی</span>
-                <span className="compare-stat-value">{response.usage.prompt_tokens}</span>
+                <span className="compare-stat-label">{s.tokensInput}</span>
+                <span className="compare-stat-value num">{f.num(response.usage.prompt_tokens)}</span>
               </div>
               <div className="compare-stat">
-                <span className="compare-stat-label">توکن خروجی</span>
-                <span className="compare-stat-value">{response.usage.completion_tokens}</span>
+                <span className="compare-stat-label">{s.tokensOutput}</span>
+                <span className="compare-stat-value num">{f.num(response.usage.completion_tokens)}</span>
               </div>
               <div className="compare-stat">
-                <span className="compare-stat-label">مجموع</span>
-                <span className="compare-stat-value num">{faNum(response.usage.total_tokens)}</span>
+                <span className="compare-stat-label">{s.tokensTotal}</span>
+                <span className="compare-stat-value num">{f.num(response.usage.total_tokens)}</span>
               </div>
             </div>
           )}

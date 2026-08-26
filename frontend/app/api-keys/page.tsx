@@ -6,13 +6,10 @@ import { useAuth } from '@/lib/auth'
 import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
-import { faNum, faDate } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
 import { ApiKeyRevealModal } from '@/components/ApiKeyRevealModal'
-
-// Shared Persian message for the (expected-rare) CSRF-rejection path — the
-// backend returns 403 with "هدر X-Requested-With ارسال نشده" if a mutating
-// request ever reaches it without the header apiFetch adds automatically.
-const FORBIDDEN_MESSAGE = 'درخواست شما رد شد (خطای امنیتی). لطفاً صفحه را تازه‌سازی کرده و دوباره تلاش کنید.'
+import { apiKeysPageStrings } from './page.strings'
 
 type ApiKeyInfo = {
   id: number
@@ -27,6 +24,9 @@ type ApiKeyInfo = {
 export default function ApiKeysPage() {
   const { user, token } = useAuth()
   const router = useRouter()
+  const lang = useLang()
+  const s = apiKeysPageStrings(lang)
+  const f = fmt(lang)
   const [keys, setKeys] = useState<ApiKeyInfo[]>([])
   const [name, setName] = useState('Default')
   const [loading, setLoading] = useState(false)
@@ -60,23 +60,25 @@ export default function ApiKeysPage() {
         body: JSON.stringify({ name }),
       })
       if (r.status === 401) { router.push('/login'); return }
-      if (r.status === 403) { toast(FORBIDDEN_MESSAGE, 'error'); return }
+      if (r.status === 403) { toast(s.forbiddenMessage, 'error'); return }
       const data = await r.json()
       if (r.ok) {
         setReveal({ key: data.key, isRotation: false })
         fetchKeys()
       } else {
-        toast(data.detail || 'خطا', 'error')
+        // data.detail is a backend-sourced error message (Persian only for
+        // now) -- see the i18n handoff report.
+        toast(data.detail || s.genericError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط', 'error')
+      toast(s.connectionError, 'error')
     } finally {
       setLoading(false)
     }
   }
 
   const rotateKey = async (id: number) => {
-    if (!confirm('با چرخاندن این کلید، کلید فعلی بلافاصله از کار می‌افتد و باید کلید جدید را در همه جا جایگزین کنید. ادامه می‌دهید؟')) return
+    if (!confirm(s.rotateConfirm)) return
     setRotatingId(id)
     try {
       const r = await apiFetch(`/api/api-keys/${id}/rotate`, {
@@ -84,16 +86,16 @@ export default function ApiKeysPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (r.status === 401) { router.push('/login'); return }
-      if (r.status === 403) { toast(FORBIDDEN_MESSAGE, 'error'); return }
+      if (r.status === 403) { toast(s.forbiddenMessage, 'error'); return }
       const data = await r.json()
       if (r.ok) {
         setReveal({ key: data.key, isRotation: true })
         fetchKeys()
       } else {
-        toast(data.detail || 'خطا', 'error')
+        toast(data.detail || s.genericError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط', 'error')
+      toast(s.connectionError, 'error')
     } finally {
       setRotatingId(null)
     }
@@ -106,17 +108,17 @@ export default function ApiKeysPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (r.status === 401) { router.push('/login'); return }
-      if (r.status === 403) { toast(FORBIDDEN_MESSAGE, 'error'); return }
+      if (r.status === 403) { toast(s.forbiddenMessage, 'error'); return }
       if (r.ok) {
-        toast('کلید غیرفعال شد', 'success')
+        toast(s.revoked, 'success')
         fetchKeys()
       }
     } catch {
-      toast('خطا', 'error')
+      toast(s.revokeError, 'error')
     }
   }
 
-  const formatDate = (s: string | null) => faDate(s)
+  const formatDate = (val: string | null) => f.date(val)
 
   return (
     <div className="apikeys-page">
@@ -126,8 +128,8 @@ export default function ApiKeysPage() {
           <Icon name="key" size={20} className="text-accent" />
         </div>
         <div>
-          <h1 className="page-title">کلیدهای API</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>مدیریت کلیدهای دسترسی به API</p>
+          <h1 className="page-title">{s.title}</h1>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>{s.subtitle}</p>
         </div>
       </div>
 
@@ -135,13 +137,13 @@ export default function ApiKeysPage() {
       <div className="card apikeys-generate-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
           <Icon name="plus" size={16} className="text-accent" />
-          <h2 className="card-title">ساخت کلید جدید</h2>
+          <h2 className="card-title">{s.generateTitle}</h2>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="نام کلید (مثلاً Production)"
+            placeholder={s.namePlaceholder}
             className="input flex-1"
           />
           <button onClick={generateKey} disabled={loading} className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -150,7 +152,7 @@ export default function ApiKeysPage() {
             ) : (
               <Icon name="key" size={14} />
             )}
-            ساخت کلید
+            {s.create}
           </button>
         </div>
       </div>
@@ -160,9 +162,9 @@ export default function ApiKeysPage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon name="key" size={16} className="text-accent" />
-            <h2 className="card-title">کلیدهای شما</h2>
+            <h2 className="card-title">{s.yourKeys}</h2>
             {keys.length > 0 && (
-              <span className="badge badge-accent">{faNum(keys.length)}</span>
+              <span className="badge badge-accent">{f.num(keys.length)}</span>
             )}
           </div>
         </div>
@@ -172,8 +174,8 @@ export default function ApiKeysPage() {
             <div className="apikeys-empty-icon">
               <Icon name="key" size={28} className="text-muted" />
             </div>
-            <p style={{ color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 4 }}>هنوز کلیدی نساختهاید</p>
-            <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>از فرم بالا اولین کلید API خود را بسازید</p>
+            <p style={{ color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 4 }}>{s.emptyTitle}</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>{s.emptyDesc}</p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -187,9 +189,9 @@ export default function ApiKeysPage() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                         <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{k.name}</span>
                         {k.active ? (
-                          <span className="badge badge-positive">فعال</span>
+                          <span className="badge badge-positive">{s.active}</span>
                         ) : (
-                          <span className="badge badge-danger">غیرفعال</span>
+                          <span className="badge badge-danger">{s.inactive}</span>
                         )}
                       </div>
 
@@ -207,19 +209,19 @@ export default function ApiKeysPage() {
                         {k.created_at && (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                             <Icon name="calendar" size={11} />
-                            ساخت: {formatDate(k.created_at)}
+                            {s.createdAt(formatDate(k.created_at))}
                           </span>
                         )}
                         {k.last_used && (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                             <Icon name="clock" size={11} />
-                            آخرین استفاده: {formatDate(k.last_used)}
+                            {s.lastUsed(formatDate(k.last_used))}
                           </span>
                         )}
                         {k.usage_count !== undefined && (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                             <Icon name="chart" size={11} />
-                            {faNum(k.usage_count)} درخواست
+                            {s.requestsCount(f.num(k.usage_count))}
                           </span>
                         )}
                       </div>
@@ -232,14 +234,14 @@ export default function ApiKeysPage() {
                           onClick={() => rotateKey(k.id)}
                           disabled={isRotating}
                           className="btn btn-ghost btn-sm"
-                          title="چرخاندن کلید (ساخت رمز جدید)"
+                          title={s.rotateTitle}
                         >
                           {isRotating ? <span className="apikeys-spinner" /> : <Icon name="refresh" size={14} />}
                         </button>
                         <button
                           onClick={() => revokeKey(k.id)}
                           className="btn btn-ghost btn-sm apikeys-revoke-btn"
-                          title="غیرفعال کردن"
+                          title={s.revokeTitle}
                         >
                           <Icon name="trash" size={14} />
                         </button>
@@ -257,13 +259,13 @@ export default function ApiKeysPage() {
       <div className="card" style={{ marginTop: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
           <Icon name="code" size={16} className="text-accent" />
-          <h2 className="card-title">نحوه استفاده</h2>
+          <h2 className="card-title">{s.howToUse}</h2>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
             <h3 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span className="apikeys-doc-num">۱</span>
-              احراز هویت
+              <span className="apikeys-doc-num">{f.num(1)}</span>
+              {s.step1}
             </h3>
             <pre className="apikeys-pre">
               <code>{`curl -H "Authorization: Bearer *** \\
@@ -272,8 +274,8 @@ export default function ApiKeysPage() {
           </div>
           <div>
             <h3 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span className="apikeys-doc-num">۲</span>
-              ارسال درخواست چت
+              <span className="apikeys-doc-num">{f.num(2)}</span>
+              {s.step2}
             </h3>
             <pre className="apikeys-pre">
               <code>{`{
@@ -284,8 +286,8 @@ export default function ApiKeysPage() {
           </div>
           <div>
             <h3 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span className="apikeys-doc-num">۳</span>
-              لیست مدل‌ها
+              <span className="apikeys-doc-num">{f.num(3)}</span>
+              {s.step3}
             </h3>
             <pre className="apikeys-pre">
               <code>{`curl -H "Authorization: Bearer *** \\

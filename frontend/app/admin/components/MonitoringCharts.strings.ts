@@ -1,4 +1,4 @@
-import { dict } from '@/lib/adminI18n'
+import { dict } from '@/lib/i18n'
 
 /* Dictionary for MonitoringCharts.tsx — hand-rolled SVG/div charts used by
  * MonitoringTab.tsx. recharts is banned in this project (AdminCharts.tsx);

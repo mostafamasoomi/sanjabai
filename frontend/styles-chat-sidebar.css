@@ -28,7 +28,11 @@
   display: flex;
   flex-direction: column;
   background: var(--bg-surface);
-  border-left: 1px solid var(--border);
+  /* The edge facing the conversation. <aside> is the first flex child, so it
+     sits on the inline-start side in either direction and the content-facing
+     edge is inline-end -- which resolves to `left` in RTL, exactly what this
+     rule used to hard-code. */
+  border-inline-end: 1px solid var(--border);
   overflow: hidden;
   animation: sidebarSlideIn 0.25s ease;
 }
@@ -225,7 +229,10 @@
 
 .conv-item-active {
   background: var(--accent-dim);
-  border-right: 3px solid var(--accent);
+  /* Selection stripe on the reading edge. `border-right` resolved to the
+     right in RTL and stayed on the right in English, where the reading edge
+     is the left. */
+  border-inline-start: 3px solid var(--accent);
 }
 
 .conv-item-active:hover {
@@ -363,21 +370,33 @@
 .conv-drawer {
   position: fixed;
   top: 0;
-  right: 0;
+  inset-inline-start: 0;
   width: 300px;
   max-width: 85vw;
   height: 100vh;
   background: var(--bg-surface);
-  border-left: 1px solid var(--border);
+  border-inline-end: 1px solid var(--border);
   z-index: 999;
   display: flex;
   flex-direction: column;
+  /* Parked off the inline-start edge. There is no logical `transform`, so the
+     LTR mirror is an explicit override below rather than a logical property.
+     NOTE THE SPECIFICITY: `[dir='ltr'] .conv-drawer` is (0,2,0) and would
+     beat a bare `.conv-drawer-open` (0,1,0) -- the drawer would slide out and
+     never open in English. The open state therefore carries its own
+     equally-specific LTR rule, placed after it. */
   transform: translateX(100%);
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: -8px 0 32px rgba(0, 0, 0, 0.3);
 }
 
-.conv-drawer-open {
+[dir='ltr'] .conv-drawer {
+  transform: translateX(-100%);
+  box-shadow: 8px 0 32px rgba(0, 0, 0, 0.3);
+}
+
+.conv-drawer-open,
+[dir='ltr'] .conv-drawer-open {
   transform: translateX(0);
 }
 

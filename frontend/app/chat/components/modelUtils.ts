@@ -1,7 +1,9 @@
 'use client'
 
 import type { HealthStatus, ModelCatalogItem, ModelHealth } from '@/types/catalog'
-import { faNum } from '@/lib/format'
+import type { Lang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { modelUtilsStrings } from './modelUtils.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Model health
@@ -44,11 +46,16 @@ export function isUsableModel(m: Pick<ModelCatalogItem, 'health'>): boolean {
   return healthOf(m).status !== 'down'
 }
 
-export const HEALTH_LABEL: Record<HealthStatus, string> = {
-  healthy: 'سالم',
-  degraded: 'ناپایدار',
-  down: 'در دسترس نیست',
-  unknown: 'نامشخص',
+/** Persian default, kept as a plain Record (not a `(lang) => …` reader) for
+ *  callers written before this file went bilingual — app/status/page.tsx
+ *  (owned by another agent) still does `HEALTH_LABEL[status]` directly. Do
+ *  not remove without updating that file too. New code should call
+ *  `healthLabel(lang)` instead. */
+export const HEALTH_LABEL: Record<HealthStatus, string> = modelUtilsStrings('fa').health
+
+/** Bilingual reader — use this in any newly-translated component. */
+export function healthLabel(lang: Lang): Record<HealthStatus, string> {
+  return modelUtilsStrings(lang).health
 }
 
 /** Maps to the semantic colour tokens in globals.css. */
@@ -72,12 +79,10 @@ export function getModelIcon(capabilities: string[] = [], recommendedFor: string
   return '🤖'
 }
 
-export function formatPriceIRT(price: number): string {
+export function formatPriceIRT(price: number, lang: Lang = 'fa'): string {
   if (price == null || isNaN(price)) return '—'
-  // Price is already in tomans. The unit used to read "تومان/۱M": a Persian
-  // word, a slash, then a Latin M, which the RTL run reorders. Spelled out in
-  // Persian it is unambiguous.
-  return `${faNum(price)} تومان/میلیون`
+  const n = fmt(lang).num(price)
+  return `${n} ${modelUtilsStrings(lang).priceUnit}`
 }
 
 export function formatContextWindow(ctx: number): string {

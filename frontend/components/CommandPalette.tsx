@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Icon, iconNames, type IconName } from './ui/Icon'
+import { useLang } from './LanguageToggle'
+import { commandPaletteStrings } from './CommandPalette.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Command Palette — ⌘K / Ctrl+K to open, keyboard-first navigation.
@@ -20,6 +22,8 @@ interface Command {
 }
 
 export function useCommandPalette() {
+  const lang = useLang()
+  const s = commandPaletteStrings(lang)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
@@ -27,18 +31,18 @@ export function useCommandPalette() {
   const router = useRouter()
 
   const commands: Command[] = [
-    { id: 'chat', label: 'چت', icon: 'chat', href: '/chat', shortcut: '⌘1', category: 'navigation' },
-    { id: 'dashboard', label: 'داشبورد', icon: 'dashboard', href: '/dashboard', shortcut: '⌘2', category: 'navigation' },
-    { id: 'models', label: 'مدل‌ها', icon: 'models', href: '/models', shortcut: '⌘3', category: 'navigation' },
-    { id: 'wallet', label: 'کیف پول', icon: 'wallet', href: '/wallet', shortcut: '⌘4', category: 'navigation' },
-    { id: 'pricing', label: 'تعرفه‌ها', icon: 'pricing', href: '/pricing', category: 'navigation' },
-    { id: 'playground', label: 'Playground', icon: 'playground', href: '/playground', category: 'navigation' },
-    { id: 'compare', label: 'مقایسه مدل‌ها', icon: 'compare', href: '/compare', category: 'navigation' },
-    { id: 'images', label: 'تولید تصویر', icon: 'camera', href: '/images', category: 'navigation' },
-    { id: 'profile', label: 'پروفایل', icon: 'profile', href: '/profile', category: 'navigation' },
-    { id: 'api-keys', label: 'کلیدهای API', icon: 'key', href: '/api-keys', category: 'navigation' },
-    { id: 'admin', label: 'پنل مدیریت', icon: 'settings', href: '/admin', category: 'navigation' },
-    { id: 'referral', label: 'دعوت دوستان', icon: 'referral', href: '/referral', category: 'action' },
+    { id: 'chat', label: s.commands.chat, icon: 'chat', href: '/chat', shortcut: '⌘1', category: 'navigation' },
+    { id: 'dashboard', label: s.commands.dashboard, icon: 'dashboard', href: '/dashboard', shortcut: '⌘2', category: 'navigation' },
+    { id: 'models', label: s.commands.models, icon: 'models', href: '/models', shortcut: '⌘3', category: 'navigation' },
+    { id: 'wallet', label: s.commands.wallet, icon: 'wallet', href: '/wallet', shortcut: '⌘4', category: 'navigation' },
+    { id: 'pricing', label: s.commands.pricing, icon: 'pricing', href: '/pricing', category: 'navigation' },
+    { id: 'playground', label: s.commands.playground, icon: 'playground', href: '/playground', category: 'navigation' },
+    { id: 'compare', label: s.commands.compare, icon: 'compare', href: '/compare', category: 'navigation' },
+    { id: 'images', label: s.commands.images, icon: 'camera', href: '/images', category: 'navigation' },
+    { id: 'profile', label: s.commands.profile, icon: 'profile', href: '/profile', category: 'navigation' },
+    { id: 'api-keys', label: s.commands.apiKeys, icon: 'key', href: '/api-keys', category: 'navigation' },
+    { id: 'admin', label: s.commands.admin, icon: 'settings', href: '/admin', category: 'navigation' },
+    { id: 'referral', label: s.commands.referral, icon: 'referral', href: '/referral', category: 'action' },
   ]
 
   const filtered = query
@@ -95,11 +99,7 @@ export function useCommandPalette() {
     }
   }
 
-  const categoryLabels: Record<string, string> = {
-    navigation: 'ناوبری',
-    action: 'عملیات',
-    model: 'مدل‌ها',
-  }
+  const categoryLabels: Record<string, string> = s.categories
 
   const CommandPalette = open ? (
     <div className="fixed inset-0 z-[100] flex items-start justify-center pt-[15vh]" onClick={() => setOpen(false)}>
@@ -116,7 +116,7 @@ export function useCommandPalette() {
             value={query}
             onChange={(e) => { setQuery(e.target.value); setActiveIndex(0) }}
             onKeyDown={handleKey}
-            placeholder="جستجو در منوها..."
+            placeholder={s.searchPlaceholder}
             className="flex-1 bg-transparent border-none outline-none text-[var(--text-primary)] text-sm placeholder:text-[var(--text-muted)] font-[var(--font-sans)]"
           />
           <kbd className="text-xs text-[var(--text-muted)] bg-[var(--bg-surface)] px-2 py-0.5 rounded-[var(--radius-sm)] border border-[var(--border)]">
@@ -144,7 +144,7 @@ export function useCommandPalette() {
                     }`}
                   >
                     <Icon name={cmd.icon} size={18} />
-                    <span className="flex-1 text-right">{cmd.label}</span>
+                    <span className="flex-1 text-start">{cmd.label}</span>
                     {cmd.shortcut && (
                       <kbd className="text-xs text-[var(--text-muted)] bg-[var(--bg-surface)] px-1.5 py-0.5 rounded-[var(--radius-sm)]">
                         {cmd.shortcut}
@@ -156,14 +156,14 @@ export function useCommandPalette() {
             </div>
           ))}
           {filtered.length === 0 && (
-            <div className="text-center py-8 text-[var(--text-muted)] text-sm">نتیجه‌ای یافت نشد</div>
+            <div className="text-center py-8 text-[var(--text-muted)] text-sm">{s.noResults}</div>
           )}
         </div>
 
         <div className="px-4 py-2 border-t border-[var(--border)] flex items-center gap-4 text-xs text-[var(--text-muted)]">
-          <span>↑↓ پیمایش</span>
-          <span>↵ انتخاب</span>
-          <span>ESC بستن</span>
+          <span>↑↓ {s.navigate}</span>
+          <span>↵ {s.select}</span>
+          <span>ESC {s.close}</span>
         </div>
       </div>
     </div>

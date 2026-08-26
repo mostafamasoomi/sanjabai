@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef, type ReactNode } from 'react'
+import { useLang } from '@/components/LanguageToggle'
+import { codeBlockStrings } from './CodeBlock.strings'
 
 type CodeBlockProps = {
   className?: string
@@ -38,6 +40,7 @@ function extractTextContent(node: ReactNode): string {
 }
 
 export default function CodeBlock({ className, children }: CodeBlockProps) {
+  const s = codeBlockStrings(useLang())
   const [copied, setCopied] = useState(false)
   const timeoutRef = useRef<number | null>(null)
 
@@ -72,11 +75,11 @@ export default function CodeBlock({ className, children }: CodeBlockProps) {
           type="button"
           className="code-copy-btn"
           onClick={handleCopy}
-          aria-label={copied ? 'کپی شد' : 'کپی کد'}
-          title={copied ? 'کپی شد' : 'کپی'}
+          aria-label={copied ? s.copied : s.copyCode}
+          title={copied ? s.copied : s.copy}
         >
           {copied ? <CheckIcon size={12} /> : <CopyIcon size={12} />}
-          {copied ? 'کپی شد' : 'کپی'}
+          {copied ? s.copied : s.copy}
         </button>
       </div>
       <pre>

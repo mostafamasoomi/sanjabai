@@ -16,13 +16,15 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '@/lib/auth'
 import { apiFetch } from '@/lib/apiFetch'
 import { Icon, type IconName } from '@/components/ui/Icon'
-import { faNum, faPrice, faDate } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { entitlementPanelStrings } from './EntitlementPanel.strings'
 
 type Entitlement = {
   id: number
   package_id: string
   // null on either of these means the package does not meter that
-  // dimension at all -- NOT zero. Must never render as "۰ باقی‌مانده".
+  // dimension at all -- NOT zero. Must never render as "0 remaining".
   requests_remaining: number | null
   tokens_remaining: number | null
   max_cost_per_request_toman: number | null
@@ -43,11 +45,15 @@ function QuotaRow({
   label,
   value,
   unit,
+  unmeteredLabel,
+  num,
 }: {
   icon: IconName
   label: string
   value: number | null
   unit: string
+  unmeteredLabel: string
+  num: (n: number) => string
 }) {
   const unmetered = value === null
   return (
@@ -60,10 +66,10 @@ function QuotaRow({
         // A null value means this package places no count-based limit on
         // this dimension -- distinct from, and rendered differently than,
         // a genuine zero remaining.
-        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>بدون محدودیت شمارشی</span>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{unmeteredLabel}</span>
       ) : (
         <span style={{ fontSize: 14, fontWeight: 700, color: value === 0 ? 'var(--danger)' : 'var(--text-primary)' }}>
-          {faNum(value)} <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>{unit}</span>
+          {num(value)} <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)' }}>{unit}</span>
         </span>
       )}
     </div>
@@ -71,7 +77,11 @@ function QuotaRow({
 }
 
 // ─── One entitlement card ───────────────────────────────────────────────────
-function EntitlementCard({ e }: { e: Entitlement }) {
+function EntitlementCard({ e, s, f }: {
+  e: Entitlement
+  s: ReturnType<typeof entitlementPanelStrings>
+  f: ReturnType<typeof fmt>
+}) {
   const soon = e.expires_at != null && daysUntil(e.expires_at) <= SOON_THRESHOLD_DAYS
 
   return (
@@ -80,29 +90,29 @@ function EntitlementCard({ e }: { e: Entitlement }) {
         <span className="badge" style={{ fontFamily: 'monospace', fontSize: 11 }}>{e.package_id}</span>
         {e.expires_at && (
           <span className={`badge ${soon ? 'badge-danger' : 'badge-accent'}`} style={{ fontSize: 11 }}>
-            {soon ? 'به‌زودی منقضی می‌شود' : 'انقضا'}: {faDate(e.expires_at)}
+            {soon ? s.expiresSoon : s.expires}: {f.date(e.expires_at)}
           </span>
         )}
       </div>
 
       <div className="divider" style={{ margin: '4px 0 8px' }} />
 
-      <QuotaRow icon="send" label="درخواست باقی‌مانده" value={e.requests_remaining} unit="درخواست" />
-      <QuotaRow icon="cpu" label="توکن باقی‌مانده" value={e.tokens_remaining} unit="توکن" />
+      <QuotaRow icon="send" label={s.requestsRemaining} value={e.requests_remaining} unit={s.requestUnit} unmeteredLabel={s.unmetered} num={f.num} />
+      <QuotaRow icon="cpu" label={s.tokensRemaining} value={e.tokens_remaining} unit={s.tokenUnit} unmeteredLabel={s.unmetered} num={f.num} />
 
       <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)', fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.7 }}>
         {e.max_cost_per_request_toman != null ? (
           <>
-            سقف هزینه هر درخواست از این بسته:{' '}
-            <strong style={{ color: 'var(--text-secondary)' }}>{faPrice(e.max_cost_per_request_toman)}</strong>.
-            درخواست‌های گران‌تر از این سقف، از موجودی کیف پول شما کسر می‌شود، نه از این بسته.
+            {s.ceilingPrefix}{' '}
+            <strong style={{ color: 'var(--text-secondary)' }}>{f.price(e.max_cost_per_request_toman)}</strong>.
+            {' '}{s.ceilingSuffix}
           </>
         ) : (
           // A NULL ceiling is not "no limit" -- the backend never routes a
           // request through an entitlement with no ceiling set for it, so
           // in practice this entitlement's requests are always billed from
           // the wallet, not from this quota. Say that plainly.
-          <>برای این بسته سقف هزینه‌ای ثبت نشده؛ در نتیجه هزینه درخواست‌های شما از این سهمیه پوشش داده نمی‌شود و از موجودی کیف پول کسر می‌شود.</>
+          <>{s.noCeiling}</>
         )}
       </div>
     </div>
@@ -112,6 +122,9 @@ function EntitlementCard({ e }: { e: Entitlement }) {
 // ─── Panel ───────────────────────────────────────────────────────────────
 export default function EntitlementPanel() {
   const { token } = useAuth()
+  const lang = useLang()
+  const s = entitlementPanelStrings(lang)
+  const f = fmt(lang)
   const [entitlements, setEntitlements] = useState<Entitlement[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -161,15 +174,15 @@ export default function EntitlementPanel() {
     <div className="card" style={{ marginBottom: 24 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
         <Icon name="gift" size={16} className="text-accent" />
-        <h2 className="card-title">سهمیه بسته‌های شما</h2>
-        <span className="badge badge-accent" style={{ marginLeft: 4 }}>{faNum(entitlements.length)}</span>
+        <h2 className="card-title">{s.title}</h2>
+        <span className="badge badge-accent" style={{ marginLeft: 4 }}>{f.num(entitlements.length)}</span>
       </div>
       <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
-        این سهمیه‌ها جدا از موجودی تومانی کیف پول شما شمارش می‌شوند. با تمام یا منقضی شدن سهمیه یک بسته، هزینه درخواست‌های بعدی از موجودی کیف پول کسر خواهد شد.
+        {s.intro}
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
         {entitlements.map((e) => (
-          <EntitlementCard key={e.id} e={e} />
+          <EntitlementCard key={e.id} e={e} s={s} f={f} />
         ))}
       </div>
     </div>

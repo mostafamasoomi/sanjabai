@@ -1,10 +1,16 @@
-import { STEP_LABELS } from '../constants'
+'use client'
+
+import { useLang } from '@/components/LanguageToggle'
+import { STEP_LABELS_FA, STEP_LABELS_EN } from '../constants'
 
 export function StepProgress({ step }: { step: number }) {
+  const lang = useLang()
+  const labels = lang === 'fa' ? STEP_LABELS_FA : STEP_LABELS_EN
+
   return (
     <div className="max-w-3xl w-full mx-auto px-5 sm:px-8 pb-2">
       <div className="flex items-center gap-2">
-        {STEP_LABELS.map((label, i) => {
+        {labels.map((label, i) => {
           const done = i < step
           const current = i === step
           return (

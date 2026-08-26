@@ -1,6 +1,8 @@
 import { useState, useCallback, type Dispatch, type SetStateAction } from 'react'
 import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
+import { useLang } from '@/components/LanguageToggle'
+import { useBillingSettingsStrings } from './useBillingSettings.strings'
 import type { BillingSettings } from '../types'
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -14,6 +16,11 @@ export function useBillingSettings(
   billingSettings: BillingSettings,
   setBillingSettings: Dispatch<SetStateAction<BillingSettings>>
 ) {
+  // This hook is itself a hook (called from DashboardPage), so it is safe to
+  // read the language directly rather than take it as a parameter -- see the
+  // note in the i18n spec on hook files.
+  const lang = useLang()
+  const s = useBillingSettingsStrings(lang)
   const [paygLoading, setPaygLoading] = useState(false)
   const [showHardLimitInput, setShowHardLimitInput] = useState(false)
   const [hardLimitValue, setHardLimitValue] = useState('')
@@ -31,23 +38,23 @@ export function useBillingSettings(
       })
       if (res.ok) {
         setBillingSettings((prev) => prev ? { ...prev, payg_enabled: !prev.payg_enabled } : prev)
-        toast(billingSettings.payg_enabled ? 'پرداخت به ازای مصرف غیرفعال شد' : 'پرداخت به ازای مصرف فعال شد', 'success')
+        toast(billingSettings.payg_enabled ? s.paygDisabled : s.paygEnabled, 'success')
       } else {
-        toast('خطا در تغییر تنظیمات', 'error')
+        toast(s.settingsError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.serverError, 'error')
     } finally {
       setPaygLoading(false)
     }
-  }, [token, billingSettings, setBillingSettings])
+  }, [token, billingSettings, setBillingSettings, s])
 
   /* ─── Set Hard Limit ─── */
   const setHardLimit = useCallback(async () => {
     if (!token) return
     const parsed = parseInt(hardLimitValue, 10)
     if (isNaN(parsed) || parsed < 0) {
-      toast('لطفاً مبلغ معتبری وارد کنید', 'error')
+      toast(s.invalidAmount, 'error')
       return
     }
     setHardLimitLoading(true)
@@ -61,16 +68,16 @@ export function useBillingSettings(
         setBillingSettings((prev) => prev ? { ...prev, payg_hard_limit: parsed } : prev)
         setShowHardLimitInput(false)
         setHardLimitValue('')
-        toast('سقف هزینه با موفقیت تنظیم شد', 'success')
+        toast(s.hardLimitSet, 'success')
       } else {
-        toast('خطا در تنظیم سقف هزینه', 'error')
+        toast(s.hardLimitError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.serverError, 'error')
     } finally {
       setHardLimitLoading(false)
     }
-  }, [token, hardLimitValue, setBillingSettings])
+  }, [token, hardLimitValue, setBillingSettings, s])
 
   return {
     paygLoading,

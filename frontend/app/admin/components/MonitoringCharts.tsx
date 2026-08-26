@@ -1,7 +1,7 @@
 'use client'
 
 import { useLang, type Lang } from '@/components/LanguageToggle'
-import { fmt } from '@/lib/adminI18n'
+import { fmt } from '@/lib/i18n'
 import { toFaDigits } from '@/lib/format'
 import { monitoringChartsStrings } from './MonitoringCharts.strings'
 

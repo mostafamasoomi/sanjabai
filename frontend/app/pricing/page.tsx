@@ -5,7 +5,12 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
-import { Num } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { pricingPageStrings } from './page.strings'
+
+type Strings = ReturnType<typeof pricingPageStrings>
+type TierKey = keyof Strings['tier']
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Types
@@ -53,12 +58,12 @@ function getModelIcon(modelId: string): string {
   return '🤖'
 }
 
-function getModelTier(modelId: string): { label: string; color: string } {
-  if (modelId.includes('flash') && !modelId.includes('agnes')) return { label: 'اقتصادی', color: 'var(--positive)' }
-  if (modelId.includes('pro-ultraspeed')) return { label: 'سریع', color: 'var(--warning)' }
-  if (modelId.includes('pro')) return { label: 'پیشرفته', color: 'var(--accent)' }
-  if (modelId.includes('large') || modelId.includes('medium')) return { label: 'حرفه‌ای', color: 'var(--accent)' }
-  return { label: 'اقتصادی', color: 'var(--positive)' }
+function getModelTier(modelId: string): { key: TierKey; color: string } {
+  if (modelId.includes('flash') && !modelId.includes('agnes')) return { key: 'economy', color: 'var(--positive)' }
+  if (modelId.includes('pro-ultraspeed')) return { key: 'fast', color: 'var(--warning)' }
+  if (modelId.includes('pro')) return { key: 'advanced', color: 'var(--accent)' }
+  if (modelId.includes('large') || modelId.includes('medium')) return { key: 'pro', color: 'var(--accent)' }
+  return { key: 'economy', color: 'var(--positive)' }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -66,6 +71,9 @@ function getModelTier(modelId: string): { label: string; color: string } {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function PricingPage() {
+  const lang = useLang()
+  const f = fmt(lang)
+  const s = pricingPageStrings(lang)
   const { token, user, loading: authLoading } = useAuth()
   const [models, setModels] = useState<ModelPricing[]>([])
   const [loading, setLoading] = useState(true)
@@ -87,11 +95,12 @@ export default function PricingPage() {
         if (data.exchangeRate) setExchangeRate(data.exchangeRate)
       }
     } catch {
-      toast('خطا در دریافت اطلاعات مدل‌ها', 'error')
+      toast(s.loadErrorToast, 'error')
     } finally {
       setLoading(false)
     }
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s])
 
   const fetchExchangeRate = useCallback(async () => {
     try {
@@ -134,13 +143,13 @@ export default function PricingPage() {
       <div style={{ textAlign: 'center', marginBottom: 48 }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 16px', borderRadius: 'var(--radius-full)', background: 'var(--accent-dim)', marginBottom: 20 }}>
           <Icon name="sparkles" size={16} className="text-accent" />
-          <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>تعرفه مدل‌ها</span>
+          <span style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>{s.eyebrow}</span>
         </div>
         <h1 style={{ fontSize: 'var(--fs-3xl)', fontWeight: 800, color: 'var(--text-primary)', marginBottom: 12, lineHeight: 1.4 }}>
-          قیمت‌گذاری شفاف، پرداخت به ازای مصرف
+          {s.heroTitle}
         </h1>
         <p style={{ fontSize: 15, color: 'var(--text-secondary)', maxWidth: 560, margin: '0 auto', lineHeight: 1.7 }}>
-          هر مدل هوش مصنوعی قیمت مشخصی دارد. فقط به اندازه مصرف واقعی خود پرداخت کنید. قیمت‌ها به تومان به ازای هر ۱ میلیون توکن هستند.
+          {s.heroSubtitle}
         </p>
       </div>
 
@@ -149,12 +158,12 @@ export default function PricingPage() {
         <div className="card" style={{ padding: '16px 20px', marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Icon name="wallet" size={18} className="text-accent" />
-            <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>موجودی کیف پول:</span>
-            <Num className="text-lg font-bold" value={balance} unit="تومان" />
+            <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{s.balanceLabel}</span>
+            <span className="text-lg font-bold num">{f.price(balance)}</span>
           </div>
           <Link href="/wallet" className="btn btn-sm btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <Icon name="plus" size={14} />
-            شارژ کیف پول
+            {s.topUp}
           </Link>
         </div>
       )}
@@ -172,7 +181,7 @@ export default function PricingPage() {
             aria-pressed={sortBy === 'name'}
             onClick={() => setSortBy('name')}
           >
-            مدل {sortBy === 'name' && '↕'}
+            {s.colModel} {sortBy === 'name' && '↕'}
           </button>
           <button
             type="button"
@@ -180,7 +189,7 @@ export default function PricingPage() {
             aria-pressed={sortBy === 'input'}
             onClick={() => setSortBy('input')}
           >
-            ورودی/میلیون {sortBy === 'input' && '↕'}
+            {s.colInput} {sortBy === 'input' && '↕'}
           </button>
           <button
             type="button"
@@ -188,9 +197,9 @@ export default function PricingPage() {
             aria-pressed={sortBy === 'output'}
             onClick={() => setSortBy('output')}
           >
-            خروجی/میلیون {sortBy === 'output' && '↕'}
+            {s.colOutput} {sortBy === 'output' && '↕'}
           </button>
-          <div className="text-center">سطح</div>
+          <div className="text-center">{s.colTier}</div>
         </div>
 
         {loading ? (
@@ -210,7 +219,7 @@ export default function PricingPage() {
         ) : models.length === 0 ? (
           <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>
             <Icon name="info" size={32} style={{ marginBottom: 12, color: 'var(--text-muted)' }} />
-            <p>مدلی یافت نشد</p>
+            <p>{s.noModelsFound}</p>
           </div>
         ) : (
           sortedModels.map((model, idx) => {
@@ -244,7 +253,7 @@ export default function PricingPage() {
 
                 {/* Input price, tomans per million tokens */}
                 <div>
-                  <Num className="pricing-cell-value" value={model.pricing.inputPerMillion} />
+                  <span className="pricing-cell-value num">{f.num(model.pricing.inputPerMillion)}</span>
                   <div style={{ marginTop: 3, height: 3, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
                     <div style={{ width: `${inputPct}%`, height: '100%', borderRadius: 2, background: 'var(--accent)', opacity: 0.5 }} />
                   </div>
@@ -252,7 +261,7 @@ export default function PricingPage() {
 
                 {/* Output price, tomans per million tokens */}
                 <div>
-                  <Num className="pricing-cell-value" value={model.pricing.outputPerMillion} />
+                  <span className="pricing-cell-value num">{f.num(model.pricing.outputPerMillion)}</span>
                   <div style={{ marginTop: 3, height: 3, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
                     <div style={{ width: `${outputPct}%`, height: '100%', borderRadius: 2, background: 'var(--warning)', opacity: 0.6 }} />
                   </div>
@@ -260,7 +269,7 @@ export default function PricingPage() {
 
                 {/* Tier badge */}
                 <div className="text-center">
-                  <span style={{ fontSize: 10, fontWeight: 600, color: tier.color, background: `${tier.color}15`, padding: '3px 8px', borderRadius: 'var(--radius-full)' }}>{tier.label}</span>
+                  <span style={{ fontSize: 10, fontWeight: 600, color: tier.color, background: `${tier.color}15`, padding: '3px 8px', borderRadius: 'var(--radius-full)' }}>{s.tier[tier.key]}</span>
                 </div>
               </div>
             )
@@ -273,29 +282,26 @@ export default function PricingPage() {
         <div className="card" style={{ padding: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <Icon name="info" size={16} className="text-accent" />
-            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>واحد قیمت</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{s.unitNoteTitle}</span>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-            قیمت‌ها به <strong>تومان</strong> به ازای هر <strong>۱ میلیون توکن</strong> هستند. یک پیام معمولی حدود ۵۰۰-۲۰۰۰ توکن مصرف می‌کند.
+            {s.unitNotePrefix} <strong>{s.unitNoteToman}</strong> {s.unitNoteMiddle} <strong>{s.unitNoteTokens}</strong>{' '}
+            {s.unitNoteSuffix} {s.messageEstimate(f.num(500), f.num(2000))}
           </p>
         </div>
         <div className="card" style={{ padding: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <Icon name="wallet" size={16} className="text-accent" />
-            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>شارژ کیف پول</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{s.topUpNoteTitle}</span>
           </div>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-            کیف پول خود را شارژ کنید و به ازای مصرف واقعی هر پیام، هزینه از موجودی کسر می‌شود. بدون اشتراک ماهانه!
-          </p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>{s.topUpNoteBody}</p>
         </div>
         <div className="card" style={{ padding: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <Icon name="sparkles" size={16} className="text-accent" />
-            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>مدل هوشمند</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{s.smartNoteTitle}</span>
           </div>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
-            با حالت «Smart»، سیستم بهترین مدل را بر اساس پیام شما انتخاب می‌کند تا بهترین کیفیت و هزینه را داشته باشید.
-          </p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.8 }}>{s.smartNoteBody}</p>
         </div>
       </div>
 
@@ -310,26 +316,26 @@ export default function PricingPage() {
         <Icon name="sparkles" size={28} style={{ color: 'var(--accent)', marginBottom: 12 }} />
         {/* h2, not h3 — the only heading above it on this page is the h1. */}
         <h2 style={{ fontSize: 'var(--fs-lg)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
-          آماده شروع هستید؟
+          {s.ctaTitle}
         </h2>
         <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 20, maxWidth: 400, margin: '0 auto 20px' }}>
-          کیف پول خود را شارژ کنید و همین الان با هوش مصنوعی چت کنید.
+          {s.ctaSubtitle}
         </p>
         <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
           {!user ? (
             <Link href="/login" className="btn btn-primary" style={{ padding: '10px 28px', fontSize: 14, fontWeight: 600, borderRadius: 'var(--radius-md)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
               <Icon name="profile" size={16} />
-              ورود و شروع
+              {s.ctaLoginAndStart}
             </Link>
           ) : (
             <Link href="/wallet" className="btn btn-primary" style={{ padding: '10px 28px', fontSize: 14, fontWeight: 600, borderRadius: 'var(--radius-md)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
               <Icon name="wallet" size={16} />
-              شارژ کیف پول
+              {s.ctaTopUp}
             </Link>
           )}
           <Link href="/chat" className="btn btn-secondary" style={{ padding: '10px 28px', fontSize: 14, fontWeight: 600, borderRadius: 'var(--radius-md)', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             <Icon name="chat" size={16} />
-            شروع چت رایگان
+            {s.ctaStartChat}
           </Link>
         </div>
       </div>

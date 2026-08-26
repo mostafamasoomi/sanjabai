@@ -6,10 +6,12 @@ import { apiFetch } from '@/lib/apiFetch'
 import { toast, EmptyState, Skeleton } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
 import { useCatalog } from '@/lib/useCatalog'
+import { useLang } from '@/components/LanguageToggle'
 import { type Task, type Execution, type TaskForm } from './types'
 import TaskCard from './components/TaskCard'
 import TaskFormModal from './components/TaskFormModal'
 import ExecutionHistoryModal from './components/ExecutionHistoryModal'
+import { tasksPageStrings } from './page.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Scheduled Tasks Page
@@ -17,6 +19,8 @@ import ExecutionHistoryModal from './components/ExecutionHistoryModal'
 
 export default function TasksPage() {
   const { token, user, loading: authLoading } = useAuth()
+  const lang = useLang()
+  const s = tasksPageStrings(lang)
   const { models: catalogModels, loading: catalogLoading } = useCatalog()
   // Cheapest currently-available model first, mirroring the backend's own
   // _default_model() resolution (backend/tasks.py) so the preselected value
@@ -63,10 +67,11 @@ export default function TasksPage() {
         setTasks(Array.isArray(data) ? data : (data?.items ?? []))
       }
     } catch {
-      toast('خطا در دریافت تسک‌ها', 'error')
+      toast(s.loadError, 'error')
     } finally {
       setLoading(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, headers])
 
   useEffect(() => {
@@ -97,7 +102,7 @@ export default function TasksPage() {
 
   const saveTask = async () => {
     if (!form.title.trim() || !form.prompt.trim()) {
-      toast('عنوان و پرامپت الزامی هستند', 'error')
+      toast(s.titlePromptRequired, 'error')
       return
     }
     setSaving(true)
@@ -110,15 +115,15 @@ export default function TasksPage() {
         body: JSON.stringify(form),
       })
       if (r.ok) {
-        toast(editingTask ? 'تسک بروزرسانی شد' : 'تسک جدید ایجاد شد', 'success')
+        toast(editingTask ? s.taskUpdated : s.taskCreated, 'success')
         setModalOpen(false)
         fetchTasks()
       } else {
         const data = await r.json().catch(() => ({}))
-        toast(data.detail || 'خطا در ذخیره تسک', 'error')
+        toast(data.detail || s.saveError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط', 'error')
+      toast(s.connectionError, 'error')
     } finally {
       setSaving(false)
     }
@@ -130,11 +135,11 @@ export default function TasksPage() {
         method: 'POST', headers: headers(),
       })
       if (r.ok) {
-        toast(task.is_active ? 'تسک غیرفعال شد' : 'تسک فعال شد', 'success')
+        toast(task.is_active ? s.taskDisabled : s.taskEnabled, 'success')
         fetchTasks()
       }
     } catch {
-      toast('خطا', 'error')
+      toast(s.genericError, 'error')
     }
   }
 
@@ -145,31 +150,31 @@ export default function TasksPage() {
         method: 'POST', headers: headers(),
       })
       if (r.ok) {
-        toast('تسک با موفقیت اجرا شد', 'success')
+        toast(s.taskRanSuccessfully, 'success')
         fetchTasks()
       } else {
-        toast('خطا در اجرای تسک', 'error')
+        toast(s.runError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط', 'error')
+      toast(s.connectionError, 'error')
     } finally {
       setRunningTaskId(null)
     }
   }
 
   const deleteTask = async (task: Task) => {
-    if (!confirm(`آیا از حذف «${task.title}» مطمئن هستید؟`)) return
+    if (!confirm(s.deleteConfirm(task.title))) return
     setDeletingId(task.id)
     try {
       const r = await apiFetch(`/api/tasks/${task.id}`, {
         method: 'DELETE', headers: headers(),
       })
       if (r.ok) {
-        toast('تسک حذف شد', 'success')
+        toast(s.taskDeleted, 'success')
         fetchTasks()
       }
     } catch {
-      toast('خطا', 'error')
+      toast(s.genericError, 'error')
     } finally {
       setDeletingId(null)
     }
@@ -186,7 +191,7 @@ export default function TasksPage() {
         setExecutions(Array.isArray(data) ? data : (data?.items ?? []))
       }
     } catch {
-      toast('خطا در دریافت تاریخچه', 'error')
+      toast(s.historyLoadError, 'error')
     }
   }
 
@@ -205,7 +210,7 @@ export default function TasksPage() {
             ))}
           </div>
         ) : (
-          <EmptyState icon="lock" title="برای مشاهده تسک‌ها وارد شوید" description="ابتدا باید وارد حساب خود شوید." />
+          <EmptyState icon="lock" title={s.loginRequiredTitle} description={s.loginRequiredDescription} />
         )}
       </div>
     )
@@ -225,16 +230,16 @@ export default function TasksPage() {
           </div>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.2 }}>
-              تسک‌های زمان‌بندی شده
+              {s.pageTitle}
             </h1>
             <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
-              اجرای خودکار پرامپت‌ها طبق زمان‌بندی
+              {s.pageSubtitle}
             </p>
           </div>
         </div>
         <button onClick={openCreate} className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <Icon name="plus" size={16} />
-          ایجاد تسک جدید
+          {s.createTask}
         </button>
       </div>
 
@@ -247,7 +252,7 @@ export default function TasksPage() {
       }}>
         <Icon name="info" size={18} className="text-accent shrink-0" />
         <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.7 }}>
-          تسک‌ها به صورت خودکار طبق زمان‌بندی اجرا می‌شوند و نتیجه در داشبورد نمایش داده می‌شود.
+          {s.infoCard}
         </p>
       </div>
 
@@ -268,8 +273,8 @@ export default function TasksPage() {
       ) : tasks.length === 0 ? (
         <EmptyState
           icon="calendar"
-          title="هنوز تسکی ایجاد نشده"
-          description="اولین تسک زمان‌بندی شده خود را بسازید تا پرامپت‌ها به صورت خودکار اجرا شوند."
+          title={s.emptyTitle}
+          description={s.emptyDescription}
         />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

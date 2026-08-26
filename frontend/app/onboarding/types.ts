@@ -3,9 +3,11 @@ import { type IconName } from '@/components/ui/Icon'
 
 export type Goal = {
   id: string
-  label: string
+  label_fa: string
+  label_en: string
   icon: IconName
-  hint: string
+  hint_fa: string
+  hint_en: string
   /** keywords matched against catalog capabilities / recommendedFor */
   keywords: string[]
   /** used only when the live catalog is unavailable */

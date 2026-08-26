@@ -3,7 +3,7 @@
 import { Icon } from '@/components/ui/Icon'
 import { toast } from '@/components/ui'
 import { useLang } from '@/components/LanguageToggle'
-import { fmt } from '@/lib/adminI18n'
+import { fmt } from '@/lib/i18n'
 import { formatAuditDetails } from '@/lib/auditDetails'
 import { StatCard, SectionHeader } from './shared'
 import { ErrorCard, RefreshButton, CardSkeleton } from './LoadState'

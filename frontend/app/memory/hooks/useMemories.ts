@@ -1,7 +1,9 @@
 import { useState, useCallback, useRef } from 'react'
 import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
+import { useLang } from '@/components/LanguageToggle'
 import type { Memory } from '../memoryTypes'
+import { useMemoriesStrings } from './useMemories.strings'
 
 /* ═══════════════════════════════════════════════════════════════
    All memory-page state and CRUD logic: fetch/search/filter, add,
@@ -13,6 +15,9 @@ import type { Memory } from '../memoryTypes'
    ═══════════════════════════════════════════════════════════════ */
 
 export function useMemories(token: string | null) {
+  const lang = useLang()
+  const s = useMemoriesStrings(lang)
+
   /* ── State ────────────────────────────────────────────────── */
   const [memories, setMemories] = useState<Memory[]>([])
   const [loading, setLoading] = useState(true)
@@ -50,13 +55,14 @@ export function useMemories(token: string | null) {
         const data = await r.json()
         setMemories(data)
       } else {
-        toast('خطا در دریافت حافظه', 'error')
+        toast(s.loadError, 'error')
       }
     } catch {
-      toast('خطا در دریافت حافظه', 'error')
+      toast(s.loadError, 'error')
     } finally {
       setLoading(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
   /* ── Search with debounce ─────────────────────────────────── */
@@ -78,7 +84,7 @@ export function useMemories(token: string | null) {
   /* ── Add memory ───────────────────────────────────────────── */
   const addMemory = async () => {
     if (!newContent.trim()) {
-      toast('محتوا را وارد کنید', 'error')
+      toast(s.contentRequired, 'error')
       return
     }
     if (!token) return
@@ -97,7 +103,7 @@ export function useMemories(token: string | null) {
         }),
       })
       if (r.ok) {
-        toast('حافظه ذخیره شد', 'success')
+        toast(s.saved, 'success')
         setNewContent('')
         setNewCategory('other')
         setNewTags('')
@@ -105,10 +111,10 @@ export function useMemories(token: string | null) {
         fetchMemories(activeCategory || undefined, searchQuery || undefined)
       } else {
         const data = await r.json()
-        toast(data.detail || 'خطا در ذخیره', 'error')
+        toast(data.detail || s.saveError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط', 'error')
+      toast(s.connectionError, 'error')
     } finally {
       setSaving(false)
     }
@@ -138,14 +144,14 @@ export function useMemories(token: string | null) {
         }),
       })
       if (r.ok) {
-        toast('حافظه به‌روزرسانی شد', 'success')
+        toast(s.updated, 'success')
         setEditingId(null)
         fetchMemories(activeCategory || undefined, searchQuery || undefined)
       } else {
-        toast('خطا در به‌روزرسانی', 'error')
+        toast(s.updateError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط', 'error')
+      toast(s.connectionError, 'error')
     }
   }
 
@@ -160,13 +166,13 @@ export function useMemories(token: string | null) {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (r.ok) {
-        toast('حافظه حذف شد', 'success')
+        toast(s.deleted, 'success')
         fetchMemories(activeCategory || undefined, searchQuery || undefined)
       } else {
-        toast('خطا در حذف', 'error')
+        toast(s.deleteError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط', 'error')
+      toast(s.connectionError, 'error')
     }
   }
 

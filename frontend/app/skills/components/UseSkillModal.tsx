@@ -4,15 +4,17 @@ import { useState, useEffect } from 'react'
 import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
 import {
   type Skill,
   type UseResult,
   CATEGORY_BADGES,
-  CATEGORY_LABELS,
+  categoryLabel,
   renderStars,
   getAverageRating,
 } from '../types'
+import { useSkillModalStrings } from './UseSkillModal.strings'
 
 /* ═══════════════════════════════════════════════════════════════
    Use Skill Modal
@@ -29,6 +31,10 @@ export default function UseSkillModal({
   onClose: () => void
   token: string | null
 }) {
+  const lang = useLang()
+  const s = useSkillModalStrings(lang)
+  const f = fmt(lang)
+
   const [variables, setVariables] = useState<Record<string, string>>({})
   const [model, setModel] = useState(skill?.default_model || '')
   const [result, setResult] = useState<UseResult | null>(null)
@@ -61,10 +67,10 @@ export default function UseSkillModal({
         const data: UseResult = await res.json()
         setResult(data)
       } else {
-        toast('خطا در اجرای اسکیل', 'error')
+        toast(s.toastUseError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.toastServerError, 'error')
     } finally {
       setLoading(false)
     }
@@ -80,12 +86,12 @@ export default function UseSkillModal({
       })
       if (res.ok) {
         setUserRating(rating)
-        toast('امتیاز شما ثبت شد', 'success')
+        toast(s.toastRateSuccess, 'success')
       } else {
-        toast('خطا در ثبت امتیاز', 'error')
+        toast(s.toastRateError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.toastServerError, 'error')
     }
   }
 
@@ -108,10 +114,10 @@ export default function UseSkillModal({
               className={`badge ${CATEGORY_BADGES[skill.category] || 'aurora-cap-default'}`}
               style={{ fontSize: '0.625rem', marginTop: '0.375rem', display: 'inline-block' }}
             >
-              {CATEGORY_LABELS[skill.category] || skill.category}
+              {categoryLabel(skill.category, lang)}
             </span>
           </div>
-          <button onClick={onClose} className="btn btn-ghost btn-icon" aria-label="بستن">
+          <button onClick={onClose} className="btn btn-ghost btn-icon" aria-label={s.closeAria}>
             <Icon name="close" size={18} />
           </button>
         </div>
@@ -125,11 +131,11 @@ export default function UseSkillModal({
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
           <span className="flex items-center gap-1">
             <Icon name="user" size={12} />
-            {faNum(skill.usage_count)} استفاده
+            {s.usageCount(f.num(skill.usage_count))}
           </span>
           <span className="flex items-center gap-1">
             {renderStars(getAverageRating(skill), 12)}
-            ({faNum(skill.rating_count)})
+            ({f.num(skill.rating_count)})
           </span>
         </div>
 
@@ -159,14 +165,14 @@ export default function UseSkillModal({
         {/* Model selector */}
         <div style={{ marginBottom: '1rem' }}>
           <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-            مدل
+            {s.modelLabel}
           </label>
           <input
             type="text"
             className="input"
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            placeholder="نام مدل (مثلاً gpt-4)"
+            placeholder={s.modelPlaceholder}
             style={{ width: '100%', fontSize: '0.875rem' }}
           />
         </div>
@@ -175,7 +181,7 @@ export default function UseSkillModal({
         {skill.variables && skill.variables.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1rem' }}>
             <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-              متغیرها
+              {s.variablesLabel}
             </label>
             {skill.variables.map((v) => (
               <div key={v.name}>
@@ -205,12 +211,12 @@ export default function UseSkillModal({
           {loading ? (
             <span className="flex items-center gap-2">
               <span className="animate-spin" style={{ width: '1rem', height: '1rem', border: '2px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', display: 'inline-block' }} />
-              در حال اجرا...
+              {s.runningText}
             </span>
           ) : (
             <>
               <Icon name="send" size={16} />
-              اجرا
+              {s.runAction}
             </>
           )}
         </button>
@@ -227,17 +233,17 @@ export default function UseSkillModal({
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>خروجی</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{s.outputLabel}</span>
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={() => {
                   navigator.clipboard.writeText(result.rendered_prompt)
-                  toast('کپی شد', 'success')
+                  toast(s.copiedToast, 'success')
                 }}
                 style={{ fontSize: '0.75rem', padding: '0.125rem 0.5rem' }}
               >
                 <Icon name="copy" size={12} />
-                کپی
+                {s.copyAction}
               </button>
             </div>
             <pre
@@ -253,14 +259,14 @@ export default function UseSkillModal({
               {result.rendered_prompt}
             </pre>
             <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-              مدل: {result.model}
+              {s.modelResultLabel(result.model)}
             </div>
           </div>
         )}
 
         {/* Rating */}
         <div className="flex items-center gap-3">
-          <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>امتیاز شما:</span>
+          <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>{s.yourRating}</span>
           <div className="flex gap-1">
             {[1, 2, 3, 4, 5].map((r) => (
               <button
@@ -275,7 +281,7 @@ export default function UseSkillModal({
                   opacity: r <= userRating ? 1 : 0.4,
                   transition: 'all 0.15s ease',
                 }}
-                aria-label={`${r} ستاره`}
+                aria-label={s.starAria(r)}
               >
                 <Icon name="sparkles" size={18} />
               </button>

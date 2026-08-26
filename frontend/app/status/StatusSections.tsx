@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt, type Formatters } from '@/lib/i18n'
+import { statusSectionsStrings } from './StatusSections.strings'
+
+type Strings = ReturnType<typeof statusSectionsStrings>
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Overview sections for the public /status page: incident banner, per-service
@@ -56,25 +60,25 @@ export type StatusSummary = {
 }
 
 /** Thin wrapper: this file always rounds before formatting. */
-function fa(n: number | null | undefined, fallback = '—'): string {
+function num(f: Formatters, n: number | null | undefined, fallback = '—'): string {
   if (n == null || Number.isNaN(n)) return fallback
-  return faNum(Math.round(n), { fallback })
+  return f.num(Math.round(n), { fallback })
 }
 
-function relativeTime(iso: string | null): string {
+function relativeTime(iso: string | null, f: Formatters, s: Strings): string {
   if (!iso) return '—'
   const then = new Date(iso).getTime()
   if (Number.isNaN(then)) return '—'
   const seconds = Math.max(0, Math.floor((Date.now() - then) / 1000))
-  if (seconds < 60) return 'همین الان'
-  if (seconds < 3600) return `${fa(seconds / 60)} دقیقه پیش`
-  if (seconds < 86_400) return `${fa(seconds / 3600)} ساعت پیش`
-  return `${fa(seconds / 86_400)} روز پیش`
+  if (seconds < 60) return s.justNow
+  if (seconds < 3600) return s.minutesAgo(num(f, seconds / 60))
+  if (seconds < 86_400) return s.hoursAgo(num(f, seconds / 3600))
+  return s.daysAgo(num(f, seconds / 86_400))
 }
 
 /** Kuma's uptime24h is a 0..1 fraction, but be defensive in case that ever
  * changes upstream to an already-percent number. */
-function uptimePercent(value: number | null): string {
+function uptimePercent(value: number | null, f: Formatters, s: Strings): string {
   if (value == null || Number.isNaN(value)) return '—'
   const pct = value > 1 ? value : value * 100
   const clamped = Math.min(100, Math.max(0, pct))
@@ -83,7 +87,7 @@ function uptimePercent(value: number | null): string {
   // can only ever understate, which is the side of the honest-labelling rule
   // we want to err on. A clean 100 still reads "۱۰۰٪", not "۱۰۰٫۰٪".
   const floored = Math.floor(clamped * 10) / 10
-  return `${faNum(floored, { decimals: Number.isInteger(floored) ? 0 : 1 })}٪`
+  return `${f.num(floored, { decimals: Number.isInteger(floored) ? 0 : 1 })}${s.percentSign}`
 }
 
 const SEVERITY_COLOR: Record<StatusIncidentSeverity, string> = {
@@ -135,7 +139,7 @@ export function useStatusSummary(): {
   return { data, loading, error, reload: load }
 }
 
-function IncidentBanner({ incident }: { incident: StatusIncident }) {
+function IncidentBanner({ incident, f, str }: { incident: StatusIncident; f: Formatters; str: Strings }) {
   const color = SEVERITY_COLOR[incident.severity] || SEVERITY_COLOR.warning
   return (
     <div
@@ -145,18 +149,18 @@ function IncidentBanner({ incident }: { incident: StatusIncident }) {
       <strong style={{ color }}>{incident.title}</strong>
       <p className="card-desc">{incident.body}</p>
       <p className="status-muted" style={{ marginTop: '0.3rem' }}>
-        شروع: {relativeTime(incident.startedAt)}
+        {str.incidentStarted(relativeTime(incident.startedAt, f, str))}
       </p>
     </div>
   )
 }
 
-function BeatBar({ beats }: { beats: StatusBeat[] }) {
+function BeatBar({ beats, f }: { beats: StatusBeat[]; f: Formatters }) {
   if (!beats || beats.length === 0) return null
   return (
     <div dir="ltr" style={{ display: 'flex', gap: '2px', marginTop: '0.5rem' }}>
       {beats.map((b, i) => {
-        const title = `${b.t ?? '—'}${b.pingMs != null ? ` · ${fa(b.pingMs)} ms` : ''}`
+        const title = `${b.t ?? '—'}${b.pingMs != null ? ` · ${num(f, b.pingMs)} ms` : ''}`
         return (
           <div
             key={i}
@@ -175,7 +179,7 @@ function BeatBar({ beats }: { beats: StatusBeat[] }) {
   )
 }
 
-function ServiceCard({ service }: { service: StatusService }) {
+function ServiceCard({ service, f, str }: { service: StatusService; f: Formatters; str: Strings }) {
   return (
     <div className="card status-upstream" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
@@ -188,13 +192,13 @@ function ServiceCard({ service }: { service: StatusService }) {
           <span className="status-model-name">{service.label}</span>
           <span className="status-muted">
             <span dir="ltr">
-              {uptimePercent(service.uptime24h)}
-              {service.avgPingMs != null && ` · ${fa(service.avgPingMs)} ms`}
+              {uptimePercent(service.uptime24h, f, str)}
+              {service.avgPingMs != null && ` · ${num(f, service.avgPingMs)} ms`}
             </span>
           </span>
         </div>
       </div>
-      <BeatBar beats={service.beats} />
+      <BeatBar beats={service.beats} f={f} />
     </div>
   )
 }
@@ -204,6 +208,9 @@ export function StatusOverviewSections({
 }: {
   summary: ReturnType<typeof useStatusSummary>
 }) {
+  const lang = useLang()
+  const f = fmt(lang)
+  const str = statusSectionsStrings(lang)
   const { data, loading } = summary
 
   const showEmptyNotice = useMemo(() => {
@@ -224,26 +231,26 @@ export function StatusOverviewSections({
 
   return (
     <>
-      {data.incident && <IncidentBanner incident={data.incident} />}
+      {data.incident && <IncidentBanner incident={data.incident} f={f} str={str} />}
 
       <section className="status-section">
-        <h2 className="aurora-section-title">وضعیت سرویس‌ها</h2>
+        <h2 className="aurora-section-title">{str.servicesTitle}</h2>
 
         {showEmptyNotice ? (
           <div className="card status-upstream">
-            <span className="status-muted">پایش بیرونی در دسترس نیست</span>
+            <span className="status-muted">{str.monitoringUnavailable}</span>
           </div>
         ) : (
           <div className="status-upstreams">
-            {data.services.map((s) => (
-              <ServiceCard key={s.key} service={s} />
+            {data.services.map((svc) => (
+              <ServiceCard key={svc.key} service={svc} f={f} str={str} />
             ))}
           </div>
         )}
 
         {data.stale && (
           <p className="status-muted" style={{ marginTop: '0.3rem' }}>
-            داده‌ها ممکن است به‌روز نباشند
+            {str.staleNotice}
           </p>
         )}
       </section>
@@ -256,6 +263,8 @@ export function SupportSection({
 }: {
   summary: ReturnType<typeof useStatusSummary>
 }) {
+  const lang = useLang()
+  const str = statusSectionsStrings(lang)
   const email = summary.data?.support?.email
   if (!email) return null
 
@@ -264,9 +273,9 @@ export function SupportSection({
 
   return (
     <section className="status-section">
-      <h2 className="aurora-section-title">پشتیبانی</h2>
+      <h2 className="aurora-section-title">{str.supportTitle}</h2>
       <div className="card">
-        <p className="card-desc">در صورت مشاهده‌ی اختلال یا سوال، از راه‌های زیر با ما در تماس باشید.</p>
+        <p className="card-desc">{str.supportDesc}</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.5rem' }}>
           <a href={`mailto:${email}`} className="auth-inline-link" style={{ display: 'inline-flex', gap: '0.4rem', alignItems: 'center' }}>
             <Icon name="mail" size={14} />

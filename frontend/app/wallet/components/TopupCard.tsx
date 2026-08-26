@@ -1,10 +1,15 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
 import { PRESET_AMOUNTS, MIN_TOPUP, MAX_TOPUP } from '../walletHelpers'
+import { topupCardStrings } from './TopupCard.strings'
 
 // ─── Topup Card ─────────────────────────────────────────────────────────────
 // All amounts here (preset values, effectiveAmount, MIN_TOPUP) are raw,
-// whole tomans passed straight into faNum -- no arithmetic on any of them.
+// whole tomans passed straight into f.num/f.price -- no arithmetic on any of
+// them.
 export function TopupCard({
   topupAmount,
   selectedPreset,
@@ -22,26 +27,30 @@ export function TopupCard({
   onCustomAmount: (v: string) => void
   onInitiate: () => void
 }) {
+  const lang = useLang()
+  const s = topupCardStrings(lang)
+  const f = fmt(lang)
+
   return (
     <div className="card wallet-topup-card">
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
         <div className="wallet-topup-icon">
           <Icon name="plus" size={14} className="text-accent" />
         </div>
-        <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>شارژ حساب</span>
+        <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 600 }}>{s.title}</span>
       </div>
 
       {/* Preset buttons */}
       <div className="wallet-preset-grid">
-        {PRESET_AMOUNTS.map((p) => (
+        {PRESET_AMOUNTS.map((value) => (
           <button
-            key={p.value}
-            className={`wallet-preset-btn ${selectedPreset === p.value ? 'wallet-preset-active' : ''}`}
-            onClick={() => onPreset(p.value)}
+            key={value}
+            className={`wallet-preset-btn ${selectedPreset === value ? 'wallet-preset-active' : ''}`}
+            onClick={() => onPreset(value)}
           >
-            {p.label}
+            {f.compact(value)}
             <span className="wallet-preset-sub">
-              {faNum(p.value)} تومان
+              {f.price(value)}
             </span>
           </button>
         ))}
@@ -59,7 +68,7 @@ export function TopupCard({
           type="number"
           value={topupAmount}
           onChange={(e) => onCustomAmount(e.target.value)}
-          placeholder="مبلغ دلخواه (تومان)"
+          placeholder={s.customAmountPlaceholder}
           min={MIN_TOPUP}
           max={MAX_TOPUP}
           style={{
@@ -72,7 +81,7 @@ export function TopupCard({
 
       {effectiveAmount > 0 && effectiveAmount < MIN_TOPUP && (
         <p style={{ fontSize: 11, color: 'var(--danger)', marginBottom: 8 }}>
-          حداقل مبلغ: {faNum(MIN_TOPUP)} تومان
+          {s.minAmount(f.num(MIN_TOPUP))}
         </p>
       )}
 
@@ -90,7 +99,7 @@ export function TopupCard({
         }}
       >
         <Icon name="send" size={16} />
-        {busy ? 'در حال پردازش...' : `شارژ ${effectiveAmount > 0 ? faNum(effectiveAmount) + ' تومان' : 'حساب'}`}
+        {busy ? s.processing : s.chargeButton(effectiveAmount > 0 ? f.num(effectiveAmount) : null)}
       </button>
     </div>
   )

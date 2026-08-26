@@ -1,7 +1,7 @@
 'use client'
 
 import { useLang } from '@/components/LanguageToggle'
-import { fmt } from '@/lib/adminI18n'
+import { fmt } from '@/lib/i18n'
 import { userDetailTabsStrings } from './UserDetailTabs.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -24,7 +24,7 @@ import { userDetailTabsStrings } from './UserDetailTabs.strings'
    cannot tell an `admin_credit` apart from a `chat_settle` apart from a
    `referral_bonus` except by the free-text `reason` string. Money here is
    already integer toman — never divide/multiply by 10, render only via
-   f.price/f.num (see lib/adminI18n.ts).
+   f.price/f.num (see lib/i18n.ts).
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export type TabStatus = 'idle' | 'loading' | 'error' | 'ready'

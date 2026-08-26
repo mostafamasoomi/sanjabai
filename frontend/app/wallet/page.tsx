@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
+import { walletPageStrings } from './page.strings'
 import EntitlementPanel from './components/EntitlementPanel'
 import { BalanceSkeleton, TopupSkeleton, TableSkeleton, PackagesSkeleton } from './components/WalletSkeletons'
 import { PaymentBanner } from './components/PaymentBanner'
@@ -29,6 +31,8 @@ import type { LedgerFilter } from './walletTypes'
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function WalletPage() {
+  const lang = useLang()
+  const s = walletPageStrings(lang)
   const { token, user, loading: authLoading } = useAuth()
 
   const { balance, ledger, payments, creditPackages, modelOutputRates, loading, refreshing, fetchData } = useWalletData(token)
@@ -56,7 +60,7 @@ export default function WalletPage() {
     if (balance === null) return
     navigator.clipboard?.writeText(String(balance)).then(() => {
       setCopied(true)
-      toast('موجودی کپی شد', 'success')
+      toast(s.balanceCopied, 'success')
       setTimeout(() => setCopied(false), 2000)
     })
   }
@@ -78,10 +82,10 @@ export default function WalletPage() {
           <div className="wallet-empty-icon-wrap" style={{ marginBottom: 20 }}>
             <Icon name="wallet" size={32} className="text-accent" />
           </div>
-          <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>کیف پول</h2>
-          <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>برای مشاهده کیف پول، ابتدا وارد حساب خود شوید.</p>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>{s.needLoginTitle}</h2>
+          <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>{s.needLoginDesc}</p>
           <Link href="/login" className="btn btn-lg btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-            ورود
+            {s.login}
             <Icon name="arrowLeft" size={16} />
           </Link>
         </div>
@@ -97,7 +101,7 @@ export default function WalletPage() {
           <div className="wallet-header-icon">
             <Icon name="wallet" size={20} className="text-accent" />
           </div>
-          <h1 className="page-title">کیف پول</h1>
+          <h1 className="page-title">{s.title}</h1>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16, marginBottom: 24 }}>
           <BalanceSkeleton />
@@ -118,17 +122,17 @@ export default function WalletPage() {
           <div className="wallet-header-icon">
             <Icon name="wallet" size={20} className="text-accent" />
           </div>
-          <h1 className="page-title">کیف پول</h1>
+          <h1 className="page-title">{s.title}</h1>
         </div>
         <button
           className="btn btn-sm btn-secondary"
           onClick={() => fetchData(true)}
           disabled={refreshing}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          title="بروزرسانی"
+          title={s.refresh}
         >
           <Icon name="refresh" size={14} className={refreshing ? 'spin' : ''} />
-          بروزرسانی
+          {s.refresh}
         </button>
       </div>
 

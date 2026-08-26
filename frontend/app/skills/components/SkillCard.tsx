@@ -1,14 +1,19 @@
 'use client'
 
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
-import { type Skill, CATEGORY_BADGES, CATEGORY_LABELS, renderStars, getAverageRating } from '../types'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { type Skill, CATEGORY_BADGES, categoryLabel, renderStars, getAverageRating } from '../types'
+import { skillCardStrings } from './SkillCard.strings'
 
 /* ═══════════════════════════════════════════════════════════════
    Skill Card
    ═══════════════════════════════════════════════════════════════ */
 
 export default function SkillCard({ skill, onUse }: { skill: Skill; onUse: (s: Skill) => void }) {
+  const lang = useLang()
+  const s = skillCardStrings(lang)
+  const f = fmt(lang)
   const avg = getAverageRating(skill)
 
   return (
@@ -28,11 +33,11 @@ export default function SkillCard({ skill, onUse }: { skill: Skill; onUse: (s: S
           className={`badge ${CATEGORY_BADGES[skill.category] || 'aurora-cap-default'}`}
           style={{ fontSize: '0.6875rem' }}
         >
-          {CATEGORY_LABELS[skill.category] || skill.category}
+          {categoryLabel(skill.category, lang)}
         </span>
         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
           <Icon name="user" size={12} />
-          {faNum(skill.usage_count)} استفاده
+          {s.usageCount(f.num(skill.usage_count))}
         </span>
       </div>
 
@@ -83,7 +88,7 @@ export default function SkillCard({ skill, onUse }: { skill: Skill; onUse: (s: S
           {renderStars(avg, 12)}
           {skill.rating_count > 0 && (
             <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginRight: '0.25rem' }}>
-              ({faNum(skill.rating_count)})
+              ({f.num(skill.rating_count)})
             </span>
           )}
         </div>
@@ -93,7 +98,7 @@ export default function SkillCard({ skill, onUse }: { skill: Skill; onUse: (s: S
           style={{ fontSize: '0.8125rem', padding: '0.375rem 0.875rem' }}
         >
           <Icon name="send" size={14} />
-          استفاده
+          {s.useAction}
         </button>
       </div>
     </div>

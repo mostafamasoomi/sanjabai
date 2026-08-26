@@ -1,12 +1,19 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
-import { RATE_LIMITS } from '../constants'
+import { useLang } from '@/components/LanguageToggle'
+import { rateLimits } from '../constants'
+import { apiInfoCardStrings } from './ApiInfoCard.strings'
 
 export function ApiInfoCard() {
+  const lang = useLang()
+  const s = apiInfoCardStrings(lang)
+
   return (
     <div className="card" style={{ marginBottom: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
         <Icon name="external" size={16} className="text-accent" />
-        <h2 className="card-title">اطلاعات API</h2>
+        <h2 className="card-title">{s.title}</h2>
       </div>
 
       <div style={{
@@ -17,7 +24,7 @@ export function ApiInfoCard() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Icon name="info" size={14} className="text-accent" />
-          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Endpoint</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{s.endpointLabel}</span>
         </div>
         <code style={{
           display: 'block', direction: 'ltr', fontFamily: 'var(--font-mono)',
@@ -26,25 +33,25 @@ export function ApiInfoCard() {
           https://sanjabai.com/v1
         </code>
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '6px 0 0' }}>
-          API سازگار با فرمت OpenAI — بدون تغییر در کد اصلی ادغام دهید.
+          {s.endpointDesc}
         </p>
       </div>
 
       {/* Rate Limits */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
         <Icon name="chart" size={14} className="text-muted" />
-        <h3 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>محدودیت‌های نرخی بر اساس پلن</h3>
+        <h3 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>{s.rateLimitsTitle}</h3>
       </div>
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)' }}>
-              <th style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 600 }}>پلن</th>
-              <th style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 600 }}>محدودیت درخواست</th>
+              <th style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 600 }}>{s.colPlan}</th>
+              <th style={{ padding: '8px 12px', textAlign: 'right', color: 'var(--text-muted)', fontWeight: 600 }}>{s.colLimit}</th>
             </tr>
           </thead>
           <tbody>
-            {RATE_LIMITS.map((r) => (
+            {rateLimits(lang).map((r) => (
               <tr key={r.plan} style={{ borderBottom: '1px solid var(--border)' }}>
                 <td style={{ padding: '8px 12px', color: 'var(--text-primary)', fontWeight: 600 }}>{r.plan}</td>
                 <td style={{ padding: '8px 12px', color: 'var(--text-secondary)' }}>{r.requests}</td>

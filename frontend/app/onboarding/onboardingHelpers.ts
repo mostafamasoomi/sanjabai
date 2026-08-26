@@ -1,10 +1,13 @@
-import { priceBand, PRICE_BAND_LABEL } from '@/lib/useCatalog'
+import { priceBand } from '@/lib/useCatalog'
 import { type ModelCatalogItem } from '@/types/catalog'
-import { faNum, faCompact } from '@/lib/format'
+import { fmt } from '@/lib/i18n'
+import type { Lang } from '@/components/LanguageToggle'
+import { onboardingHelpersStrings } from './onboardingHelpers.strings'
 import { type Goal, type Recommendation } from './types'
 import { FAVORITES_KEY } from './constants'
 
-export function recommendFor(goal: Goal, models: ModelCatalogItem[], favoriteIds: string[]): Recommendation {
+export function recommendFor(goal: Goal, models: ModelCatalogItem[], favoriteIds: string[], lang: Lang): Recommendation {
+  const s = onboardingHelpersStrings(lang)
   const kw = goal.keywords
   // First try to find a matching model among favorites
   const favorites = models.filter((m) => favoriteIds.includes(m.id))
@@ -21,7 +24,7 @@ export function recommendFor(goal: Goal, models: ModelCatalogItem[], favoriteIds
   if (match) {
     return {
       displayName: match.displayName,
-      badgeLabel: PRICE_BAND_LABEL[priceBand(match, models)],
+      badgeLabel: s.priceBand[priceBand(match, models)],
       description: match.description,
       pricing: match.pricing,
       contextWindow: match.contextWindow,
@@ -30,30 +33,39 @@ export function recommendFor(goal: Goal, models: ModelCatalogItem[], favoriteIds
     }
   }
   return {
+    // goal.fallbackModel/fallbackProvider are well-known example brand names
+    // (e.g. "Claude Sonnet 4" / "Anthropic") -- Latin in both languages, not
+    // translated.
     displayName: goal.fallbackModel,
     badgeLabel: goal.fallbackProvider,
     fromCatalog: false,
   }
 }
 
-export function formatPrice(p?: ModelCatalogItem['pricing']): string {
+export function formatPrice(p: ModelCatalogItem['pricing'] | undefined, lang: Lang): string {
   if (!p) return ''
-  const cur = p.currency === 'IRT' ? 'تومان' : p.currency === 'IRR' ? 'ریال' : p.currency
-  return `هر ۱ میلیون توکن — ورودی ${p.inputPerMillion} · خروجی ${p.outputPerMillion} ${cur}`
+  const s = onboardingHelpersStrings(lang)
+  const f = fmt(lang)
+  const cur = s.currency(p.currency)
+  return s.perMillionTokens(f.num(p.inputPerMillion), f.num(p.outputPerMillion), cur)
 }
 
-export function formatPriceShort(p?: ModelCatalogItem['pricing']): string {
+export function formatPriceShort(p: ModelCatalogItem['pricing'] | undefined, lang: Lang): string {
   if (!p) return ''
-  const cur = p.currency === 'IRT' ? 'تومان' : p.currency === 'IRR' ? 'ریال' : p.currency
-  const fmt = faNum
-  return `ورودی ${fmt(p.inputPerMillion)} · خروجی ${fmt(p.outputPerMillion)} ${cur}`
+  const s = onboardingHelpersStrings(lang)
+  const f = fmt(lang)
+  const cur = s.currency(p.currency)
+  return s.inputOutputShort(f.num(p.inputPerMillion), f.num(p.outputPerMillion), cur)
 }
 
-export function formatContext(n?: number): string {
+export function formatContext(n: number | undefined, lang: Lang): string {
   if (!n) return ''
+  const s = onboardingHelpersStrings(lang)
+  const f = fmt(lang)
   // `M` / `K` are Latin runs: in an RTL paragraph they were placed before
-  // the number they abbreviate. Persian words carry the same meaning safely.
-  return `${faCompact(n)} توکن`
+  // the number they abbreviate. A Persian unit word carries the same
+  // meaning safely; English keeps the compact `M`/`K` form as-is.
+  return s.tokens(f.compact(n))
 }
 
 export function loadFavorites(): string[] {

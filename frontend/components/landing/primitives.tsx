@@ -85,5 +85,5 @@ export function ForwardArrow({ size = 15 }: { size?: number }) {
     squirrel + wordmark lockup, so the three `.lp-brand` anchors no longer
     print the word "Sanjabai" next to a mark that already contains it. */
 export function BrandMark() {
-  return <BrandLockup height={30} className="lp-brand__mark" />
+  return <BrandLockup height={35} className="lp-brand__mark" />
 }

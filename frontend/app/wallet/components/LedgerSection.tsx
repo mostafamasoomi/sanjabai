@@ -1,18 +1,16 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
 import { fmtDate } from '../walletHelpers'
 import { EmptyStateIcon } from './WalletEmptyState'
+import { ledgerSectionStrings } from './LedgerSection.strings'
 import type { LedgerEntry, LedgerFilter } from '../walletTypes'
-
-const FILTERS = [
-  { key: 'all', label: 'همه' },
-  { key: 'credit', label: 'واریز' },
-  { key: 'debit', label: 'برداشت' },
-] as const
 
 // ─── Ledger Section ─────────────────────────────────────────────────────────
 // l.amount and l.balance_after are raw, whole-toman integers straight from
-// the API, passed straight into faNum -- no arithmetic on either.
+// the API, passed straight into f.num -- no arithmetic on either.
 export function LedgerSection({
   ledger,
   filteredLedger,
@@ -24,24 +22,34 @@ export function LedgerSection({
   ledgerFilter: LedgerFilter
   onFilterChange: (key: LedgerFilter) => void
 }) {
+  const lang = useLang()
+  const s = ledgerSectionStrings(lang)
+  const f = fmt(lang)
+
+  const FILTERS: { key: LedgerFilter; label: string }[] = [
+    { key: 'all', label: s.filterAll },
+    { key: 'credit', label: s.filterCredit },
+    { key: 'debit', label: s.filterDebit },
+  ]
+
   return (
     <div className="card" style={{ marginBottom: 24 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <Icon name="history" size={16} className="text-accent" />
-          <h2 className="card-title">تاریخچه تراکنش‌ها</h2>
-          <span className="badge badge-accent" style={{ marginLeft: 4 }}>{faNum(ledger.length)}</span>
+          <h2 className="card-title">{s.title}</h2>
+          <span className="badge badge-accent" style={{ marginLeft: 4 }}>{f.num(ledger.length)}</span>
         </div>
 
         {/* Filter tabs */}
         <div className="wallet-filter-tabs">
-          {FILTERS.map((f) => (
+          {FILTERS.map((flt) => (
             <button
-              key={f.key}
-              onClick={() => onFilterChange(f.key)}
-              className={`wallet-filter-tab ${ledgerFilter === f.key ? 'wallet-filter-active' : ''}`}
+              key={flt.key}
+              onClick={() => onFilterChange(flt.key)}
+              className={`wallet-filter-tab ${ledgerFilter === flt.key ? 'wallet-filter-active' : ''}`}
             >
-              {f.label}
+              {flt.label}
             </button>
           ))}
         </div>
@@ -50,18 +58,18 @@ export function LedgerSection({
       {filteredLedger.length === 0 ? (
         <EmptyStateIcon
           icon="history"
-          title="تراکنشی ثبت نشده"
-          desc={ledgerFilter === 'all' ? 'هنوز هیچ تراکنشی انجام نشده است.' : 'تراکنشی با این فیلتر یافت نشد.'}
+          title={s.emptyTitle}
+          desc={ledgerFilter === 'all' ? s.emptyDescAll : s.emptyDescFiltered}
         />
       ) : (
         <div className="wallet-table-wrap">
           <table className="wallet-table">
             <thead>
               <tr>
-                <th>تاریخ</th>
-                <th>شرح</th>
-                <th style={{ textAlign: 'left' }}>مبلغ</th>
-                <th style={{ textAlign: 'left' }}>مانده</th>
+                <th>{s.colDate}</th>
+                <th>{s.colDescription}</th>
+                <th style={{ textAlign: 'left' }}>{s.colAmount}</th>
+                <th style={{ textAlign: 'left' }}>{s.colBalance}</th>
               </tr>
             </thead>
             <tbody>
@@ -70,21 +78,24 @@ export function LedgerSection({
                 return (
                   <tr key={l.id} className={idx % 2 === 0 ? 'wallet-row-even' : 'wallet-row-odd'}>
                     <td className="wallet-td-date">
-                      {fmtDate(l.created_at)}
+                      {fmtDate(l.created_at, lang)}
                     </td>
                     <td style={{ padding: '12px', color: 'var(--text-primary)', fontWeight: 500 }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         <span className={`wallet-amount-dot ${isCredit ? 'positive' : 'negative'}`} />
+                        {/* l.reason is backend-authored ledger text (Persian
+                            only today) -- rendered as-is, not translated
+                            client-side. See return-format report. */}
                         {l.reason}
                       </span>
                     </td>
                     <td
                       className={`wallet-td-amount ${isCredit ? 'positive' : 'negative'}`}
                     >
-                      {isCredit ? '+' : ''}{faNum(l.amount)} <span className="wallet-currency">تومان</span>
+                      {isCredit ? '+' : ''}{f.num(l.amount)} <span className="wallet-currency">{s.tomanUnit}</span>
                     </td>
                     <td className="wallet-td-balance">
-                      {faNum(l.balance_after)}
+                      {f.num(l.balance_after)}
                     </td>
                   </tr>
                 )

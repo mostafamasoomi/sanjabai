@@ -7,6 +7,8 @@ import { useCatalog } from '@/lib/useCatalog'
 import { type ModelCatalogItem } from '@/types/catalog'
 import { Icon } from '@/components/ui/Icon'
 import { EmptyState, toast } from '@/components/ui'
+import { useLang } from '@/components/LanguageToggle'
+import { dirFor } from '@/lib/i18n'
 import { isUsableModel } from './components/modelUtils'
 import ChatMessageItem from './components/ChatMessageItem'
 import ConversationSidebar from './components/ConversationSidebar'
@@ -18,7 +20,8 @@ import ChatComposerFooter from './components/ChatComposerFooter'
 import { useConversations } from './hooks/useConversations'
 import { useChatStream } from './hooks/useChatStream'
 import type { Message, UsageStats, Assistant } from './chatTypes'
-import { PRESETS } from './chatHelpers'
+import { getPresets, makeWelcomeMessage } from './chatHelpers'
+import { chatPageStrings } from './page.strings'
 import './chat-stream.css'
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -30,12 +33,12 @@ import './chat-stream.css'
    file wires them together and owns only what's genuinely page-wide.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const WELCOME_MESSAGE: Message = { id: 'welcome', role: 'assistant', content: 'سلام! به Sanjabai خوش آمدید. چطور می‌توانم کمک کنید؟' }
-
 export default function ChatPage() {
+  const lang = useLang()
+  const s = chatPageStrings(lang)
   const { user, token } = useAuth()
   const { models, loading, error: catalogError } = useCatalog()
-  const [messages, setMessages] = useState<Message[]>(() => [WELCOME_MESSAGE])
+  const [messages, setMessages] = useState<Message[]>(() => [makeWelcomeMessage(lang)])
   const [model, setModel] = useState<ModelCatalogItem | null>(null);
   const [input, setInput] = useState('')
   const abortRef = useRef<AbortController | null>(null)
@@ -83,6 +86,8 @@ export default function ChatPage() {
       .then(data => setWalletBalance(data.balance ?? 0))
       .catch(() => { /* silent */ })
   }, [token])
+
+  const presets = useMemo(() => getPresets(lang), [lang])
 
   /* ── Pre-send cost estimate ────────────────────────────────────────── */
   const preSendEstimate = useMemo(() => {
@@ -180,10 +185,10 @@ export default function ChatPage() {
         setModel(found)
       } else {
         setModel(models[0])
-        toast(found ? 'مدل درخواستی در دسترس نیست؛ مدل پیش‌فرض انتخاب شد.' : 'مدل درخواستی یافت نشد؛ مدل پیش‌فرض انتخاب شد.', 'error')
+        toast(found ? s.modelUnavailablePickedDefault : s.modelNotFoundPickedDefault, 'error')
       }
     }
-  }, [modelParam, models, model])
+  }, [modelParam, models, model, s])
 
   useEffect(() => {
     if (!model && models.length > 0) {
@@ -192,8 +197,8 @@ export default function ChatPage() {
   }, [models, model]);
 
   useEffect(() => {
-    if (catalogError) toast('خطا در دریافت فهرست مدل‌ها', 'error')
-  }, [catalogError])
+    if (catalogError) toast(s.catalogLoadError, 'error')
+  }, [catalogError, s])
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -284,7 +289,7 @@ export default function ChatPage() {
         {isMobile && (
           <aside className={`conv-drawer ${conv.mobileDrawerOpen ? 'conv-drawer-open' : ''}`}>
             <div className="conv-drawer-header">
-              <span className="conv-drawer-title">مکالمات</span>
+              <span className="conv-drawer-title">{s.conversationsDrawerTitle}</span>
               <button onClick={() => conv.setMobileDrawerOpen(false)} className="conv-drawer-close">
                 <Icon name="close" size={18} />
               </button>
@@ -300,7 +305,7 @@ export default function ChatPage() {
               with nothing to announce. Visually hidden because the model bar
               below already says which model you are talking to — a second,
               visible title would be noise in a surface this dense. */}
-          <h1 className="sr-only">چت با مدل‌های هوش مصنوعی</h1>
+          <h1 className="sr-only">{s.pageHeading}</h1>
 
           <ChatModelBar
             isMobile={isMobile}
@@ -327,8 +332,8 @@ export default function ChatPage() {
           {!loading && !catalogError && models.length === 0 && (
             <EmptyState
               icon="models"
-              title="مدلی در دسترس نیست"
-              description="در حال حاضر فهرست مدل‌ها خالی است. لطفاً اتصال را بررسی کرده و دوباره تلاش کنید."
+              title={s.noModelsTitle}
+              description={s.noModelsDescription}
             />
           )}
 
@@ -338,9 +343,9 @@ export default function ChatPage() {
           <div ref={scrollContainerRef} onScroll={handleScroll} className="chat-messages">
             {showPresets && messages.length <= 1 && (
               <div className="chat-presets">
-                <h2 className="chat-presets-title">از کجا شروع کنیم؟</h2>
+                <h2 className="chat-presets-title">{s.presetsTitle}</h2>
                 <div className="chat-presets-grid">
-                  {PRESETS.map(p => (
+                  {presets.map(p => (
                     <button
                       key={p.label}
                       onClick={() => chat.sendMessage(p.prompt)}
@@ -381,7 +386,7 @@ export default function ChatPage() {
 
           {/* ── Scroll to bottom ────────────────────────────────────── */}
           {showScrollBtn && (
-            <button onClick={scrollToBottom} className="chat-scroll-btn" aria-label="اسکرول به پایین">
+            <button onClick={scrollToBottom} className="chat-scroll-btn" aria-label={s.scrollToBottom}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="6 9 12 15 18 9" />
               </svg>
@@ -408,8 +413,8 @@ export default function ChatPage() {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="btn btn-ghost btn-icon rounded-xl shrink-0"
-                aria-label="پیوست فایل"
-                title="پیوست فایل (txt, md, csv, json, pdf)"
+                aria-label={s.attachFile}
+                title={s.attachFileHint}
               >
                 <Icon name="paperclip" size={18} />
               </button>
@@ -417,18 +422,18 @@ export default function ChatPage() {
                 type="button"
                 onClick={() => setWebSearch(!webSearch)}
                 className={"btn btn-ghost btn-icon rounded-xl shrink-0" + (webSearch ? " text-[var(--accent)]" : "")}
-                aria-label="جستجوی وب"
-                title="جستجوی وب"
+                aria-label={s.webSearch}
+                title={s.webSearch}
                 style={webSearch ? { color: 'var(--accent)' } : {}}
               >
                 <Icon name="globe" size={18} />
               </button>
-              <textarea dir="rtl"
+              <textarea dir={dirFor(lang)}
                 ref={inputRef}
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="پیام خود را بنویسید... (Shift+Enter برای خط جدید)"
+                placeholder={s.composerPlaceholder}
                 rows={1}
                 className="chat-composer-input"
                 style={{ fieldSizing: 'content' } as React.CSSProperties}
@@ -437,7 +442,7 @@ export default function ChatPage() {
                 type="submit"
                 disabled={(!input.trim() && !attachedFile) || streaming || !model}
                 className="btn btn-primary btn-icon rounded-xl shrink-0"
-                aria-label="ارسال"
+                aria-label={s.send}
               >
                 <Icon name="send" size={18} />
               </button>
@@ -446,7 +451,7 @@ export default function ChatPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', marginTop: '6px', background: 'var(--bg-secondary, rgba(255,255,255,0.05))', borderRadius: '10px', fontSize: '0.82rem' }}>
                 <Icon name="paperclip" size={14} />
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{attachedFile.name}</span>
-                <button type="button" onClick={() => setAttachedFile(null)} aria-label="حذف پیوست" style={{ display: 'inline-flex', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: '2px' }}>
+                <button type="button" onClick={() => setAttachedFile(null)} aria-label={s.removeAttachment} style={{ display: 'inline-flex', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: '2px' }}>
                   <Icon name="close" size={12} />
                 </button>
               </div>

@@ -1,8 +1,10 @@
 'use client'
 
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
-import { type Task, DELIVERY_CHANNELS, describeCron, formatDateTime } from '../types'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { type Task, deliveryChannels, describeCron, formatDateTime } from '../types'
+import { taskCardStrings } from './TaskCard.strings'
 
 export default function TaskCard({
   task,
@@ -23,7 +25,11 @@ export default function TaskCard({
   onDelete: (task: Task) => void
   onHistory: (task: Task) => void
 }) {
-  const ch = DELIVERY_CHANNELS[task.delivery_channel] || DELIVERY_CHANNELS.dashboard
+  const lang = useLang()
+  const s = taskCardStrings(lang)
+  const f = fmt(lang)
+  const channels = deliveryChannels(lang)
+  const ch = channels[task.delivery_channel] || channels.dashboard
 
   return (
     <div className="card" style={{
@@ -49,7 +55,7 @@ export default function TaskCard({
             border: 'none', cursor: 'pointer', position: 'relative',
             transition: 'background 0.2s', flexShrink: 0,
           }}
-          title={task.is_active ? 'غیرفعال کردن' : 'فعال کردن'}
+          title={task.is_active ? s.disable : s.enable}
         >
           <span style={{
             width: 18, height: 18, borderRadius: '50%',
@@ -65,7 +71,7 @@ export default function TaskCard({
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10, alignItems: 'center' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
           <Icon name="clock" size={12} />
-          {describeCron(task.cron_expression)}
+          {describeCron(task.cron_expression, lang)}
         </span>
         <span style={{ fontSize: 11, color: 'var(--text-muted)', direction: 'ltr', fontFamily: 'var(--font-mono)' }}>
           {task.cron_expression}
@@ -75,7 +81,7 @@ export default function TaskCard({
           color: task.is_active ? 'var(--positive)' : 'var(--danger)',
           fontSize: 11,
         }}>
-          {task.is_active ? 'فعال' : 'غیرفعال'}
+          {task.is_active ? s.active : s.inactive}
         </span>
         <span className="badge" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, background: 'var(--bg-surface, var(--bg-elev))' }}>
           <Icon name={ch.icon} size={11} />
@@ -94,18 +100,18 @@ export default function TaskCard({
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
           <Icon name="history" size={12} />
-          اجرا: {faNum(task.run_count)} بار
+          {s.runCount(f.num(task.run_count))}
         </span>
         {task.last_run_at && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             <Icon name="clock" size={12} />
-            آخرین اجرا: {formatDateTime(task.last_run_at)}
+            {s.lastRun(formatDateTime(task.last_run_at, lang))}
           </span>
         )}
         {task.next_run_at && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             <Icon name="calendar" size={12} />
-            اجرای بعدی: {formatDateTime(task.next_run_at)}
+            {s.nextRun(formatDateTime(task.next_run_at, lang))}
           </span>
         )}
       </div>
@@ -123,7 +129,7 @@ export default function TaskCard({
           ) : (
             <Icon name="send" size={13} />
           )}
-          اجرا
+          {s.run}
         </button>
         <button
           onClick={() => onHistory(task)}
@@ -131,7 +137,7 @@ export default function TaskCard({
           style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
         >
           <Icon name="history" size={13} />
-          تاریخچه
+          {s.history}
         </button>
         <button
           onClick={() => onEdit(task)}
@@ -139,7 +145,7 @@ export default function TaskCard({
           style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
         >
           <Icon name="settings" size={13} />
-          ویرایش
+          {s.edit}
         </button>
         <button
           onClick={() => onDelete(task)}
@@ -152,7 +158,7 @@ export default function TaskCard({
           ) : (
             <Icon name="trash" size={13} />
           )}
-          حذف
+          {s.delete}
         </button>
       </div>
 

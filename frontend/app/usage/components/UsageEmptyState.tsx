@@ -1,5 +1,9 @@
+'use client'
+
 import Link from 'next/link'
 import { Icon } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
+import { usageEmptyStateStrings } from './UsageEmptyState.strings'
 import { FadeInCard } from './FadeInCard'
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -8,6 +12,9 @@ import { FadeInCard } from './FadeInCard'
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export function UsageEmptyState() {
+  const lang = useLang()
+  const s = usageEmptyStateStrings(lang)
+
   return (
     <FadeInCard className="card" style={{ padding: '56px 24px', textAlign: 'center' }}>
       <div style={{ width: 96, height: 96, margin: '0 auto 24px', position: 'relative' }}>
@@ -18,13 +25,13 @@ export function UsageEmptyState() {
           </svg>
         </div>
       </div>
-      <h2 className="card-title" style={{ marginBottom: 8 }}>هنوز مصرفی ثبت نشده است</h2>
+      <h2 className="card-title" style={{ marginBottom: 8 }}>{s.title}</h2>
       <p style={{ color: 'var(--text-muted)', fontSize: 14, maxWidth: 360, margin: '0 auto 24px' }}>
-        با ارسال اولین پیام در چت، گزارش‌های دقیق مصرف توکن و هزینه اینجا نمایش داده می‌شود.
+        {s.desc}
       </p>
       <Link href="/chat" className="btn btn-lg btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
         <Icon name="chat" size={16} />
-        شروع چت
+        {s.startChat}
       </Link>
     </FadeInCard>
   )

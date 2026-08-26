@@ -4,7 +4,7 @@
  * This is the older of the panel's two translation shapes and it stays for
  * what it is good at: a list of items that already existed as objects
  * (`{ key, label, icon }`) and only needed a sibling field. Section bodies
- * use the other shape, `dict(FA, EN)` from lib/adminI18n.ts, which is what
+ * use the other shape, `dict(FA, EN)` from lib/i18n.ts, which is what
  * to reach for when translating free-standing strings -- it makes a missing
  * key a compile error, which a `labelEn` field cannot do.
  *

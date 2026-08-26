@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react'
 import { toast } from '@/components/ui'
 import { useLang } from '@/components/LanguageToggle'
-import { fmt } from '@/lib/adminI18n'
+import { fmt } from '@/lib/i18n'
 import { errMessage } from '../api'
 import { bulkLiveTestStrings } from './BulkLiveTest.strings'
 

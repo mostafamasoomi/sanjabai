@@ -1,6 +1,10 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
 import { MemoryCard } from './MemoryCard'
 import type { Memory } from '../memoryTypes'
+import { memoryListSectionStrings } from './MemoryListSection.strings'
 
 /* ═══════════════════════════════════════════════════════════════
    Memory list: loading skeleton, empty state, or the list of cards.
@@ -38,6 +42,9 @@ export function MemoryListSection({
   onStartEdit: (m: Memory) => void
   onDelete: (id: number) => void
 }) {
+  const lang = useLang()
+  const s = memoryListSectionStrings(lang)
+
   if (loading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -75,10 +82,10 @@ export function MemoryListSection({
           <Icon name="sparkles" size={28} className="text-muted" />
         </div>
         <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
-          هنوز حافظه‌ای ذخیره نشده
+          {s.emptyTitle}
         </p>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
-          اولین حافظه خود را اضافه کنید یا اجازه دهید سیستم به‌صورت خودکار اطلاعات شما را یاد بگیرد.
+          {s.emptyDescription}
         </p>
         <button
           onClick={onAddClick}
@@ -86,7 +93,7 @@ export function MemoryListSection({
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
         >
           <Icon name="plus" size={14} />
-          افزودن حافظه
+          {s.addMemory}
         </button>
       </div>
     )

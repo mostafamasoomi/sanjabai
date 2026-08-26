@@ -1353,8 +1353,12 @@ input[type='number']:focus::-webkit-inner-spin-button { opacity: 1; }
   }
   /* The model cell is the card's title, so it keeps the full width and drops
      its label. */
-  .status-table td[data-label='مدل'] { padding-bottom: 0.6rem; }
-  .status-table td[data-label='مدل']::before { content: none; }
+  /* Keyed on data-col, not data-label. The selector used to match the
+     literal string «مدل», so translating that cell's label silently detached
+     the rule and the mobile card grew a redundant "Model" caption above the
+     model name. A layout hook must not be spelled in a language. */
+  .status-table td[data-col='model'] { padding-bottom: 0.6rem; }
+  .status-table td[data-col='model']::before { content: none; }
 
   .status-model-name, .status-model-id { white-space: normal; word-break: break-word; }
 }

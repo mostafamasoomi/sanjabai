@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from '@/components/ui'
+import { useLang } from '@/components/LanguageToggle'
+import { useDashboardDataStrings } from './useDashboardData.strings'
 import type {
   UserProfile,
   Usage,
@@ -17,6 +19,10 @@ import type {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export function useDashboardData(token: string | null, authLoading: boolean) {
+  // Itself a hook (called from DashboardPage) -- safe to read the language
+  // directly rather than take it as a parameter, see the i18n spec note.
+  const lang = useLang()
+  const s = useDashboardDataStrings(lang)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [usage, setUsage] = useState<Usage | null>(null)
   const [balance, setBalance] = useState<number | null>(null)
@@ -65,17 +71,17 @@ export function useDashboardData(token: string | null, authLoading: boolean) {
 
       const failed = [meRes, usageRes, walletRes, ledgerRes, modelsRes, subRes, billingRes].filter((r) => r.status === 'rejected')
       if (failed.length === 7) {
-        toast('خطا در دریافت اطلاعات داشبورد', 'error')
+        toast(s.allFailed, 'error')
       } else if (failed.length > 0) {
-        toast('برخی اطلاعات بارگذاری نشد', 'info')
+        toast(s.partialFailed, 'info')
       }
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.serverError, 'error')
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [token])
+  }, [token, s])
 
   useEffect(() => {
     if (!authLoading) fetchData()

@@ -4,7 +4,9 @@ import { useState } from 'react'
 import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
-import { CATEGORIES } from '../types'
+import { useLang } from '@/components/LanguageToggle'
+import { CATEGORY_KEYS, categoryLabel } from '../types'
+import { createSkillModalStrings } from './CreateSkillModal.strings'
 
 /* ═══════════════════════════════════════════════════════════════
    Create Skill Modal
@@ -21,6 +23,9 @@ export default function CreateSkillModal({
   token: string | null
   onCreated: () => void
 }) {
+  const lang = useLang()
+  const s = createSkillModalStrings(lang)
+
   const [titleFa, setTitleFa] = useState('')
   const [descriptionFa, setDescriptionFa] = useState('')
   const [category, setCategory] = useState('writing')
@@ -47,7 +52,7 @@ export default function CreateSkillModal({
 
   const handleSubmit = async () => {
     if (!token || !titleFa.trim() || !promptTemplate.trim()) {
-      toast('لطفاً فیلدهای ضروری را پر کنید', 'error')
+      toast(s.requiredFieldsToast, 'error')
       return
     }
 
@@ -76,7 +81,7 @@ export default function CreateSkillModal({
       })
 
       if (res.ok) {
-        toast('اسکیل با موفقیت ایجاد شد', 'success')
+        toast(s.createdToast, 'success')
         onCreated()
         onClose()
         // Reset form
@@ -89,10 +94,10 @@ export default function CreateSkillModal({
         setIsPublic(true)
         setTagsInput('')
       } else {
-        toast('خطا در ایجاد اسکیل', 'error')
+        toast(s.createErrorToast, 'error')
       }
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.serverErrorToast, 'error')
     } finally {
       setLoading(false)
     }
@@ -110,9 +115,9 @@ export default function CreateSkillModal({
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
           <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-            ایجاد اسکیل جدید
+            {s.modalTitle}
           </h2>
-          <button onClick={onClose} className="btn btn-ghost btn-icon" aria-label="بستن">
+          <button onClick={onClose} className="btn btn-ghost btn-icon" aria-label={s.closeAria}>
             <Icon name="close" size={18} />
           </button>
         </div>
@@ -120,28 +125,30 @@ export default function CreateSkillModal({
         {/* Title */}
         <div style={{ marginBottom: '1rem' }}>
           <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-            عنوان *
+            {s.titleLabel}
           </label>
           <input
             type="text"
             className="input"
             value={titleFa}
             onChange={(e) => setTitleFa(e.target.value)}
-            placeholder="عنوان اسکیل را وارد کنید"
+            placeholder={s.titlePlaceholder}
             style={{ width: '100%', fontSize: '0.875rem' }}
           />
         </div>
 
-        {/* Description */}
+        {/* Description — always Persian content (title_fa/description_fa are
+            dedicated Persian fields in the data model), so the input keeps
+            its own rtl direction regardless of the panel's language. */}
         <div style={{ marginBottom: '1rem' }}>
           <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-            توضیحات
+            {s.descriptionLabel}
           </label>
           <textarea dir="rtl"
             className="input"
             value={descriptionFa}
             onChange={(e) => setDescriptionFa(e.target.value)}
-            placeholder="توضیحات اسکیل را وارد کنید"
+            placeholder={s.descriptionPlaceholder}
             rows={3}
             style={{ width: '100%', fontSize: '0.875rem', resize: 'vertical' }}
           />
@@ -150,7 +157,7 @@ export default function CreateSkillModal({
         {/* Category */}
         <div style={{ marginBottom: '1rem' }}>
           <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-            دسته‌بندی
+            {s.categoryLabel}
           </label>
           <select
             className="input"
@@ -158,24 +165,26 @@ export default function CreateSkillModal({
             onChange={(e) => setCategory(e.target.value)}
             style={{ width: '100%', fontSize: '0.875rem' }}
           >
-            {CATEGORIES.filter((c) => c.key !== 'all').map((c) => (
-              <option key={c.key} value={c.key}>
-                {c.label}
+            {CATEGORY_KEYS.filter((c) => c !== 'all').map((c) => (
+              <option key={c} value={c}>
+                {categoryLabel(c, lang)}
               </option>
             ))}
           </select>
         </div>
 
-        {/* Prompt Template */}
+        {/* Prompt Template — the executable template body, same "content,
+            not chrome" rule as the prompt library: kept rtl regardless of
+            panel language. */}
         <div style={{ marginBottom: '1rem' }}>
           <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-            الگوی پرامپت *
+            {s.promptLabel}
           </label>
           <textarea dir="rtl"
             className="input"
             value={promptTemplate}
             onChange={(e) => setPromptTemplate(e.target.value)}
-            placeholder="الگوی پرامپت را وارد کنید. از {{variable_name}} برای متغیرها استفاده کنید."
+            placeholder={s.promptPlaceholder}
             rows={5}
             style={{ width: '100%', fontSize: '0.875rem', resize: 'vertical', fontFamily: 'var(--font-mono, monospace)' }}
           />
@@ -185,7 +194,7 @@ export default function CreateSkillModal({
         <div style={{ marginBottom: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
             <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-              متغیرها
+              {s.variablesLabel}
             </label>
             <button
               className="btn btn-ghost btn-sm"
@@ -193,7 +202,7 @@ export default function CreateSkillModal({
               style={{ fontSize: '0.75rem', padding: '0.125rem 0.5rem' }}
             >
               <Icon name="plus" size={12} />
-              افزودن
+              {s.addAction}
             </button>
           </div>
           {variables.map((v, i) => (
@@ -203,7 +212,7 @@ export default function CreateSkillModal({
                 className="input"
                 value={v.name}
                 onChange={(e) => updateVariable(i, 'name', e.target.value)}
-                placeholder="نام متغیر"
+                placeholder={s.variableNamePlaceholder}
                 style={{ flex: 1, fontSize: '0.8125rem' }}
               />
               <input
@@ -211,14 +220,14 @@ export default function CreateSkillModal({
                 className="input"
                 value={v.description}
                 onChange={(e) => updateVariable(i, 'description', e.target.value)}
-                placeholder="توضیحات"
+                placeholder={s.variableDescPlaceholder}
                 style={{ flex: 2, fontSize: '0.8125rem' }}
               />
               <button
                 className="btn btn-ghost btn-icon"
                 onClick={() => removeVariable(i)}
                 style={{ color: 'var(--danger)', padding: '0.25rem' }}
-                aria-label="حذف متغیر"
+                aria-label={s.removeVariableAria}
               >
                 <Icon name="trash" size={14} />
               </button>
@@ -229,14 +238,14 @@ export default function CreateSkillModal({
         {/* Default Model */}
         <div style={{ marginBottom: '1rem' }}>
           <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-            مدل پیش‌فرض
+            {s.defaultModelLabel}
           </label>
           <input
             type="text"
             className="input"
             value={defaultModel}
             onChange={(e) => setDefaultModel(e.target.value)}
-            placeholder="نام مدل (اختیاری)"
+            placeholder={s.defaultModelPlaceholder}
             style={{ width: '100%', fontSize: '0.875rem' }}
           />
         </div>
@@ -244,14 +253,14 @@ export default function CreateSkillModal({
         {/* Tags */}
         <div style={{ marginBottom: '1rem' }}>
           <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-            برچسب‌ها (با کاما جدا کنید)
+            {s.tagsLabel}
           </label>
           <input
             type="text"
             className="input"
             value={tagsInput}
             onChange={(e) => setTagsInput(e.target.value)}
-            placeholder="برچسب۱, برچسب۲, ..."
+            placeholder={s.tagsPlaceholder}
             style={{ width: '100%', fontSize: '0.875rem' }}
           />
         </div>
@@ -271,7 +280,7 @@ export default function CreateSkillModal({
               transition: 'all 0.2s ease',
               padding: 0,
             }}
-            aria-label={isPublic ? 'عمومی' : 'خصوصی'}
+            aria-label={s.publicAria(isPublic)}
           >
             <span
               style={{
@@ -288,7 +297,7 @@ export default function CreateSkillModal({
             />
           </button>
           <span style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-            {isPublic ? 'عمومی — برای همه قابل مشاهده' : 'خصوصی — فقط برای شما'}
+            {s.publicHint(isPublic)}
           </span>
         </div>
 
@@ -301,12 +310,12 @@ export default function CreateSkillModal({
           {loading ? (
             <span className="flex items-center gap-2">
               <span className="animate-spin" style={{ width: '1rem', height: '1rem', border: '2px solid var(--border)', borderTopColor: 'var(--accent)', borderRadius: '50%', display: 'inline-block' }} />
-              در حال ذخیره...
+              {s.savingText}
             </span>
           ) : (
             <>
               <Icon name="check" size={16} />
-              ذخیره
+              {s.saveAction}
             </>
           )}
         </button>

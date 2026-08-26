@@ -1,4 +1,4 @@
-import { dict } from '@/lib/adminI18n'
+import { dict } from '@/lib/i18n'
 
 /* Dictionary for ModerationRules.tsx — the regex rule editor for the
  * moderation review queue. */

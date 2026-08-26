@@ -183,7 +183,7 @@ export default function AdminPage() {
         <div className="card w-full max-w-sm">
           <div className="text-center mb-8">
             <div className="flex justify-center mb-5">
-              <BrandLockup height={38} />
+              <BrandLockup height={44} />
             </div>
             <h1 className="text-xl font-bold text-primary">{t(ADMIN_CHROME.panelCaption, lang)}</h1>
             <p className="text-sm mt-1 text-muted">{t(ADMIN_CHROME.loginSubtitle, lang)}</p>
@@ -284,7 +284,7 @@ export default function AdminPage() {
               Now bilingual: the caption follows `lang`, same as every nav
               label below. */}
           <div className="shrink-0 p-5 border-b" style={{ borderColor: 'var(--border)' }}>
-            <BrandLockup height={28} />
+            <BrandLockup height={33} />
             <p className="text-[10px] text-muted mt-2">{t(ADMIN_CHROME.panelCaption, lang)}</p>
           </div>
 

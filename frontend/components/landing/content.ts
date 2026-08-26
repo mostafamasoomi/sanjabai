@@ -20,23 +20,30 @@
    landing-page section so no single file grows unwieldy. Every symbol below
    is re-exported unchanged so existing imports of `@/components/landing/content`
    keep working exactly as before.
+
+   Bilingual note: the section modules under ./content/* now export a
+   `(lang) => data` reader (see lib/i18n.ts `dict`) instead of a flat
+   Persian-only constant, so a section can render in English once the
+   language toggle is flipped. `FAQ` is the one exception, kept as a flat
+   Persian array for app/page.tsx's JSON-LD FAQ schema, which is a Server
+   Component outside components/landing and isn't language-toggle-aware.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export { API_BASE_URL, MIN_TOPUP_LABEL } from './content/constants'
-export { NAV_LINKS } from './content/nav'
-export { HERO_ROTATION, HERO_TRUST, PREVIEW_THREADS } from './content/hero'
+export { API_BASE_URL, MIN_TOPUP_LABEL_FA, MIN_TOPUP_LABEL_EN } from './content/constants'
+export { navContent } from './content/nav'
+export { heroContent } from './content/hero'
 export type { PreviewThread } from './content/hero'
 export { CATALOG } from './content/catalog'
-export { STATS } from './content/stats'
-export { FEATURES } from './content/features'
+export { statsContent } from './content/stats'
+export { featuresContent } from './content/features'
 export type { Feature } from './content/features'
-export { CAPABILITY_TABS, MEMORY_SAMPLES, DOCUMENT_TYPES, TASK_SAMPLES } from './content/capabilities'
+export { capabilitiesContent } from './content/capabilities'
 export type { CapabilityTab } from './content/capabilities'
-export { COMPARISON_ROWS } from './content/comparison'
+export { comparisonContent } from './content/comparison'
 export type { ComparisonRow } from './content/comparison'
-export { STEPS } from './content/steps'
-export { API_POINTS, CODE_SAMPLES } from './content/api'
-export { PRICING_COLUMNS } from './content/pricing'
+export { stepsContent } from './content/steps'
+export { apiContent } from './content/api'
+export { pricingContent } from './content/pricing'
 export type { PricingColumn } from './content/pricing'
-export { FAQ } from './content/faq'
-export { FOOTER_COLUMNS } from './content/footer'
+export { FAQ, faqContent } from './content/faq'
+export { footerContent } from './content/footer'

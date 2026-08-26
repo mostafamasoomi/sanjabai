@@ -1,5 +1,9 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
-import { faNum, faDate } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { subscriptionCardStrings } from './SubscriptionCard.strings'
 
 /* ═══════════════════════════════════════════════════════════════
    Subscription status card
@@ -24,10 +28,14 @@ export function SubscriptionCard({
   endsAt?: string
   onChangePlan: () => void
 }) {
+  const lang = useLang()
+  const s = subscriptionCardStrings(lang)
+  const f = fmt(lang)
+
   return (
     <div className="card dash-span-4 flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>وضعیت اشتراک</span>
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>{s.status}</span>
         <div
           style={{
             width: '2rem',
@@ -69,10 +77,10 @@ export function SubscriptionCard({
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
             <span style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-              توکن مصرف شده
+              {s.tokensUsed}
             </span>
             <span className="num" style={{ fontSize: 'var(--fs-2xs)', color: 'var(--text-secondary)' }}>
-              {faNum(tokensUsed)} / {faNum(tokenQuota)}
+              {f.num(tokensUsed)} / {f.num(tokenQuota)}
             </span>
           </div>
           <div
@@ -100,7 +108,7 @@ export function SubscriptionCard({
       {/* Ends at */}
       {endsAt && (
         <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-          تاریخ پایان: {faDate(endsAt)}
+          {s.endsAt(f.date(endsAt))}
         </div>
       )}
 
@@ -111,7 +119,7 @@ export function SubscriptionCard({
         style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.375rem', marginTop: '0.25rem' }}
       >
         <Icon name="payment" size={14} />
-        تغییر پلن
+        {s.changePlan}
       </button>
     </div>
   )

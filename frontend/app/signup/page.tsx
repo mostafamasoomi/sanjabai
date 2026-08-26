@@ -6,8 +6,12 @@ import { useAuth } from '@/lib/auth'
 import { Icon } from '@/components/ui/Icon'
 import { BrandLockup } from '@/components/BrandLockup'
 import Link from 'next/link'
+import { useLang } from '@/components/LanguageToggle'
+import { signupPageStrings } from './page.strings'
 
 export default function SignupPage() {
+  const lang = useLang()
+  const s = signupPageStrings(lang)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [password2, setPassword2] = useState('')
@@ -43,18 +47,21 @@ export default function SignupPage() {
     setEmailTouched(true)
     setPasswordTouched(true)
     setPassword2Touched(true)
-    if (!email.trim() || !password) return setError('ایمیل و رمز عبور را وارد کنید')
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError('ایمیل معتبر وارد کنید')
-    if (password.length < 8) return setError('رمز عبور حداقل ۸ کاراکتر باشد')
-    if (password !== password2) return setError('رمزهای عبور یکسان نیستند')
-    if (!captchaAnswer.trim()) return setError('پاسخ کپچا را وارد کنید')
+    if (!email.trim() || !password) return setError(s.errMissingFields)
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setError(s.errEmailInvalid)
+    if (password.length < 8) return setError(s.errPasswordTooShort)
+    if (password !== password2) return setError(s.errPasswordsMismatch)
+    if (!captchaAnswer.trim()) return setError(s.errCaptchaRequired)
     setBusy(true)
     setError('')
     try {
       await signup(email.trim(), password, captchaToken, captchaAnswer)
       router.push('/onboarding')
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'خطا در ثبت‌نام')
+      // err.message may be a backend-sourced Persian error string (e.g.
+      // "email already registered") — rendered verbatim in both languages,
+      // see the handoff report.
+      setError(err instanceof Error ? err.message : s.errSignupFailed)
       fetchCaptcha()
     } finally {
       setBusy(false)
@@ -70,10 +77,10 @@ export default function SignupPage() {
               This was the rule's only user, so it is gone from globals.css
               too. */}
           <div className="flex justify-center mb-4">
-            <BrandLockup height={34} />
+            <BrandLockup height={40} />
           </div>
-          <h1 className="text-xl font-extrabold mb-1 text-gradient">ثبت‌نام در Sanjabai</h1>
-          <p className="text-sm text-[var(--text-dim)]">دسترسی به همه مدل‌های هوش مصنوعی</p>
+          <h1 className="text-xl font-extrabold mb-1 text-gradient">{s.title}</h1>
+          <p className="text-sm text-[var(--text-dim)]">{s.subtitle}</p>
         </div>
 
         {error && (
@@ -85,7 +92,7 @@ export default function SignupPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-xs text-[var(--text-dim)] mb-1.5 block">ایمیل</label>
+            <label className="text-xs text-[var(--text-dim)] mb-1.5 block">{s.emailLabel}</label>
             <input
               className={`input ${emailTouched && !emailValid ? 'aurora-input-error' : ''}`}
               type="email"
@@ -98,16 +105,16 @@ export default function SignupPage() {
             {emailTouched && !emailValid && (
               <p className="text-xs text-[var(--danger)] mt-1 flex items-center gap-1">
                 <Icon name="close" size={10} />
-                ایمیل معتبر وارد کنید
+                {s.emailInvalid}
               </p>
             )}
           </div>
           <div>
-            <label className="text-xs text-[var(--text-dim)] mb-1.5 block">رمز عبور</label>
+            <label className="text-xs text-[var(--text-dim)] mb-1.5 block">{s.passwordLabel}</label>
             <input
               className={`input ${passwordTouched && !passwordValid ? 'aurora-input-error' : ''}`}
               type="password"
-              placeholder="حداقل ۸ کاراکتر"
+              placeholder={s.passwordPlaceholder}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onBlur={() => setPasswordTouched(true)}
@@ -116,16 +123,16 @@ export default function SignupPage() {
             {passwordTouched && !passwordValid && (
               <p className="text-xs text-[var(--danger)] mt-1 flex items-center gap-1">
                 <Icon name="close" size={10} />
-                رمز عبور حداقل ۸ کاراکتر باشد
+                {s.passwordTooShort}
               </p>
             )}
           </div>
           <div>
-            <label className="text-xs text-[var(--text-dim)] mb-1.5 block">تکرار رمز عبور</label>
+            <label className="text-xs text-[var(--text-dim)] mb-1.5 block">{s.password2Label}</label>
             <input
               className={`input ${password2Touched && !password2Valid ? 'aurora-input-error' : ''}`}
               type="password"
-              placeholder="رمز عبور را دوباره وارد کنید"
+              placeholder={s.password2Placeholder}
               value={password2}
               onChange={(e) => setPassword2(e.target.value)}
               onBlur={() => setPassword2Touched(true)}
@@ -134,45 +141,45 @@ export default function SignupPage() {
             {password2Touched && !password2Valid && (
               <p className="text-xs text-[var(--danger)] mt-1 flex items-center gap-1">
                 <Icon name="close" size={10} />
-                رمزهای عبور یکسان نیستند
+                {s.passwordsMismatch}
               </p>
             )}
             {password2Touched && password2Valid && password2.length > 0 && (
               <p className="text-xs text-[var(--positive)] mt-1 flex items-center gap-1">
                 <Icon name="check" size={10} />
-                مطابقت دارد
+                {s.passwordsMatch}
               </p>
             )}
           </div>
           <div>
-            <label className="text-xs text-[var(--text-dim)] mb-1.5 block">کپچا</label>
+            <label className="text-xs text-[var(--text-dim)] mb-1.5 block">{s.captchaLabel}</label>
             {captchaImg && <img src={captchaImg} alt="captcha" className="mb-2 rounded" style={{maxWidth:200,height:60}} onClick={fetchCaptcha} />}
             <input
               className="input"
               type="text"
-              placeholder="پاسخ را وارد کنید"
+              placeholder={s.captchaPlaceholder}
               value={captchaAnswer}
               onChange={(e) => setCaptchaAnswer(e.target.value)}
               dir="ltr"
             />
             <button type="button" onClick={fetchCaptcha} className="auth-inline-link mt-1">
               <Icon name="refresh" size={12} />
-              تصویر جدید
+              {s.captchaRefresh}
             </button>
           </div>
           <button className="aurora-signup-btn btn btn-primary w-full" type="submit" disabled={busy}>
             {busy ? (
               <span className="flex items-center gap-2">
                 <span className="aurora-spinner" />
-                در حال ثبت‌نام...
+                {s.submitBusy}
               </span>
-            ) : 'ثبت‌نام'}
+            ) : s.submit}
           </button>
         </form>
 
         <p className="text-center text-sm text-[var(--text-dim)] mt-5">
-          قبلاً ثبت‌نام کرده‌اید؟{' '}
-          <Link href="/login" className="auth-inline-link">ورود</Link>
+          {s.haveAccount}{' '}
+          <Link href="/login" className="auth-inline-link">{s.login}</Link>
         </p>
 
         {/* Trust signals */}
@@ -180,15 +187,15 @@ export default function SignupPage() {
           <div className="flex items-center justify-center gap-6 text-xs text-[var(--text-muted)]">
             <span className="flex items-center gap-1.5">
               <Icon name="security" size={14} className="text-[var(--positive)]" />
-              رمزنگاری SSL
+              {s.trustSsl}
             </span>
             <span className="flex items-center gap-1.5">
               <Icon name="check" size={14} className="text-[var(--positive)]" />
-              بدون نیاز به VPN
+              {s.trustNoVpn}
             </span>
             <span className="flex items-center gap-1.5">
               <Icon name="wallet" size={14} className="text-[var(--positive)]" />
-              شارژ ریالی
+              {s.trustTomanTopUp}
             </span>
           </div>
         </div>

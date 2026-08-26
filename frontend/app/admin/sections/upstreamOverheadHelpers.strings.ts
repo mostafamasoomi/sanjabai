@@ -1,4 +1,4 @@
-// Relative, not `@/lib/adminI18n`: this file is transitively imported by
+// Relative, not `@/lib/i18n`: this file is transitively imported by
 // tests/lib/upstreamOverhead.test.ts, a plain .ts file Vitest pulls straight
 // into its module graph (not through Next's webpack/SWC resolver) — Vitest
 // here has no `@` alias configured, so a value import through it fails at
@@ -6,7 +6,7 @@
 // paths. The .strings.ts files that only ever get imported by a .tsx
 // component (which Vitest never parses at all) don't hit this and use `@/`
 // as normal — see CatalogFilterBar.strings.ts.
-import { dict } from '@/lib/adminI18n'
+import { dict } from '@/lib/i18n'
 
 /* Error strings for parseOverheadResponse (upstreamOverheadHelpers.ts). Split
    into its own dictionary rather than living inside the component's

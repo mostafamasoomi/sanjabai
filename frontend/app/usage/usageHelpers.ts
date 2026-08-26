@@ -1,24 +1,33 @@
-import { faPrice, faCompact, faPercent, toFaDigits } from '@/lib/format'
+import { toFaDigits } from '@/lib/format'
+import { fmt } from '@/lib/i18n'
+import type { Lang } from '@/components/LanguageToggle'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Helpers
    Split out of page.tsx verbatim -- no behaviour change.
+
+   Plain functions, not components or hooks, so each takes `lang` as a
+   parameter (see the i18n spec note on non-component helpers) rather than
+   reading it via useLang().
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export const fmtToman = (n: number) => faPrice(n)
-// No page-local money-formatter alias here -- call `faNum` directly. A
+export const fmtToman = (n: number, lang: Lang) => fmt(lang).price(n)
+// No page-local money-formatter alias here -- call `fmt(lang).num` directly. A
 // same-shaped wrapper named for the wrong currency used to live in this
 // spot, and was one of the two places that habit caused a 10x display bug.
 // Was `1.2M` / `34.0K` — Latin abbreviations that the RTL paragraph reorders
-// away from their number. faCompact gives the Persian equivalent instead.
-export const fmtTokens = (n: number) => faCompact(n)
-export const fmtDate = (s: string | null) => {
+// away from their number. `fmt(lang).compact` gives the localized equivalent.
+export const fmtTokens = (n: number, lang: Lang) => fmt(lang).compact(n)
+export const fmtDate = (s: string | null, lang: Lang) => {
   if (!s) return '—'
-  return toFaDigits(new Date(s).toLocaleDateString('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }))
+  const d = new Date(s)
+  if (lang === 'en') {
+    return d.toLocaleDateString('en-GB', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  }
+  return toFaDigits(d.toLocaleDateString('fa-IR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }))
 }
-// `٪` rather than `%`: the Latin sign is an LTR run that gets pushed away
-// from its number in an RTL paragraph.
-export const fmtPct = (n: number) => faPercent(n * 100, 1)
+// `٪`/`%`: the localized formatter already picks the right sign and digits.
+export const fmtPct = (n: number, lang: Lang) => fmt(lang).percent(n * 100, 1)
 
 export const modelDisplayNames: Record<string, string> = {
   'agnes-2.0-flash': 'Agnes 2.0 Flash',

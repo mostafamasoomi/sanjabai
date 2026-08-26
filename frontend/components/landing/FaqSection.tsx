@@ -1,11 +1,16 @@
 'use client'
 
 import { useId, useState } from 'react'
+import { useLang } from '../LanguageToggle'
 import { Reveal } from './Reveal'
 import { ChevronGlyph } from './primitives'
-import { FAQ } from './content'
+import { faqContent } from './content'
+import { faqSectionStrings } from './FaqSection.strings'
 
 export function FaqSection() {
+  const lang = useLang()
+  const s = faqSectionStrings(lang)
+  const { items } = faqContent(lang)
   // Accordion, not a disclosure set: at most one answer open at a time.
   const [open, setOpen] = useState<number | null>(0)
   const baseId = useId()
@@ -15,14 +20,14 @@ export function FaqSection() {
       <div className="lp-container">
         <Reveal>
           <header className="lp-head">
-            <span className="lp-eyebrow">سوالات متداول</span>
-            <h2 className="lp-title">چیزهایی که معمولاً می‌پرسند</h2>
+            <span className="lp-eyebrow">{s.eyebrow}</span>
+            <h2 className="lp-title">{s.title}</h2>
           </header>
         </Reveal>
 
         <Reveal>
           <div className="lp-faq">
-            {FAQ.map((item, i) => {
+            {items.map((item, i) => {
               const expanded = open === i
               const panelId = `${baseId}-panel-${i}`
               const triggerId = `${baseId}-trigger-${i}`

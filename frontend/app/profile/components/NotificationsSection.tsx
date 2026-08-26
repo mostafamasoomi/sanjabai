@@ -1,7 +1,10 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
+import { notificationsSectionStrings } from './NotificationsSection.strings'
 
 type NotificationsSectionProps = {
-  isFa: boolean
   emailNotif: boolean
   setEmailNotif: (v: boolean) => void
   telegramNotif: boolean
@@ -9,14 +12,17 @@ type NotificationsSectionProps = {
 }
 
 export default function NotificationsSection({
-  isFa, emailNotif, setEmailNotif, telegramNotif, setTelegramNotif,
+  emailNotif, setEmailNotif, telegramNotif, setTelegramNotif,
 }: NotificationsSectionProps) {
+  const lang = useLang()
+  const s = notificationsSectionStrings(lang)
+
   return (
     <div className="card profile-section-card">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
         <Icon name="bell" size={16} className="text-accent" />
         <h2 className="card-title">
-          {isFa ? 'اعلان‌ها' : 'Notifications'}
+          {s.title}
         </h2>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -25,10 +31,10 @@ export default function NotificationsSection({
             <Icon name="mail" size={16} className="text-muted" />
             <div>
               <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
-                {isFa ? 'اعلان ایمیلی' : 'Email Notifications'}
+                {s.email}
               </span>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                {isFa ? 'دریافت اعلانها از طریق ایمیل' : 'Receive notifications via email'}
+                {s.emailHint}
               </p>
             </div>
           </div>
@@ -46,10 +52,10 @@ export default function NotificationsSection({
             <Icon name="send" size={16} className="text-muted" />
             <div>
               <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
-                {isFa ? 'اعلان تلگرامی' : 'Telegram Notifications'}
+                {s.telegram}
               </span>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                {isFa ? 'دریافت اعلانها از طریق ربات تلگرام' : 'Receive notifications via Telegram bot'}
+                {s.telegramHint}
               </p>
             </div>
           </div>

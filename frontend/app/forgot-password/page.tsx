@@ -4,15 +4,19 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { toast } from '@/components/ui'
 import { apiFetch } from '@/lib/apiFetch'
+import { useLang } from '@/components/LanguageToggle'
+import { forgotPasswordPageStrings } from './page.strings'
 
 export default function ForgotPasswordPage() {
+  const lang = useLang()
+  const s = forgotPasswordPageStrings(lang)
   const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email.trim()) return toast('ایمیل خود را وارد کنید', 'error')
+    if (!email.trim()) return toast(s.emailRequired, 'error')
     setBusy(true)
     try {
       const res = await apiFetch('/api/auth/forgot-password', {
@@ -22,13 +26,15 @@ export default function ForgotPasswordPage() {
       })
       if (res.ok) {
         setSent(true)
-        toast('لینک بازنشانی رمز عبور به ایمیل شما ارسال شد', 'success')
+        toast(s.sentToast, 'success')
       } else {
         const data = await res.json()
-        toast(data.detail || 'خطا در ارسال ایمیل', 'error')
+        // data.detail is a backend-sourced Persian error string, rendered
+        // verbatim in both languages — see the handoff report.
+        toast(data.detail || s.genericError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.networkError, 'error')
     } finally {
       setBusy(false)
     }
@@ -37,24 +43,22 @@ export default function ForgotPasswordPage() {
   return (
     <div className="min-h-[80vh] flex items-center justify-center">
       <div className="card w-full max-w-sm">
-        <h1 className="text-xl font-bold text-center mb-6">بازنشانی رمز عبور</h1>
+        <h1 className="text-xl font-bold text-center mb-6">{s.title}</h1>
         {sent ? (
           <div className="text-center">
             <p className="text-sm text-[var(--text-dim)] mb-4">
-              ایمیل بازنشانی رمز عبور به <strong dir="ltr">{email}</strong> ارسال شد. لطفاً صندوق ورودی خود را بررسی کنید.
+              {s.sentPrefix} <strong dir="ltr">{email}</strong> {s.sentSuffix}
             </p>
             <Link href="/login" className="text-[var(--accent)] hover:underline text-sm">
-              بازگشت به ورود
+              {s.backToLogin}
             </Link>
           </div>
         ) : (
           <>
-            <p className="text-sm text-[var(--text-dim)] mb-4 text-center">
-              ایمیل خود را وارد کنید تا لینک بازنشانی رمز عبور برای شما ارسال شود.
-            </p>
+            <p className="text-sm text-[var(--text-dim)] mb-4 text-center">{s.intro}</p>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="text-xs text-[var(--text-dim)] mb-1 block">ایمیل</label>
+                <label className="text-xs text-[var(--text-dim)] mb-1 block">{s.emailLabel}</label>
                 <input
                   className="input"
                   type="email"
@@ -65,11 +69,11 @@ export default function ForgotPasswordPage() {
                 />
               </div>
               <button className="btn btn-primary w-full" type="submit" disabled={busy}>
-                {busy ? 'در حال ارسال...' : 'ارسال لینک بازنشانی'}
+                {busy ? s.submitBusy : s.submit}
               </button>
             </form>
             <p className="text-center text-sm text-[var(--text-dim)] mt-4">
-              <Link href="/login" className="text-[var(--accent)] hover:underline">بازگشت به ورود</Link>
+              <Link href="/login" className="text-[var(--accent)] hover:underline">{s.backToLogin}</Link>
             </p>
           </>
         )}

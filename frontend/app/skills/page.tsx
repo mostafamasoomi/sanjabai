@@ -4,22 +4,14 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/lib/auth'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
 import SkillActivationPanel from './SkillActivationPanel'
 import SkillCard from './components/SkillCard'
 import UseSkillModal from './components/UseSkillModal'
 import CreateSkillModal from './components/CreateSkillModal'
-import { type Skill, CATEGORIES } from './types'
-
-/* ═══════════════════════════════════════════════════════════════
-   Constants
-   ═══════════════════════════════════════════════════════════════ */
-
-const SORT_OPTIONS = [
-  { key: 'popular', label: 'محبوبترین' },
-  { key: 'newest', label: 'جدیدترین' },
-  { key: 'top_rated', label: 'بهترین امتیاز' },
-]
+import { type Skill, CATEGORY_KEYS, categoryLabel } from './types'
+import { skillsPageStrings } from './page.strings'
 
 /* ═══════════════════════════════════════════════════════════════
    Skeleton
@@ -54,6 +46,9 @@ function CardSkeleton() {
 
 export default function SkillsPage() {
   const { token, user, loading: authLoading } = useAuth()
+  const lang = useLang()
+  const s = skillsPageStrings(lang)
+  const f = fmt(lang)
 
   const [skills, setSkills] = useState<Skill[]>([])
   const [loading, setLoading] = useState(true)
@@ -80,14 +75,14 @@ export default function SkillsPage() {
         // Backend may return array or paginated {items: [...]} format
         setSkills(Array.isArray(data) ? data : (data?.items ?? []))
       } else {
-        toast('خطا در دریافت اسکیل‌ها', 'error')
+        toast(s.toastFetchError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.toastServerError, 'error')
     } finally {
       setLoading(false)
     }
-  }, [category, sort, search, token])
+  }, [category, sort, search, token, s])
 
   useEffect(() => {
     fetchSkills()
@@ -105,14 +100,14 @@ export default function SkillsPage() {
         <Icon name="sparkles" size={48} className="text-[var(--text-muted)]" style={{ opacity: 0.4 }} />
         <div className="text-center">
           {/* h1: this branch replaces the whole page, so it owns the outline. */}
-          <h1 className="page-title" style={{ marginBottom: '0.5rem' }}>وارد شوید</h1>
+          <h1 className="page-title" style={{ marginBottom: '0.5rem' }}>{s.signInTitle}</h1>
           <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-            برای استفاده از مارکتپلیس اسکیل‌ها، ابتدا وارد حساب کاربری خود شوید.
+            {s.signInDesc}
           </p>
         </div>
         <a href="/login" className="btn btn-primary">
           <Icon name="profile" size={16} />
-          ورود به حساب
+          {s.signInAction}
         </a>
       </div>
     )
@@ -138,10 +133,10 @@ export default function SkillsPage() {
           </div>
           <div>
             <h1 className="page-title">
-              مارکتپلیس اسکیل‌ها
+              {s.pageTitle}
             </h1>
             <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-              اسکیل‌های آماده رو کشف کن و استفاده کن
+              {s.pageSubtitle}
             </p>
           </div>
         </div>
@@ -151,7 +146,7 @@ export default function SkillsPage() {
           style={{ fontSize: '0.875rem' }}
         >
           <Icon name="plus" size={16} />
-          ایجاد اسکیل جدید
+          {s.createNew}
         </button>
       </div>
 
@@ -166,7 +161,7 @@ export default function SkillsPage() {
             className="input"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="جستجوی اسکیل..."
+            placeholder={s.searchPlaceholder}
             style={{ width: '100%', paddingRight: '2.5rem', fontSize: '0.875rem' }}
           />
           {search && (
@@ -183,7 +178,7 @@ export default function SkillsPage() {
                 color: 'var(--text-muted)',
                 padding: '0.25rem',
               }}
-              aria-label="پاک کردن"
+              aria-label={s.clearAria}
             >
               <Icon name="close" size={14} />
             </button>
@@ -195,7 +190,7 @@ export default function SkillsPage() {
           onChange={(e) => setSort(e.target.value)}
           style={{ fontSize: '0.875rem', minWidth: '140px' }}
         >
-          {SORT_OPTIONS.map((opt) => (
+          {s.sortOptions.map((opt) => (
             <option key={opt.key} value={opt.key}>
               {opt.label}
             </option>
@@ -205,14 +200,14 @@ export default function SkillsPage() {
 
       {/* ── Category Tabs ── */}
       <div style={{ display: 'flex', gap: '0.5rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
-        {CATEGORIES.map((cat) => (
+        {CATEGORY_KEYS.map((key) => (
           <button
-            key={cat.key}
-            onClick={() => setCategory(cat.key)}
-            className={`btn btn-sm ${category === cat.key ? 'btn-primary' : 'btn-ghost'}`}
+            key={key}
+            onClick={() => setCategory(key)}
+            className={`btn btn-sm ${category === key ? 'btn-primary' : 'btn-ghost'}`}
             style={{ whiteSpace: 'nowrap', fontSize: '0.8125rem' }}
           >
-            {cat.label}
+            {categoryLabel(key, lang)}
           </button>
         ))}
       </div>
@@ -220,7 +215,7 @@ export default function SkillsPage() {
       {/* ── Results count ── */}
       {!loading && (
         <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-          {faNum(skills.length)} اسکیل
+          {s.resultsCount(f.num(skills.length))}
         </p>
       )}
 
@@ -253,16 +248,14 @@ export default function SkillsPage() {
         >
           <Icon name="sparkles" size={48} className="text-[var(--text-muted)]" style={{ opacity: 0.4 }} />
           <div className="text-center">
-            <h2 className="empty-state__title">اسکیلی یافت نشد</h2>
+            <h2 className="empty-state__title">{s.emptyTitle}</h2>
             <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-              {search.trim()
-                ? 'عبارت جستجو را تغییر دهید یا فیلترها را بررسی کنید.'
-                : 'هنوز اسکیلی ایجاد نشده است. اولین اسکیل را شما ایجاد کنید!'}
+              {search.trim() ? s.emptySearchDesc : s.emptyNoneDesc}
             </p>
           </div>
           <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
             <Icon name="plus" size={16} />
-            ایجاد اسکیل جدید
+            {s.createNew}
           </button>
         </div>
       )}

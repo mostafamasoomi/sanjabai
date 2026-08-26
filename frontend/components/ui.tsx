@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Icon, type IconName } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
+import { uiStrings } from './ui.strings'
 
 /* ═══════════════════════════════
    Toast notification system
@@ -125,6 +127,7 @@ export function Modal({
   title?: string
   children: React.ReactNode
 }) {
+  const s = uiStrings(useLang())
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -136,7 +139,7 @@ export function Modal({
         {title && (
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold">{title}</h2>
-            <button onClick={onClose} className="btn btn-ghost btn-icon" aria-label="بستن">
+            <button onClick={onClose} className="btn btn-ghost btn-icon" aria-label={s.close}>
               <Icon name="close" size={18} />
             </button>
           </div>

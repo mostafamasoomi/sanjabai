@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from '@/components/ui'
+import { useLang } from '@/components/LanguageToggle'
+import { useWalletDataStrings } from './useWalletData.strings'
 import type { LedgerEntry, PaymentRecord, CreditPackage } from '../walletTypes'
 
 // Fetches wallet balance, ledger, payment history, credit packages, and the
@@ -8,6 +10,8 @@ import type { LedgerEntry, PaymentRecord, CreditPackage } from '../walletTypes'
 // Kept as one hook because all four/five requests are fired together and
 // share the same loading/refreshing lifecycle.
 export function useWalletData(token: string | null) {
+  const lang = useLang()
+  const s = useWalletDataStrings(lang)
   const [balance, setBalance] = useState<number | null>(null)
   const [ledger, setLedger] = useState<LedgerEntry[]>([])
   const [payments, setPayments] = useState<PaymentRecord[]>([])
@@ -58,13 +62,13 @@ export function useWalletData(token: string | null) {
           }
         } catch {}
       } catch {
-        if (!silent) toast('خطا در دریافت اطلاعات', 'error')
+        if (!silent) toast(s.fetchError, 'error')
       } finally {
         setLoading(false)
         setRefreshing(false)
       }
     },
-    [token],
+    [token, s.fetchError],
   )
 
   useEffect(() => {

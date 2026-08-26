@@ -1,27 +1,31 @@
+'use client'
+
 import { Icon } from '../ui/Icon'
+import { useLang } from '../LanguageToggle'
 import { Reveal } from './Reveal'
 import { ForwardArrow } from './primitives'
-import { FEATURES } from './content'
+import { featuresContent } from './content'
+import { featureBentoStrings } from './FeatureBento.strings'
 
 export function FeatureBento() {
+  const lang = useLang()
+  const s = featureBentoStrings(lang)
+  const { items } = featuresContent(lang)
+
   return (
     <section id="features" className="lp-section">
       <div className="lp-container">
         <Reveal>
           <header className="lp-head">
-            <span className="lp-eyebrow">امکانات</span>
-            <h2 className="lp-title">هر چه لازم دارید، بدون اضافه‌کاری</h2>
-            <p className="lp-lead">
-              یک فضای کاری برای همه‌ی مدل‌ها: چت، ساخت عامل، حافظه‌ی بلندمدت، خروجی پاورپوینت
-              و Word، وظایف زمان‌بندی‌شده، مقایسه‌ی خروجی و مدیریت کلیدهای API — همه در یک جا
-              و با یک صورتحساب.
-            </p>
+            <span className="lp-eyebrow">{s.eyebrow}</span>
+            <h2 className="lp-title">{s.title}</h2>
+            <p className="lp-lead">{s.lead}</p>
           </header>
         </Reveal>
 
         <div className="lp-bento">
-          {FEATURES.map((feature, i) => {
-            const isWide = i === FEATURES.length - 1
+          {items.map((feature, i) => {
+            const isWide = i === items.length - 1
             return (
               <Reveal
                 key={feature.title}

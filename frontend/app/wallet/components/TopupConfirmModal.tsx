@@ -1,8 +1,12 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { topupConfirmModalStrings } from './TopupConfirmModal.strings'
 
 // ─── Confirmation Modal ─────────────────────────────────────────────────────
-// effectiveAmount is raw, whole tomans -- straight into faNum, no arithmetic.
+// effectiveAmount is raw, whole tomans -- straight into f.price, no arithmetic.
 export function TopupConfirmModal({
   show,
   effectiveAmount,
@@ -16,6 +20,9 @@ export function TopupConfirmModal({
   onCancel: () => void
   onConfirm: () => void
 }) {
+  const lang = useLang()
+  const s = topupConfirmModalStrings(lang)
+  const f = fmt(lang)
   if (!show) return null
   return (
     <div className="wallet-modal-overlay" onClick={onCancel}>
@@ -24,14 +31,14 @@ export function TopupConfirmModal({
           <div className="wallet-modal-icon">
             <Icon name="wallet" size={28} className="text-accent" />
           </div>
-          <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>تایید شارژ</h3>
+          <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>{s.title}</h3>
           <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 4 }}>
-            آیا از شارژ حساب به مبلغ
+            {s.confirmQuestion}
           </p>
           <p className="wallet-modal-amount">
-            {faNum(effectiveAmount)} تومان
+            {f.price(effectiveAmount)}
           </p>
-          <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>اطمینان دارید؟</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>{s.areYouSure}</p>
         </div>
 
         <div style={{ display: 'flex', gap: 8 }}>
@@ -39,7 +46,7 @@ export function TopupConfirmModal({
             className="btn btn-secondary flex-1"
             onClick={onCancel}
           >
-            انصراف
+            {s.cancel}
           </button>
           <button
             className="btn btn-lg btn-primary"
@@ -48,7 +55,7 @@ export function TopupConfirmModal({
             style={{ flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
           >
             <Icon name="check" size={16} />
-            {busy ? 'در حال پردازش...' : 'تایید و پرداخت'}
+            {busy ? s.processing : s.confirmAndPay}
           </button>
         </div>
       </div>

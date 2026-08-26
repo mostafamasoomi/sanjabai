@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { toast } from '@/components/ui'
+import { useLang } from '@/components/LanguageToggle'
+import { useUsageDataStrings } from './useUsageData.strings'
 import { modelColor, modelName } from '../usageHelpers'
 import type { UsageData } from '../usageTypes'
 
@@ -10,6 +12,10 @@ import type { UsageData } from '../usageTypes'
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export function useUsageData(token: string | null) {
+  // Itself a hook (called from UsagePage) -- safe to read the language
+  // directly rather than take it as a parameter, see the i18n spec note.
+  const lang = useLang()
+  const s = useUsageDataStrings(lang)
   const [data, setData] = useState<UsageData | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -33,15 +39,15 @@ export function useUsageData(token: string | null) {
           per_model_breakdown: Array.isArray(d?.per_model_breakdown) ? d.per_model_breakdown : [],
         })
       } else {
-        toast('خطا در دریافت اطلاعات مصرف', 'error')
+        toast(s.fetchError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.serverError, 'error')
     } finally {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [token])
+  }, [token, s])
 
   useEffect(() => {
     if (!token) { setLoading(false); return }
@@ -97,7 +103,7 @@ export function useUsageData(token: string | null) {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (!res.ok) {
-        toast('خطا در دریافت فایل CSV', 'error')
+        toast(s.csvFetchError, 'error')
         return
       }
       const blob = await res.blob()
@@ -109,11 +115,11 @@ export function useUsageData(token: string | null) {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-      toast('فایل CSV دانلود شد', 'success')
+      toast(s.csvDownloaded, 'success')
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.serverError, 'error')
     }
-  }, [token])
+  }, [token, s])
 
   const totalTokens = (data?.total_input_tokens_this_month ?? 0) + (data?.total_output_tokens_this_month ?? 0)
   const maxModelCost = Math.max(...(data?.per_model_breakdown.map(m => m.cost) ?? [1]), 1)

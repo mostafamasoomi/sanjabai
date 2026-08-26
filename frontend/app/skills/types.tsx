@@ -1,6 +1,7 @@
 'use client'
 
 import { Icon } from '@/components/ui/Icon'
+import type { Lang } from '@/components/LanguageToggle'
 
 /* ═══════════════════════════════════════════════════════════════
    Shared types, constants, and helpers for the skills marketplace
@@ -40,15 +41,38 @@ export type UseResult = {
   model: string
 }
 
-export const CATEGORIES = [
-  { key: 'all', label: 'همه' },
-  { key: 'writing', label: 'نوشتن' },
-  { key: 'coding', label: 'برنامه‌نویسی' },
-  { key: 'analysis', label: 'تحلیل' },
-  { key: 'translation', label: 'ترجمه' },
-  { key: 'marketing', label: 'بازاریابی' },
-  { key: 'other', label: 'سایر' },
-]
+export const CATEGORY_KEYS = ['all', 'writing', 'coding', 'analysis', 'translation', 'marketing', 'other'] as const
+
+export type CategoryKey = (typeof CATEGORY_KEYS)[number]
+
+const CATEGORY_LABEL_FA: Record<CategoryKey, string> = {
+  all: 'همه',
+  writing: 'نوشتن',
+  coding: 'برنامه‌نویسی',
+  analysis: 'تحلیل',
+  translation: 'ترجمه',
+  marketing: 'بازاریابی',
+  other: 'سایر',
+}
+
+const CATEGORY_LABEL_EN: Record<CategoryKey, string> = {
+  all: 'All',
+  writing: 'Writing',
+  coding: 'Coding',
+  analysis: 'Analysis',
+  translation: 'Translation',
+  marketing: 'Marketing',
+  other: 'Other',
+}
+
+/** Label for a skill category, in the given language. `raw` may be a value
+ *  the DB has that this table doesn't (a category added after this list),
+ *  in which case it renders as itself rather than as `undefined` — same
+ *  fallback shape as admin's `availabilityLabel`. */
+export function categoryLabel(raw: string, lang: Lang = 'fa'): string {
+  const table = lang === 'en' ? CATEGORY_LABEL_EN : CATEGORY_LABEL_FA
+  return table[raw as CategoryKey] || raw
+}
 
 export const CATEGORY_BADGES: Record<string, string> = {
   writing: 'aurora-cap-blue',
@@ -57,15 +81,6 @@ export const CATEGORY_BADGES: Record<string, string> = {
   translation: 'aurora-cap-cyan',
   marketing: 'aurora-cap-green',
   other: 'aurora-cap-default',
-}
-
-export const CATEGORY_LABELS: Record<string, string> = {
-  writing: 'نوشتن',
-  coding: 'برنامه‌نویسی',
-  analysis: 'تحلیل',
-  translation: 'ترجمه',
-  marketing: 'بازاریابی',
-  other: 'سایر',
 }
 
 export function renderStars(rating: number, size = 14) {

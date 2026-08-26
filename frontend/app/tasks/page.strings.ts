@@ -1,0 +1,53 @@
+import { dict } from '@/lib/i18n'
+
+const FA = {
+  loadError: 'خطا در دریافت تسک‌ها',
+  titlePromptRequired: 'عنوان و پرامپت الزامی هستند',
+  taskUpdated: 'تسک بروزرسانی شد',
+  taskCreated: 'تسک جدید ایجاد شد',
+  saveError: 'خطا در ذخیره تسک',
+  connectionError: 'خطا در ارتباط',
+  taskDisabled: 'تسک غیرفعال شد',
+  taskEnabled: 'تسک فعال شد',
+  genericError: 'خطا',
+  taskRanSuccessfully: 'تسک با موفقیت اجرا شد',
+  runError: 'خطا در اجرای تسک',
+  deleteConfirm: (title: string) => `آیا از حذف «${title}» مطمئن هستید؟`,
+  taskDeleted: 'تسک حذف شد',
+  historyLoadError: 'خطا در دریافت تاریخچه',
+  loginRequiredTitle: 'برای مشاهده تسک‌ها وارد شوید',
+  loginRequiredDescription: 'ابتدا باید وارد حساب خود شوید.',
+  pageTitle: 'تسک‌های زمان‌بندی شده',
+  pageSubtitle: 'اجرای خودکار پرامپت‌ها طبق زمان‌بندی',
+  createTask: 'ایجاد تسک جدید',
+  infoCard: 'تسک‌ها به صورت خودکار طبق زمان‌بندی اجرا می‌شوند و نتیجه در داشبورد نمایش داده می‌شود.',
+  emptyTitle: 'هنوز تسکی ایجاد نشده',
+  emptyDescription: 'اولین تسک زمان‌بندی شده خود را بسازید تا پرامپت‌ها به صورت خودکار اجرا شوند.',
+}
+
+const EN: typeof FA = {
+  loadError: 'Failed to load tasks',
+  titlePromptRequired: 'Title and prompt are required',
+  taskUpdated: 'Task updated',
+  taskCreated: 'Task created',
+  saveError: 'Failed to save task',
+  connectionError: 'Connection error',
+  taskDisabled: 'Task disabled',
+  taskEnabled: 'Task enabled',
+  genericError: 'Error',
+  taskRanSuccessfully: 'Task ran successfully',
+  runError: 'Failed to run task',
+  deleteConfirm: (title) => `Delete "${title}"?`,
+  taskDeleted: 'Task deleted',
+  historyLoadError: 'Failed to load history',
+  loginRequiredTitle: 'Sign in to view tasks',
+  loginRequiredDescription: 'You need to sign in to your account first.',
+  pageTitle: 'Scheduled tasks',
+  pageSubtitle: 'Automatically run prompts on a schedule',
+  createTask: 'Create new task',
+  infoCard: 'Tasks run automatically on their schedule and the result appears on the dashboard.',
+  emptyTitle: 'No tasks created yet',
+  emptyDescription: 'Create your first scheduled task to run prompts automatically.',
+}
+
+export const tasksPageStrings = dict(FA, EN)

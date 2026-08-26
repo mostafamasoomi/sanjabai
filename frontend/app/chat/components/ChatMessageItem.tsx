@@ -1,9 +1,11 @@
 import { memo } from 'react'
 import { Icon } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
 import MarkdownRenderer from './MarkdownRenderer'
 import { getTruncationStatus } from '../finishReason'
 import type { Message } from '../chatTypes'
 import { CopyIcon, CheckIcon } from './ChatIcons'
+import { chatMessageItemStrings } from './ChatMessageItem.strings'
 
 type ChatMessageItemProps = {
   msg: Message
@@ -28,6 +30,7 @@ const ChatMessageItem = memo(function ChatMessageItem({
   onRetry,
   onContinue,
 }: ChatMessageItemProps) {
+  const s = chatMessageItemStrings(useLang())
   // finishReason is only populated once this message's own stream finished
   // (see sendMessage in the parent), so this is naturally false while `msg`
   // is still the actively-streaming bubble -- no extra `!streaming` guard
@@ -61,16 +64,16 @@ const ChatMessageItem = memo(function ChatMessageItem({
         {msg.role === 'assistant' && truncation.truncated && (
           truncation.empty ? (
             <div className="chat-truncated-bar chat-truncated-bar-empty" role="status">
-              <span>مدل بدون تولید متن به محدودیت طول رسید.</span>
+              <span>{s.truncatedEmpty}</span>
               <button type="button" onClick={() => onRetry(index)} className="chat-truncated-btn">
-                تلاش دوباره
+                {s.retry}
               </button>
             </div>
           ) : (
             <div className="chat-truncated-bar" role="status">
-              <span>این پاسخ به‌خاطر محدودیت طول ناتمام ماند.</span>
+              <span>{s.truncated}</span>
               <button type="button" onClick={() => onContinue(index)} className="chat-truncated-btn">
-                ادامه بده
+                {s.continue}
               </button>
             </div>
           )
@@ -80,15 +83,15 @@ const ChatMessageItem = memo(function ChatMessageItem({
             <button
               onClick={() => onCopy(msg.id, msg.content)}
               className="chat-action-btn"
-              title="کپی"
+              title={s.copy}
             >
               {copiedId === msg.id ? <CheckIcon size={13} /> : <CopyIcon size={13} />}
-              {copiedId === msg.id ? 'کپی شد' : 'کپی'}
+              {copiedId === msg.id ? s.copied : s.copy}
             </button>
             {index > 0 && (
-              <button onClick={() => onRetry(index)} className="chat-action-btn" title="تلاش مجدد">
+              <button onClick={() => onRetry(index)} className="chat-action-btn" title={s.retryAgain}>
                 <Icon name="refresh" size={13} />
-                تلاش مجدد
+                {s.retryAgain}
               </button>
             )}
           </div>

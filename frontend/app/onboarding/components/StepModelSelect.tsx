@@ -1,9 +1,14 @@
-import { priceBand, PRICE_BAND_LABEL } from '@/lib/useCatalog'
+'use client'
+
+import { priceBand } from '@/lib/useCatalog'
 import { type ModelCatalogItem } from '@/types/catalog'
 import { Icon } from '@/components/ui/Icon'
 import { Skeleton } from '@/components/ui'
-import { faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
 import { formatPriceShort, formatContext } from '../onboardingHelpers'
+import { onboardingHelpersStrings } from '../onboardingHelpers.strings'
+import { stepModelSelectStrings } from './StepModelSelect.strings'
 
 export function StepModelSelect({
   models,
@@ -20,11 +25,18 @@ export function StepModelSelect({
   onBack: () => void
   onNext: () => void
 }) {
+  const lang = useLang()
+  const s = stepModelSelectStrings(lang)
+  const f = fmt(lang)
+  // lib/useCatalog's own PRICE_BAND_LABEL is Persian-only (out of this
+  // batch's scope) -- see onboardingHelpers.strings.ts's file comment.
+  const priceBandLabel = onboardingHelpersStrings(lang).priceBand
+
   return (
     <div className="fade-in slide-up">
-      <h2 className="text-2xl sm:text-3xl font-bold text-center mb-2">مدل‌های موردعلاقه شما</h2>
+      <h2 className="text-2xl sm:text-3xl font-bold text-center mb-2">{s.title}</h2>
       <p className="text-center text-[var(--text-secondary)] mb-6">
-        از بین مدل‌های موجود، ۲ تا ۳ مدل موردعلاقه‌تان را انتخاب کنید.
+        {s.subtitle}
       </p>
 
       {catalogLoading ? (
@@ -40,7 +52,7 @@ export function StepModelSelect({
       ) : models.length === 0 ? (
         <div className="text-center py-12">
           <Icon name="models" size={40} className="text-[var(--text-muted)] mx-auto mb-3" />
-          <p className="text-[var(--text-secondary)]">در حال حاضر مدلی در دسترس نیست.</p>
+          <p className="text-[var(--text-secondary)]">{s.noModels}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[45vh] overflow-y-auto pr-1">
@@ -50,7 +62,7 @@ export function StepModelSelect({
               <button
                 key={m.id}
                 onClick={() => onToggleFavorite(m.id)}
-                className={`card card-interactive text-right flex items-start gap-3 p-4 cursor-pointer transition-all ${
+                className={`card card-interactive text-start flex items-start gap-3 p-4 cursor-pointer transition-all ${
                   selected
                     ? 'border-[var(--accent)] bg-[var(--accent-dim)] shadow-[var(--shadow-glow)]'
                     : ''
@@ -68,13 +80,13 @@ export function StepModelSelect({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-sm truncate">{m.displayName}</span>
-                    <span className="badge badge-accent text-[10px] shrink-0">{PRICE_BAND_LABEL[priceBand(m, models)]}</span>
+                    <span className="badge badge-accent text-[10px] shrink-0">{priceBandLabel[priceBand(m, models)]}</span>
                   </div>
                   <div className="text-xs text-[var(--text-muted)] mt-1">
-                    {formatPriceShort(m.pricing)}
+                    {formatPriceShort(m.pricing, lang)}
                   </div>
                   <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                    {formatContext(m.contextWindow)}
+                    {formatContext(m.contextWindow, lang)}
                   </div>
                 </div>
                 {selected && (
@@ -88,20 +100,20 @@ export function StepModelSelect({
 
       {favoriteIds.length > 0 && (
         <p className="text-center text-xs text-[var(--accent)] mt-3">
-          {faNum(favoriteIds.length)} مدل انتخاب شده
+          {s.selectedCount(f.num(favoriteIds.length))}
         </p>
       )}
 
       <div className="flex items-center justify-between mt-8 gap-3">
         <button className="btn btn-ghost" onClick={onBack}>
           <Icon name="arrowRight" size={16} />
-          قبلی
+          {s.back}
         </button>
         <button
           className="btn btn-primary btn-lg"
           onClick={onNext}
         >
-          ادامه
+          {s.next}
           <Icon name="arrowLeft" size={18} />
         </button>
       </div>

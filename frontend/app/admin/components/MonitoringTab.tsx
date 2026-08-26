@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
-import { fmt } from '@/lib/adminI18n'
+import { fmt } from '@/lib/i18n'
 import { TrafficBars, LatencyChart, VolumeBars } from './MonitoringCharts'
 import type { TrafficHour, VolumeDay } from './MonitoringCharts'
 import { monitoringTabStrings } from './MonitoringTab.strings'

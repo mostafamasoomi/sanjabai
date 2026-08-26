@@ -1,6 +1,10 @@
+'use client'
+
+import { useLang } from '../LanguageToggle'
 import { Reveal } from './Reveal'
 import { CheckGlyph, ForwardArrow } from './primitives'
-import { PRICING_COLUMNS } from './content'
+import { pricingContent } from './content'
+import { pricingSectionStrings } from './PricingSection.strings'
 
 /**
  * Sanjabai bills per token against a prepaid wallet — see app/pricing/page.tsx.
@@ -9,22 +13,23 @@ import { PRICING_COLUMNS } from './content'
  * per-model rate table lives on /pricing; this just links there.
  */
 export function PricingSection() {
+  const lang = useLang()
+  const s = pricingSectionStrings(lang)
+  const { columns } = pricingContent(lang)
+
   return (
     <section id="pricing" className="lp-section lp-section--soft">
       <div className="lp-container">
         <Reveal>
           <header className="lp-head">
-            <span className="lp-eyebrow">تعرفه‌ها</span>
-            <h2 className="lp-title">فقط بابت آنچه مصرف می‌کنید بپردازید</h2>
-            <p className="lp-lead">
-              اشتراک ماهانه‌ای در کار نیست. کیف پولتان را به تومان شارژ می‌کنید و هزینه‌ی هر
-              درخواست به‌ازای توکن از همان کسر می‌شود.
-            </p>
+            <span className="lp-eyebrow">{s.eyebrow}</span>
+            <h2 className="lp-title">{s.title}</h2>
+            <p className="lp-lead">{s.lead}</p>
           </header>
         </Reveal>
 
         <div className="lp-plans">
-          {PRICING_COLUMNS.map((column, i) => (
+          {columns.map((column, i) => (
             <Reveal
               key={column.name}
               as="article"
@@ -33,7 +38,7 @@ export function PricingSection() {
               tiltDeg={4}
               className={`lp-card lp-plan${column.featured ? ' lp-plan--featured' : ''}`}
             >
-              {column.featured && <span className="lp-plan__badge">روش اصلی</span>}
+              {column.featured && <span className="lp-plan__badge">{s.featuredBadge}</span>}
 
               <h3 className="lp-plan__name">{column.name}</h3>
               <p className="lp-plan__desc">{column.desc}</p>
@@ -69,7 +74,7 @@ export function PricingSection() {
         <Reveal delay={180}>
           <p className="lp-plans__footnote">
             <a href="/pricing" className="lp-feature__link">
-              مشاهده‌ی تعرفه‌ی دقیق هر مدل
+              {s.fullRateLink}
               <ForwardArrow size={13} />
             </a>
           </p>

@@ -1,5 +1,8 @@
+'use client'
+
+import { useLang } from '../LanguageToggle'
 import { Reveal } from './Reveal'
-import { STATS } from './content'
+import { statsContent } from './content'
 
 /**
  * A definition list: the label defines the number. DOM order is dt → dd for
@@ -14,9 +17,12 @@ import { STATS } from './content'
  * for every value regardless of what it says.
  */
 export function StatsBand() {
+  const lang = useLang()
+  const { items } = statsContent(lang)
+
   return (
     <dl className="lp-stats">
-      {STATS.map((stat, i) => (
+      {items.map((stat, i) => (
         <Reveal key={stat.label} as="div" delay={i * 110} className="lp-stat lp-flip">
           <dt className="lp-stat__label">{stat.label}</dt>
           <dd className="lp-stat__value lp-num">{stat.value}</dd>

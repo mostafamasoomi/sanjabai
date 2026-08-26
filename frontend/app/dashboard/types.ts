@@ -64,13 +64,10 @@ export type BillingSettings = {
 } | null
 
 /* Numerals, dates and money all come from lib/format — see the note there on
-   why this page no longer calls toLocaleString directly. */
+   why this page no longer calls toLocaleString directly.
 
-export const planLabels: Record<string, string> = {
-  free: 'رایگان',
-  pro: 'حرفه‌ای',
-  enterprise: 'سازمانی',
-}
+   Plan display names moved to page.strings.ts (they are translated text, not
+   a class map) -- only the CSS class lookup stays here. */
 
 export const planBadgeClass: Record<string, string> = {
   free: 'badge',

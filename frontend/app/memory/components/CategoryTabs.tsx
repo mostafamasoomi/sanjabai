@@ -1,4 +1,7 @@
-import { CATEGORIES } from '../memoryTypes'
+'use client'
+
+import { useLang } from '@/components/LanguageToggle'
+import { categories } from '../memoryTypes'
 
 /* ═══════════════════════════════════════════════════════════════
    Category filter tabs. Split out of page.tsx verbatim -- no
@@ -12,6 +15,9 @@ export function CategoryTabs({
   activeCategory: string
   onSelect: (cat: string) => void
 }) {
+  const lang = useLang()
+  const cats = categories(lang)
+
   return (
     <div
       style={{
@@ -22,7 +28,7 @@ export function CategoryTabs({
         paddingBottom: 4,
       }}
     >
-      {CATEGORIES.map((cat) => (
+      {cats.map((cat) => (
         <button
           key={cat.key}
           onClick={() => onSelect(cat.key)}

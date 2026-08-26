@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
-import { faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { useTopupFlowStrings } from './useTopupFlow.strings'
 import { MIN_TOPUP, MAX_TOPUP } from '../walletHelpers'
 
 // Wallet top-up (preset/custom amount -> confirm -> gateway redirect) and
@@ -10,6 +12,9 @@ import { MIN_TOPUP, MAX_TOPUP } from '../walletHelpers'
 // redirect to it -- and both are page-wide payment-initiation state, not
 // presentational.
 export function useTopupFlow(token: string | null) {
+  const lang = useLang()
+  const s = useTopupFlowStrings(lang)
+  const f = fmt(lang)
   const [busy, setBusy] = useState(false)
   const [topupAmount, setTopupAmount] = useState('')
   const [selectedPreset, setSelectedPreset] = useState<number | null>(100_000)
@@ -30,8 +35,8 @@ export function useTopupFlow(token: string | null) {
 
   const initiateTopup = () => {
     const amount = effectiveAmount
-    if (!amount || amount < MIN_TOPUP) return toast(`حداقل مبلغ شارژ ${faNum(MIN_TOPUP)} تومان است`, 'error')
-    if (amount > MAX_TOPUP) return toast(`حداکثر مبلغ شارژ ${faNum(MAX_TOPUP)} تومان است`, 'error')
+    if (!amount || amount < MIN_TOPUP) return toast(s.minAmount(f.num(MIN_TOPUP)), 'error')
+    if (amount > MAX_TOPUP) return toast(s.maxAmount(f.num(MAX_TOPUP)), 'error')
     setShowConfirm(true)
   }
 
@@ -50,17 +55,17 @@ export function useTopupFlow(token: string | null) {
       const res = await apiFetch('/api/payment/request', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: effectiveAmount, description: 'شارژ کیف پول' }),
+        body: JSON.stringify({ amount: effectiveAmount, description: s.walletTopupDescription }),
       })
       const data = await res.json()
       if (res.ok && data.url) {
-        toast('در حال انتقال به درگاه پرداخت...', 'info')
+        toast(s.redirecting, 'info')
         window.location.href = data.url
       } else {
-        toast(data.detail || 'خطا در شارژ', 'error')
+        toast(data.detail || s.topupError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.serverError, 'error')
     } finally {
       setBusy(false)
     }
@@ -77,13 +82,13 @@ export function useTopupFlow(token: string | null) {
       })
       const data = await res.json()
       if (res.ok && data.url) {
-        toast('در حال انتقال به درگاه پرداخت...', 'info')
+        toast(s.redirecting, 'info')
         window.location.href = data.url
       } else {
-        toast(data.detail || 'خطا در خرید بسته', 'error')
+        toast(data.detail || s.purchaseError, 'error')
       }
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.serverError, 'error')
     } finally {
       setPurchasingPkgId(null)
     }

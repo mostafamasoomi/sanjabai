@@ -1,4 +1,4 @@
-import { dict } from '@/lib/adminI18n'
+import { dict } from '@/lib/i18n'
 
 /* Dictionary for ModerationSection.tsx — the moderation review queue and its
  * per-user risk modal. See moderationTypes.ts for the severity/decision/

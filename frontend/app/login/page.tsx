@@ -6,8 +6,12 @@ import { useAuth } from '@/lib/auth'
 import { Icon } from '@/components/ui/Icon'
 import { BrandLockup } from '@/components/BrandLockup'
 import Link from 'next/link'
+import { useLang } from '@/components/LanguageToggle'
+import { loginPageStrings } from './page.strings'
 
 export default function LoginPage() {
+  const lang = useLang()
+  const s = loginPageStrings(lang)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -31,15 +35,18 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email.trim() || !password) return setError('ایمیل و رمز عبور را وارد کنید')
-    if (!captchaAnswer.trim()) return setError('پاسخ کپچا را وارد کنید')
+    if (!email.trim() || !password) return setError(s.errMissingFields)
+    if (!captchaAnswer.trim()) return setError(s.errCaptchaRequired)
     setBusy(true)
     setError('')
     try {
       await login(email.trim(), password, captchaToken, captchaAnswer)
       router.push('/chat')
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'خطا در ورود')
+      // err.message may be a backend-sourced Persian error string (e.g.
+      // "invalid credentials") — rendered verbatim in both languages, see
+      // the handoff report.
+      setError(err instanceof Error ? err.message : s.errLoginFailed)
       fetchCaptcha()
     } finally {
       setBusy(false)
@@ -54,10 +61,10 @@ export default function LoginPage() {
           {/* The front door gets the real mark, not a chat glyph in a
               gradient tile. */}
           <div className="flex justify-center mb-4">
-            <BrandLockup height={34} />
+            <BrandLockup height={40} />
           </div>
-          <h1 className="text-xl font-extrabold mb-1 text-gradient">ورود به حساب</h1>
-          <p className="text-sm text-[var(--text-muted)]">به Sanjabai خوش آمدید</p>
+          <h1 className="text-xl font-extrabold mb-1 text-gradient">{s.title}</h1>
+          <p className="text-sm text-[var(--text-muted)]">{s.subtitle}</p>
         </div>
 
         {error && (
@@ -76,7 +83,7 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-xs text-[var(--text-secondary)] mb-1.5 block font-medium">ایمیل</label>
+            <label className="text-xs text-[var(--text-secondary)] mb-1.5 block font-medium">{s.emailLabel}</label>
             <input
               className="input"
               type="email"
@@ -88,48 +95,48 @@ export default function LoginPage() {
             />
           </div>
           <div>
-            <label className="text-xs text-[var(--text-secondary)] mb-1.5 block font-medium">رمز عبور</label>
+            <label className="text-xs text-[var(--text-secondary)] mb-1.5 block font-medium">{s.passwordLabel}</label>
             <input
               className="input"
               type="password"
-              placeholder="حداقل ۸ کاراکتر"
+              placeholder={s.passwordPlaceholder}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               dir="ltr"
             />
           </div>
           <div>
-            <label className="text-xs text-[var(--text-secondary)] mb-1.5 block font-medium">کپچا</label>
+            <label className="text-xs text-[var(--text-secondary)] mb-1.5 block font-medium">{s.captchaLabel}</label>
             {captchaImg && <img src={captchaImg} alt="captcha" className="mb-2 rounded" style={{maxWidth:200,height:60}} onClick={fetchCaptcha} />}
             <input
               className="input"
               type="text"
-              placeholder="پاسخ را وارد کنید"
+              placeholder={s.captchaPlaceholder}
               value={captchaAnswer}
               onChange={(e) => setCaptchaAnswer(e.target.value)}
               dir="ltr"
             />
             <button type="button" onClick={fetchCaptcha} className="auth-inline-link mt-1">
               <Icon name="refresh" size={12} />
-              تصویر جدید
+              {s.captchaRefresh}
             </button>
           </div>
           <button className="btn btn-primary w-full" type="submit" disabled={busy}>
             {busy ? (
               <span className="flex items-center gap-2">
                 <span className="animate-spin" style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'var(--text-on-accent)', borderRadius: '50%', display: 'inline-block' }} />
-                در حال ورود...
+                {s.submitBusy}
               </span>
-            ) : 'ورود'}
+            ) : s.submit}
           </button>
         </form>
 
         <p className="text-center text-sm text-[var(--text-muted)] mt-4">
-          <Link href="/forgot-password" className="auth-inline-link">رمز عبور را فراموش کرده‌اید؟</Link>
+          <Link href="/forgot-password" className="auth-inline-link">{s.forgotPassword}</Link>
         </p>
         <p className="text-center text-sm text-[var(--text-muted)] mt-2">
-          حساب کاربری ندارید؟{' '}
-          <Link href="/signup" className="auth-inline-link">ثبت‌نام</Link>
+          {s.noAccount}{' '}
+          <Link href="/signup" className="auth-inline-link">{s.signup}</Link>
         </p>
 
         {/* Trust signals */}
@@ -137,11 +144,11 @@ export default function LoginPage() {
           <div className="flex items-center justify-center gap-6 text-xs text-[var(--text-muted)]">
             <span className="flex items-center gap-1.5">
               <Icon name="security" size={14} className="text-[var(--positive)]" />
-              امن
+              {s.trustSecure}
             </span>
             <span className="flex items-center gap-1.5">
               <Icon name="check" size={14} className="text-[var(--positive)]" />
-              بدون VPN
+              {s.trustNoVpn}
             </span>
           </div>
         </div>

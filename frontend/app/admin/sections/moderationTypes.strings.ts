@@ -1,4 +1,4 @@
-import { dict } from '@/lib/adminI18n'
+import { dict } from '@/lib/i18n'
 
 /* Dictionary backing moderationTypes.ts's label helpers (severityLabel,
  * decisionLabel, actionLabel). moderationTypes.ts is not a component and

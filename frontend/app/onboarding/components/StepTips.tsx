@@ -1,4 +1,8 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
+import { stepTipsStrings } from './StepTips.strings'
 
 export function StepTips({
   redirecting,
@@ -9,11 +13,14 @@ export function StepTips({
   onBack: () => void
   onFinish: () => void
 }) {
+  const lang = useLang()
+  const s = stepTipsStrings(lang)
+
   return (
     <div className="fade-in slide-up">
-      <h2 className="text-2xl sm:text-3xl font-bold text-center mb-2">سه نکته که کار را راه میاندازد</h2>
+      <h2 className="text-2xl sm:text-3xl font-bold text-center mb-2">{s.title}</h2>
       <p className="text-center text-[var(--text-secondary)] mb-6">
-        چند ثانیه دیگر و آماده میکارید.
+        {s.subtitle}
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -21,13 +28,13 @@ export function StepTips({
           <div className="w-11 h-11 rounded-xl bg-[var(--bg-elevated)] flex items-center justify-center mb-3">
             <Icon name="search" size={22} className="text-[var(--accent)]" />
           </div>
-          <div className="font-semibold mb-1">منوی سریع</div>
+          <div className="font-semibold mb-1">{s.quickMenuTitle}</div>
           <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-            با زدن{' '}
+            {s.quickMenuPrefix}
             <kbd className="text-[11px] bg-[var(--bg-surface)] px-1.5 py-0.5 rounded border border-[var(--border)]">
               ⌘K
-            </kbd>{' '}
-            (یا Ctrl+K) به همه بخشها سریع بروید.
+            </kbd>
+            {s.quickMenuSuffix}
           </p>
         </div>
 
@@ -35,9 +42,9 @@ export function StepTips({
           <div className="w-11 h-11 rounded-xl bg-[var(--bg-elevated)] flex items-center justify-center mb-3">
             <Icon name="models" size={22} className="text-[var(--accent)]" />
           </div>
-          <div className="font-semibold mb-1">تعویض مدل</div>
+          <div className="font-semibold mb-1">{s.switchModelTitle}</div>
           <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-            مدل فعال را از نوار بالای صفحه چت با یک کلیک عوض کنید.
+            {s.switchModelBody}
           </p>
         </div>
 
@@ -45,9 +52,9 @@ export function StepTips({
           <div className="w-11 h-11 rounded-xl bg-[var(--bg-elevated)] flex items-center justify-center mb-3">
             <Icon name="wallet" size={22} className="text-[var(--accent)]" />
           </div>
-          <div className="font-semibold mb-1">موجودی حساب</div>
+          <div className="font-semibold mb-1">{s.balanceTitle}</div>
           <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-            هزینه هر چت و موجودی خود را از بخش «کیف پول» دنبال کنید.
+            {s.balanceBody}
           </p>
         </div>
       </div>
@@ -55,10 +62,10 @@ export function StepTips({
       <div className="flex items-center justify-between mt-8 gap-3">
         <button className="btn btn-ghost" onClick={onBack}>
           <Icon name="arrowRight" size={16} />
-          قبلی
+          {s.back}
         </button>
         <button className="btn btn-primary btn-lg" onClick={onFinish} disabled={redirecting}>
-          {redirecting ? 'در حال انتقال...' : 'شروع چت'}
+          {redirecting ? s.redirecting : s.startChat}
           <Icon name="send" size={18} />
         </button>
       </div>

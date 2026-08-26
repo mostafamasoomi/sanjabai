@@ -1,5 +1,9 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
-import { Num, faDate, faTime } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { ledgerRowStrings } from './LedgerRow.strings'
 import type { LedgerEntry } from '../types'
 
 /* ═══════════════════════════════════════════════════════════════
@@ -7,6 +11,9 @@ import type { LedgerEntry } from '../types'
    ═══════════════════════════════════════════════════════════════ */
 
 export function LedgerRow({ entry }: { entry: LedgerEntry }) {
+  const lang = useLang()
+  const s = ledgerRowStrings(lang)
+  const f = fmt(lang)
   const isCredit = entry.amount > 0
   return (
     <div className="flex items-center justify-between py-3 border-b border-[var(--border)]">
@@ -24,11 +31,13 @@ export function LedgerRow({ entry }: { entry: LedgerEntry }) {
           />
         </div>
         <div className="min-w-0">
+          {/* entry.reason is backend-sourced ledger reason text (Persian
+              only for now) -- see the i18n handoff report. */}
           <div className="text-[13px] font-medium text-[var(--text-primary)] overflow-hidden text-ellipsis whitespace-nowrap">
             {entry.reason}
           </div>
           <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
-            {faDate(entry.created_at)} — {faTime(entry.created_at)}
+            {f.date(entry.created_at)} — {f.time(entry.created_at)}
           </div>
         </div>
       </div>
@@ -37,10 +46,10 @@ export function LedgerRow({ entry }: { entry: LedgerEntry }) {
           className="text-sm font-semibold"
           style={{ color: isCredit ? 'var(--positive)' : 'var(--danger)' }}
         >
-          <Num value={entry.amount} unit="تومان" signed />
+          {f.price(entry.amount, { signed: true })}
         </div>
         <div className="text-[10px] text-[var(--text-muted)] text-end">
-          موجودی: <Num value={entry.balance_after} />
+          {s.balance}: {f.num(entry.balance_after)}
         </div>
       </div>
     </div>

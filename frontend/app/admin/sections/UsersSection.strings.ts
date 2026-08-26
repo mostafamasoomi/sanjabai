@@ -1,4 +1,4 @@
-import { dict } from '@/lib/adminI18n'
+import { dict } from '@/lib/i18n'
 
 /* See CatalogFilterBar.strings.ts for why FA has no `as const` and EN is
    annotated `typeof FA` -- that is the whole completeness check. */

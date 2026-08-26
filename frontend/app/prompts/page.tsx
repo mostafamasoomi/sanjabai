@@ -3,128 +3,110 @@
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Icon, type IconName } from '@/components/ui/Icon'
-import { faNum } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { promptsPageStrings } from './page.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Sanjabai Prompt Library — 10 Persian prompt templates with search & filter
+   Sanjabai Prompt Library — 10 prompt templates with search & filter.
+
+   `category`/`icon` and the template metadata (title, description) are UI
+   chrome and are translated via page.strings.ts. `prompt` — the text that
+   actually gets sent to the model when a card is used — is CONTENT, not
+   chrome: it stays Persian in both languages, per the i18n spec's rule that
+   a Persian prompt a user picked must never be silently swapped for an
+   English one. See the handoff report for the full reasoning.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-type PromptCategory = 'کدنویسی' | 'ترجمه' | 'تحلیل' | 'خلاقیت' | 'عمومی'
+type PromptCategoryKey = 'coding' | 'translation' | 'analysis' | 'creativity' | 'general'
+
+type PromptId = 'p1' | 'p2' | 'p3' | 'p4' | 'p5' | 'p6' | 'p7' | 'p8' | 'p9' | 'p10'
 
 type PromptTemplate = {
-  id: string
-  title: string
-  description: string
-  category: PromptCategory
+  id: PromptId
+  category: PromptCategoryKey
   prompt: string
   icon: IconName
 }
 
-const CATEGORY_ICONS: Record<PromptCategory, IconName> = {
-  'کدنویسی': 'code',
-  'ترجمه': 'chat',
-  'تحلیل': 'search',
-  'خلاقیت': 'sparkles',
-  'عمومی': 'info',
+const CATEGORY_ICONS: Record<PromptCategoryKey, IconName> = {
+  coding: 'code',
+  translation: 'chat',
+  analysis: 'search',
+  creativity: 'sparkles',
+  general: 'info',
 }
 
-const CATEGORY_COLORS: Record<PromptCategory, string> = {
-  'کدنویسی': 'var(--accent)',
-  'ترجمه': 'var(--success)',
-  'تحلیل': 'var(--warning)',
-  'خلاقیت': 'var(--accent-purple)',
-  'عمومی': 'var(--text-secondary)',
+const CATEGORY_COLORS: Record<PromptCategoryKey, string> = {
+  coding: 'var(--accent)',
+  translation: 'var(--success)',
+  analysis: 'var(--warning)',
+  creativity: 'var(--accent-purple)',
+  general: 'var(--text-secondary)',
 }
 
 const PROMPTS: PromptTemplate[] = [
-  {
-    id: 'p1',
-    title: 'نوشتن کد پایتون',
-    description: 'یک تابع یا اسکریپت پایتون با توضیحات کامل و بهینه',
-    category: 'کدنویسی',
-    prompt: 'یک تابع پایتون بنویس که ',
-    icon: 'code',
-  },
+  { id: 'p1', category: 'coding', prompt: 'یک تابع پایتون بنویس که ', icon: 'code' },
   {
     id: 'p2',
-    title: 'ترجمه فارسی به انگلیسی',
-    description: 'ترجمه روان و دقیق متن فارسی به انگلیسی',
-    category: 'ترجمه',
+    category: 'translation',
     prompt: 'متن زیر را به انگلیسی روان ترجمه کن، لحن رسمی و حرفه‌ای:\n\n',
     icon: 'chat',
   },
   {
     id: 'p3',
-    title: 'تحلیل داده‌های متنی',
-    description: 'تحلیل و استخراج الگوها و اطلاعات کلیدی از متن',
-    category: 'تحلیل',
+    category: 'analysis',
     prompt: 'متن زیر را تحلیل کن و نکات کلیدی، الگوها و خلاصه آن را استخراج کن:\n\n',
     icon: 'search',
   },
-  {
-    id: 'p4',
-    title: 'ایده‌پردازی خلاقانه',
-    description: 'تولید ایده‌های خلاقانه برای پروژه‌ها و کسب‌وکارها',
-    category: 'خلاقیت',
-    prompt: '۱۰ ایده خلاقانه و نوآورانه برای ',
-    icon: 'sparkles',
-  },
+  { id: 'p4', category: 'creativity', prompt: '۱۰ ایده خلاقانه و نوآورانه برای ', icon: 'sparkles' },
   {
     id: 'p5',
-    title: 'خلاصه‌سازی متن',
-    description: 'خلاصه‌سازی هوشمند متن‌های طولانی به نکات اصلی',
-    category: 'عمومی',
+    category: 'general',
     prompt: 'متن زیر را به صورت خلاصه و مفید در ۳ پاراگراف خلاصه کن:\n\n',
     icon: 'info',
   },
   {
     id: 'p6',
-    title: 'بررسی باگ و رفع اشکال',
-    description: 'تحلیل کد و پیدا کردن باگ‌ها با پیشنهاد راه‌حل',
-    category: 'کدنویسی',
+    category: 'coding',
     prompt: 'کد زیر را بررسی کن، باگ‌های احتمالی را پیدا کن و راه‌حل اصلاحی ارائه بده:\n\n',
     icon: 'code',
   },
   {
     id: 'p7',
-    title: 'بازنویسی محتوا',
-    description: 'بازنویسی و بهبود متن با حفظ معنی اصلی',
-    category: 'خلاقیت',
+    category: 'creativity',
     prompt: 'متن زیر را با لحن جذاب‌تر و روان‌تر بازنویسی کن، بدون تغییر در معنی اصلی:\n\n',
     icon: 'sparkles',
   },
   {
     id: 'p8',
-    title: 'ترجمه انگلیسی به فارسی',
-    description: 'ترجمه تخصصی و روان انگلیسی به فارسی',
-    category: 'ترجمه',
+    category: 'translation',
     prompt: 'متن انگلیسی زیر را به فارسی روان و سلیس ترجمه کن، با حفظ اصطلاحات تخصصی:\n\n',
     icon: 'chat',
   },
   {
     id: 'p9',
-    title: 'تحلیل SWOT',
-    description: 'تحلیل نقاط قوت، ضعف، فرصت‌ها و تهدیدها',
-    category: 'تحلیل',
+    category: 'analysis',
     prompt: 'یک تحلیل SWOT کامل برای موضوع زیر ارائه بده (نقاط قوت، ضعف، فرصت‌ها و تهدیدها):\n\n',
     icon: 'search',
   },
   {
     id: 'p10',
-    title: 'توضیح مفاهیم پیچیده',
-    description: 'توضیح ساده و قابل فهم مفاهیم علمی و تخصصی',
-    category: 'عمومی',
+    category: 'general',
     prompt: 'مفهوم زیر را به زبان ساده و با مثال توضیح بده، طوری که یک فرد مبتدی هم متوجه شود:\n\n',
     icon: 'info',
   },
 ]
 
-const ALL_CATEGORIES: PromptCategory[] = ['کدنویسی', 'ترجمه', 'تحلیل', 'خلاقیت', 'عمومی']
+const ALL_CATEGORIES: PromptCategoryKey[] = ['coding', 'translation', 'analysis', 'creativity', 'general']
 
 export default function PromptsPage() {
   const router = useRouter()
+  const lang = useLang()
+  const s = promptsPageStrings(lang)
+  const f = fmt(lang)
   const [search, setSearch] = useState('')
-  const [activeCategory, setActiveCategory] = useState<PromptCategory | 'all'>('all')
+  const [activeCategory, setActiveCategory] = useState<PromptCategoryKey | 'all'>('all')
 
   const filteredPrompts = useMemo(() => {
     let list = PROMPTS
@@ -133,14 +115,17 @@ export default function PromptsPage() {
     }
     if (search.trim()) {
       const q = search.trim().toLowerCase()
-      list = list.filter(p =>
-        p.title.toLowerCase().includes(q) ||
-        p.description.toLowerCase().includes(q) ||
-        p.category.toLowerCase().includes(q)
-      )
+      list = list.filter(p => {
+        const meta = s.prompts[p.id]
+        return (
+          meta.title.toLowerCase().includes(q) ||
+          meta.description.toLowerCase().includes(q) ||
+          s.categories[p.category].toLowerCase().includes(q)
+        )
+      })
     }
     return list
-  }, [search, activeCategory])
+  }, [search, activeCategory, s])
 
   const handleUsePrompt = (prompt: PromptTemplate) => {
     router.push(`/chat?prompt=${encodeURIComponent(prompt.prompt)}`)
@@ -155,8 +140,8 @@ export default function PromptsPage() {
             <Icon name="sparkles" size={22} className="text-accent" />
           </div>
           <div>
-            <h1 className="prompts-title">کتابخانه پرامپت</h1>
-            <p className="prompts-subtitle">پرامپت‌های آماده فارسی برای شروع سریع گفتگو</p>
+            <h1 className="prompts-title">{s.headerTitle}</h1>
+            <p className="prompts-subtitle">{s.headerSubtitle}</p>
           </div>
         </div>
       </div>
@@ -168,16 +153,15 @@ export default function PromptsPage() {
           <input
             type="text"
             className="prompts-search-input"
-            placeholder="جستجوی پرامپت..."
+            placeholder={s.searchPlaceholder}
             value={search}
             onChange={e => setSearch(e.target.value)}
-            dir="rtl"
           />
           {search && (
             <button
               className="prompts-search-clear"
               onClick={() => setSearch('')}
-              aria-label="پاک کردن"
+              aria-label={s.clearSearchAria}
             >
               <Icon name="close" size={12} />
             </button>
@@ -189,7 +173,7 @@ export default function PromptsPage() {
             className={`prompts-cat-btn ${activeCategory === 'all' ? 'prompts-cat-active' : ''}`}
             onClick={() => setActiveCategory('all')}
           >
-            همه
+            {s.allCategories}
           </button>
           {ALL_CATEGORIES.map(cat => (
             <button
@@ -198,7 +182,7 @@ export default function PromptsPage() {
               onClick={() => setActiveCategory(cat)}
             >
               <Icon name={CATEGORY_ICONS[cat]} size={14} />
-              {cat}
+              {s.categories[cat]}
             </button>
           ))}
         </div>
@@ -206,52 +190,55 @@ export default function PromptsPage() {
 
       {/* Results count */}
       <div className="prompts-count">
-        {faNum(filteredPrompts.length)} پرامپت
-        {activeCategory !== 'all' && ` در دسته «${activeCategory}»`}
-        {search && ` برای «${search}»`}
+        {s.countBase(f.num(filteredPrompts.length))}
+        {activeCategory !== 'all' && s.countInCategory(s.categories[activeCategory])}
+        {search && s.countForSearch(search)}
       </div>
 
       {/* Prompt Grid */}
       {filteredPrompts.length === 0 ? (
         <div className="prompts-empty">
           <Icon name="search" size={32} style={{ color: 'var(--text-muted)', marginBottom: 12 }} />
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>پرامپتی با این مشخصات یافت نشد</p>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>{s.emptyText}</p>
           <button className="btn btn-ghost" onClick={() => { setSearch(''); setActiveCategory('all') }}>
-            پاک کردن فیلترها
+            {s.clearFilters}
           </button>
         </div>
       ) : (
         <div className="prompts-grid">
-          {filteredPrompts.map(prompt => (
-            <button
-              key={prompt.id}
-              className="prompt-card"
-              onClick={() => handleUsePrompt(prompt)}
-            >
-              <div className="prompt-card-header">
-                <div
-                  className="prompt-card-icon"
-                  style={{ background: `${CATEGORY_COLORS[prompt.category]}20`, color: CATEGORY_COLORS[prompt.category] }}
-                >
-                  <Icon name={prompt.icon} size={20} />
+          {filteredPrompts.map(prompt => {
+            const meta = s.prompts[prompt.id]
+            return (
+              <button
+                key={prompt.id}
+                className="prompt-card"
+                onClick={() => handleUsePrompt(prompt)}
+              >
+                <div className="prompt-card-header">
+                  <div
+                    className="prompt-card-icon"
+                    style={{ background: `${CATEGORY_COLORS[prompt.category]}20`, color: CATEGORY_COLORS[prompt.category] }}
+                  >
+                    <Icon name={prompt.icon} size={20} />
+                  </div>
+                  <span
+                    className="prompt-card-category"
+                    style={{ color: CATEGORY_COLORS[prompt.category], background: `${CATEGORY_COLORS[prompt.category]}15` }}
+                  >
+                    {s.categories[prompt.category]}
+                  </span>
                 </div>
-                <span
-                  className="prompt-card-category"
-                  style={{ color: CATEGORY_COLORS[prompt.category], background: `${CATEGORY_COLORS[prompt.category]}15` }}
-                >
-                  {prompt.category}
-                </span>
-              </div>
-              <h2 className="prompt-card-title">{prompt.title}</h2>
-              <p className="prompt-card-desc">{prompt.description}</p>
-              <div className="prompt-card-footer">
-                <span className="prompt-card-cta">
-                  استفاده از پرامپت
-                  <Icon name="arrowLeft" size={14} />
-                </span>
-              </div>
-            </button>
-          ))}
+                <h2 className="prompt-card-title">{meta.title}</h2>
+                <p className="prompt-card-desc">{meta.description}</p>
+                <div className="prompt-card-footer">
+                  <span className="prompt-card-cta">
+                    {s.useAction}
+                    <Icon name="arrowLeft" size={14} />
+                  </span>
+                </div>
+              </button>
+            )
+          })}
         </div>
       )}
     </div>

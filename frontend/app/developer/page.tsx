@@ -3,7 +3,9 @@
 import { useAuth } from '@/lib/auth'
 import { Skeleton } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
 import { ApiKeyRevealModal } from '@/components/ApiKeyRevealModal'
+import { developerPageStrings } from './page.strings'
 import { useApiKeys } from './hooks/useApiKeys'
 import { ApiInfoCard } from './components/ApiInfoCard'
 import { ApiKeysSection } from './components/ApiKeysSection'
@@ -21,6 +23,8 @@ import { EndpointDocsSection } from './components/EndpointDocsSection'
 
 export default function DeveloperPage() {
   const { token, user, loading: authLoading } = useAuth()
+  const lang = useLang()
+  const s = developerPageStrings(lang)
   const {
     keys,
     newKeyName,
@@ -58,10 +62,10 @@ export default function DeveloperPage() {
         </div>
         <div>
           <h1 className="page-title">
-            پلتفرم توسعه‌دهندگان
+            {s.title}
           </h1>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2 }}>
-            API سازگار با OpenAI برای ادغام در اپلیکیشن‌های شما
+            {s.subtitle}
           </p>
         </div>
       </div>

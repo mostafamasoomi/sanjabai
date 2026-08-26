@@ -7,6 +7,8 @@ import { apiFetch } from '@/lib/apiFetch'
 import { useCatalog, priceBand, PRICE_BAND_LABEL } from '@/lib/useCatalog'
 import { toast } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
+import { newAssistantPageStrings } from './page.strings'
 
 /* ═══════════════════════════════════════════════════════════════
    Create Assistant Page
@@ -16,6 +18,8 @@ export default function CreateAssistantPage() {
   const { token, user, loading: authLoading } = useAuth()
   const { models, loading: modelsLoading } = useCatalog()
   const router = useRouter()
+  const lang = useLang()
+  const s = newAssistantPageStrings(lang)
 
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
@@ -34,11 +38,11 @@ export default function CreateAssistantPage() {
     e.preventDefault()
     if (!token) return
     if (!name.trim()) {
-      toast('نام دستیار الزامی است', 'error')
+      toast(s.requiredNameToast, 'error')
       return
     }
     if (!systemPrompt.trim()) {
-      toast('پرامپت سیستم الزامی است', 'error')
+      toast(s.requiredPromptToast, 'error')
       return
     }
 
@@ -60,14 +64,14 @@ export default function CreateAssistantPage() {
       })
 
       if (res.ok) {
-        toast('دستیار با موفقیت ساخته شد', 'success')
+        toast(s.createdToast, 'success')
         router.push('/assistants')
       } else {
         const data = await res.json()
-        toast(data.detail || 'خطا در ساخت دستیار', 'error')
+        toast(data.detail || s.createErrorFallback, 'error')
       }
     } catch {
-      toast('خطا در ارتباط با سرور', 'error')
+      toast(s.serverErrorToast, 'error')
     } finally {
       setSubmitting(false)
     }
@@ -95,14 +99,14 @@ export default function CreateAssistantPage() {
         style={{ marginBottom: '1rem', fontSize: '0.8125rem' }}
       >
         <Icon name="arrowLeft" size={14} />
-        بازگشت به دستیارها
+        {s.backAction}
       </button>
 
       <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.25rem' }}>
-        ساخت دستیار جدید
+        {s.pageTitle}
       </h1>
       <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
-        یک دستیار هوشمند با پرامپت سیستم سفارشی بسازید
+        {s.pageSubtitle}
       </p>
 
       <form onSubmit={handleSubmit}>
@@ -120,14 +124,14 @@ export default function CreateAssistantPage() {
           {/* Name */}
           <div>
             <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-              نام دستیار <span className="text-danger">*</span>
+              {s.nameLabel} <span className="text-danger">*</span>
             </label>
             <input
               type="text"
               className="input"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="مثال: دستیار برنامه‌نویسی"
+              placeholder={s.namePlaceholder}
               style={{ width: '100%', fontSize: '0.875rem' }}
               maxLength={100}
             />
@@ -136,41 +140,43 @@ export default function CreateAssistantPage() {
           {/* Description */}
           <div>
             <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-              توضیحات
+              {s.descriptionLabel}
             </label>
             <input
               type="text"
               className="input"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="توضیح کوتاه درباره دستیار"
+              placeholder={s.descriptionPlaceholder}
               style={{ width: '100%', fontSize: '0.875rem' }}
               maxLength={500}
             />
           </div>
 
-          {/* System Prompt */}
+          {/* System Prompt — free-form, user-authored content; kept rtl
+              regardless of panel language, same as the skills prompt
+              template field. */}
           <div>
             <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-              پرامپت سیستم <span className="text-danger">*</span>
+              {s.systemPromptLabel} <span className="text-danger">*</span>
             </label>
             <textarea dir="rtl"
               className="input"
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
-              placeholder="تو یک دستیار متخصص در... هستی. وظیفه تو..."
+              placeholder={s.systemPromptPlaceholder}
               style={{ width: '100%', fontSize: '0.875rem', minHeight: '10rem', resize: 'vertical' }}
               rows={6}
             />
             <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-              این پرامپت در ابتدای هر مکالمه به مدل ارسال می‌شود
+              {s.systemPromptHint}
             </p>
           </div>
 
           {/* Model */}
           <div>
             <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.375rem' }}>
-              مدل پیش‌فرض
+              {s.defaultModelLabel}
             </label>
             {modelsLoading ? (
               <div className="skeleton" style={{ width: '100%', height: '2.5rem', borderRadius: 'var(--radius-md)' }} />
@@ -182,7 +188,7 @@ export default function CreateAssistantPage() {
                   onChange={(e) => setModelId(e.target.value)}
                   style={{ width: '100%', fontSize: '0.875rem' }}
                 >
-                  <option value="">بدون مدل پیش‌فرض (استفاده از مدل انتخابی کاربر)</option>
+                  <option value="">{s.noDefaultModelOption}</option>
                   {models.map((m) => (
                     <option key={m.id} value={m.providerModelId || m.id}>
                       {m.displayName} ({PRICE_BAND_LABEL[priceBand(m, models)]})
@@ -192,13 +198,13 @@ export default function CreateAssistantPage() {
               </div>
             )}
             <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-              در صورت انتخاب، هنگام شروع گفتگو با این دستیار، این مدل استفاده می‌شود
+              {s.defaultModelHint}
             </p>
           </div>
 
           {/* Public toggle */}
           <div className="flex items-center gap-3">
-            <label className="smart-mode-toggle" title={isPublic ? 'عمومی' : 'خصوصی'}>
+            <label className="smart-mode-toggle" title={isPublic ? s.publicLabel : s.privateLabel}>
               <input
                 type="checkbox"
                 checked={isPublic}
@@ -211,10 +217,10 @@ export default function CreateAssistantPage() {
             </label>
             <div>
               <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                {isPublic ? 'عمومی' : 'خصوصی'}
+                {isPublic ? s.publicLabel : s.privateLabel}
               </span>
               <p style={{ fontSize: '0.6875rem', color: 'var(--text-muted)' }}>
-                {isPublic ? 'همه کاربران می‌توانند از این دستیار استفاده کنند' : 'فقط شما به این دستیار دسترسی دارید'}
+                {isPublic ? s.publicHintOn : s.publicHintOff}
               </p>
             </div>
           </div>
@@ -228,7 +234,7 @@ export default function CreateAssistantPage() {
             onClick={() => router.push('/assistants')}
             disabled={submitting}
           >
-            انصراف
+            {s.cancelAction}
           </button>
           <button
             type="submit"
@@ -238,12 +244,12 @@ export default function CreateAssistantPage() {
             {submitting ? (
               <span className="flex items-center gap-2">
                 <span className="animate-spin" style={{ width: '1rem', height: '1rem', border: '2px solid var(--border)', borderTopColor: 'currentColor', borderRadius: '50%', display: 'inline-block' }} />
-                در حال ساخت...
+                {s.creatingText}
               </span>
             ) : (
               <>
                 <Icon name="plus" size={16} />
-                ساخت دستیار
+                {s.createAction}
               </>
             )}
           </button>

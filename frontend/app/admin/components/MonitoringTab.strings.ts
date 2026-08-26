@@ -1,8 +1,8 @@
-import { dict } from '@/lib/adminI18n'
+import { dict } from '@/lib/i18n'
 
 /* Dictionary for MonitoringTab.tsx — the read-only operator dashboard over
  * GET /admin/monitoring. See CatalogFilterBar.strings.ts for the pattern
- * and lib/adminI18n.ts for why `EN: typeof FA` (no `as const` on FA) is the
+ * and lib/i18n.ts for why `EN: typeof FA` (no `as const` on FA) is the
  * completeness check. */
 
 const FA = {

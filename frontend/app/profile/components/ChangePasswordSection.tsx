@@ -1,7 +1,10 @@
+'use client'
+
 import { Icon } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
+import { changePasswordSectionStrings } from './ChangePasswordSection.strings'
 
 type ChangePasswordSectionProps = {
-  isFa: boolean
   currentPassword: string
   setCurrentPassword: (v: string) => void
   newPassword: string
@@ -13,45 +16,48 @@ type ChangePasswordSectionProps = {
 }
 
 export default function ChangePasswordSection({
-  isFa, currentPassword, setCurrentPassword, newPassword, setNewPassword,
+  currentPassword, setCurrentPassword, newPassword, setNewPassword,
   confirmPassword, setConfirmPassword, changingPassword, handleChangePassword,
 }: ChangePasswordSectionProps) {
+  const lang = useLang()
+  const s = changePasswordSectionStrings(lang)
+
   return (
     <div className="card profile-section-card">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
         <Icon name="lock" size={16} className="text-accent" />
         <h2 className="card-title">
-          {isFa ? 'تغییر رمز عبور' : 'Change Password'}
+          {s.title}
         </h2>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div className="profile-input-group">
-          <label className="profile-input-label">{isFa ? 'رمز عبور فعلی' : 'Current Password'}</label>
+          <label className="profile-input-label">{s.current}</label>
           <input
             type="password"
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
-            placeholder={isFa ? 'رمز عبور فعلی' : 'Current password'}
+            placeholder={s.currentPlaceholder}
             className="input"
           />
         </div>
         <div className="profile-input-group">
-          <label className="profile-input-label">{isFa ? 'رمز عبور جدید' : 'New Password'}</label>
+          <label className="profile-input-label">{s.newPassword}</label>
           <input
             type="password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-            placeholder={isFa ? 'حداقل ۸ کاراکتر' : 'At least 8 characters'}
+            placeholder={s.newPasswordPlaceholder}
             className="input"
           />
         </div>
         <div className="profile-input-group">
-          <label className="profile-input-label">{isFa ? 'تکرار رمز عبور جدید' : 'Confirm New Password'}</label>
+          <label className="profile-input-label">{s.confirm}</label>
           <input
             type="password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder={isFa ? 'تکرار رمز عبور جدید' : 'Confirm new password'}
+            placeholder={s.confirmPlaceholder}
             className="input"
           />
         </div>
@@ -66,7 +72,7 @@ export default function ChangePasswordSection({
           ) : (
             <Icon name="lock" size={14} />
           )}
-          {isFa ? 'تغییر رمز عبور' : 'Change Password'}
+          {s.submit}
         </button>
       </div>
     </div>

@@ -5,7 +5,9 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth'
 import { Icon } from '@/components/ui/Icon'
 import { Spinner, EmptyState, toast } from '@/components/ui'
-import { faPrice, faDate } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { hermesServersStrings } from './page.strings'
 
 type Server = {
   id: number
@@ -17,15 +19,15 @@ type Server = {
   last_heartbeat_at: string | null
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  provisioning: 'در حال راه‌اندازی', active: 'فعال', suspended: 'متوقف‌شده', terminated: 'خاتمه‌یافته',
-}
 const STATUS_BADGE: Record<string, string> = {
   provisioning: 'badge-accent', active: 'badge-positive', suspended: 'badge-warning', terminated: 'badge-danger',
 }
 
 export default function HermesServersPage() {
   const { token, user, loading: authLoading } = useAuth()
+  const lang = useLang()
+  const s = hermesServersStrings(lang)
+  const f = fmt(lang)
   const [servers, setServers] = useState<Server[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -39,19 +41,20 @@ export default function HermesServersPage() {
         const data = await res.json()
         if (!cancelled) setServers(Array.isArray(data) ? data : [])
       } catch {
-        if (!cancelled) toast('خطا در دریافت سرورها', 'error')
+        if (!cancelled) toast(s.loadError, 'error')
       } finally {
         if (!cancelled) setLoading(false)
       }
     })()
     return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
   if (!authLoading && !user) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '1rem' }}>
-        <h1 className="page-title">وارد شوید</h1>
-        <a href="/login" className="btn btn-primary">ورود به حساب</a>
+        <h1 className="page-title">{s.signIn}</h1>
+        <a href="/login" className="btn btn-primary">{s.loginToAccount}</a>
       </div>
     )
   }
@@ -59,31 +62,31 @@ export default function HermesServersPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="page-title">سرورهای هرمس من</h1>
+        <h1 className="page-title">{s.pageTitle}</h1>
         <Link href="/hermes" className="btn btn-primary btn-sm">
           <Icon name="plus" size={14} />
-          سرور جدید
+          {s.newServer}
         </Link>
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center" style={{ minHeight: '30vh' }}><Spinner size="lg" /></div>
       ) : servers.length === 0 ? (
-        <EmptyState icon="rocket" title="هنوز سروری ندارید" description="یک سرور هرمس سفارش دهید تا اینجا نمایش داده شود.">
-          <Link href="/hermes" className="btn btn-primary">مشاهده پلن‌ها</Link>
+        <EmptyState icon="rocket" title={s.emptyTitle} description={s.emptyDescription}>
+          <Link href="/hermes" className="btn btn-primary">{s.viewPlans}</Link>
         </EmptyState>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1rem' }}>
-          {servers.map((s) => (
-            <Link key={s.id} href={`/hermes/servers/${s.id}`} className="card card-interactive" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {servers.map((sv) => (
+            <Link key={sv.id} href={`/hermes/servers/${sv.id}`} className="card card-interactive" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <div className="flex items-center justify-between">
-                <span style={{ fontWeight: 700 }}>{s.hostname || `سرور #${s.id}`}</span>
-                <span className={`badge ${STATUS_BADGE[s.status]}`} style={{ fontSize: '0.6875rem' }}>{STATUS_LABEL[s.status]}</span>
+                <span style={{ fontWeight: 700 }}>{sv.hostname || s.serverNumber(f.num(sv.id))}</span>
+                <span className={`badge ${STATUS_BADGE[sv.status]}`} style={{ fontSize: '0.6875rem' }}>{s.status[sv.status]}</span>
               </div>
-              <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', direction: 'ltr', textAlign: 'right' }}>{s.ip_address || '—'}</span>
+              <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', direction: 'ltr', textAlign: 'right' }}>{sv.ip_address || '—'}</span>
               <div className="flex items-center justify-between" style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                <span>{s.in_sync ? 'همگام' : 'در حال اعمال تغییرات'}</span>
-                <span>{faPrice(s.monthly_price_irt)}/ماه</span>
+                <span>{sv.in_sync ? s.inSync : s.syncing}</span>
+                <span>{s.perMonth(f.price(sv.monthly_price_irt))}</span>
               </div>
             </Link>
           ))}

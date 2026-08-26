@@ -1,17 +1,18 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { AuthProvider, useAuth } from '@/lib/auth'
 import { ToastContainer } from '@/components/ui'
 import { ThemeToggle } from '@/components/ThemeToggle'
-import { LanguageToggle } from '@/components/LanguageToggle'
+import { LanguageToggle, useLang, type Lang } from '@/components/LanguageToggle'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { useCommandPalette } from '@/components/CommandPalette'
 import { isOnboarded } from '@/lib/onboarding'
 import { getPanelPreference, isNavItemVisibleForPanel } from '@/lib/panel'
 import { BrandLockup } from './BrandLockup'
+import { appShellStrings } from './AppShell.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Sanjabai Aurora — AppShell v2
@@ -26,38 +27,44 @@ type NavItem = {
   admin?: boolean
 }
 
-const NAV: NavItem[] = [
-  { href: '/chat', label: 'چت', icon: 'chat', section: 'main' },
-  { href: '/models', label: 'مدل\u200cها', icon: 'models', section: 'main' },
-  { href: '/compare', label: 'مقایسه', icon: 'compare', section: 'main' },
-  { href: '/status', label: 'وضعیت مدل‌ها', icon: 'chart', section: 'main' },
-  { href: '/dashboard', label: 'داشبورد', icon: 'dashboard', section: 'tools' },
-  { href: '/wallet', label: 'کیف پول', icon: 'wallet', section: 'tools' },
-  { href: '/pricing', label: 'تعرفه\u200cها', icon: 'pricing', section: 'tools' },
-  { href: '/usage', label: 'مصرف', icon: 'chart', section: 'tools' },
-  { href: '/api-keys', label: 'کلید API', icon: 'key', section: 'tools' },
-  /* '/search' (standalone conversation search) archived 2026-08-21 — search
-     already lives inside chat, so a separate section was redundant. Page
-     moved to app/search/page.tsx.bak.before-archive-search-20260821; restore
-     by moving it back to app/search/page.tsx and restoring this nav entry:
-     { href: '/search', label: 'جستجو', icon: 'search', section: 'tools' }, */
-  { href: '/skills', label: 'اسکیل\u200cها', icon: 'cpu', section: 'tools' },
-  { href: '/hermes', label: 'سرور هرمس', icon: 'rocket', section: 'tools' },
-  { href: '/assistants', label: 'دستیارها', icon: 'sparkles', section: 'tools' },
-  { href: '/memory', label: 'حافظه', icon: 'clock', section: 'tools' },
-  { href: '/tasks', label: 'تسک\u200cها', icon: 'calendar', section: 'tools' },
-  { href: '/documents', label: 'سندساز', icon: 'file', section: 'tools' },
-  /* '/images' is listed even though no image model is servable yet: every
-     media row is in maintenance with no price, so the page shows an honest
-     "no image model is active" empty state rather than a fake list. Listing
-     it means the feature appears the moment an upstream key and a price
-     exist, instead of needing a frontend change to become visible. */
-  { href: '/images', label: 'تولید تصویر', icon: 'camera', section: 'tools' },
-  { href: '/developer', label: 'توسعه\u200cدهندگان', icon: 'code', section: 'tools' },
-  { href: '/profile', label: 'پروفایل', icon: 'profile', section: 'account' },
-  { href: '/referral', label: 'دعوت', icon: 'referral', section: 'account' },
-  { href: '/admin', label: 'مدیریت', icon: 'settings', section: 'account', admin: true },
-]
+/** Not a component -- takes `lang` as a plain parameter instead of calling
+ *  useLang(), since NAV is built once per render inside AppShellInner via
+ *  useMemo rather than read from a hook at module scope. */
+function getNav(lang: Lang): NavItem[] {
+  const n = appShellStrings(lang).nav
+  return [
+    { href: '/chat', label: n.chat, icon: 'chat', section: 'main' },
+    { href: '/models', label: n.models, icon: 'models', section: 'main' },
+    { href: '/compare', label: n.compare, icon: 'compare', section: 'main' },
+    { href: '/status', label: n.status, icon: 'chart', section: 'main' },
+    { href: '/dashboard', label: n.dashboard, icon: 'dashboard', section: 'tools' },
+    { href: '/wallet', label: n.wallet, icon: 'wallet', section: 'tools' },
+    { href: '/pricing', label: n.pricing, icon: 'pricing', section: 'tools' },
+    { href: '/usage', label: n.usage, icon: 'chart', section: 'tools' },
+    { href: '/api-keys', label: n.apiKeys, icon: 'key', section: 'tools' },
+    /* '/search' (standalone conversation search) archived 2026-08-21 — search
+       already lives inside chat, so a separate section was redundant. Page
+       moved to app/search/page.tsx.bak.before-archive-search-20260821; restore
+       by moving it back to app/search/page.tsx and restoring this nav entry:
+       { href: '/search', label: 'جستجو', icon: 'search', section: 'tools' }, */
+    { href: '/skills', label: n.skills, icon: 'cpu', section: 'tools' },
+    { href: '/hermes', label: n.hermes, icon: 'rocket', section: 'tools' },
+    { href: '/assistants', label: n.assistants, icon: 'sparkles', section: 'tools' },
+    { href: '/memory', label: n.memory, icon: 'clock', section: 'tools' },
+    { href: '/tasks', label: n.tasks, icon: 'calendar', section: 'tools' },
+    { href: '/documents', label: n.documents, icon: 'file', section: 'tools' },
+    /* '/images' is listed even though no image model is servable yet: every
+       media row is in maintenance with no price, so the page shows an honest
+       "no image model is active" empty state rather than a fake list. Listing
+       it means the feature appears the moment an upstream key and a price
+       exist, instead of needing a frontend change to become visible. */
+    { href: '/images', label: n.images, icon: 'camera', section: 'tools' },
+    { href: '/developer', label: n.developer, icon: 'code', section: 'tools' },
+    { href: '/profile', label: n.profile, icon: 'profile', section: 'account' },
+    { href: '/referral', label: n.referral, icon: 'referral', section: 'account' },
+    { href: '/admin', label: n.admin, icon: 'settings', section: 'account', admin: true },
+  ]
+}
 
 /**
  * Routes that render without the product sidebar/topbar. The landing page and
@@ -99,6 +106,9 @@ const PUBLIC_ROUTES = [
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function AppShellInner({ children }: { children: React.ReactNode }) {
+  const lang = useLang()
+  const s = appShellStrings(lang)
+  const NAV = useMemo(() => getNav(lang), [lang])
   const { user, loading, logout, token } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
@@ -215,9 +225,9 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   )
 
   const sections = [
-    { key: 'main', label: 'اصلی' },
-    { key: 'tools', label: 'ابزارها' },
-    { key: 'account', label: 'حساب' },
+    { key: 'main', label: s.sections.main },
+    { key: 'tools', label: s.sections.tools },
+    { key: 'account', label: s.sections.account },
   ]
 
   return (
@@ -271,24 +281,24 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
                 <div className="sidebar-user-menu fade-in">
                   <Link href="/profile" className="sidebar-user-menu-item">
                     <Icon name="profile" size={14} />
-                    پروفایل
+                    {s.profile}
                   </Link>
                   <Link href="/dashboard" className="sidebar-user-menu-item">
                     <Icon name="dashboard" size={14} />
-                    داشبورد
+                    {s.dashboard}
                   </Link>
                   <div className="divider" style={{ margin: '4px 0' }} />
                   <button onClick={logout} className="sidebar-user-menu-item sidebar-user-menu-item--danger">
                     <Icon name="close" size={14} />
-                    خروج
+                    {s.logout}
                   </button>
                 </div>
               )}
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              <Link href="/login" className="btn btn-primary w-full text-sm">ورود</Link>
-              <Link href="/signup" className="btn btn-secondary w-full text-sm">ثبت‌نام</Link>
+              <Link href="/login" className="btn btn-primary w-full text-sm">{s.login}</Link>
+              <Link href="/signup" className="btn btn-secondary w-full text-sm">{s.signup}</Link>
             </div>
           )}
         </div>
@@ -305,7 +315,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               <button
                 className="md:hidden btn btn-ghost btn-icon topbar-menu-btn"
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                aria-label="منو"
+                aria-label={s.menu}
               >
                 <Icon name={sidebarOpen ? 'close' : 'menu'} size={20} />
               </button>
@@ -336,10 +346,10 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
               <button
                 onClick={() => openPalette(true)}
                 className="topbar-search hidden sm:flex"
-                aria-label="جستجو در منوها"
+                aria-label={s.searchMenus}
               >
                 <Icon name="search" size={14} />
-                <span>جستجو</span>
+                <span>{s.search}</span>
                 <kbd>⌘K</kbd>
               </button>
             )}
@@ -347,10 +357,10 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
             {/* Public pages get the marketing links inline, since they have no
                 sidebar to carry them. */}
             {!loading && !user && (
-              <nav className="topbar-public-nav" aria-label="پیمایش عمومی">
-                <Link href="/models">مدل‌ها</Link>
-                <Link href="/pricing">تعرفه‌ها</Link>
-                <Link href="/developer">مستندات</Link>
+              <nav className="topbar-public-nav" aria-label={s.publicNavLabel}>
+                <Link href="/models">{s.nav.models}</Link>
+                <Link href="/pricing">{s.nav.pricing}</Link>
+                <Link href="/developer">{s.docs}</Link>
               </nav>
             )}
           </div>
@@ -360,8 +370,8 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
             <ThemeToggle />
             {!loading && !user && (
               <>
-                <Link href="/login" className="btn btn-ghost btn-sm">ورود</Link>
-                <Link href="/signup" className="btn btn-primary btn-sm">ثبت‌نام</Link>
+                <Link href="/login" className="btn btn-ghost btn-sm">{s.login}</Link>
+                <Link href="/signup" className="btn btn-primary btn-sm">{s.signup}</Link>
               </>
             )}
           </div>
@@ -390,7 +400,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
             className="flex flex-col items-center gap-0.5 text-xs px-2 py-1 text-[var(--text-muted)]"
           >
             <Icon name="menu" size={20} />
-            <span className="text-[10px]">بیشتر</span>
+            <span className="text-[10px]">{s.more}</span>
           </button>
         </nav>
         )}
@@ -430,10 +440,10 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
             {user ? (
               <div>
                 <div className="text-xs text-[var(--text-muted)] mb-2">{user.email}</div>
-                <button onClick={logout} className="btn btn-ghost btn-sm w-full text-[var(--danger)]">خروج</button>
+                <button onClick={logout} className="btn btn-ghost btn-sm w-full text-[var(--danger)]">{s.logout}</button>
               </div>
             ) : (
-              <Link href="/login" className="btn btn-primary w-full">ورود / ثبت‌نام</Link>
+              <Link href="/login" className="btn btn-primary w-full">{s.loginSignup}</Link>
             )}
           </div>
         </div>

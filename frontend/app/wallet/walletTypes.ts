@@ -25,4 +25,8 @@ export type CreditPackage = {
 
 export type LedgerFilter = 'all' | 'credit' | 'debit'
 
-export type PaymentBannerState = { ok: boolean; text: string } | null
+// `kind` rather than a pre-rendered string, so the banner's text is looked
+// up in the current UI language at render time (PaymentBanner.tsx) instead
+// of being frozen in whatever language was active the moment the gateway
+// redirect landed.
+export type PaymentBannerState = { ok: boolean; kind: 'success' | 'failed' | 'error' } | null

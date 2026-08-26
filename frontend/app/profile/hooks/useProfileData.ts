@@ -4,15 +4,29 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth'
 import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
+import { useLang } from '@/components/LanguageToggle'
+import { useProfileDataStrings } from './useProfileData.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Profile page state, fetches, and mutation handlers. Split out of page.tsx
    to keep every file under the project's 500-line cap -- pure move, no
    behaviour change. Owns everything that isn't JSX; page.tsx and the
    components/ presentational pieces just render what this returns.
+
+   Two different "language"s live in this file. `language`/`setLanguage`
+   below is the ACCOUNT's own stored preference (`GET/PUT /api/auth/profile`
+   `.language`), unrelated to the site-wide UI language. The toasts here used
+   to pick fa/en off that stored preference, which meant a user who flipped
+   the header's language toggle to English still got Persian toasts until
+   they separately saved an English account preference in AppearanceSection.
+   Toasts are transient UI chrome, so they now follow `useLang()` (`s.*`
+   below) like every other rendered string on the page; `language` itself is
+   untouched and still round-trips to the API exactly as before.
    ═══════════════════════════════════════════════════════════════════════════ */
 export function useProfileData() {
   const { user, token } = useAuth()
+  const lang = useLang()
+  const s = useProfileDataStrings(lang)
 
   // Profile fields
   const [displayName, setDisplayName] = useState('')
@@ -185,7 +199,7 @@ export function useProfileData() {
       })
       const data = await r.json()
       if (r.ok) {
-        toast(language === 'fa' ? 'پروفایل با موفقیت ذخیره شد' : 'Profile saved successfully', 'success')
+        toast(s.profileSaved, 'success')
         // Sync theme with document
         if (theme === 'dark') {
           document.documentElement.classList.add('dark')
@@ -205,10 +219,10 @@ export function useProfileData() {
           email_notif: emailNotif, telegram_notif: telegramNotif,
         })
       } else {
-        toast(data.detail || (language === 'fa' ? 'خطا در ذخیره پروفایل' : 'Error saving profile'), 'error')
+        toast(data.detail || s.profileSaveError, 'error')
       }
     } catch {
-      toast(language === 'fa' ? 'خطا در ارتباط با سرور' : 'Server connection error', 'error')
+      toast(s.serverError, 'error')
     } finally {
       setSaving(false)
     }
@@ -219,17 +233,17 @@ export function useProfileData() {
     e.target.value = ''
     if (!file) return
     if (file.size > 1024 * 1024) {
-      toast(language === 'fa' ? 'حجم فایل نباید بیشتر از ۱ مگابایت باشد' : 'File must be under 1MB', 'error')
+      toast(s.fileTooLarge, 'error')
       return
     }
     const reader = new FileReader()
     reader.onload = () => {
       const text = String(reader.result || '').slice(0, 20000)
       setPinnedContext(text)
-      toast(language === 'fa' ? 'فایل بارگذاری شد — برای ذخیره، «ذخیره تغییرات» را بزنید' : 'File loaded — click Save to apply', 'success')
+      toast(s.fileLoaded, 'success')
     }
     reader.onerror = () => {
-      toast(language === 'fa' ? 'خطا در خواندن فایل' : 'Error reading file', 'error')
+      toast(s.fileReadError, 'error')
     }
     reader.readAsText(file)
   }
@@ -238,7 +252,7 @@ export function useProfileData() {
     const file = e.target.files?.[0]
     if (!file) return
     if (file.size > 2 * 1024 * 1024) {
-      toast(language === 'fa' ? 'حجم تصویر نباید بیشتر از ۲ مگابایت باشد' : 'Image must be under 2MB', 'error')
+      toast(s.imageTooLarge, 'error')
       return
     }
     setAvatarUploading(true)
@@ -258,26 +272,26 @@ export function useProfileData() {
         const data = await r.json()
         if (r.ok) {
           setAvatarUrl(data.avatar_url)
-          toast(language === 'fa' ? 'تصویر پروفایل بروزرسانی شد' : 'Avatar updated', 'success')
+          toast(s.avatarUpdated, 'success')
         } else {
-          toast(data.detail || (language === 'fa' ? 'خطا در آپلود تصویر' : 'Upload error'), 'error')
+          toast(data.detail || s.avatarUploadError, 'error')
         }
         setAvatarUploading(false)
       }
       reader.readAsDataURL(file)
     } catch {
-      toast(language === 'fa' ? 'خطا در آپلود تصویر' : 'Upload error', 'error')
+      toast(s.avatarUploadError, 'error')
       setAvatarUploading(false)
     }
   }
 
   const handleChangePassword = async () => {
     if (newPassword !== confirmPassword) {
-      toast(language === 'fa' ? 'رمز عبور جدید با تکرار آن مطابقت ندارد' : 'Passwords do not match', 'error')
+      toast(s.passwordMismatch, 'error')
       return
     }
     if (newPassword.length < 8) {
-      toast(language === 'fa' ? 'رمز عبور باید حداقل ۸ کاراکتر باشد' : 'Password must be at least 8 characters', 'error')
+      toast(s.passwordTooShort, 'error')
       return
     }
     setChangingPassword(true)
@@ -292,16 +306,16 @@ export function useProfileData() {
         body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
       })
       if (r.ok) {
-        toast(language === 'fa' ? 'رمز عبور با موفقیت تغییر کرد' : 'Password changed successfully', 'success')
+        toast(s.passwordChanged, 'success')
         setCurrentPassword('')
         setNewPassword('')
         setConfirmPassword('')
       } else {
         const data = await r.json()
-        toast(data.detail || (language === 'fa' ? 'خطا در تغییر رمز عبور' : 'Password change error'), 'error')
+        toast(data.detail || s.passwordChangeError, 'error')
       }
     } catch {
-      toast(language === 'fa' ? 'خطا در ارتباط با سرور' : 'Server connection error', 'error')
+      toast(s.serverError, 'error')
     } finally {
       setChangingPassword(false)
     }
@@ -309,7 +323,7 @@ export function useProfileData() {
 
   const handleLinkTelegram = async () => {
     if (!telegramId) {
-      toast(language === 'fa' ? 'شناسه تلگرام را وارد کنید' : 'Enter Telegram ID', 'error')
+      toast(s.enterTelegramId, 'error')
       return
     }
     // Validate before sending: a non-numeric value makes parseInt return NaN,
@@ -317,7 +331,7 @@ export function useProfileData() {
     // Telegram IDs are positive integers.
     const tgId = parseInt(telegramId.trim(), 10)
     if (!Number.isInteger(tgId) || tgId <= 0 || String(tgId) !== telegramId.trim()) {
-      toast(language === 'fa' ? 'شناسه تلگرام باید یک عدد صحیح مثبت باشد' : 'Telegram ID must be a positive whole number', 'error')
+      toast(s.telegramIdInvalid, 'error')
       return
     }
     setLinkingTelegram(true)
@@ -332,19 +346,18 @@ export function useProfileData() {
         body: JSON.stringify({ telegram_id: tgId }),
       })
       if (r.ok) {
-        toast(language === 'fa' ? 'حساب تلگرام با موفقیت متصل شد' : 'Telegram linked successfully', 'success')
+        toast(s.telegramLinked, 'success')
       } else {
-        toast(language === 'fa' ? 'خطا در اتصال تلگرام' : 'Telegram link error', 'error')
+        toast(s.telegramLinkError, 'error')
       }
     } catch {
-      toast(language === 'fa' ? 'خطا در ارتباط با سرور' : 'Server connection error', 'error')
+      toast(s.serverError, 'error')
     } finally {
       setLinkingTelegram(false)
     }
   }
 
   const userInitial = displayName?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase() || 'U'
-  const isFa = language === 'fa'
 
   // Dirty check against the values last loaded/saved. originalValues was
   // declared for this but never read, so Save was always enabled. The `??`
@@ -395,6 +408,6 @@ export function useProfileData() {
     handleAvatarUpload,
     handleChangePassword,
     handleLinkTelegram,
-    userInitial, isFa, isDirty,
+    userInitial, isDirty,
   }
 }

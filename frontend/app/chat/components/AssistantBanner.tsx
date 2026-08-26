@@ -1,4 +1,6 @@
 import { Icon, type IconName } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
+import { assistantBannerStrings } from './AssistantBanner.strings'
 import type { Assistant } from '../chatTypes'
 
 type AssistantBannerProps = {
@@ -7,6 +9,7 @@ type AssistantBannerProps = {
 }
 
 export default function AssistantBanner({ activeAssistant, loadingAssistant }: AssistantBannerProps) {
+  const s = assistantBannerStrings(useLang())
   if (!activeAssistant && !loadingAssistant) return null
   return (
     <div
@@ -53,7 +56,7 @@ export default function AssistantBanner({ activeAssistant, loadingAssistant }: A
             style={{ fontSize: '0.6875rem', flexShrink: 0 }}
           >
             <Icon name="settings" size={12} />
-            تنظیمات
+            {s.settings}
           </a>
         </>
       ) : null}

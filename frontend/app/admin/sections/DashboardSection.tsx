@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic'
 import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
-import { fmt } from '@/lib/adminI18n'
+import { fmt } from '@/lib/i18n'
 import { StatCard, SectionHeader } from './shared'
 import { ErrorCard, RefreshButton, CardSkeleton } from './LoadState'
 import { useAdminResource } from '../useAdminResource'

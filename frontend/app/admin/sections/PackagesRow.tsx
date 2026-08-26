@@ -3,7 +3,7 @@
 import { Fragment } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
-import { fmt } from '@/lib/adminI18n'
+import { fmt } from '@/lib/i18n'
 import { Field, NumInput } from './shared'
 import { isLossPath, type Draft, type PackageRow } from './PackagesTypes'
 import { packagesRowStrings } from './PackagesRow.strings'

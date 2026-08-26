@@ -2,13 +2,13 @@
 
 import { useState } from 'react'
 import { Icon } from '../ui/Icon'
+import { useLang } from '../LanguageToggle'
 import { Reveal } from './Reveal'
 import { CheckGlyph, ForwardArrow } from './primitives'
-import { API_BASE_URL, API_POINTS, CODE_SAMPLES } from './content'
+import { API_BASE_URL, apiContent } from './content'
+import { apiSectionStrings } from './ApiSection.strings'
 
-const LANGUAGES = Object.keys(CODE_SAMPLES)
-
-function CopyButton({ value }: { value: string }) {
+function CopyButton({ value, copyLabel, copiedLabel }: { value: string; copyLabel: string; copiedLabel: string }) {
   const [copied, setCopied] = useState(false)
 
   const copy = async () => {
@@ -27,7 +27,7 @@ function CopyButton({ value }: { value: string }) {
       type="button"
       className="lp-icon-btn lp-code__copy"
       onClick={copy}
-      aria-label={copied ? 'کپی شد' : 'کپی کردن نمونه کد'}
+      aria-label={copied ? copiedLabel : copyLabel}
     >
       <Icon name={copied ? 'check' : 'copy'} size={16} />
     </button>
@@ -35,22 +35,29 @@ function CopyButton({ value }: { value: string }) {
 }
 
 export function ApiSection() {
-  const [lang, setLang] = useState(LANGUAGES[0])
-  const sample = CODE_SAMPLES[lang]
+  const lang = useLang()
+  const s = apiSectionStrings(lang)
+  const content = apiContent(lang)
+  // Renamed from `lang`/`setLang`: this is the code-sample language picker
+  // (Python/JavaScript/cURL), unrelated to the UI language toggle above —
+  // sharing the name would shadow `useLang()`'s result inside this component.
+  const [codeLang, setCodeLang] = useState(Object.keys(content.codeSamples)[0])
+  const sample = content.codeSamples[codeLang]
 
   return (
     <section className="lp-section">
       <div className="lp-container lp-split">
         <Reveal className="lp-split__copy">
-          <span className="lp-eyebrow">برای توسعه‌دهندگان</span>
-          <h2 className="lp-title">یک endpoint، همه‌ی مدل‌ها</h2>
+          <span className="lp-eyebrow">{s.eyebrow}</span>
+          <h2 className="lp-title">{s.title}</h2>
           <p className="lp-lead">
-            آدرس پایه را به <span className="lp-latin">{API_BASE_URL}</span> تغییر دهید.
-            همین. کتابخانه‌های رسمی OpenAI بدون هیچ تغییر دیگری کار می‌کنند.
+            {s.leadBefore}
+            <span className="lp-latin">{API_BASE_URL}</span>
+            {s.leadAfter}
           </p>
 
           <ul className="lp-checklist">
-            {API_POINTS.map((point) => (
+            {content.points.map((point) => (
               <li key={point}>
                 <CheckGlyph />
                 {point}
@@ -59,27 +66,27 @@ export function ApiSection() {
           </ul>
 
           <a href="/developer" className="lp-btn lp-btn--secondary">
-            مطالعه‌ی مستندات
+            {s.docsLinkLabel}
             <ForwardArrow />
           </a>
         </Reveal>
 
         <Reveal delay={120}>
           <div className="lp-code">
-            <div className="lp-code__head" role="tablist" aria-label="زبان نمونه کد">
-              {LANGUAGES.map((name) => (
+            <div className="lp-code__head" role="tablist" aria-label={s.codeTabAria}>
+              {Object.keys(content.codeSamples).map((name) => (
                 <button
                   key={name}
                   type="button"
                   role="tab"
                   className="lp-code__tab"
-                  aria-selected={lang === name}
-                  onClick={() => setLang(name)}
+                  aria-selected={codeLang === name}
+                  onClick={() => setCodeLang(name)}
                 >
                   {name}
                 </button>
               ))}
-              <CopyButton value={sample} />
+              <CopyButton value={sample} copyLabel={s.copyLabel} copiedLabel={s.copiedLabel} />
             </div>
             {/* dir="ltr" lives on .lp-code__body so code is never reordered by
                 the surrounding RTL document. */}

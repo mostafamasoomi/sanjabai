@@ -2,10 +2,12 @@
 
 import { useRef } from 'react'
 import { Icon } from '@/components/ui/Icon'
-import { faNum, faPrice, toFaDigits } from '@/lib/format'
+import { useLang } from '@/components/LanguageToggle'
+import { fmt } from '@/lib/i18n'
+import { toFaDigits } from '@/lib/format'
+import { profileAvatarCardStrings } from './ProfileAvatarCard.strings'
 
 type ProfileAvatarCardProps = {
-  isFa: boolean
   avatarUrl: string
   avatarUploading: boolean
   handleAvatarUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
@@ -19,10 +21,22 @@ type ProfileAvatarCardProps = {
 }
 
 export default function ProfileAvatarCard({
-  isFa, avatarUrl, avatarUploading, handleAvatarUpload, userInitial, displayName, bio, user,
+  avatarUrl, avatarUploading, handleAvatarUpload, userInitial, displayName, bio, user,
   balance, usage, statsError,
 }: ProfileAvatarCardProps) {
+  const lang = useLang()
+  const s = profileAvatarCardStrings(lang)
+  const f = fmt(lang)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Member-since only needs year+month, one granularity coarser than
+  // fmt(lang).date() — kept as a local format rather than routed through
+  // f.date so this doesn't start showing a day-of-month it never showed.
+  const memberSince = user?.created_at
+    ? (lang === 'fa'
+        ? toFaDigits(new Date(user.created_at).toLocaleDateString('fa-IR', { year: 'numeric', month: 'long' }))
+        : new Date(user.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }))
+    : '—'
 
   return (
     <div className="card profile-avatar-card">
@@ -62,13 +76,10 @@ export default function ProfileAvatarCard({
         </div>
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
-            {displayName || user?.email || (isFa ? 'کاربر' : 'User')}
+            {displayName || user?.email || s.user}
           </h2>
           <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-            {isFa
-              ? `عضو از ${user?.created_at ? toFaDigits(new Date(user.created_at).toLocaleDateString('fa-IR', { year: 'numeric', month: 'long' })) : '—'}`
-              : `Member since ${user?.created_at ? new Date(user.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : '—'}`
-            }
+            {s.memberSince(memberSince)}
           </p>
           {bio && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>{bio}</p>}
         </div>
@@ -78,35 +89,30 @@ export default function ProfileAvatarCard({
         <div className="profile-stat-card">
           <Icon name="wallet" size={18} className="text-accent" />
           <div>
-            <span className="profile-stat-label">{isFa ? 'موجودی' : 'Balance'}</span>
+            <span className="profile-stat-label">{s.balance}</span>
             <span className="profile-stat-value text-gradient">
               {/* balance is raw integer TOMAN. The old English branch both
                   bypassed faPrice and mislabeled toman as "IRR" (Rial) — a
-                  10x-class currency bug. Always go through faPrice. */}
-              {balance === null ? '—' : faPrice(balance)}
+                  10x-class currency bug. Always go through f.price. */}
+              {balance === null ? '—' : f.price(balance)}
             </span>
           </div>
         </div>
         <div className="profile-stat-card">
           <Icon name="chart" size={18} className="text-positive" />
           <div>
-            <span className="profile-stat-label">{isFa ? 'مصرف ماهانه' : 'Monthly usage'}</span>
+            <span className="profile-stat-label">{s.monthlyUsage}</span>
             <span className="profile-stat-value">
-              {/* Token counts go through faNum in both branches — the old
-                  English branch used toLocaleString, which returns Latin
-                  digits on the production small-icu runtime. */}
               {!usage?.monthly
                 ? '—'
-                : isFa
-                  ? `${faNum(usage.monthly.inp + usage.monthly.out || 0)} توکن`
-                  : `${faNum(usage.monthly.inp + usage.monthly.out || 0)} tokens`}
+                : s.tokens(f.num(usage.monthly.inp + usage.monthly.out || 0))}
             </span>
           </div>
         </div>
         <div className="profile-stat-card">
           <Icon name="mail" size={18} style={{ color: 'var(--info)' }} />
           <div>
-            <span className="profile-stat-label">{isFa ? 'ایمیل' : 'Email'}</span>
+            <span className="profile-stat-label">{s.email}</span>
             <span className="profile-stat-value">{user?.email || '—'}</span>
           </div>
         </div>
@@ -114,7 +120,7 @@ export default function ProfileAvatarCard({
       {statsError && (
         <p style={{ fontSize: 12, color: 'var(--danger)', marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
           <Icon name="warning" size={13} />
-          {isFa ? 'خطا در بارگذاری موجودی و آمار مصرف.' : 'Failed to load balance and usage stats.'}
+          {s.statsError}
         </p>
       )}
     </div>

@@ -1,11 +1,11 @@
 import { useState, useRef, useCallback, useEffect, type MutableRefObject } from 'react'
 import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
+import { useLang } from '@/components/LanguageToggle'
 import { type ModelCatalogItem } from '@/types/catalog'
 import type { Message, UsageStats, Conversation, ConversationDetail } from '../chatTypes'
-import { generateId, getDateGroup } from '../chatHelpers'
-
-const WELCOME_MESSAGE = { id: 'welcome', role: 'assistant' as const, content: 'سلام! به Sanjabai خوش آمدید. چطور می‌توانم کمک کنید؟' }
+import { generateId, getDateGroup, makeWelcomeMessage, type DateGroupKey } from '../chatHelpers'
+import { useConversationsStrings } from './useConversations.strings'
 
 type UseConversationsParams = {
   token: string | null
@@ -30,6 +30,8 @@ type UseConversationsParams = {
 // nothing about how sendMessage's stream-reading closures behave.
 export function useConversations(params: UseConversationsParams) {
   const { token, models, model, abortRef, setModel: _setModel, setStreaming, setMessages, setShowPresets, setError, setUsageStats, setSmartModel, setSearchHintFor } = params
+  const lang = useLang()
+  const s = useConversationsStrings(lang)
 
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
@@ -97,7 +99,7 @@ export function useConversations(params: UseConversationsParams) {
         setMessages(loaded)
         setShowPresets(false)
       } else {
-        setMessages([WELCOME_MESSAGE])
+        setMessages([makeWelcomeMessage(lang)])
         setShowPresets(true)
       }
       // Set model from conversation if possible
@@ -107,9 +109,9 @@ export function useConversations(params: UseConversationsParams) {
       }
       setMobileDrawerOpen(false)
     } catch {
-      toast('خطا در بارگذاری مکالمه', 'error')
+      toast(s.loadFailed, 'error')
     }
-  }, [token, authHeaders, models, abortRef, setStreaming, setMessages, setShowPresets, _setModel])
+  }, [token, authHeaders, models, abortRef, setStreaming, setMessages, setShowPresets, _setModel, lang, s])
 
   const createConversation = useCallback(async (firstUserMsg: string): Promise<string | null> => {
     if (!token) return null
@@ -159,18 +161,18 @@ export function useConversations(params: UseConversationsParams) {
         setConversations(prev => prev.filter(c => c.id !== id))
         if (activeConversationId === id) {
           setActiveConversationId(null)
-          setMessages([WELCOME_MESSAGE])
+          setMessages([makeWelcomeMessage(lang)])
           setShowPresets(true)
         }
       }
     } catch {
-      toast('خطا در حذف مکالمه', 'error')
+      toast(s.deleteFailed, 'error')
     }
     finally {
       setDeletingId(null)
       setConfirmDeleteId(null)
     }
-  }, [token, authHeaders, activeConversationId, setMessages, setShowPresets])
+  }, [token, authHeaders, activeConversationId, setMessages, setShowPresets, lang, s])
 
   const startNewChat = useCallback(() => {
     // Abort any in-flight stream first — same orphaned-stream hazard as
@@ -181,14 +183,14 @@ export function useConversations(params: UseConversationsParams) {
       setStreaming(false)
     }
     setActiveConversationId(null)
-    setMessages([WELCOME_MESSAGE])
+    setMessages([makeWelcomeMessage(lang)])
     setShowPresets(true)
     setError('')
     setMobileDrawerOpen(false)
     setUsageStats({ promptTokens: 0, completionTokens: 0, totalTokens: 0, estimatedCost: 0 })
     setSmartModel(null)
     setSearchHintFor(null)
-  }, [abortRef, setStreaming, setMessages, setShowPresets, setError, setUsageStats, setSmartModel, setSearchHintFor])
+  }, [abortRef, setStreaming, setMessages, setShowPresets, setError, setUsageStats, setSmartModel, setSearchHintFor, lang])
 
   /* ── Filtered + grouped conversations ──────────────────────────────────── */
   const filteredConversations = conversations.filter(c => {
@@ -196,19 +198,23 @@ export function useConversations(params: UseConversationsParams) {
     return c.title.toLowerCase().includes(sidebarSearchQuery.trim().toLowerCase())
   })
 
+  // Keyed by the language-independent DateGroupKey (not the translated
+  // label) so this never has to match a string that changed under it when
+  // the language toggle flips -- ConversationSidebar renders the label via
+  // dateGroupLabel(key, lang).
   const groupedConversations = (() => {
-    const groups: Record<string, Conversation[]> = { 'امروز': [], 'دیروز': [], 'این هفته': [], 'قدیمی‌تر': [] }
+    const groups: Record<DateGroupKey, Conversation[]> = { today: [], yesterday: [], week: [], older: [] }
     for (const c of filteredConversations) {
       const g = getDateGroup(c.updated_at || c.created_at)
       groups[g].push(c)
     }
-    return Object.entries(groups).filter(([, items]) => items.length > 0)
+    return (Object.entries(groups) as [DateGroupKey, Conversation[]][]).filter(([, items]) => items.length > 0)
   })()
 
   /* ── Export conversation ──────────────────────────────────────────────── */
   const exportConversation = useCallback(async (format: 'json' | 'markdown' | 'text') => {
     if (!token || !activeConversationId) {
-      toast('ابتدا یک مکالمه را انتخاب کنید', 'error')
+      toast(s.selectConversationFirst, 'error')
       return
     }
     setExportMenuOpen(false)
@@ -227,11 +233,11 @@ export function useConversations(params: UseConversationsParams) {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-      toast('فایل دانلود شد', 'success')
+      toast(s.fileDownloaded, 'success')
     } catch {
-      toast('خطا در خروجی گرفتن', 'error')
+      toast(s.exportFailed, 'error')
     }
-  }, [token, activeConversationId, authHeaders])
+  }, [token, activeConversationId, authHeaders, s])
 
   return {
     sidebarOpen, setSidebarOpen,
@@ -251,6 +257,5 @@ export function useConversations(params: UseConversationsParams) {
     deleteConversation,
     startNewChat,
     exportConversation,
-    WELCOME_MESSAGE,
   }
 }

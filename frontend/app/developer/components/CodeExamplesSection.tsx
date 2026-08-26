@@ -1,22 +1,28 @@
+'use client'
+
 import { useState } from 'react'
 import { toast, Tabs } from '@/components/ui'
 import { Icon } from '@/components/ui/Icon'
+import { useLang } from '@/components/LanguageToggle'
 import { CODE_EXAMPLES } from '../constants'
-
-function copyText(text: string) {
-  navigator.clipboard.writeText(text)
-  toast('کپی شد', 'success')
-}
+import { codeExamplesSectionStrings } from './CodeExamplesSection.strings'
 
 export function CodeExamplesSection() {
+  const lang = useLang()
+  const s = codeExamplesSectionStrings(lang)
   const [activeTab, setActiveTab] = useState('python')
   const example = CODE_EXAMPLES[activeTab as keyof typeof CODE_EXAMPLES]
+
+  const copyText = (text: string) => {
+    navigator.clipboard.writeText(text)
+    toast(s.copied, 'success')
+  }
 
   return (
     <div className="card" style={{ marginBottom: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
         <Icon name="code" size={16} className="text-accent" />
-        <h2 className="card-title">نمونه کد</h2>
+        <h2 className="card-title">{s.title}</h2>
       </div>
 
       <Tabs
@@ -33,7 +39,7 @@ export function CodeExamplesSection() {
         {/* Install command */}
         {example.install && (
           <div style={{ marginBottom: 12 }}>
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>نصب وابستگی:</span>
+            <span style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>{s.installLabel}</span>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <code style={{
                 flex: 1, padding: '8px 14px', borderRadius: 8,
@@ -72,7 +78,7 @@ export function CodeExamplesSection() {
             style={{ position: 'absolute', top: 8, left: 8, display: 'inline-flex', alignItems: 'center', gap: 4 }}
           >
             <Icon name="copy" size={12} />
-            کپی
+            {s.copy}
           </button>
         </div>
       </div>

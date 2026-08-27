@@ -1,27 +1,43 @@
-"""Hotfix H: smart-mode's auto-selection rescue path.
+"""Smart Mode's auto-selection, end to end from a fake catalog.
 
-Measured against the live DB before this fix: `_select_smart_model`'s six
-hardcoded ids are ALL unservable (two have zero `model_catalog` rows, four
-are `disabled`/`maintenance`), and `_select_smart_model_safe`'s rescue path
-returned `_DEFAULT_MODEL` -- a member of the very set it had just rejected
--- unchecked. 32/32 category x balance combinations landed on
-`('tencent-hy3', 'bynara')`, and that id 404s on the live LiteLLM proxy.
+HISTORY, because this file's name and its assertions no longer match.
+Hotfix H patched a live outage: `_select_smart_model`'s six hardcoded ids
+were ALL unservable, and the rescue path answered with `_DEFAULT_MODEL` --
+a member of the very set it had just rejected -- so 32/32 category x
+balance combinations landed on an id that 404s upstream. The emergency
+patch added `_cheapest_live_model`, a one-row "cheapest priced+probed
+catalog row" lookup, and this file pinned its SQL, its cache and its
+wiring.
 
-This file covers, in order:
-  1. `_cheapest_live_model`'s SQL shape (string-level, since the DB is
-     mocked here -- a real Postgres never runs these predicates in CI) and
-     its cache/never-raises behaviour.
-  2. `_select_smart_model_safe`'s fallback wiring.
-  3. The end-to-end `/v1/smart-chat` response: the label the user sees and
-     the price the reservation opens for, when the fallback fires.
+That whole mechanism is now DELETED and superseded by
+services/smart_router.py (`candidate_pool` + `select_by_rules`), which
+does the same job for the whole pool instead of one row, with its own
+tests (tests/test_smart_router.py, including the SQL predicates this file
+used to assert as strings -- against a real SQLite database rather than a
+substring match).
 
-Style mirrors tests/test_admin_probe_gate.py (hand-rolled async session
-double recording SQL) and tests/test_web_search.py (module-level patches on
-`chat` bypassing auth/billing/routing so only the code under test runs).
+So this file keeps only the claims that OUTLIVED the hotfix, and it makes
+them end to end through `/v1/smart-chat` against a fake catalog rather
+than against a deleted helper:
+
+  1. The label the user sees is the public_id, never the provider route.
+  2. The reservation is priced on the model's real per-million rates.
+  3. A DB that cannot answer does not raise -- and, unlike Hotfix H, does
+     not answer with a guessed model id either.
+
+Assertions about the deleted helper's own mechanics (its cache TTL, its
+"return the stale cache" behaviour, its last-resort return of
+`_DEFAULT_MODEL`) are gone: the first two moved to
+tests/test_smart_router.py with the code, and the third is now the exact
+defect being removed. tests/test_smart_chat_v2_gates.py covers the gate
+order, the empty-pool refusal and the provider-leak rule.
+
+Style mirrors tests/test_web_search.py (module-level patches on `chat`
+bypassing auth/billing/routing so only the code under test runs).
 """
 from __future__ import annotations
 
-import time
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -29,7 +45,7 @@ import pytest
 import chat as chat_mod
 import chat_smart as chat_smart_mod
 import database as _db
-from tests.conftest import make_row
+import services.smart_router as sr
 
 
 @pytest.fixture
@@ -38,33 +54,63 @@ def anyio_backend():
 
 
 @pytest.fixture(autouse=True)
-def _reset_cheapest_cache():
-    """The cache is module-level global state -- reset it around every test
-    so one test's cached row can't leak into the next."""
-    chat_smart_mod._cheapest_cache = None
-    chat_smart_mod._cheapest_cache_at = 0.0
+def _reset_pool_cache():
+    """The router's pool cache is module-level global state -- reset it
+    around every test so one test's pool can't leak into the next."""
+    sr._pool_cache = []
+    sr._pool_cache_at = 0.0
     yield
-    chat_smart_mod._cheapest_cache = None
-    chat_smart_mod._cheapest_cache_at = 0.0
+    sr._pool_cache = []
+    sr._pool_cache_at = 0.0
 
 
-# ── A hand-rolled async session double, same shape as test_admin_probe_gate
-# ── and test_margin_guard's `_Session`: records the SQL it was given and
-# ── replays a queued row (or raises).
+# ── A fake catalog behind the router's real SQL ──────────────────────────
+#
+# The pool query is executed for real (its string is asserted against a
+# live SQLite database in tests/test_smart_router.py); here the session
+# just replays catalog rows, so what is under test is chat_smart.py's
+# wiring: which row it routes to, what it calls the row, and what it
+# reserves for it.
+
+def _catalog_row(**kwargs):
+    fields = dict(provider_model_id='up/cheap', public_id='sanjab/cheap',
+                  input_per_million=2_000_000, output_per_million=3_000_000,
+                  context_window=128_000, upstream='bynara')
+    fields.update(kwargs)
+    return SimpleNamespace(**fields)
+
+
+_CHEAP_ROW = _catalog_row()
+
+
+class _Result:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def fetchall(self):
+        return list(self._rows)
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
 
 class _Session:
     def __init__(self, rows=None, raises=False):
         self.rows = rows if rows is not None else []
         self.raises = raises
-        self.sql = []
+        self.sql: list[str] = []
 
     async def execute(self, stmt, *a, **k):
         self.sql.append(str(stmt))
         if self.raises:
             raise RuntimeError('database is on fire')
-        result = MagicMock()
-        result.fetchone.return_value = self.rows[0] if self.rows else None
-        return result
+        return _Result(self.rows)
+
+    async def commit(self):
+        """The reservation block commits its own session; without this the
+        route falls through to its legacy quota path and the reservation
+        assertions below would be testing the wrong branch."""
+        return None
 
 
 class _Ctx:
@@ -82,131 +128,7 @@ def _maker(session):
     return MagicMock(return_value=_Ctx(session))
 
 
-def _row(**kwargs):
-    defaults = dict(provider_model_id='cheap-real', public_id='cheap-public',
-                     input_per_million=200, output_per_million=600, upstream='bynara')
-    defaults.update(kwargs)
-    return make_row(**defaults)
-
-
-# ── 1. _cheapest_live_model ──────────────────────────────────────────────
-
-@pytest.mark.anyio
-class TestCheapestLiveModelQuery:
-    """String-level assertions on the SQL predicates/ordering -- the double
-    above never runs real Postgres, so a wrong predicate can only be caught
-    here as a query-shape check, exactly like
-    test_admin_probe_gate.py's 'last_ok_at IS NOT NULL' assertions."""
-
-    async def test_unpriced_predicate_is_gt_zero_not_is_not_null(self):
-        session = _Session([])
-        with patch.object(chat_mod, 'async_session', _maker(session)):
-            await chat_smart_mod._cheapest_live_model()
-        sql = session.sql[0]
-        assert 'c.input_per_million > 0' in sql
-        assert 'c.output_per_million > 0' in sql
-
-    async def test_requires_a_confirmed_live_probe(self):
-        session = _Session([])
-        with patch.object(chat_mod, 'async_session', _maker(session)):
-            await chat_smart_mod._cheapest_live_model()
-        assert 's.last_ok_at IS NOT NULL' in session.sql[0]
-
-    async def test_requires_public_id(self):
-        session = _Session([])
-        with patch.object(chat_mod, 'async_session', _maker(session)):
-            await chat_smart_mod._cheapest_live_model()
-        assert 'c.public_id IS NOT NULL' in session.sql[0]
-
-    async def test_ordering_blends_input_and_output_price(self):
-        session = _Session([])
-        with patch.object(chat_mod, 'async_session', _maker(session)):
-            await chat_smart_mod._cheapest_live_model()
-        assert '3 * c.input_per_million + c.output_per_million' in session.sql[0]
-
-
-@pytest.mark.anyio
-class TestCheapestLiveModelBehaviour:
-    async def test_returns_the_row_the_db_gives(self):
-        session = _Session([_row()])
-        with patch.object(chat_mod, 'async_session', _maker(session)):
-            result = await chat_smart_mod._cheapest_live_model()
-        assert result == chat_smart_mod._CheapestModel(
-            'cheap-real', 'cheap-public', 200, 600, 'bynara')
-
-    async def test_no_row_is_none(self):
-        session = _Session([])
-        with patch.object(chat_mod, 'async_session', _maker(session)):
-            result = await chat_smart_mod._cheapest_live_model()
-        assert result is None
-
-    async def test_db_exception_with_cold_cache_returns_none_not_raise(self):
-        session = _Session([], raises=True)
-        with patch.object(chat_mod, 'async_session', _maker(session)):
-            result = await chat_smart_mod._cheapest_live_model()
-        assert result is None
-
-    async def test_db_exception_with_stale_cache_returns_the_cached_value(self):
-        cached = chat_smart_mod._CheapestModel('old-real', 'old-public', 50, 150, 'bynara')
-        chat_smart_mod._cheapest_cache = cached
-        chat_smart_mod._cheapest_cache_at = time.monotonic() - 61  # force a refresh attempt
-        session = _Session([], raises=True)
-        with patch.object(chat_mod, 'async_session', _maker(session)):
-            result = await chat_smart_mod._cheapest_live_model()
-        assert result == cached
-        assert session.sql, 'expected a refresh attempt against the stale cache'
-
-    async def test_fresh_cache_is_served_without_touching_the_db(self):
-        cached = chat_smart_mod._CheapestModel('c', 'p', 1, 1, 'bynara')
-        chat_smart_mod._cheapest_cache = cached
-        chat_smart_mod._cheapest_cache_at = time.monotonic()
-        session = _Session([], raises=True)  # would raise if the DB were touched
-        with patch.object(chat_mod, 'async_session', _maker(session)):
-            result = await chat_smart_mod._cheapest_live_model()
-        assert result == cached
-        assert session.sql == []
-
-    async def test_unbound_session_returns_cache_without_querying(self):
-        chat_smart_mod._cheapest_cache = None
-        with patch.object(chat_mod, 'async_session', None):
-            result = await chat_smart_mod._cheapest_live_model()
-        assert result is None
-
-
-# ── 2. _select_smart_model_safe ──────────────────────────────────────────
-
-@pytest.mark.anyio
-class TestSelectSmartModelSafe:
-    async def test_fallback_uses_the_cheapest_live_model_not_the_hardcoded_default(self):
-        cheapest = chat_smart_mod._CheapestModel('cheap-real', 'cheap-public', 200, 600, 'bynara')
-        with patch.object(chat_mod, 'is_working_model', AsyncMock(return_value=False)), \
-             patch.object(chat_smart_mod, '_cheapest_live_model', AsyncMock(return_value=cheapest)):
-            model, provider, price_row = await chat_smart_mod._select_smart_model_safe('simple', 50000)
-        assert model == 'cheap-real'
-        assert model != chat_smart_mod._DEFAULT_MODEL[0]
-        assert price_row == cheapest
-
-    async def test_last_resort_still_returns_default_when_lookup_returns_none(self):
-        with patch.object(chat_mod, 'is_working_model', AsyncMock(return_value=False)), \
-             patch.object(chat_smart_mod, '_cheapest_live_model', AsyncMock(return_value=None)):
-            model, provider, price_row = await chat_smart_mod._select_smart_model_safe('simple', 50000)
-        assert (model, provider) == chat_smart_mod._DEFAULT_MODEL
-        assert price_row is None
-
-    async def test_working_model_short_circuits_with_no_price_row(self):
-        with patch.object(chat_mod, 'is_working_model', AsyncMock(return_value=True)):
-            model, provider, price_row = await chat_smart_mod._select_smart_model_safe('simple', 50000)
-        assert price_row is None
-
-
-# ── 3. End-to-end /v1/smart-chat: label + reservation price ─────────────
-
 AUTH_HEADERS = {'Authorization': 'Bearer test-token'}
-
-_CHEAP_ROW = chat_smart_mod._CheapestModel(
-    provider_model_id='cheap-real', public_id='cheap-public',
-    input_per_million=200, output_per_million=600, upstream='bynara',
-)
 
 
 class _FakeProvider:
@@ -230,56 +152,131 @@ def _patched_http():
     return fake
 
 
-class TestSmartChatFallbackEndToEnd:
-    """Bypasses auth/free-tier/premium/routing (same technique as
-    test_web_search.py's `_bypass_pipeline`) and forces the rescue path by
-    making every hardcoded id look unservable, so both requests below hit
-    exactly the fallback branch this hotfix adds."""
+class _SmartChatEnv:
+    """Bypasses auth/free-tier/premium/entitlement/routing and points the
+    router's pool query at `session`."""
 
-    @pytest.fixture(autouse=True)
-    def _bypass(self):
-        instance = MagicMock()
-        instance.reserve = AsyncMock(return_value={'reservation_id': 'test-reservation'})
-        instance.release = AsyncMock(return_value=None)
-        instance.settle = AsyncMock(return_value=None)
-        self.billing_instance = instance
-        billing_cls = MagicMock(return_value=instance)
-        with patch.object(chat_mod, '_get_user_id', AsyncMock(return_value=42)), \
-             patch.object(chat_mod, 'check_and_consume', AsyncMock(return_value=None)), \
-             patch.object(chat_mod, 'BillingService', billing_cls), \
-             patch.object(chat_mod, '_resolve_provider', AsyncMock(return_value=_FakeProvider())), \
-             patch.object(chat_mod, 'is_working_model', AsyncMock(return_value=False)), \
-             patch.object(chat_smart_mod, '_cheapest_live_model', AsyncMock(return_value=_CHEAP_ROW)), \
-             patch.object(chat_smart_mod, 'covering_entitlement', AsyncMock(return_value=None)):
-            yield
+    def __init__(self, session):
+        self.billing = MagicMock()
+        self.billing.reserve = AsyncMock(return_value={'reservation_id': 'test-reservation'})
+        self.billing.release = AsyncMock(return_value=None)
+        self.billing.settle = AsyncMock(return_value=None)
+        self.http = _patched_http()
+        self._patches = (
+            patch.object(chat_mod, '_get_user_id', AsyncMock(return_value=42)),
+            patch.object(chat_mod, 'check_and_consume', AsyncMock(return_value=None)),
+            patch.object(chat_mod, 'premium_check_and_consume', AsyncMock(return_value=None)),
+            patch.object(chat_mod, 'BillingService', MagicMock(return_value=self.billing)),
+            patch.object(chat_mod, '_resolve_provider', AsyncMock(return_value=_FakeProvider())),
+            patch.object(chat_mod, 'async_session', _maker(session)),
+            patch.object(chat_smart_mod, '_get_user_balance', AsyncMock(return_value=50_000)),
+            patch.object(chat_smart_mod, 'covering_entitlement', AsyncMock(return_value=None)),
+            patch.object(_db, '_real_http', self.http),
+        )
+        self._entered = []
 
-    def _post(self, client):
-        with patch.object(_db, '_real_http', _patched_http()):
-            return client.post(
-                '/v1/smart-chat',
-                json={
-                    'model': 'auto',
-                    'messages': [{'role': 'user', 'content': 'سلام'}],
-                    'stream': False,
-                },
-                headers=AUTH_HEADERS,
-            )
+    def __enter__(self):
+        for p in self._patches:
+            self._entered.append(p.start())
+        return self
 
-    def test_fallback_label_is_the_public_id_not_the_provider_model_id(self, client):
-        resp = self._post(client)
+    def __exit__(self, *exc):
+        for p in reversed(self._patches):
+            p.stop()
+        return False
+
+
+def _post(client):
+    return client.post(
+        '/v1/smart-chat',
+        json={'model': 'auto', 'messages': [{'role': 'user', 'content': 'سلام'}],
+              'stream': False},
+        headers=AUTH_HEADERS,
+    )
+
+
+# ── 1. The label the user sees (KEPT from Hotfix H) ──────────────────────
+
+class TestTheUserSeesThePublicId:
+    """KEPT: Hotfix H's claim that an auto-selected model is labelled by
+    public_id and never by the raw provider route still holds word for
+    word -- only the source of the pick changed."""
+
+    def test_label_is_the_public_id_not_the_provider_model_id(self, client):
+        with _SmartChatEnv(_Session([_CHEAP_ROW])):
+            resp = _post(client)
         assert resp.status_code == 200, resp.text
-        assert resp.headers['X-Smart-Model'] == 'cheap-public'
-        assert resp.headers['X-Smart-Model'] != 'cheap-real'
+        assert resp.headers['X-Smart-Model'] == 'sanjab/cheap'
+        assert resp.headers['X-Smart-Model'] != 'up/cheap'
 
-    def test_fallback_reservation_is_priced_on_the_real_rates(self, client):
-        resp = self._post(client)
+    def test_no_response_header_carries_the_upstream_name(self, client):
+        """The route is not the user's business -- the upstream on the
+        chosen row is 'bynara' and must appear in no header."""
+        with _SmartChatEnv(_Session([_CHEAP_ROW])):
+            resp = _post(client)
         assert resp.status_code == 200, resp.text
-        self.billing_instance.reserve.assert_awaited()
-        money_arg = self.billing_instance.reserve.await_args.args[1]
-        expected = max(1000, (2000 * 200 + 800 * 600) // 1_000_000)
-        assert money_arg.toman == expected
-        # Sanity: the flat estimate this replaces would have been 5000
-        # (is_working_model is forced False for every id in this test) --
-        # pin that the two numbers actually differ, or the price-row branch
-        # could be dead and this test would pass vacuously.
-        assert money_arg.toman != 5000
+        assert 'bynara' not in ' '.join(resp.headers.values())
+
+
+# ── 2. The reservation price (KEPT from Hotfix H, retargeted) ────────────
+
+class TestReservationTracksTheRealRates:
+    """KEPT: Hotfix H's claim that the reservation must reflect the chosen
+    model's real per-million rates, not a flat constant. The arithmetic now
+    lives in smart_router.estimate_cost_toman, so this asserts against that
+    single source of truth instead of re-deriving it."""
+
+    def test_reservation_is_priced_on_the_chosen_rows_rates(self, client):
+        with _SmartChatEnv(_Session([_CHEAP_ROW])) as env:
+            resp = _post(client)
+        assert resp.status_code == 200, resp.text
+        env.billing.reserve.assert_awaited()
+        money = env.billing.reserve.await_args.args[1]
+        expected = (2000 * 2_000_000 + 800 * 3_000_000) // 1_000_000
+        assert money.toman == expected == 6400
+        # Money is integer Toman, never a float and never a rial detour.
+        assert isinstance(money.toman, int)
+
+    def test_a_dearer_row_reserves_more(self, client):
+        """Sanity that the price branch is live: swapping the catalog row
+        for a dearer one must move the reserved amount, or the assertion
+        above could pass against a constant."""
+        dear = _catalog_row(provider_model_id='up/dear', public_id='sanjab/dear',
+                            input_per_million=4_000_000, output_per_million=6_000_000)
+        with _SmartChatEnv(_Session([dear])) as env:
+            resp = _post(client)
+        assert resp.status_code == 200, resp.text
+        money = env.billing.reserve.await_args.args[1]
+        assert money.toman == 12_800
+        # The flat number this replaces, which under-reserved every dear model.
+        assert money.toman != 1000 and money.toman != 5000
+
+
+# ── 3. A DB that cannot answer (KEPT claim, opposite outcome) ────────────
+
+class TestDatabaseFailureDoesNotRaise:
+    """KEPT: "a DB failure does not raise" -- that claim outlived the
+    hotfix. What CHANGED is the answer. Hotfix H fell through to
+    `_DEFAULT_MODEL`, a hardcoded id that 404s; there is now no hardcoded
+    id to fall through to, so the honest answer is a 503 that tells the
+    user to pick a model manually."""
+
+    def test_a_broken_db_refuses_instead_of_raising(self, client):
+        with _SmartChatEnv(_Session(raises=True)) as env:
+            resp = _post(client)
+        assert resp.status_code == 503, resp.text
+        assert 'حالت هوشمند' in resp.json()['detail']
+        assert env.http.post.await_count == 0, 'no upstream call on a refusal'
+        env.billing.reserve.assert_not_awaited()
+
+    def test_an_empty_catalog_refuses_rather_than_guessing_an_id(self, client):
+        with _SmartChatEnv(_Session([])) as env:
+            resp = _post(client)
+        assert resp.status_code == 503, resp.text
+        env.billing.reserve.assert_not_awaited()
+
+    def test_an_unbound_session_refuses_rather_than_raising(self, client):
+        with _SmartChatEnv(_Session([])), \
+             patch.object(chat_mod, 'async_session', None):
+            resp = _post(client)
+        assert resp.status_code == 503, resp.text

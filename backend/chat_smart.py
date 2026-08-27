@@ -16,6 +16,16 @@ call time below, never via `from chat import X`. `chat` is imported plainly
 at module scope, which is safe against the chat.py <-> chat_smart.py
 circular import: nothing here touches a `chat` attribute until a function
 actually runs, by which point chat.py has finished executing.
+
+services/smart_router.py is imported as a MODULE, never `from ... import
+candidate_pool`. It does `import chat` at its own module scope, so
+importing `services.smart_router` FIRST runs chat.py, which at its last
+line imports this module, which comes back round to a half-initialised
+`services.smart_router` -- a `from`-import would raise ImportError there
+because `candidate_pool` is not bound yet, while `import services.
+smart_router as smart_router` only binds the module object and resolves
+every attribute at call time. Both import orders are covered by
+tests/test_smart_chat_v2_gates.py.
 """
 from __future__ import annotations
 
@@ -23,8 +33,6 @@ import json
 import logging
 import re as _re
 import secrets
-import time
-from dataclasses import dataclass
 from typing import Any
 
 import sqlalchemy
@@ -41,6 +49,7 @@ from model_output import clean_response_dict
 from i18n import err, err_openai
 
 import chat
+import services.smart_router as smart_router  # module import on purpose -- see docstring
 from providers import COMPLETION_TIMEOUT_SECONDS
 from chat import ChatRequest
 
@@ -78,23 +87,14 @@ _Creative_KEYWORDS = _re.compile(
     _re.IGNORECASE,
 )
 
-# S1 verified live test 2026-07-16 (354 models, 3 working):
-#   WORKING: mistral-large, mistral-medium-3-5, tencent-hy3 (all bynara)
-#   kimi-k2.7-code-free -> 429 free daily quota (UNRELIABLE; do not route as primary)
-# S1 Fix 2026-07-16: Only WORKING models (8 total: 3 mistral, 1 tencent, 2 deepseek, 2 mimo)
-# See audit-v2/S1_MODEL_REPORT.md for live test results
-_FREE_MODELS = [('tencent-hy3', 'bynara'), ('deepseek-v4-flash-bynara', 'bynara')]
-_CODING_MODELS = [('deepseek-v4-pro', 'bynara'), ('mistral-large', 'bynara')]
-_REASONING_MODELS = [('deepseek-v4-pro', 'bynara'), ('mimo-v2.5-pro', 'bynara')]
-_CREATIVE_MODELS = [('mistral-large', 'bynara'), ('mistral-medium-3-5', 'bynara')]
-_DEFAULT_MODEL = ('tencent-hy3', 'bynara')            # cheapest, 1M ctx, reliable
-# _ADVANCED_MODEL and _PREMIUM_MODEL lived here and are gone. _PREMIUM_MODEL
-# was already referenced by nothing at HEAD; _ADVANCED_MODEL had exactly one
-# reference, inside the plan-tier branch _select_smart_model no longer has
-# (see its docstring for why that branch was retired rather than re-pointed).
-# Both values still exist as list entries above -- deepseek-v4-pro is
-# _REASONING_MODELS[0], mimo-v2.5-pro is _REASONING_MODELS[1] -- so nothing
-# about the catalog changed, only two aliases nobody read.
+# The hardcoded model tuples that used to live here are GONE, and they are
+# not coming back in any form -- not as a fallback, not as a last resort.
+# All six ids they named are unservable today; every category x balance
+# combination landed on one of them and 404'd, which is how Smart Mode went
+# down in production. Selection now asks services/smart_router.py, which
+# only ever returns models the catalog says are available, priced and
+# actually answered a probe. When it has nothing to return, this module
+# refuses honestly (503) rather than guessing at a model id.
 
 
 def _analyze_message(text: str) -> str:
@@ -132,141 +132,6 @@ async def _get_user_balance(uid: int) -> int:
         return 0
 
 
-def _select_smart_model(category: str, balance: int) -> tuple[str, str]:
-    """Pick a model for a classified message. BEHAVIOUR-PRESERVING as of
-    migration 0049 -- deliberately, and that deserves an explanation.
-
-    This function used to take a third argument, ``plan``, and branch on
-    ``plan in ('pro', 'enterprise', 'unlimited')`` to serve a costlier
-    model tier. That plan came from ``_get_user_plan``, which read the
-    ``subscriptions`` table. Production held ZERO active subscription rows,
-    so ``plan`` was always ``'free'`` and that whole tier branch was dead
-    code for every user who ever called this.
-
-    When plans were retired, the obvious move was to re-point the branch at
-    ``services.user_quota.has_active_package`` -- and that was rejected on
-    purpose. It would have taken a branch that had never once executed and
-    switched it on for real paying users, changing which model they are
-    served, as a side effect of a merge whose sanctioned scope was
-    "packages and plans become one product". A change to what a customer
-    gets for their money is a product decision, not a refactor, and it does
-    not get to ride in on one.
-
-    It is also about to be moot: the next phase replaces every hardcoded
-    list in this module with a live, priced, health-checked candidate pool
-    (``services/smart_router.py``). Reviving a dead branch one phase before
-    deleting it is risk with no payoff.
-
-    So: package holding is NOT read here. Balance still gates -- a user
-    under 10,000 Toman gets the cheapest model, exactly as before. When
-    the router lands, tiering by entitlement is a decision to make on
-    purpose, with the owner, against a pool that knows what each model
-    actually costs.
-    """
-    if balance < 10000:
-        return _FREE_MODELS[0]
-    if category in ('greeting', 'simple'):
-        return _FREE_MODELS[0]
-    if category == 'complex':
-        return _REASONING_MODELS[0]
-    if category == 'reasoning':
-        return _REASONING_MODELS[0]
-    if category == 'code':
-        return _CODING_MODELS[0]
-    if category == 'creative':
-        return _CREATIVE_MODELS[0]
-    if category == 'medium':
-        return _DEFAULT_MODEL
-    return _DEFAULT_MODEL
-
-
-@dataclass(frozen=True)
-class _CheapestModel:
-    """One row from `_cheapest_live_model`, priced+labelled for the caller."""
-    provider_model_id: str
-    public_id: str
-    input_per_million: int
-    output_per_million: int
-    upstream: str | None
-
-
-_CHEAPEST_CACHE_TTL_SECONDS = 60
-_cheapest_cache: _CheapestModel | None = None
-_cheapest_cache_at: float = 0.0
-
-# Plain string literal, NOT an f-string -- scripts/sql_schema_audit.py only
-# EXPLAINs literals; tests mock the DB, so an f-string would hide a wrong
-# column/table name until it broke in production.
-_CHEAPEST_MODEL_SQL = sqlalchemy.text(
-    "SELECT c.provider_model_id, c.public_id, c.input_per_million, "
-    "c.output_per_million, c.upstream FROM model_catalog c "
-    "JOIN model_health_state s "
-    "ON s.model_id = c.id OR s.model_id = c.provider_model_id "
-    "WHERE c.availability = 'available' AND c.public_id IS NOT NULL "
-    "AND c.input_per_million > 0 AND c.output_per_million > 0 "
-    "AND s.last_ok_at IS NOT NULL "
-    "ORDER BY (3 * c.input_per_million + c.output_per_million) ASC, "
-    "c.context_window DESC, c.public_id ASC LIMIT 1"
-)
-
-
-async def _cheapest_live_model() -> _CheapestModel | None:
-    """Cheapest available+priced+public+live-probed catalog row, or None.
-    Hotfix H rescue path -- see `_select_smart_model_safe`'s docstring.
-
-    `> 0`, never `IS NOT NULL`: per-million columns are NUMERIC NOT NULL
-    DEFAULT 0, so unpriced reads as 0 and would sort first if admitted.
-    `last_ok_at IS NOT NULL`, never `status = 'healthy'`: `_derive_status`
-    can say 'healthy' for a model whose every probe failed
-    (services/probe_gate.py). `public_id IS NOT NULL`: never a raw route.
-    Cached `_CHEAPEST_CACHE_TTL_SECONDS`; never raises -- on failure returns
-    the last cached value, or None if cold.
-    """
-    global _cheapest_cache, _cheapest_cache_at
-    if chat.async_session is None:
-        return _cheapest_cache
-    now = time.monotonic()
-    if _cheapest_cache_at and now - _cheapest_cache_at < _CHEAPEST_CACHE_TTL_SECONDS:
-        return _cheapest_cache
-    try:
-        async with chat.async_session() as session:
-            res = await session.execute(_CHEAPEST_MODEL_SQL)
-            row = res.fetchone()
-            _cheapest_cache = _CheapestModel(
-                provider_model_id=str(row.provider_model_id),
-                public_id=str(row.public_id),
-                input_per_million=int(row.input_per_million),
-                output_per_million=int(row.output_per_million),
-                upstream=row.upstream,
-            ) if row is not None else None
-            _cheapest_cache_at = now
-    except Exception as e:
-        logger.warning(f"_cheapest_live_model DB read failed, keeping previous cache: {e}")
-    return _cheapest_cache
-
-
-async def _select_smart_model_safe(category: str, balance: int) -> tuple[str, str, _CheapestModel | None]:
-    """Hotfix H: the old rescue path returned `_DEFAULT_MODEL` unchecked --
-    itself a member of the hardcoded set just picked from, and all six of
-    those ids are unservable today (measured live: 32/32 category x balance
-    combos landed on `_DEFAULT_MODEL`, which 404s upstream). Falls back to
-    the live cheapest priced+probed row instead; `_DEFAULT_MODEL` still
-    applies only when the DB can't answer either.
-
-    Third return value is the price row backing a fallback pick (None
-    otherwise) -- `smart_chat()` prices on it and labels with `public_id`.
-    """
-    model, provider = _select_smart_model(category, balance)
-    if await chat.is_working_model(model):
-        return model, provider, None
-    cheapest = await _cheapest_live_model()
-    if cheapest is not None:
-        return cheapest.provider_model_id, cheapest.upstream or provider, cheapest
-    return _DEFAULT_MODEL[0], _DEFAULT_MODEL[1], None
-
-# Working model set (confirmed via live test 2026-07-16)
-# _WORKING_SET moved to top of file (near WORKING_MODELS)
-
 @chat.router.post('/v1/smart-chat')
 async def smart_chat(request: Request, payload: ChatRequest) -> Response:
     """Smart Mode: auto-selects the cheapest model capable of handling the request."""
@@ -297,6 +162,9 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
 
     original_model = payload_dict.get('model', '')
     force_model = request.headers.get('X-Smart-Model', '').strip()
+    # One pool read per request, shared by both branches below (cached 60s
+    # inside the router; never raises, worst case it is empty).
+    _pool = await smart_router.candidate_pool()
     if force_model and force_model.lower() != 'auto':
         # Canonicalize to provider_model_id FIRST -- see _resolve_public_model's
         # docstring. This REPLACES the old `force_model.split('/', 1)[1]`
@@ -313,20 +181,34 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
             f'Model {force_model} is not available',
             400, code='model_not_available', err_type='invalid_request',
         )
-        selected_provider = selected_model.split('/', 1)[0] if '/' in selected_model else 'bynara2'
         # Display label: echo back exactly what the caller sent in the
         # X-Smart-Model request header, never the resolved provider_model_id
         # -- a normal user must never see which upstream route a model
-        # resolved to (see content.py's no-provider-leak rule). Only the
-        # forced-model path needs this: the auto-selection branch below
-        # already returns bare/hardcoded ids that predate public_id and were
-        # never gated behind this rule.
+        # resolved to (see content.py's no-provider-leak rule).
         smart_model_label = force_model
-        _price_row = None
+        # Price the reservation on the forced model's real catalog rates when
+        # the router knows it. Matched on provider_model_id, i.e. AFTER
+        # _resolve_public_model canonicalised the header, because that is the
+        # key the pool is built on.
+        pick = next((c for c in _pool if c.provider_model_id == selected_model), None)
     else:
-        selected_model, selected_provider, _price_row = await _select_smart_model_safe(category, balance)
-        # Fallback picks are labelled by public_id, never the raw id (Hotfix H).
-        smart_model_label = _price_row.public_id if _price_row is not None else selected_model
+        pick = smart_router.select_by_rules(category, balance, _pool)
+        if pick is None:
+            # Nothing servable: the catalog has no available+priced+probed
+            # model, or the DB could not answer. The old code fell back to a
+            # hardcoded id here, which is exactly how a 404-ing model reached
+            # every user -- so refuse honestly instead and point the user at
+            # manual model choice, which does not depend on this pool.
+            logger.warning(f"smart_chat has no candidate uid={uid} category={category}")
+            return err(
+                'حالت هوشمند موقتاً در دسترس نیست. لطفاً یک مدل را دستی انتخاب کنید.',
+                'Smart mode is temporarily unavailable. Please choose a model manually.',
+                503,
+            )
+        selected_model = pick.provider_model_id
+        # The user-facing label is always the public_id -- never the
+        # provider_model_id and never the upstream name.
+        smart_model_label = pick.public_id
 
     # FIX 2: counteract the injected caveman-style system prompt -- see
     # chat()'s comment / _REASONING_INJECTING_PROVIDERS docstring. Runs on
@@ -355,11 +237,18 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
         async with chat.async_session() as _bill_session:
             _repo = SqlBillingRepo(_bill_session)
             _bill_svc = chat.BillingService(_repo)
-            if _price_row is not None:
-                # Hotfix H: price on the fallback row's real rates -- flat 1000
-                # toman covers only ~525 input tokens on the dearest model.
-                _est_cost = max(1000, (2000 * _price_row.input_per_million + 800 * _price_row.output_per_million) // 1_000_000)
+            if pick is not None:
+                # Reserve what the chosen model actually costs, integer Toman.
+                # The flat 1000/5000 this replaces had no relation to any
+                # price: measured against the live catalog, sanjab/claude-
+                # fable-5 needs 11,436 Toman reserved and was getting 1,000.
+                _est_cost = smart_router.estimate_cost_toman(pick)
             else:
+                # Forced-model path only, and only for a model the router has
+                # no row for (unpriced, unprobed or withdrawn from the pool):
+                # there are no rates to price on, so the pre-router flat
+                # estimate is the only number available. The auto path can
+                # never land here -- a None pick returned 503 above.
                 _est_cost = 1000 if await chat.is_working_model(selected_model) else 5000
             # Package quota covers this request -> skip the wallet reservation
             # (reservation stays None; the release/settle code below already
@@ -475,9 +364,16 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
             resp = Response(content=r.content, status_code=r.status_code, media_type='application/json')
         # P3: Fire background auto-memory extraction
         chat._fire_memory_extraction(uid, payload_dict.get('messages', []))
+        # X-Smart-Model carries the public_id (the user-facing label) and
+        # X-Smart-Category the classifier's verdict -- both safe to show.
+        # There is deliberately NO provider/upstream header: it used to send
+        # the raw upstream name (ninerouter/litellm/omniroute) to every
+        # caller. The browser was shielded only because the Next proxy
+        # rebuilds the response, but /v1/* is served straight from here, so
+        # any API-key holder saw the route. A normal user never sees a
+        # provider -- only an admin does, through the admin endpoints.
         resp.headers['X-Smart-Model'] = smart_model_label
         resp.headers['X-Smart-Category'] = category
-        resp.headers['X-Smart-Provider'] = selected_provider
         if original_model and original_model != selected_model:
             resp.headers['X-Smart-Original-Model'] = original_model
         return resp

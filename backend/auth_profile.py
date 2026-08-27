@@ -235,3 +235,26 @@ async def upload_avatar(request: Request, payload: AvatarUploadRequest) -> JSONR
 
     await _write_audit_log('auth.upload_avatar', target_type='user', target_id=uid)
     return JSONResponse({'status': 'ok', 'avatar_url': avatar_url})
+
+
+@router.delete('/auth/avatar')
+async def delete_avatar(request: Request) -> JSONResponse:
+    """Clear the user's avatar. Idempotent -- deleting with no avatar set is
+    still a success, not an error (same as the rest of this file's mutation
+    endpoints never distinguish "already in the target state" from "changed
+    it just now")."""
+    uid = await auth._get_user_id(request)
+    if not uid:
+        return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
+    if async_session is None:
+        return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
+
+    async with async_session() as session:
+        await session.execute(
+            User.__table__.update().where(User.id == uid),
+            {'avatar_url': None}
+        )
+        await session.commit()
+
+    await _write_audit_log('auth.delete_avatar', target_type='user', target_id=uid)
+    return JSONResponse({'status': 'ok', 'avatar_url': None})

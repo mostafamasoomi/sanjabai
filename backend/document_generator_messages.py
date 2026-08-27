@@ -16,7 +16,7 @@ API raises it.
 """
 from __future__ import annotations
 
-_MODEL_NOT_ALLOWED_MESSAGE = 'مدل انتخابی پشتیبانی نمیشود'
+_MODEL_NOT_ALLOWED_MESSAGE = 'مدل انتخابی پشتیبانی نمی‌شود'
 _MODEL_NOT_ALLOWED_MESSAGE_EN = 'The selected model is not supported.'
 _CHAT_DISABLED_MESSAGE = 'گفتگو موقتاً در دسترس نیست'
 # Byte-for-byte the same English chat_web._chat_disabled_response() returns.

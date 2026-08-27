@@ -34,7 +34,7 @@ async def init_db():
         
         # Features
         features = [
-            {"title": "چت هوشمند", "description": "دسترسی به جدیدترین مدلهای هوش مصنوعی برای چت و پاسخگویی", "icon": "💬", "order_idx": 1, "active": True},
+            {"title": "چت هوشمند", "description": "دسترسی به جدیدترین مدل‌های هوش مصنوعی برای چت و پاسخگویی", "icon": "💬", "order_idx": 1, "active": True},
             {"title": "سرعت بالا", "description": "پاسخگویی در کمتر از ۱ ثانیه با زیرساخت بهینه", "icon": "⚡", "order_idx": 2, "active": True},
             {"title": "پشتیبانی فارسی", "description": "پشتیبانی کامل از زبان فارسی و لهجه‌های مختلف", "icon": "🇮🇷", "order_idx": 3, "active": True},
             {"title": "حریم خصوصی", "description": "عدم ذخیره‌سازی مکالمات و حفظ حریم خصوصی کاربران", "icon": "🔒", "order_idx": 4, "active": True},
@@ -60,7 +60,7 @@ async def init_db():
         stmt = select(AboutContent)
         res = await session.execute(stmt)
         if not res.scalar_one_or_none():
-            session.add(AboutContent(title="درباره ما", body="ما یک پلتفرم هوش مصنوعی فارسی هستیم که با هدف ارائه بهترین تجربه کاربری و دسترسی به جدیدترین مدلهای هوش مصنوعی ایجاد شده‌ایم. تیم ما متشکل از متخصصان حوزه فناوری و هوش مصنوعی است که با عشق به زبان فارسی و فرهنگ ایرانی، این پلتفرم را توسعه داده‌اند."))
+            session.add(AboutContent(title="درباره ما", body="ما یک پلتفرم هوش مصنوعی فارسی هستیم که با هدف ارائه بهترین تجربه کاربری و دسترسی به جدیدترین مدل‌های هوش مصنوعی ایجاد شده‌ایم. تیم ما متشکل از متخصصان حوزه فناوری و هوش مصنوعی است که با عشق به زبان فارسی و فرهنگ ایرانی، این پلتفرم را توسعه داده‌اند."))
         
         # Proxy
         # NOTE: this credential is hardcoded and has been sitting in git

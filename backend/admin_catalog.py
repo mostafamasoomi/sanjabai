@@ -193,9 +193,9 @@ async def bulk_set_availability(request: Request, payload: dict[str, Any]) -> JS
     ids = payload.get('ids')
     availability = payload.get('availability')
     if not isinstance(ids, list) or not ids:
-        return err('فهرست مدلها الزامی است', 'A list of model ids is required.', 400)
+        return err('فهرست مدل‌ها الزامی است', 'A list of model ids is required.', 400)
     if len(ids) > _BULK_MAX_IDS:
-        return err('تعداد مدلها بیش از حد مجاز است', 'Too many model ids.', 400)
+        return err('تعداد مدل‌ها بیش از حد مجاز است', 'Too many model ids.', 400)
     if availability not in _VALID_AVAILABILITY:
         return err('وضعیت نامعتبر است', 'Invalid availability status.', 400)
 
@@ -328,9 +328,9 @@ async def bulk_set_model_markup(request: Request, payload: dict[str, Any]) -> JS
 
     ids = payload.get('ids')
     if not isinstance(ids, list) or not ids:
-        return err('فهرست مدلها الزامی است', 'A list of model ids is required.', 400)
+        return err('فهرست مدل‌ها الزامی است', 'A list of model ids is required.', 400)
     if len(ids) > _BULK_MAX_IDS:
-        return err('تعداد مدلها بیش از حد مجاز است', 'Too many model ids.', 400)
+        return err('تعداد مدل‌ها بیش از حد مجاز است', 'Too many model ids.', 400)
 
     pct, fa_err = _parse_markup_pct(payload.get('markup_pct'), allow_null=True)
     if fa_err:

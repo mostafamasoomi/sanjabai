@@ -1,8 +1,8 @@
 import { dict } from '@/lib/i18n'
 
-/* Dashboard page: header, stat-card labels/units, and the plan/subscription
-   labels this page derives locally (name_fa/name_en, where present, comes
-   straight from the backend -- see the note at the call site). */
+/* Dashboard page: header, stat-card labels/units, and the plan badge labels
+   this page derives locally from the user's profile (`profile.plan`) for
+   the header badge -- unrelated to the retired subscription concept. */
 
 const FA = {
   greeting: (name: string) => `سلام، ${name}`,
@@ -20,11 +20,6 @@ const FA = {
     free: 'رایگان',
     pro: 'حرفه‌ای',
     enterprise: 'سازمانی',
-  } as Record<string, string>,
-  subStatus: {
-    active: 'فعال',
-    cancelled: 'لغو شده',
-    none: 'بدون اشتراک',
   } as Record<string, string>,
 }
 
@@ -44,11 +39,6 @@ const EN: typeof FA = {
     free: 'Free',
     pro: 'Pro',
     enterprise: 'Enterprise',
-  },
-  subStatus: {
-    active: 'Active',
-    cancelled: 'Cancelled',
-    none: 'No subscription',
   },
 }
 

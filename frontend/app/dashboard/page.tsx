@@ -13,7 +13,7 @@ import { StatCard } from './components/StatCard'
 import { PaymentBanner } from './components/PaymentBanner'
 import { UnauthenticatedView } from './components/UnauthenticatedView'
 import { DashboardLoadingSkeleton } from './components/DashboardLoadingSkeleton'
-import { SubscriptionCard } from './components/SubscriptionCard'
+import { PackagesCard } from './components/PackagesCard'
 import { RecentActivityCard } from './components/RecentActivityCard'
 import { QuickActionsCard } from './components/QuickActionsCard'
 import { AccountInfoCard } from './components/AccountInfoCard'
@@ -43,8 +43,6 @@ export default function DashboardPage() {
     models,
     loading,
     refreshing,
-    subscription,
-    subscriptionPlan,
     billingSettings,
     setBillingSettings,
     fetchData,
@@ -79,19 +77,6 @@ export default function DashboardPage() {
   const displayName = profile?.username || s.defaultUser
   const plan = profile?.plan || 'free'
   const recentLedger = ledger.slice(0, 10)
-
-  // Subscription derived values
-  const subStatus = subscription?.status || 'none'
-  const subStatusColor = subStatus === 'active' ? 'var(--positive)' : subStatus === 'cancelled' ? 'var(--danger)' : 'var(--text-muted)'
-  const subStatusLabel = s.subStatus[subStatus] ?? s.subStatus.none
-  const tokenQuota = subscription?.monthly_token_quota ?? 0
-  const tokensUsed = subscription?.tokens_used_this_period ?? 0
-  const tokenPct = tokenQuota > 0 ? Math.min((tokensUsed / tokenQuota) * 100, 100) : 0
-  // subscriptionPlan carries both name_fa and name_en from the backend
-  // already -- no client-side translation needed here, just picking the
-  // field that matches the current language.
-  const planName = (lang === 'en' ? subscriptionPlan?.name_en : subscriptionPlan?.name_fa)
-    || s.planLabels[plan] || plan
 
   return (
     // One 12-column grid for the whole page. Each card declares how much of
@@ -146,16 +131,10 @@ export default function DashboardPage() {
         <StatCard icon="code" label={s.statTokens} value={usage?.total_input_tokens_this_month ?? 0} unit={s.unitToken} />
       </div>
 
-      {/* ─── Subscription + activity row ─── */}
-      <SubscriptionCard
-        planName={planName}
-        subStatusColor={subStatusColor}
-        subStatusLabel={subStatusLabel}
-        tokenQuota={tokenQuota}
-        tokensUsed={tokensUsed}
-        tokenPct={tokenPct}
-        endsAt={subscription?.ends_at}
-        onChangePlan={() => router.push('/pricing')}
+      {/* ─── Packages + activity row ─── */}
+      <PackagesCard
+        balance={balance}
+        onManagePackages={() => router.push('/pricing#credit-packages')}
       />
 
       <RecentActivityCard

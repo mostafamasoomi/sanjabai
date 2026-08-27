@@ -33,29 +33,6 @@ export type LedgerEntry = {
 
 export type ModelItem = { id: string }
 
-export type Subscription = {
-  id: number
-  user_id: number
-  plan: string
-  starts_at: string
-  ends_at: string
-  status: string
-  monthly_token_quota: number
-  tokens_used_this_period: number
-  auto_renew: boolean
-  price_paid: number
-} | null
-
-export type SubscriptionPlan = {
-  id: number
-  name_fa: string
-  name_en: string
-  price_monthly: number
-  monthly_token_quota: number
-  daily_token_limit: number
-  features: string[]
-} | null
-
 export type BillingSettings = {
   user_id: number
   payg_enabled: boolean

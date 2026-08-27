@@ -143,12 +143,12 @@ export default function ModerationSection() {
               <table className="admin-table w-full text-sm">
                 <thead>
                   <tr>
-                    <th className="text-right p-3">{s.colUser}</th>
-                    <th className="text-right p-3">{s.colCategory}</th>
-                    <th className="text-right p-3">{s.colSeverity}</th>
-                    <th className="text-right p-3">{s.colDecision}</th>
-                    <th className="text-right p-3">{s.colSnippet}</th>
-                    <th className="text-right p-3">{s.colTime}</th>
+                    <th className="p-3">{s.colUser}</th>
+                    <th className="p-3">{s.colCategory}</th>
+                    <th className="p-3">{s.colSeverity}</th>
+                    <th className="p-3">{s.colDecision}</th>
+                    <th className="p-3">{s.colSnippet}</th>
+                    <th className="p-3">{s.colTime}</th>
                   </tr>
                 </thead>
                 <tbody>

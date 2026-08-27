@@ -343,19 +343,19 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
             <thead>
               <tr>
                 <th className="p-3"><input type="checkbox" checked={pageAllSelected} onChange={togglePageAll} /></th>
-                <th className="text-right p-3">{s.colModel}</th>
-                <th className="text-right p-3">{s.colStatus}</th>
-                <th className="text-right p-3">{s.colProvider}</th>
-                <th className="text-right p-3">{s.colContext}</th>
-                <th className="text-right p-3">{s.colPrice}</th>
+                <th className="p-3">{s.colModel}</th>
+                <th className="p-3">{s.colStatus}</th>
+                <th className="p-3">{s.colProvider}</th>
+                <th className="p-3">{s.colContext}</th>
+                <th className="p-3">{s.colPrice}</th>
                 {/* Was `last_verified_at`, which showed a recent date for
                     every row in the catalog including the ~1,155 that had
                     never been probed once -- the column is NOT NULL DEFAULT
                     now() and the rollup touches it every pass. This one
                     reads model_health_state.last_ok_at, the same column
                     the server's enable-gate checks. */}
-                <th className="text-right p-3">{s.colProbe}</th>
-                <th className="text-right p-3">{s.colActions}</th>
+                <th className="p-3">{s.colProbe}</th>
+                <th className="p-3">{s.colActions}</th>
               </tr>
             </thead>
             <tbody>

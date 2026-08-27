@@ -249,12 +249,12 @@ export default function LogicalModelsSection({ api }: LogicalModelsSectionProps)
           <table className="admin-table w-full text-sm">
             <thead>
               <tr>
-                <th className="text-right p-3">{s.colLogicalModel}</th>
-                <th className="text-right p-3">{s.colVendor}</th>
-                <th className="text-right p-3">{s.colStatus}</th>
-                <th className="text-right p-3">{s.colRoutingPolicy}</th>
-                <th className="text-right p-3">{s.colCandidateCounts}</th>
-                <th className="text-right p-3">{s.colActions}</th>
+                <th className="p-3">{s.colLogicalModel}</th>
+                <th className="p-3">{s.colVendor}</th>
+                <th className="p-3">{s.colStatus}</th>
+                <th className="p-3">{s.colRoutingPolicy}</th>
+                <th className="p-3">{s.colCandidateCounts}</th>
+                <th className="p-3">{s.colActions}</th>
               </tr>
             </thead>
             <tbody>
@@ -380,14 +380,14 @@ function CandidatesPanel({
         <table className="admin-table w-full text-xs">
           <thead>
             <tr>
-              <th className="text-right p-2">{s.colPhysicalModel}</th>
-              <th className="text-right p-2">{s.colProviderStatus}</th>
-              <th className="text-right p-2">{s.colPriceTomanMillion}</th>
-              <th className="text-right p-2">{s.colUsdEstimate}</th>
-              <th className="text-right p-2">{s.colCandidateState}</th>
-              <th className="text-right p-2">{s.colEnabled}</th>
-              <th className="text-right p-2">{s.colPriority}</th>
-              <th className="text-right p-2">{s.colActions}</th>
+              <th className="p-2">{s.colPhysicalModel}</th>
+              <th className="p-2">{s.colProviderStatus}</th>
+              <th className="p-2">{s.colPriceTomanMillion}</th>
+              <th className="p-2">{s.colUsdEstimate}</th>
+              <th className="p-2">{s.colCandidateState}</th>
+              <th className="p-2">{s.colEnabled}</th>
+              <th className="p-2">{s.colPriority}</th>
+              <th className="p-2">{s.colActions}</th>
             </tr>
           </thead>
           <tbody>

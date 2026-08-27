@@ -125,11 +125,11 @@ export function LedgerTab({ state }: { state: TabState<LedgerPayload> }) {
           <table className="admin-table w-full text-sm">
             <thead>
               <tr>
-                <th className="text-right p-2">{s.colId}</th>
-                <th className="text-right p-2">{s.colAmount}</th>
-                <th className="text-right p-2">{s.colBalanceAfter}</th>
-                <th className="text-right p-2">{s.colReason}</th>
-                <th className="text-right p-2">{s.colDate}</th>
+                <th className="p-2">{s.colId}</th>
+                <th className="p-2">{s.colAmount}</th>
+                <th className="p-2">{s.colBalanceAfter}</th>
+                <th className="p-2">{s.colReason}</th>
+                <th className="p-2">{s.colDate}</th>
               </tr>
             </thead>
             <tbody>
@@ -169,12 +169,12 @@ export function PaymentsTab({ state }: { state: TabState<PaymentsPayload> }) {
               <table className="admin-table w-full text-sm">
                 <thead>
                   <tr>
-                    <th className="text-right p-2">{s.colId}</th>
-                    <th className="text-right p-2">{s.colAmount}</th>
-                    <th className="text-right p-2">{s.colStatus}</th>
-                    <th className="text-right p-2">{s.colType}</th>
-                    <th className="text-right p-2">{s.colRefCode}</th>
-                    <th className="text-right p-2">{s.colDate}</th>
+                    <th className="p-2">{s.colId}</th>
+                    <th className="p-2">{s.colAmount}</th>
+                    <th className="p-2">{s.colStatus}</th>
+                    <th className="p-2">{s.colType}</th>
+                    <th className="p-2">{s.colRefCode}</th>
+                    <th className="p-2">{s.colDate}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -204,11 +204,11 @@ export function PaymentsTab({ state }: { state: TabState<PaymentsPayload> }) {
               <table className="admin-table w-full text-sm">
                 <thead>
                   <tr>
-                    <th className="text-right p-2">{s.colPlan}</th>
-                    <th className="text-right p-2">{s.colStatus}</th>
-                    <th className="text-right p-2">{s.colStart}</th>
-                    <th className="text-right p-2">{s.colEnd}</th>
-                    <th className="text-right p-2">{s.colAmount}</th>
+                    <th className="p-2">{s.colPlan}</th>
+                    <th className="p-2">{s.colStatus}</th>
+                    <th className="p-2">{s.colStart}</th>
+                    <th className="p-2">{s.colEnd}</th>
+                    <th className="p-2">{s.colAmount}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -297,12 +297,12 @@ export function UsageTab({ state }: { state: TabState<UsagePayload> }) {
             <table className="admin-table w-full text-sm">
               <thead>
                 <tr>
-                  <th className="text-right p-2">{s.colModel}</th>
-                  <th className="text-right p-2">{s.colCalls}</th>
-                  <th className="text-right p-2">{s.colInput}</th>
-                  <th className="text-right p-2">{s.colOutput}</th>
-                  <th className="text-right p-2">{s.colCost}</th>
-                  <th className="text-right p-2">{s.colLastUsed}</th>
+                  <th className="p-2">{s.colModel}</th>
+                  <th className="p-2">{s.colCalls}</th>
+                  <th className="p-2">{s.colInput}</th>
+                  <th className="p-2">{s.colOutput}</th>
+                  <th className="p-2">{s.colCost}</th>
+                  <th className="p-2">{s.colLastUsed}</th>
                 </tr>
               </thead>
               <tbody>
@@ -345,11 +345,11 @@ export function ConversationsTab({ state }: { state: TabState<ConversationsPaylo
           <table className="admin-table w-full text-sm">
             <thead>
               <tr>
-                <th className="text-right p-2">{s.colId}</th>
-                <th className="text-right p-2">{s.colTitle}</th>
-                <th className="text-right p-2">{s.colModel}</th>
-                <th className="text-right p-2">{s.colMessages}</th>
-                <th className="text-right p-2">{s.colLastUpdated}</th>
+                <th className="p-2">{s.colId}</th>
+                <th className="p-2">{s.colTitle}</th>
+                <th className="p-2">{s.colModel}</th>
+                <th className="p-2">{s.colMessages}</th>
+                <th className="p-2">{s.colLastUpdated}</th>
               </tr>
             </thead>
             <tbody>

@@ -274,12 +274,12 @@ export default function UpstreamOverheadSection({ api }: UpstreamOverheadSection
             <table className="admin-table w-full text-sm">
               <thead>
                 <tr>
-                  <th className="text-right p-3">{s.colRoute}</th>
-                  <th className="text-right p-3">{s.colProvider}</th>
-                  <th className="text-right p-3">{s.colOverheadTokens}</th>
-                  <th className="text-right p-3">{s.colSampleModel}</th>
-                  <th className="text-right p-3">{s.colMeasuredAt}</th>
-                  <th className="text-right p-3">{s.colDetails}</th>
+                  <th className="p-3">{s.colRoute}</th>
+                  <th className="p-3">{s.colProvider}</th>
+                  <th className="p-3">{s.colOverheadTokens}</th>
+                  <th className="p-3">{s.colSampleModel}</th>
+                  <th className="p-3">{s.colMeasuredAt}</th>
+                  <th className="p-3">{s.colDetails}</th>
                 </tr>
               </thead>
               <tbody>
@@ -336,8 +336,8 @@ export default function UpstreamOverheadSection({ api }: UpstreamOverheadSection
             <table className="admin-table w-full text-sm">
               <thead>
                 <tr>
-                  <th className="text-right p-3">{s.colProvider}</th>
-                  <th className="text-right p-3">{s.colDefaultOverheadTokens}</th>
+                  <th className="p-3">{s.colProvider}</th>
+                  <th className="p-3">{s.colDefaultOverheadTokens}</th>
                 </tr>
               </thead>
               <tbody>
@@ -364,9 +364,9 @@ export default function UpstreamOverheadSection({ api }: UpstreamOverheadSection
             <table className="admin-table w-full text-sm">
               <thead>
                 <tr>
-                  <th className="text-right p-3">{s.colProvider}</th>
-                  <th className="text-right p-3">{s.colRequests7d}</th>
-                  <th className="text-right p-3">{s.colTokensDiscounted7d}</th>
+                  <th className="p-3">{s.colProvider}</th>
+                  <th className="p-3">{s.colRequests7d}</th>
+                  <th className="p-3">{s.colTokensDiscounted7d}</th>
                 </tr>
               </thead>
               <tbody>

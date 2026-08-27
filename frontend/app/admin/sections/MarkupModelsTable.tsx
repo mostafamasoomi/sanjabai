@@ -122,7 +122,7 @@ export default function MarkupModelsTable({
         <table className="admin-table w-full text-sm">
           <thead>
             <tr>
-              <th className="text-right p-3">
+              <th className="p-3">
                 <input
                   type="checkbox"
                   checked={allPageSelected}
@@ -131,13 +131,13 @@ export default function MarkupModelsTable({
                   title={s.selectPageTitle}
                 />
               </th>
-              <th className="text-right p-3">{s.colModel}</th>
-              <th className="text-right p-3">{s.colBaseInput}</th>
-              <th className="text-right p-3">{s.colBaseOutput}</th>
-              <th className="text-right p-3">{s.colEffectivePct}</th>
-              <th className="text-right p-3">{s.colInputAfterMarkup}</th>
-              <th className="text-right p-3">{s.colOverride}</th>
-              <th className="text-right p-3">{s.colActions}</th>
+              <th className="p-3">{s.colModel}</th>
+              <th className="p-3">{s.colBaseInput}</th>
+              <th className="p-3">{s.colBaseOutput}</th>
+              <th className="p-3">{s.colEffectivePct}</th>
+              <th className="p-3">{s.colInputAfterMarkup}</th>
+              <th className="p-3">{s.colOverride}</th>
+              <th className="p-3">{s.colActions}</th>
             </tr>
           </thead>
           <tbody>

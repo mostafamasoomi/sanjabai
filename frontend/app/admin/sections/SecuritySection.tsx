@@ -183,11 +183,11 @@ export default function SecuritySection() {
                 <table className="admin-table w-full text-sm">
                   <thead>
                     <tr>
-                      <th className="text-right p-3">{s.colId}</th>
-                      <th className="text-right p-3">{s.colUsername}</th>
-                      <th className="text-right p-3">{s.colEmail}</th>
-                      <th className="text-right p-3">{s.colBannedAt}</th>
-                      <th className="text-right p-3">{s.colActions}</th>
+                      <th className="p-3">{s.colId}</th>
+                      <th className="p-3">{s.colUsername}</th>
+                      <th className="p-3">{s.colEmail}</th>
+                      <th className="p-3">{s.colBannedAt}</th>
+                      <th className="p-3">{s.colActions}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -249,12 +249,12 @@ export default function SecuritySection() {
             <table className="admin-table w-full text-sm">
               <thead>
                 <tr>
-                  <th className="text-right p-3">{s.colId}</th>
-                  <th className="text-right p-3">{s.colAction}</th>
-                  <th className="text-right p-3">{s.colTargetType}</th>
-                  <th className="text-right p-3">{s.colTargetId}</th>
-                  <th className="text-right p-3">{s.colDetails}</th>
-                  <th className="text-right p-3">{s.colTime}</th>
+                  <th className="p-3">{s.colId}</th>
+                  <th className="p-3">{s.colAction}</th>
+                  <th className="p-3">{s.colTargetType}</th>
+                  <th className="p-3">{s.colTargetId}</th>
+                  <th className="p-3">{s.colDetails}</th>
+                  <th className="p-3">{s.colTime}</th>
                 </tr>
               </thead>
               <tbody>

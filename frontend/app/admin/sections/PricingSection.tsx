@@ -220,13 +220,13 @@ export default function PricingSection() {
           <table className="admin-table w-full text-sm">
             <thead>
               <tr>
-                <th className="text-right p-3">{s.colModel}</th>
-                <th className="text-right p-3">{s.colInput}</th>
-                <th className="text-right p-3">{s.colOutput}</th>
-                <th className="text-right p-3">{s.colUnit}</th>
-                <th className="text-right p-3">{s.colStatus}</th>
-                <th className="text-right p-3">{s.colTest}</th>
-                <th className="text-right p-3">{s.colActions}</th>
+                <th className="p-3">{s.colModel}</th>
+                <th className="p-3">{s.colInput}</th>
+                <th className="p-3">{s.colOutput}</th>
+                <th className="p-3">{s.colUnit}</th>
+                <th className="p-3">{s.colStatus}</th>
+                <th className="p-3">{s.colTest}</th>
+                <th className="p-3">{s.colActions}</th>
               </tr>
             </thead>
             <tbody>

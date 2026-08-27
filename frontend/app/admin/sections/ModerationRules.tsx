@@ -107,13 +107,13 @@ export default function ModerationRules() {
             <table className="admin-table w-full text-sm">
               <thead>
                 <tr>
-                  <th className="text-right p-3">{s.colPattern}</th>
-                  <th className="text-right p-3">{s.colCategory}</th>
-                  <th className="text-right p-3">{s.colSeverity}</th>
-                  <th className="text-right p-3">{s.colStatus}</th>
-                  <th className="text-right p-3">{s.colNotes}</th>
-                  <th className="text-right p-3">{s.colUpdated}</th>
-                  <th className="text-right p-3">{s.colActions}</th>
+                  <th className="p-3">{s.colPattern}</th>
+                  <th className="p-3">{s.colCategory}</th>
+                  <th className="p-3">{s.colSeverity}</th>
+                  <th className="p-3">{s.colStatus}</th>
+                  <th className="p-3">{s.colNotes}</th>
+                  <th className="p-3">{s.colUpdated}</th>
+                  <th className="p-3">{s.colActions}</th>
                 </tr>
               </thead>
               <tbody>

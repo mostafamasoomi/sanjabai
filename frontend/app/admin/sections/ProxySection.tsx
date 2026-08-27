@@ -12,7 +12,7 @@ import { proxyStrings } from './ProxySection.strings'
 /* ═══════════════════════════════════════════════════════════════════════════
    Proxy — GET/POST /admin/proxy (backend/admin_content.py).
 
-   Same rule as AboutSection: the form is only rendered after a successful
+   The form is only rendered after a successful
    load. Saving a form that was never populated would blank the tunnel URL
    the whole LiteLLM egress depends on.
    ═══════════════════════════════════════════════════════════════════════════ */

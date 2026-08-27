@@ -216,24 +216,24 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
           <table className="admin-table w-full text-sm">
             <thead>
               <tr>
-                <th className="text-right p-3">{s.colPackage}</th>
-                <th className="text-right p-3">{s.colActive}</th>
-                <th className="text-right p-3">{s.colBaseAmount}</th>
-                <th className="text-right p-3">{s.colTotalCredits}</th>
-                <th className="text-right p-3">{s.colBonusPercent}</th>
-                <th className="text-right p-3">{s.colRequestQuota}</th>
-                <th className="text-right p-3">{s.colTokenQuota}</th>
-                <th className="text-right p-3">{s.colMaxCostPerRequest}</th>
-                <th className="text-right p-3">
+                <th className="p-3">{s.colPackage}</th>
+                <th className="p-3">{s.colActive}</th>
+                <th className="p-3">{s.colBaseAmount}</th>
+                <th className="p-3">{s.colTotalCredits}</th>
+                <th className="p-3">{s.colBonusPercent}</th>
+                <th className="p-3">{s.colRequestQuota}</th>
+                <th className="p-3">{s.colTokenQuota}</th>
+                <th className="p-3">{s.colMaxCostPerRequest}</th>
+                <th className="p-3">
                   <div>{s.colRateLimit}</div>
                   <div className="text-xs text-muted font-normal">{s.colRateLimitSub}</div>
                 </th>
-                <th className="text-right p-3" title={s.colPremiumRateLimitTitle}>
+                <th className="p-3" title={s.colPremiumRateLimitTitle}>
                   <div>{s.colPremiumRateLimit}</div>
                   <div className="text-xs text-muted font-normal">{s.colRateLimitSub}</div>
                 </th>
-                <th className="text-right p-3">{s.colValidityDays}</th>
-                <th className="text-right p-3">{s.colActions}</th>
+                <th className="p-3">{s.colValidityDays}</th>
+                <th className="p-3">{s.colActions}</th>
               </tr>
             </thead>
             <tbody>

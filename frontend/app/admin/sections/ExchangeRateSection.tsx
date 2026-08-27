@@ -341,9 +341,9 @@ export default function ExchangeRateSection({ api }: ExchangeRateSectionProps) {
             <p className="text-xs text-muted mb-4">{s.sourcesDescription}</p>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="admin-table w-full text-sm">
                 <thead>
-                  <tr className="text-right text-xs text-muted border-b border-line">
+                  <tr className="text-xs text-muted border-b border-line">
                     <th className="py-2 pl-2">{s.colSource}</th>
                     <th className="py-2 pl-2">{s.colKind}</th>
                     <th className="py-2 pl-2">{s.colPriority}</th>

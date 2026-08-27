@@ -66,10 +66,10 @@ export default function DashboardSection() {
               <table className="admin-table w-full text-sm">
                 <thead>
                   <tr>
-                    <th className="text-right p-3">{s.colUserId}</th>
-                    <th className="text-right p-3">{s.colAmount}</th>
-                    <th className="text-right p-3">{s.colDescription}</th>
-                    <th className="text-right p-3">{s.colDate}</th>
+                    <th className="p-3">{s.colUserId}</th>
+                    <th className="p-3">{s.colAmount}</th>
+                    <th className="p-3">{s.colDescription}</th>
+                    <th className="p-3">{s.colDate}</th>
                   </tr>
                 </thead>
                 <tbody>

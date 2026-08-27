@@ -162,21 +162,21 @@ export default function ImagePricingSection({ api }: ImagePricingSectionProps) {
           <table className="admin-table w-full text-sm">
             <thead>
               <tr>
-                <th className="text-right p-3">{s.colModel}</th>
-                <th className="text-right p-3">{s.colStatus}</th>
-                <th className="text-right p-3">{s.colBasePrice}</th>
+                <th className="p-3">{s.colModel}</th>
+                <th className="p-3">{s.colStatus}</th>
+                <th className="p-3">{s.colBasePrice}</th>
                 {/* Read-only here. The column is `model_catalog.markup_pct`, written
                     only from the «درصد سود» sub-tab -- an admin looking at a wrong
                     final price on this screen has no way to know which control
                     produced it unless the screen says so. Same reason PricingSection
                     points at «عملیات کاتالوگ» for the availability it cannot change. */}
-                <th className="text-right p-3">
+                <th className="p-3">
                   {s.colMarkup}
                   <span className="block text-[10px] font-normal text-muted">{s.colMarkupSub}</span>
                 </th>
-                <th className="text-right p-3">{s.colFinalPrice}</th>
-                <th className="text-right p-3">{s.colNewPrice}</th>
-                <th className="text-right p-3">{s.colActions}</th>
+                <th className="p-3">{s.colFinalPrice}</th>
+                <th className="p-3">{s.colNewPrice}</th>
+                <th className="p-3">{s.colActions}</th>
               </tr>
             </thead>
             <tbody>

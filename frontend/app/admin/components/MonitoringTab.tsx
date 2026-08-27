@@ -267,13 +267,13 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
               <table className="admin-table w-full text-sm">
                 <thead>
                   <tr>
-                    <th className="text-right p-2">{s.colModel}</th>
-                    <th className="text-right p-2">{s.colStatus}</th>
-                    <th className="text-right p-2">{s.colSuccessRate}</th>
-                    <th className="text-right p-2">{s.colP50}</th>
-                    <th className="text-right p-2">{s.colP95}</th>
-                    <th className="text-right p-2">{s.colSamples}</th>
-                    <th className="text-right p-2">{s.colLastStatus}</th>
+                    <th className="p-2">{s.colModel}</th>
+                    <th className="p-2">{s.colStatus}</th>
+                    <th className="p-2">{s.colSuccessRate}</th>
+                    <th className="p-2">{s.colP50}</th>
+                    <th className="p-2">{s.colP95}</th>
+                    <th className="p-2">{s.colSamples}</th>
+                    <th className="p-2">{s.colLastStatus}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -337,12 +337,12 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
               <table className="admin-table w-full text-sm">
                 <thead>
                   <tr>
-                    <th className="text-right p-2">{s.colUser}</th>
-                    <th className="text-right p-2">{s.colModel}</th>
-                    <th className="text-right p-2">{s.colChargedAmount}</th>
-                    <th className="text-right p-2">{s.colListedCost}</th>
-                    <th className="text-right p-2">{s.colShortfall}</th>
-                    <th className="text-right p-2">{s.colTime}</th>
+                    <th className="p-2">{s.colUser}</th>
+                    <th className="p-2">{s.colModel}</th>
+                    <th className="p-2">{s.colChargedAmount}</th>
+                    <th className="p-2">{s.colListedCost}</th>
+                    <th className="p-2">{s.colShortfall}</th>
+                    <th className="p-2">{s.colTime}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -374,10 +374,10 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
               <table className="admin-table w-full text-sm">
                 <thead>
                   <tr>
-                    <th className="text-right p-2">{s.colUser}</th>
-                    <th className="text-right p-2">{s.colModel}</th>
-                    <th className="text-right p-2">{s.colChargedAmount}</th>
-                    <th className="text-right p-2">{s.colTime}</th>
+                    <th className="p-2">{s.colUser}</th>
+                    <th className="p-2">{s.colModel}</th>
+                    <th className="p-2">{s.colChargedAmount}</th>
+                    <th className="p-2">{s.colTime}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -403,8 +403,8 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
               <table className="admin-table w-full text-sm">
                 <thead>
                   <tr>
-                    <th className="text-right p-2">{s.colUser}</th>
-                    <th className="text-right p-2">{s.colBalance}</th>
+                    <th className="p-2">{s.colUser}</th>
+                    <th className="p-2">{s.colBalance}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -427,10 +427,10 @@ export default function MonitoringTab({ api }: { api: (path: string, opts?: Requ
               <table className="admin-table w-full text-sm">
                 <thead>
                   <tr>
-                    <th className="text-right p-2">{s.colUser}</th>
-                    <th className="text-right p-2">{s.colWalletBalance}</th>
-                    <th className="text-right p-2">{s.colLedgerBalance}</th>
-                    <th className="text-right p-2">{s.colDelta}</th>
+                    <th className="p-2">{s.colUser}</th>
+                    <th className="p-2">{s.colWalletBalance}</th>
+                    <th className="p-2">{s.colLedgerBalance}</th>
+                    <th className="p-2">{s.colDelta}</th>
                   </tr>
                 </thead>
                 <tbody>

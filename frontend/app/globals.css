@@ -301,19 +301,45 @@ img, svg, video, canvas {
   padding: 0.625rem 1.1rem;
   font-size: 0.875rem; font-weight: 600; font-family: inherit;
   border-radius: var(--radius-md);
-  border: 1px solid transparent;
+  /* Was `border: 1px solid transparent` with no background at all, so any
+     call site using the bare class -- no `-primary`/`-secondary`/`-danger`/
+     `-ghost` variant -- rendered as transparent-on-transparent (104 admin
+     buttons do exactly this: `className="btn btn-sm"`). This is now the same
+     surface as `.btn-secondary` below. Every variant sets its own
+     `background`, and because each is a single class (same specificity,
+     0,1,0) declared later in this file, they still win the cascade -- this
+     does not need `!important` or extra specificity to be overridden. */
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
   cursor: pointer;
   transition: background var(--motion-fast), border-color var(--motion-fast), color var(--motion-fast), opacity var(--motion-fast);
   white-space: nowrap;
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-primary { background: var(--accent-fill); color: var(--text-on-accent); box-shadow: var(--shadow-sm); }
+/* Hover feedback for the variantless base only. Scoped with :not() rather
+   than left as a plain `.btn:hover:not(:disabled)` because `:hover:not(...)`
+   already carries the same specificity (0,3,0) as each variant's own hover
+   rule below -- source order alone would not reliably lose to
+   `.btn-secondary:hover` etc, and for `.btn-primary`/`.btn-danger`/
+   `.btn-ghost` a bled-in `border-color` here would win outright regardless
+   of order, since those variants never set their own hover border-color. */
+.btn:not(.btn-primary):not(.btn-secondary):not(.btn-danger):not(.btn-ghost):hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+/* `border-color: transparent` on the three solid/ghost variants is not a
+   visual change -- it is what the old base rule already gave them for free.
+   Spelling it out here stops the new base border (above) from silently
+   drawing a hairline around a filled accent/danger button or turning the
+   ghost variant into an outlined one. */
+.btn-primary { background: var(--accent-fill); color: var(--text-on-accent); border-color: transparent; box-shadow: var(--shadow-sm); }
 .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
 .btn-secondary { background: var(--bg-elevated); color: var(--text-primary); border-color: var(--border); }
 .btn-secondary:hover:not(:disabled) { border-color: var(--border-strong); }
-.btn-ghost { background: transparent; color: var(--text-secondary); }
+.btn-ghost { background: transparent; color: var(--text-secondary); border-color: transparent; }
 .btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
-.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger { background: var(--danger); color: #fff; border-color: transparent; }
 .btn-danger:hover:not(:disabled) { opacity: 0.9; }
 .btn-sm { padding: 0.4rem 0.75rem; font-size: 0.8rem; }
 .btn-lg { padding: 0.85rem 1.5rem; font-size: 1rem; }
@@ -431,11 +457,46 @@ input[type='number']:focus::-webkit-inner-spin-button { opacity: 1; }
    full-height shell measured in vh sits partly under the URL bar and pushes
    the composer off screen. */
 .layout-shell { display: flex; min-height: 100dvh; background: var(--bg-base); }
+/* ── Sidebar collapse tokens ──────────────────────────────────────────────
+   Shared by the user shell's `.layout-sidebar` (below) and the admin panel's
+   own `<aside>`, so a collapse in one place cannot drift out of sync with
+   the other. `--sidebar-w-collapsed` is an icon rail: wide enough for a
+   24px tap target plus its own padding, nothing else. */
+:root {
+  --sidebar-w: 260px;
+  --sidebar-w-collapsed: 64px;
+}
 .layout-sidebar {
-  width: 260px; flex-shrink: 0;
+  width: var(--sidebar-w); flex-shrink: 0;
   flex-direction: column;
   height: 100dvh; position: sticky; top: 0;
   border-inline-end: 1px solid var(--border);
+  transition: width var(--motion-fast);
+}
+/* Contract for the sidebar-collapse work: add/remove this modifier class on
+   the same element that carries `.layout-sidebar`. */
+/* `overflow: hidden` for the same reason the admin rail has it: the header
+   row keeps its `px-4` (32px) around a 36px `btn-icon`, which is 68px of
+   content in a 64px box, and a label caught mid-transition would spill over
+   the main column. */
+.layout-sidebar--collapsed { width: var(--sidebar-w-collapsed); overflow: hidden; }
+/* Collapsed rail: hide label text, keep icons, centre what's left. Targets
+   the literal markup in components/AppShell.tsx --
+   `.sidebar-nav-item` is `[activeBar?] <Icon/> <span>{label}</span>`, so the
+   label span is excluded from the active-bar span by class, not position;
+   `.sidebar-user-btn` is `<avatar-div> <div>{email text}</div>`, so hiding
+   "every child that is not the avatar" is what removes the text without
+   depending on the untitled wrapper div's own (Tailwind) classes. */
+.layout-sidebar--collapsed .sidebar-section-label,
+.layout-sidebar--collapsed .sidebar-nav-item span:not(.sidebar-active-bar) {
+  display: none;
+}
+.layout-sidebar--collapsed .sidebar-user-btn > *:not(.sidebar-user-avatar) {
+  display: none;
+}
+.layout-sidebar--collapsed .sidebar-nav-item,
+.layout-sidebar--collapsed .sidebar-user-btn {
+  justify-content: center;
 }
 .sidebar-glass { background: rgba(26,18,12,0.72); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
 [data-theme='light'] .sidebar-glass { background: rgba(255,255,255,0.7); }
@@ -588,7 +649,10 @@ input[type='number']:focus::-webkit-inner-spin-button { opacity: 1; }
 }
 .topbar-public-nav a:hover { color: var(--text-primary); background: var(--bg-hover); }
 @media (min-width: 768px) { .topbar-public-nav { display: flex; } }
-.layout-content { flex: 1; padding: var(--space-6); max-width: 1400px; width: 100%; margin: 0 auto; }
+/* No max-width/margin:auto cap: panels take the full window per owner
+   request. Horizontal padding stays so text is never flush to the edge --
+   this is the only thing keeping wide viewports readable now. */
+.layout-content { flex: 1; padding: var(--space-6); width: 100%; }
 @media (max-width: 768px) { .layout-content { padding: var(--space-4); } }
 
 /* ── Full-bleed routes ────────────────────────────────────────────────────
@@ -603,6 +667,10 @@ input[type='number']:focus::-webkit-inner-spin-button { opacity: 1; }
    Children size themselves with height:100% from here. */
 .layout-content--flush {
   padding: 0;
+  /* No-op now that `.layout-content` itself carries no max-width, but kept:
+     the rest of this modifier (padding/height/overflow) is still load-bearing
+     for /chat, and re-adding a cap to the base class later should not have to
+     remember to also delete it here. */
   max-width: none;
   height: calc(100dvh - var(--topbar-h));
   min-height: 0;
@@ -933,7 +1001,9 @@ input[type='number']:focus::-webkit-inner-spin-button { opacity: 1; }
 /* ═══════════════════════════════════════════════════════════════════════════
    Shared page layout primitives
    ═══════════════════════════════════════════════════════════════════════════ */
-.page-container { display: flex; flex-direction: column; gap: var(--space-6); max-width: 1100px; margin: 0 auto; }
+/* No max-width cap: panels take the full window per owner request (was
+   1100px, centred). */
+.page-container { display: flex; flex-direction: column; gap: var(--space-6); }
 .page-title { font-size: var(--fs-xl); font-weight: 800; line-height: 1.35; color: var(--text-primary); }
 .page-subtitle { font-size: var(--fs-sm); color: var(--text-muted); margin-top: 0.25rem; }
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-3); }
@@ -1005,7 +1075,9 @@ input[type='number']:focus::-webkit-inner-spin-button { opacity: 1; }
 /* ═══════════════════════════════════════════════════════════════════════════
    Wallet page
    ═══════════════════════════════════════════════════════════════════════════ */
-.wallet-page { display: flex; flex-direction: column; gap: var(--space-6); max-width: 900px; margin: 0 auto; }
+/* No max-width cap: panels take the full window per owner request (was
+   900px, centred). */
+.wallet-page { display: flex; flex-direction: column; gap: var(--space-6); }
 .wallet-header-icon { width: 2.5rem; height: 2.5rem; border-radius: var(--radius-md); background: var(--accent-dim); color: var(--accent); display: flex; align-items: center; justify-content: center; }
 .wallet-balance-card { position: relative; overflow: hidden; text-align: center; padding: var(--space-8); }
 .wallet-balance-glow { position: absolute; inset: 0; background: radial-gradient(circle at 50% 0%, var(--accent-glow), transparent 60%); opacity: 0.4; pointer-events: none; }
@@ -1049,7 +1121,9 @@ input[type='number']:focus::-webkit-inner-spin-button { opacity: 1; }
 /* ═══════════════════════════════════════════════════════════════════════════
    Profile page
    ═══════════════════════════════════════════════════════════════════════════ */
-.profile-page { display: flex; flex-direction: column; gap: var(--space-6); max-width: 800px; margin: 0 auto; }
+/* No max-width cap: panels take the full window per owner request (was
+   800px, centred). */
+.profile-page { display: flex; flex-direction: column; gap: var(--space-6); }
 .profile-header-icon { width: 2.5rem; height: 2.5rem; border-radius: var(--radius-md); background: var(--accent-dim); color: var(--accent); display: flex; align-items: center; justify-content: center; }
 .profile-avatar-section { display: flex; align-items: center; gap: var(--space-4); }
 /* Was a single non-wrapping flex row of [avatar block | 3-up stat grid]. At
@@ -1095,7 +1169,9 @@ input[type='number']:focus::-webkit-inner-spin-button { opacity: 1; }
 /* ═══════════════════════════════════════════════════════════════════════════
    API keys page
    ═══════════════════════════════════════════════════════════════════════════ */
-.apikeys-page { display: flex; flex-direction: column; gap: var(--space-6); max-width: 900px; margin: 0 auto; }
+/* No max-width cap: panels take the full window per owner request (was
+   900px, centred). */
+.apikeys-page { display: flex; flex-direction: column; gap: var(--space-6); }
 .apikeys-header-icon { width: 2.5rem; height: 2.5rem; border-radius: var(--radius-md); background: var(--accent-dim); color: var(--accent); display: flex; align-items: center; justify-content: center; }
 .apikeys-generate-card, .apikeys-newkey-card { display: flex; flex-direction: column; gap: var(--space-3); }
 .apikeys-success-icon { width: 2.5rem; height: 2.5rem; border-radius: var(--radius-full); background: rgba(52,211,153,0.12); color: var(--positive); display: flex; align-items: center; justify-content: center; }
@@ -1156,7 +1232,53 @@ input[type='number']:focus::-webkit-inner-spin-button { opacity: 1; }
    Admin panel
    ═══════════════════════════════════════════════════════════════════════════ */
 .admin-layout { display: flex; gap: var(--space-6); align-items: flex-start; }
+/* AdminPanel.tsx's `.admin-layout` wraps exactly two direct children: the
+   `lg:hidden` mobile header strip, and a plain `.flex` div holding the
+   sidebar `<aside>` + `<main>`. Below Tailwind's `lg` breakpoint (1024px,
+   matching the `lg:hidden`/`lg:sticky` classes on those same elements) the
+   header is not hidden, the aside is `position: fixed` (out of flow), so
+   `.admin-layout`'s default row direction put the header beside the content
+   column instead of above it. `align-items: stretch` is required alongside
+   `flex-direction: column` here -- without it the inherited `flex-start`
+   above shrinks both children to their own content width instead of the
+   full viewport. */
+@media (max-width: 1023px) {
+  .admin-layout { flex-direction: column; align-items: stretch; }
+}
 .admin-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-6); }
+/* ── Admin sidebar collapse ───────────────────────────────────────────────
+   `.admin-sidebar` replaces the Tailwind `w-64` that AdminPanel.tsx's
+   `<aside>` used to carry, so the width reads the same
+   --sidebar-w/--sidebar-w-collapsed tokens as `.layout-sidebar` above and the
+   two cannot drift apart.
+
+   Label hiding hangs off two marker classes -- `.admin-nav-item` and
+   `.admin-nav-chrome` -- that AdminPanel.tsx's buttons now carry purely as
+   styling hooks; they declare nothing themselves, so they cannot collide with
+   the Tailwind utilities and inline `style` those buttons already use. The
+   shell's `.sidebar-nav-item` was deliberately NOT reused: it brings its own
+   padding, radius and background, which would fight the inline active-state
+   colours AdminPanel computes per item.
+
+   The collapse is gated at >=1024px on purpose. Unlike the user shell, where
+   the desktop sidebar (`hidden md:flex`) and the mobile drawer are two
+   different elements, this ONE `<aside>` is both: below lg it is the
+   `fixed`/`translate-x-full` drawer. An ungated width rule would open that
+   drawer as a 64px icon rail behind a full-screen overlay, which is not a
+   state anyone asked for. */
+.admin-sidebar { width: var(--sidebar-w); flex-shrink: 0; transition: width var(--motion-fast); }
+@media (min-width: 1024px) {
+  .admin-sidebar--collapsed { width: var(--sidebar-w-collapsed); }
+  /* The label text, the panel caption, and the language toggle all go; the
+     icons stay and centre. `overflow: hidden` on the aside keeps a mid-
+     transition label from spilling over the main column. */
+  .admin-sidebar--collapsed { overflow: hidden; }
+  .admin-sidebar--collapsed .admin-nav-item span,
+  .admin-sidebar--collapsed .admin-nav-chrome { display: none; }
+  .admin-sidebar--collapsed .admin-nav-item { justify-content: center; padding-inline: 0.5rem; }
+  .admin-sidebar--collapsed .admin-sidebar-head { padding: 0.75rem 0.5rem; }
+  .admin-sidebar--collapsed .admin-sidebar-foot { justify-content: center; padding-inline: 0.5rem; }
+}
 .admin-card { display: flex; flex-direction: column; gap: var(--space-3); }
 
 /* A card whose children are a control strip, not a stack.
@@ -1185,7 +1307,11 @@ input[type='number']:focus::-webkit-inner-spin-button { opacity: 1; }
    same edge React's `borderRight` lands on. */
 .admin-card[style*='border-right'] { padding-inline-start: var(--space-3); }
 .admin-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-.admin-table th { text-align: start; padding: 0.6rem 0.75rem; font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; border-bottom: 1px solid var(--border); }
+/* Owner request: table headers centred (was `start`, i.e. right-aligned in
+   RTL). A parallel pass in this same round removes any per-<th> alignment
+   classes/attrs that would otherwise win by specificity or source order over
+   this shared rule -- this file only owns the default. */
+.admin-table th { text-align: center; padding: 0.6rem 0.75rem; font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; border-bottom: 1px solid var(--border); }
 .admin-table td { padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1281,7 +1407,9 @@ input[type='number']:focus::-webkit-inner-spin-button { opacity: 1; }
 /* ═══════════════════════════════════════════════════════════════════════════
    Status page (/status)
    ═══════════════════════════════════════════════════════════════════════════ */
-.status-page { display: flex; flex-direction: column; gap: var(--space-6); max-width: 1000px; margin: 0 auto; }
+/* No max-width cap: panels take the full window per owner request (was
+   1000px, centred). */
+.status-page { display: flex; flex-direction: column; gap: var(--space-6); }
 .status-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
 .status-skeletons { display: flex; flex-direction: column; gap: var(--space-3); }
 

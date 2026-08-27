@@ -271,14 +271,14 @@ export default function PlansSection({ api }: PlansSectionProps) {
           <table className="admin-table w-full text-sm">
             <thead>
               <tr>
-                <th className="text-right p-3">{s.colPlan}</th>
-                <th className="text-right p-3">{s.colActive}</th>
-                <th className="text-right p-3">{s.colPriceMonthly}</th>
-                <th className="text-right p-3">{s.colMonthlyQuota}</th>
-                <th className="text-right p-3">{s.colDailyCap}</th>
-                <th className="text-right p-3">{s.colPriorityQueue}</th>
-                <th className="text-right p-3">{s.colSortOrder}</th>
-                <th className="text-right p-3">{s.colActions}</th>
+                <th className="p-3">{s.colPlan}</th>
+                <th className="p-3">{s.colActive}</th>
+                <th className="p-3">{s.colPriceMonthly}</th>
+                <th className="p-3">{s.colMonthlyQuota}</th>
+                <th className="p-3">{s.colDailyCap}</th>
+                <th className="p-3">{s.colPriorityQueue}</th>
+                <th className="p-3">{s.colSortOrder}</th>
+                <th className="p-3">{s.colActions}</th>
               </tr>
             </thead>
             <tbody>
@@ -374,14 +374,14 @@ export default function PlansSection({ api }: PlansSectionProps) {
           <table className="admin-table w-full text-sm">
             <thead>
               <tr>
-                <th className="text-right p-3">{s.colUser}</th>
-                <th className="text-right p-3">{s.colPlan}</th>
-                <th className="text-right p-3">{s.colStatus}</th>
-                <th className="text-right p-3">{s.colQuota}</th>
-                <th className="text-right p-3">{s.colUsedTokens}</th>
-                <th className="text-right p-3">{s.colPricePaid}</th>
-                <th className="text-right p-3">{s.colAutoRenew}</th>
-                <th className="text-right p-3">{s.colCreatedAt}</th>
+                <th className="p-3">{s.colUser}</th>
+                <th className="p-3">{s.colPlan}</th>
+                <th className="p-3">{s.colStatus}</th>
+                <th className="p-3">{s.colQuota}</th>
+                <th className="p-3">{s.colUsedTokens}</th>
+                <th className="p-3">{s.colPricePaid}</th>
+                <th className="p-3">{s.colAutoRenew}</th>
+                <th className="p-3">{s.colCreatedAt}</th>
               </tr>
             </thead>
             <tbody>

@@ -140,14 +140,14 @@ export default function UsersSection() {
             <table className="admin-table w-full text-sm">
               <thead>
                 <tr>
-                  <th className="text-right p-3">{s.colId}</th>
-                  <th className="text-right p-3">{s.colEmail}</th>
-                  <th className="text-right p-3">{s.colPhone}</th>
-                  <th className="text-right p-3">{s.colBalance}</th>
-                  <th className="text-right p-3">{s.colReserved}</th>
-                  <th className="text-right p-3">{s.colUsedToday}</th>
-                  <th className="text-right p-3">{s.colStatus}</th>
-                  <th className="text-right p-3">{s.colActions}</th>
+                  <th className="p-3">{s.colId}</th>
+                  <th className="p-3">{s.colEmail}</th>
+                  <th className="p-3">{s.colPhone}</th>
+                  <th className="p-3">{s.colBalance}</th>
+                  <th className="p-3">{s.colReserved}</th>
+                  <th className="p-3">{s.colUsedToday}</th>
+                  <th className="p-3">{s.colStatus}</th>
+                  <th className="p-3">{s.colActions}</th>
                 </tr>
               </thead>
               <tbody>

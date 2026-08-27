@@ -3,12 +3,15 @@
 Two real production bugs, both about `/payment/callback` sending users to
 URLs that do not exist in the frontend:
 
-1. On a FAILED payment, the redirect map sent 'subscription' users to
-   `/plans?payment=failed` and 'credit_package' users to
-   `/credits?payment=failed`. Neither `/plans` nor `/credits` exists as a
-   page in `frontend/app/` -- verified against production, both 404. A
-   user whose payment failed landed on a dead page with no explanation of
-   what happened to their money.
+1. On a FAILED payment, the redirect map sent 'credit_package' users to
+   `/credits?payment=failed`. `/credits` does not exist as a page in
+   `frontend/app/` -- verified against production, 404. A user whose
+   payment failed landed on a dead page with no explanation of what
+   happened to their money. (The map used to also carry a 'subscription'
+   entry pointing at `/plans?payment=failed`, equally dead -- moot now:
+   subscriptions were retired session 23 and `payment_type='subscription'`
+   is refused with a 410 before this redirect map is ever reached; see
+   `test_products_merge.py`.)
 
 2. On a SUCCESSFUL hermes_order payment, the redirect pointed at
    `/hermes/orders/{id}` -- a per-order detail route that was never built
@@ -19,13 +22,11 @@ URLs that do not exist in the frontend:
 
 The fix points every redirect at a page that actually exists, reusing the
 same destinations the (already-correct) success redirects use:
-subscription failure -> `/dashboard` (matches the success target,
-`/dashboard?subscription=active`); credit_package failure -> `/wallet`
-(matches the success target, `/wallet?payment=success`); hermes_order
-success -> the `/hermes/orders` list page instead of the missing
-per-order route. hermes_order failure was already correct
-(`/hermes/order`, the order form) and is pinned down so it cannot regress
-while touching the other two.
+credit_package failure -> `/wallet` (matches the success target,
+`/wallet?payment=success`); hermes_order success -> the `/hermes/orders`
+list page instead of the missing per-order route. hermes_order failure was
+already correct (`/hermes/order`, the order form) and is pinned down so it
+cannot regress while touching the other one.
 """
 from __future__ import annotations
 
@@ -79,11 +80,6 @@ class TestFailedPaymentRedirects:
             resp = client.get('/payment/callback', params={'Authority': 'AUTH1', 'Status': 'NOK'})
         assert resp.status_code == 402
         return resp.json()['redirect']
-
-    def test_subscription_failure_redirects_to_dashboard_not_plans(self, client, mock_async_session):
-        redirect = self._redirect_for(client, mock_async_session, 'subscription')
-        assert '/plans' not in redirect, f'/plans does not exist in the frontend, got {redirect!r}'
-        assert redirect.endswith('/dashboard?payment=failed')
 
     def test_credit_package_failure_redirects_to_wallet_not_credits(self, client, mock_async_session):
         redirect = self._redirect_for(client, mock_async_session, 'credit_package')

@@ -5,17 +5,16 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
-import sqlalchemy
 from fastapi import APIRouter, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 
 from database import async_session, BASE_URL
-from models import Payment, Plan, CreditPackage, Subscription, HermesOrder, HermesOffering
+from models import Payment, CreditPackage, HermesOrder, HermesOffering
 from dependencies import _get_user_id, _write_audit_log
 from payment import create_payment, verify_payment, PaymentRequest, handle_payment_callback, CallbackResult
 from services.billing import SqlBillingRepo
@@ -86,6 +85,23 @@ async def payment_callback(request: Request) -> JSONResponse:
             payment_type = getattr(p, 'payment_type', 'wallet_topup') or 'wallet_topup'
             reference_id = getattr(p, 'reference_id', None)
 
+    # 🔴 THE MONEY TRAP: subscriptions/plans were retired (session 23,
+    # migrations/0049_retire_plans_subscriptions.sql) -- there is no longer
+    # a subscription to grant. This guard MUST run before
+    # handle_payment_callback is ever called: that function's default
+    # behaviour with no credit_amount kwarg is to credit the wallet the
+    # full charged amount, so a stale *pending* Payment row still carrying
+    # payment_type='subscription' (created before this retirement, never
+    # completed) would otherwise fall straight through to that default and
+    # silently gift the wallet money for a product that no longer exists.
+    # Refusing here, before any credit path runs, credits nothing.
+    if payment_type == 'subscription':
+        return err(
+            'اشتراک‌ها دیگر پشتیبانی نمی‌شوند. اعتبار حساب شما تغییری نکرده است.',
+            'Subscriptions are no longer supported. Your wallet was not charged.',
+            410,
+        )
+
     # For a credit package the wallet must be credited total_credits (which
     # may include a bonus above what Zarinpal actually charged/verified,
     # i.e. base_amount) -- resolve that *before* the callback so it can be
@@ -139,15 +155,15 @@ async def payment_callback(request: Request) -> JSONResponse:
         # Targets must be pages that actually exist in the frontend.
         # frontend/app/plans and frontend/app/credits were never built --
         # `/plans` and `/credits` 404 -- so a failed payment used to strand
-        # the user on a dead page with no explanation. Subscription status
-        # lives on /dashboard (see the matching success redirect below,
-        # `/dashboard?subscription=active`) and credit packages are sold
-        # from /wallet (see the matching success redirect,
+        # the user on a dead page with no explanation. Credit packages are
+        # sold from /wallet (see the matching success redirect,
         # `/wallet?payment=success`) -- point the failure path at the same
-        # pages the success path already uses. hermes_order already pointed
+        # page the success path already uses. hermes_order already pointed
         # at the real order form (/hermes/order, 200) and is unchanged.
+        # No 'subscription' entry: that payment_type is refused with a 410
+        # above, before this branch is ever reachable for it -- the dict
+        # default (below) would apply if it somehow were.
         fail_redirect = {
-            'subscription': f'{BASE_URL}/dashboard?payment=failed',
             'credit_package': f'{BASE_URL}/wallet?payment=failed',
             'hermes_order': f'{BASE_URL}/hermes/order?payment=failed',
         }.get(payment_type, f'{BASE_URL}/wallet?payment=failed')
@@ -162,43 +178,10 @@ async def payment_callback(request: Request) -> JSONResponse:
     redirect_path = '/wallet?payment=success'
     extra_data = {}
 
-    if payment_type == 'subscription' and reference_id:
-        uid = p.user_id if pay_row else 0
-        async with async_session() as session:
-            # Plan.id is a string primary key (admin-chosen, e.g. "pro"),
-            # not numeric -- int(reference_id) raised ValueError for any
-            # non-numeric plan id, crashing this branch after the user had
-            # already been charged. See the identical bug fixed for
-            # CreditPackage.id above.
-            plan_res = await session.execute(select(Plan).where(Plan.id == reference_id))
-            plan_row = plan_res.fetchone()
-            plan = plan_row[0] if plan_row else None
-            if plan:
-                await session.execute(
-                    sqlalchemy.text(
-                        "UPDATE subscriptions SET status='cancelled', cancelled_at=now(), updated_at=now() "
-                        "WHERE user_id=:uid AND status='active'"
-                    ),
-                    {'uid': uid}
-                )
-                new_sub = Subscription(
-                    user_id=uid,
-                    plan=plan.name_en.lower() if hasattr(plan, 'name_en') else str(plan.id),
-                    plan_id=plan.id,
-                    status='active',
-                    monthly_token_quota=plan.monthly_token_quota,
-                    tokens_used_this_period=0,
-                    auto_renew=True,
-                    price_paid=result.amount or 0,
-                    starts_at=datetime.now(timezone.utc).replace(tzinfo=None),
-                    ends_at=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=30),
-                )
-                session.add(new_sub)
-                await session.commit()
-                extra_data['subscription'] = plan.name_en
-        redirect_path = '/dashboard?subscription=active'
-
-    elif payment_type == 'credit_package' and credit_pkg is not None:
+    # No 'subscription' branch here: retired (session 23) and refused with
+    # a 410 above before handle_payment_callback is ever called for it, so
+    # `result.ok` can never be True for payment_type == 'subscription'.
+    if payment_type == 'credit_package' and credit_pkg is not None:
         # Wallet was already credited total_credits atomically inside
         # handle_payment_callback above (via credit_amount=); nothing left
         # to do here but report what happened.

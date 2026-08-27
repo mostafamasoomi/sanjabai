@@ -208,6 +208,41 @@ FLAGS: dict[str, FlagMeta] = {
             '«همان رفتار قبلی» -- پس بدترین حالت روشن‌بودن، همان رفتار خاموش است.'
         ),
     ),
+    'smart_llm_router_enabled': FlagMeta(
+        key='smart_llm_router_enabled',
+        label_fa='روتر هوشمند مبتنی بر مدل',
+        label_en='LLM-backed smart router',
+        description_fa=(
+            'اجازه می‌دهد حالت هوشمند، به‌جای طبقه‌بندی رگکسی، یک مدل کوچک و ارزان را '
+            'صدا بزند تا پیام کاربر را تحلیل کند و مدل مناسب را از یک منوی شماره‌دار '
+            'انتخاب کند. خاموش = طبقه‌بندی قاعده‌محورِ امروز، بدون هیچ فراخوان اضافه. '
+            '⚠️ روشن‌کردن این کلید هزینه دارد: هر پیام یک فراخوان کوچک اضافه می‌شود که '
+            'مثل هر درخواست دیگری متر و از کیف پول کم می‌شود.'
+        ),
+        description_en=(
+            'Lets smart mode call one small, cheap model to analyse the user message and '
+            'pick a model from a numbered menu, instead of the regex classifier. Off = '
+            "today's rule-based classification, with no extra call. ⚠️ Turning this on "
+            'costs money: every message adds one small call, metered and billed like any '
+            'other request.'
+        ),
+        default=False,
+        wired=False,
+        wire_note=(
+            '⚠️ هنوز وصل نیست -- ردیف app_setting در مهاجرت 0050 ساخته شده ولی هیچ '
+            'کد بک‌اندی هنوز get_site_flag(\'smart_llm_router_enabled\') را صدا نمی‌زند. '
+            'تا وقتی llm_route() در services/smart_router.py ننشسته، این کلید در پنل '
+            'کاری نمی‌کند و باید همین‌طور صادقانه wired=False بماند '
+            '(نگهبانش test_site_settings.py::test_wired_bit_is_not_a_claim_nobody_checks '
+            'است و همین الان جلوی wired=True زودهنگام را گرفت).\n'
+            'وقتی وصل شد: سه گیت باید هم‌زمان باز باشند -- همین فلگ، انتخاب صریح کاربر، '
+            'و کف موجودی. ⚠️ کف موجودی گیت می‌کند، نه داشتن بستهٔ فعال: مالک در '
+            '۲۰۲۶-۰۸-۲۷ تصمیم گرفت داشتن بسته مدل بهتری نمی‌آورد. خروجی روتر فقط از یک '
+            'منوی شماره‌دار پذیرفته می‌شود تا کاربر نتواند با متن پیامش مدل گران‌تر '
+            'انتخاب کند؛ هر خطا یا خروجی نامعتبر به طبقه‌بندی رگکسی برمی‌گردد، پس بدترین '
+            'حالت روشن‌بودن همان رفتار خاموش است به‌علاوهٔ هزینهٔ یک فراخوان.'
+        ),
+    ),
     'openrouter_enabled': FlagMeta(
         key='openrouter_enabled',
         label_fa='OpenRouter (تأمین‌کننده)',

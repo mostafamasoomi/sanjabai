@@ -323,6 +323,7 @@ from admin_overhead import router as admin_overhead_router
 from images import router as images_router
 from admin_user_ops import router as admin_user_ops_router
 from api_keys import router as api_keys_router
+from combos import router as combos_router
 from pricing import router as pricing_router
 from payment_endpoints import router as payment_router
 from notifications import router as notifications_router
@@ -363,6 +364,7 @@ app.include_router(admin_overhead_router)
 app.include_router(images_router)
 app.include_router(admin_user_ops_router)
 app.include_router(api_keys_router)
+app.include_router(combos_router)
 app.include_router(pricing_router)
 app.include_router(payment_router)
 app.include_router(notifications_router)

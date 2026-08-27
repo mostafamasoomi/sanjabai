@@ -10,6 +10,7 @@ const FA = {
   nav: {
     chat: 'چت',
     models: 'مدل‌ها',
+    combos: 'ترکیب‌های من',
     compare: 'مقایسه',
     status: 'وضعیت مدل‌ها',
     dashboard: 'داشبورد',
@@ -54,6 +55,7 @@ const EN: typeof FA = {
   nav: {
     chat: 'Chat',
     models: 'Models',
+    combos: 'My combos',
     compare: 'Compare',
     status: 'Model status',
     dashboard: 'Dashboard',

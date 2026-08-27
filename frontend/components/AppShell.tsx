@@ -38,6 +38,7 @@ function getNav(lang: Lang): NavItem[] {
     { href: '/chat', label: n.chat, icon: 'chat', section: 'main' },
     { href: '/models', label: n.models, icon: 'models', section: 'main' },
     { href: '/compare', label: n.compare, icon: 'compare', section: 'main' },
+    { href: '/combos', label: n.combos, icon: 'compare', section: 'main' },
     { href: '/status', label: n.status, icon: 'chart', section: 'main' },
     { href: '/dashboard', label: n.dashboard, icon: 'dashboard', section: 'tools' },
     { href: '/wallet', label: n.wallet, icon: 'wallet', section: 'tools' },

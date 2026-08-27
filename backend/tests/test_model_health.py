@@ -62,6 +62,105 @@ class TestDeriveStatus:
         assert _derive_status(10, 0.1, 0, 20_000) == 'down'
 
 
+class TestNeverSucceededIsNotHealthy:
+    """A window with zero successes must never read 'healthy' -- that is the
+    exact input an admin or an automated promotion path would trust that a
+    model has been live-probed and answered (see services/probe_gate.py's
+    "«مدل فقط بعد از پروب زنده موفق ارائه می‌شود»" rule). Below
+    MIN_SAMPLES_FOR_RATE and short of DOWN_AFTER_CONSECUTIVE, the rate rules
+    and the consecutive-failure rule both stay silent, so the function used
+    to fall through to 'healthy'. Reproduces the production symptom:
+    model_health_state rows with status='healthy' AND last_ok_at IS NULL.
+    """
+
+    def test_one_failure_is_not_healthy(self):
+        assert _derive_status(1, 0.0, 1, None) != 'healthy'
+        assert _derive_status(1, 0.0, 1, None) == 'unknown'
+
+    def test_two_failures_is_not_healthy(self):
+        assert _derive_status(2, 0.0, 2, None) != 'healthy'
+        assert _derive_status(2, 0.0, 2, None) == 'unknown'
+
+    def test_third_consecutive_failure_is_still_down(self):
+        # DOWN_AFTER_CONSECUTIVE must still win once the streak reaches it --
+        # the new 'unknown' branch must not outrank the existing down rule.
+        assert _derive_status(3, 0.0, 3, None) == 'down'
+
+    def test_zero_consecutive_but_zero_rate_is_still_not_healthy(self):
+        # The function doesn't require consecutive_failures to agree with
+        # success_rate -- any zero-success window below both thresholds must
+        # resolve to 'unknown', not 'healthy'.
+        assert _derive_status(2, 0.0, 0, None) == 'unknown'
+
+    def test_slow_zero_rate_sample_stays_degraded(self):
+        # Latency still outranks the new branch -- order is unchanged.
+        assert _derive_status(1, 0.0, 1, 20_000) == 'degraded'
+
+    def test_a_real_success_keeps_healthy_even_with_failures_mixed_in(self):
+        # No regression: a model that HAS answered at least once, with an
+        # acceptable rate, must not be pulled into the new branch.
+        assert _derive_status(4, 0.75, 0, None) == 'healthy'
+        assert _derive_status(1, 1.0, 0, None) == 'healthy'
+
+
+class TestDeriveStatusRegressionTable:
+    """Table-drive the pre-fix behaviour of every branch this function has,
+    and assert the post-fix function is byte-identical everywhere except the
+    zero-success/low-sample/low-streak cases the fix targets. Each row's
+    `before` value was the function's actual output prior to this change
+    (verified against the previous source, reproduced in the handoff packet
+    for the first two rows) -- this proves the fix moved exactly one thing.
+    """
+
+    # (sample_count, success_rate, consecutive_failures, latency_p50, before)
+    TABLE = [
+        (0, None, 0, None, 'unknown'),
+        (0, None, 5, None, 'unknown'),
+        (10, 1.0, 0, 800, 'healthy'),
+        (1, 1.0, 0, 120, 'healthy'),
+        (20, 0.86, 0, 500, 'healthy'),
+        (20, 0.9, 0, 500, 'healthy'),
+        (20, 0.99, 0, 500, 'healthy'),
+        (20, 0.84, 0, 500, 'degraded'),
+        (20, 0.7, 0, 500, 'degraded'),
+        (20, 0.5, 0, 500, 'degraded'),
+        (20, 0.39, 0, 500, 'down'),
+        (20, 0.2, 0, 500, 'down'),
+        (20, 0.0, 0, 500, 'down'),
+        (100, 0.97, 3, 500, 'down'),
+        (100, 1.0, 2, 500, 'healthy'),
+        (10, 1.0, 0, 20_000, 'degraded'),
+        (10, 1.0, 0, None, 'healthy'),
+        (10, 0.1, 0, 20_000, 'down'),
+        # zero-success cases: 'before' is what the buggy function returned;
+        # these are the ones the fix is allowed to change.
+        (1, 0.0, 1, None, 'healthy'),
+        (2, 0.0, 2, None, 'healthy'),
+        (3, 0.0, 3, None, 'down'),
+        (4, 0.0, 2, None, 'healthy'),
+        (2, 0.0, 0, None, 'healthy'),
+        (1, 0.0, 1, 20_000, 'degraded'),
+    ]
+
+    # Exactly the rows above where the fix is expected to change the result.
+    CHANGED_INPUTS = {
+        (1, 0.0, 1, None),
+        (2, 0.0, 2, None),
+        (4, 0.0, 2, None),
+        (2, 0.0, 0, None),
+    }
+
+    def test_unchanged_everywhere_except_the_targeted_cases(self):
+        for sample_count, success_rate, consecutive, p50, before in self.TABLE:
+            after = _derive_status(sample_count, success_rate, consecutive, p50)
+            key = (sample_count, success_rate, consecutive, p50)
+            if key in self.CHANGED_INPUTS:
+                assert after == 'unknown', key
+                assert after != before, key
+            else:
+                assert after == before, key
+
+
 class TestProviderConfiguration:
     """9Router is opt-in; LiteLLM is always present."""
 

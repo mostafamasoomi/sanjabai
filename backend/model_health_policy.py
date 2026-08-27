@@ -120,6 +120,18 @@ def _derive_status(
     may act. This is the fix for the live regression that motivated it: 3
     samples, 2 old failures, the latest a success (consecutive == 0) used to
     compute success_rate = 0.333 and get marked down despite just answering.
+
+    Below MIN_SAMPLES_FOR_RATE and short of DOWN_AFTER_CONSECUTIVE, a window
+    of ALL failures (success_rate == 0.0) used to fall through to the final
+    `return 'healthy'` below -- e.g. (1, 0.0, 1, None) or (2, 0.0, 2, None):
+    a model that has never once answered, reported healthy right up until
+    its third straight failure. success_rate == 0.0 already means "zero
+    successes among sample_count samples" by construction (it's an average
+    of 1.0/0.0 per sample) -- no extra "ever succeeded" input is needed, and
+    at sample_count >= MIN_SAMPLES_FOR_RATE this same value is already caught
+    above (0.0 < DOWN_BELOW -> 'down'), so this only ever fires in the gap
+    the rate rules don't cover. 'unknown' is the existing status for "no
+    verdict yet" (see health_map/healthy_model_ids), not a new value.
     """
     if sample_count == 0 or success_rate is None:
         return 'unknown'
@@ -132,6 +144,8 @@ def _derive_status(
             return 'degraded'
     if latency_p50 is not None and latency_p50 > DEGRADED_LATENCY_MS:
         return 'degraded'
+    if success_rate == 0.0:
+        return 'unknown'
     return 'healthy'
 
 

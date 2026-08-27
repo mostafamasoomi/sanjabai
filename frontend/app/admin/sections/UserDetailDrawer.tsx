@@ -175,7 +175,7 @@ export default function UserDetailDrawer({ api, uid, onClose, onBanToggled }: Us
       loadTab<LedgerPayload>('ledger', setLedgerState, (j) => ({ items: j.items || [], total: j.total || 0 }), s.ledgerFetchError)
     }
     if (t === 'payments' && paymentsState.status === 'idle') {
-      loadTab<PaymentsPayload>('payments', setPaymentsState, (j) => ({ payments: j.payments || [], subscriptions: j.subscriptions || [] }), s.paymentsFetchError)
+      loadTab<PaymentsPayload>('payments', setPaymentsState, (j) => ({ payments: j.payments || [] }), s.paymentsFetchError)
     }
     if (t === 'usage' && usageState.status === 'idle') {
       loadTab<UsagePayload>('usage', setUsageState, (j) => ({ by_model: j.by_model || [], daily: j.daily || [] }), s.usageFetchError)

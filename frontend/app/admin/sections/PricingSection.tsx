@@ -18,11 +18,13 @@ import { pricingStrings } from './PricingSection.strings'
    availability toggle and live probe (backend/admin_pricing.py).
 
    The credit/token package table and form that used to sit at the bottom of
-   this screen are GONE. They wrote to POST /admin/credit-packages
-   (backend/admin_plans.py), which hardcodes `active: true` and skips the
+   this screen are GONE. They wrote to POST /admin/credit-packages in
+   backend/admin_plans.py, which hardcoded `active: true` and skipped the
    loss-path validation that POST /admin/packages runs — two admin screens
    writing the same table, one of them able to publish a package that sells
-   at a loss. بسته‌ها (PackagesSection) is now the only writer.
+   at a loss. PackagesSection is now the only writer, and admin_plans.py
+   itself was deleted with the plan/subscription concept (migration 0049),
+   so that unvalidated endpoint no longer exists at all.
 
    Price editing is now INLINE, per row, instead of a name-typed form at the
    bottom of the page. The old form let an admin type any string into a

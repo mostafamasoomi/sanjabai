@@ -62,9 +62,14 @@ describe('NAV_ITEMS bilingual labels', () => {
     // sections edited backend content that no public page has ever read
     // (the landing page's features come from the static
     // components/landing/content/features.ts), so they were orphaned admin
-    // surface. This number is meant to be updated deliberately when a
-    // section is added or removed -- that is the point of the floor.
-    expect(NAV_ITEMS.length).toBe(14)
+    // surface. Was 14 until the standalone «پلن‌ها و اشتراک» entry was
+    // removed (session 23 -- plans/subscriptions retired outright,
+    // migration 0049; the old «بسته‌ها» entry was relabelled «محصولات» and
+    // now mounts ProductsModule.tsx, which folds packages/limits/purchases
+    // into one sidebar entry). This number is meant to be updated
+    // deliberately when a section is added or removed -- that is the point
+    // of the floor.
+    expect(NAV_ITEMS.length).toBe(13)
   })
 
   it('has a non-empty English label for every entry', () => {

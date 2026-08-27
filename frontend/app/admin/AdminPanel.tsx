@@ -13,15 +13,15 @@ import DiscountsSection from './sections/DiscountsSection'
 import ProxySection from './sections/ProxySection'
 import SecuritySection from './sections/SecuritySection'
 import { tabFromSearch, type ModelsTab } from './sections/modelsTabs'
+import { tabFromSearch as productsTabFromSearch, type ProductsTab } from './sections/productsTabs'
 import { useLang, LanguageToggle } from '@/components/LanguageToggle'
 import { usePersistedBoolean } from '@/components/usePersistedBoolean'
 import { navIcon } from '@/lib/i18n'
 import { t, ADMIN_CHROME } from './adminLabels'
 
 const MonitoringTab = dynamic(() => import('./components/MonitoringTab'), { ssr: false })
-const PackagesSection = dynamic(() => import('./sections/PackagesSection'), { ssr: false })
 const AnalyticsSection = dynamic(() => import('./sections/AnalyticsSection'), { ssr: false })
-const PlansSection = dynamic(() => import('./sections/PlansSection'), { ssr: false })
+const ProductsModule = dynamic(() => import('./sections/ProductsModule'), { ssr: false })
 const SiteControlSection = dynamic(() => import('./sections/SiteControlSection'), { ssr: false })
 const ModelsModule = dynamic(() => import('./sections/ModelsModule'), { ssr: false })
 const ModerationSection = dynamic(() => import('./sections/ModerationSection'), { ssr: false })
@@ -51,13 +51,21 @@ export type {
   UserRow, UserDetail, UserDetailTab,
 } from './types'
 
-type Page = 'dashboard' | 'analytics' | 'site-control' | 'models' | 'packages' | 'plans' | 'discounts' | 'proxy' | 'users' | 'security' | 'moderation' | 'watchdog' | 'free-tier' | 'monitoring'
+type Page = 'dashboard' | 'analytics' | 'site-control' | 'models' | 'packages' | 'discounts' | 'proxy' | 'users' | 'security' | 'moderation' | 'watchdog' | 'free-tier' | 'monitoring'
 
 /* Eight of these used to be separate entries -- مدل‌ها, عملیات کاتالوگ,
    مدل‌های منطقی, توکن تزریقی بالادست, تعرفه‌ها, قیمت‌گذاری تصویر, نرخ ارز,
    درصد سود -- scattered down the sidebar, each opening its own list of the
    same models from a different endpoint. They are now sub-tabs of one
    ModelsModule entry.
+
+   `packages` did the same thing later: بسته‌ها and پلن و اشتراک were two
+   entries selling what turned out to be one product. The owner retired the
+   plan/subscription concept outright (migration 0049 drops both tables), so
+   the surviving entry is «محصولات» and it opens ProductsModule. Its key
+   stays `packages` deliberately -- renaming it would break every
+   `?page=packages` link an admin has bookmarked, and the key is not what is
+   on screen.
 
    `label` stays Persian; `labelEn` is the bilingual sibling read via the
    `t()` helper in ./adminLabels, driven by the same `lang`/LanguageToggle
@@ -68,8 +76,7 @@ const NAV_ITEMS: { key: Page; label: string; labelEn: string; icon: IconName }[]
   { key: 'site-control', label: 'کنترل سایت', labelEn: 'Site Control', icon: 'settings' },
   { key: 'models', label: 'مدل‌ها و قیمت‌گذاری', labelEn: 'Models & Pricing', icon: 'code' },
   { key: 'users', label: 'کاربران', labelEn: 'Users', icon: 'profile' },
-  { key: 'packages', label: 'بسته‌ها', labelEn: 'Packages', icon: 'wallet' },
-  { key: 'plans', label: 'پلن و اشتراک', labelEn: 'Plans & Subscription', icon: 'wallet' },
+  { key: 'packages', label: 'محصولات', labelEn: 'Products', icon: 'wallet' },
   { key: 'discounts', label: 'تخفیف‌ها', labelEn: 'Discounts', icon: 'wallet' },
   { key: 'proxy', label: 'پروکسی', labelEn: 'Proxy', icon: 'security' },
   { key: 'security', label: 'امنیت', labelEn: 'Security', icon: 'lock' },
@@ -113,6 +120,12 @@ export default function AdminPage() {
   // back on the sub-tab you were working in instead of on the dashboard.
   const [page, setPage] = useState<Page>(() => pageFromSearch(currentSearch()))
   const [modelsTab, setModelsTab] = useState<ModelsTab>(() => tabFromSearch(currentSearch()))
+  // Two modules own sub-tabs now, and they share the single `?tab=` parameter
+  // because only one of them is ever on screen. Separate state, so switching
+  // between them does not hand one module the other's tab key -- the
+  // normalisation inside each module rejects a foreign key anyway, but a
+  // silent reset to the default reads as the panel losing your place.
+  const [productsTab, setProductsTab] = useState<ProductsTab>(() => productsTabFromSearch(currentSearch()))
   const [sidebarOpen, setSidebarOpen] = useState(false)
   // Desktop collapse, persisted. `sidebarOpen` above is the MOBILE drawer and
   // stays session-only on purpose -- a drawer that reopens itself on every
@@ -124,9 +137,10 @@ export default function AdminPage() {
     if (typeof window === 'undefined') return
     const sp = new URLSearchParams(window.location.search)
     sp.set('page', page)
-    // `tab` belongs to the models module alone; leaving it behind on other
-    // pages would put a stale sub-tab in every link the admin copies.
+    // `tab` belongs to whichever sub-tabbed module is open; leaving it behind
+    // on other pages would put a stale sub-tab in every link the admin copies.
     if (page === 'models') sp.set('tab', modelsTab)
+    else if (page === 'packages') sp.set('tab', productsTab)
     else sp.delete('tab')
     const next = `${window.location.pathname}?${sp.toString()}`
     if (next !== window.location.pathname + window.location.search) {
@@ -134,7 +148,7 @@ export default function AdminPage() {
       // back button that walks 23 sections one at a time is worse than none.
       window.history.replaceState(null, '', next)
     }
-  }, [page, modelsTab])
+  }, [page, modelsTab, productsTab])
 
   // Any 401 from any section drops the whole panel back to the login screen.
   // Before this, `api()` threw the `unauthorized` sentinel and no caller
@@ -382,12 +396,11 @@ export default function AdminPage() {
           {page === 'models' && <ModelsModule tab={modelsTab} onTabChange={setModelsTab} />}
           {page === 'security' && <SecuritySection />}
           {page === 'moderation' && <ModerationSection />}
-          {page === 'packages' && <PackagesSection api={api} />}
+          {page === 'packages' && <ProductsModule tab={productsTab} onTabChange={setProductsTab} />}
           {page === 'analytics' && <AnalyticsSection api={api} />}
           {page === 'site-control' && <SiteControlSection api={api} />}
           {page === 'watchdog' && <WatchdogSection api={api} />}
           {page === 'free-tier' && <FreeTierSection api={api} />}
-          {page === 'plans' && <PlansSection api={api} />}
           {page === 'monitoring' && <MonitoringTab api={api} />}
         </main>
       </div>

@@ -7,7 +7,6 @@ import { fmt } from '@/lib/i18n'
 import { SectionHeader } from './shared'
 import PackagesRow from './PackagesRow'
 import PackagesCreateForm from './PackagesCreateForm'
-import PackagesPremiumThreshold from './PackagesPremiumThreshold'
 import {
   toDraft, isLossPath, EMPTY_NEW_PACKAGE,
   type Draft, type PackageRow, type PackagesSectionProps, type NewPackageDraft,
@@ -25,10 +24,13 @@ import { packagesSectionStrings } from './PackagesSection.strings'
 
    Split across sibling files, all under the 500-line cap:
      PackagesTypes.ts            -- shared types + pure helpers (no JSX)
-     PackagesRow.tsx             -- one editable table row (+ legacy expander)
+     PackagesRow.tsx             -- one editable table row (+ description expander)
      PackagesCreateForm.tsx      -- the "+ افزودن بسته" form
-     PackagesPremiumThreshold.tsx -- the "expensive model" price threshold field
      PackagesSection.tsx (here) -- data fetching/orchestration + the table shell
+
+   PackagesPremiumThreshold.tsx (the "expensive model" price threshold field)
+   used to render inline here; it is now its own sub-tab ("limits") mounted
+   by ProductsModule.tsx alongside this one -- see productsTabs.ts.
 
    Server contract (backend/admin_packages.py):
      GET  /api/admin/packages               -> full credit_packages rows
@@ -48,13 +50,12 @@ import { packagesSectionStrings } from './PackagesSection.strings'
    window message caps that never bypass the wallet — the second is a
    SUBSET counted from inside the first, never an additional cap.
 
-   `price` / `credits` / `bonus_credits` / `name` are legacy columns that
-   predate `base_amount`/`total_credits`/`bonus_percent` — grep across the
-   backend found no purchase-flow code that still reads them (see the long
-   comment at the top of admin_packages.py). They are kept editable here
-   for parity with the API, but collapsed behind "فیلدهای قدیمی" per row
-   and labeled as having no effect on checkout, so an edit here is never
-   mistaken for changing what a buyer actually pays or receives.
+   `price` / `credits` / `bonus_credits` / `name` were legacy columns that
+   predated `base_amount`/`total_credits`/`bonus_percent` — dead since
+   migration 0018 (nothing in the purchase flow ever read them) and dropped
+   from the database outright by migration 0049. They no longer appear on
+   `PackageRow`/`Draft` (see PackagesTypes.ts) or in the save/create payloads
+   below.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function PackagesSection({ api }: PackagesSectionProps) {
@@ -128,7 +129,6 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
       max_cost_per_request_toman: n(d.max_cost_per_request_toman),
       rate_limit_per_window: n(d.rate_limit_per_window),
       premium_rate_limit_per_window: n(d.premium_rate_limit_per_window),
-      price: n(d.price) ?? 0, credits: n(d.credits) ?? 0, bonus_credits: n(d.bonus_credits) ?? 0,
     }
     setSaving(id)
     try {
@@ -163,7 +163,8 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
     try {
       // backend/admin_packages.py::create_package -- `id` plus whichever of
       // the live/quota/rate-limit/text fields are given; the legacy
-      // NOT-NULL trio (name/price/credits) is defaulted server-side.
+      // name/price/credits/bonus_credits columns no longer exist
+      // (migration 0049) so there is nothing left to default server-side.
       await api('/api/admin/packages', {
         method: 'POST',
         body: JSON.stringify({
@@ -195,8 +196,6 @@ export default function PackagesSection({ api }: PackagesSectionProps) {
         title={s.title}
         subtitle={s.subtitle(f.num(rows.length))}
       />
-
-      <PackagesPremiumThreshold api={api} />
 
       <div className="admin-card" style={{ borderRight: '3px solid var(--accent)' }}>
         <h3 className="font-semibold text-sm mb-2 text-primary">{s.fourNumbersTitle}</h3>

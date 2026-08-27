@@ -10,6 +10,10 @@
    `package_entitlement` (see admin_packages.py's `_RATE_LIMIT_FIELDS`
    comment). `premium_rate_limit_per_window` is a SUBSET counted from inside
    `rate_limit_per_window`, never an additional cap on top of it.
+
+   `name` / `price` / `credits` / `bonus_credits` -- the pre-rename originals
+   of `name_fa`/`name_en`, `base_amount` and `total_credits` -- are dropped
+   by migration 0049 and no longer appear on `PackageRow`/`Draft` here.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export interface PackageRow {
@@ -27,10 +31,6 @@ export interface PackageRow {
   max_cost_per_request_toman: number | null
   rate_limit_per_window: number | null
   premium_rate_limit_per_window: number | null
-  price: number
-  credits: number
-  bonus_credits: number
-  name: string
   sort_order: number
 }
 
@@ -52,9 +52,6 @@ export type Draft = {
   max_cost_per_request_toman: string
   rate_limit_per_window: string
   premium_rate_limit_per_window: string
-  price: string
-  credits: string
-  bonus_credits: string
 }
 
 export function toDraft(p: PackageRow): Draft {
@@ -67,7 +64,6 @@ export function toDraft(p: PackageRow): Draft {
     max_cost_per_request_toman: s(p.max_cost_per_request_toman),
     rate_limit_per_window: s(p.rate_limit_per_window),
     premium_rate_limit_per_window: s(p.premium_rate_limit_per_window),
-    price: s(p.price), credits: s(p.credits), bonus_credits: s(p.bonus_credits),
   }
 }
 

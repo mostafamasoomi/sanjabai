@@ -32,9 +32,16 @@ export interface ModelTestResult {
   upstream?: string
 }
 
-// GET /admin/credit-packages (backend/admin_plans.py). Amounts are integer
-// toman like every other money figure in this codebase — never rial, and
-// never scaled on the way in or out.
+// Previously documented as GET /admin/credit-packages (backend/admin_plans.py);
+// that file and route are retired (migration 0049, session 23 — plans/
+// subscriptions dropped, credit_packages is the only product concept left).
+// The equivalent live route is GET /api/admin/packages (backend/admin_packages.py,
+// also a `SELECT * FROM credit_packages`; see PackagesSection.tsx). Nothing
+// in the frontend currently constructs a value of this type — it survives
+// only because AdminPanel.tsx re-exports the name — so treat it as dead and
+// safe to delete outright in a future pass rather than a live contract.
+// Amounts are integer toman like every other money figure in this codebase —
+// never rial, and never scaled on the way in or out.
 export interface CreditPackageRow {
   id: string
   name_fa: string

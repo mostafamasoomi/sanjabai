@@ -84,22 +84,14 @@ export default function PackagesRow({ p, d, saving, expanded, onField, onSave, o
       {expanded && (
         <tr>
           <td colSpan={12} className="p-3" style={{ background: 'var(--bg-elevated)' }}>
-            <p className="text-xs text-muted mb-2">
-              {s.legacyNote}
-            </p>
+            {/* `price`/`credits`/`bonus_credits` used to live in this expander
+                too -- migration 0049 dropped all three columns (dead since
+                the base_amount/total_credits rename, see PackagesTypes.ts),
+                so only `description` is left here. */}
             <div className="flex flex-wrap gap-4">
               <Field label={s.fieldDescription}>
                 <input className="input" value={d.description}
                   onChange={(e) => onField('description', e.target.value)} style={{ minWidth: 220 }} />
-              </Field>
-              <Field label={s.fieldPriceLegacy}>
-                <NumInput value={d.price} onChange={(v) => onField('price', v)} width={110} />
-              </Field>
-              <Field label={s.fieldCreditsLegacy}>
-                <NumInput value={d.credits} onChange={(v) => onField('credits', v)} width={110} />
-              </Field>
-              <Field label={s.fieldBonusCreditsLegacy}>
-                <NumInput value={d.bonus_credits} onChange={(v) => onField('bonus_credits', v)} width={110} />
               </Field>
             </div>
           </td>

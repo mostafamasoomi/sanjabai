@@ -56,15 +56,13 @@ export interface PaymentRow {
   created_at: string
   verified_at: string | null
 }
-export interface SubscriptionRow {
-  id?: number
-  plan?: string
-  status?: string
-  starts_at?: string
-  ends_at?: string | null
-  price_paid?: number
-}
-export interface PaymentsPayload { payments: PaymentRow[]; subscriptions: SubscriptionRow[] }
+/* `SubscriptionRow` and the `subscriptions` key lived here. Migration 0049
+   retired plans and subscriptions, and GET /admin/users/{uid}/payments now
+   answers `{payments: [...]}` and nothing else, so the table below could
+   only ever have rendered an empty array. Deleted rather than left inert:
+   a section that silently never appears reads as a bug the next person has
+   to disprove. */
+export interface PaymentsPayload { payments: PaymentRow[] }
 
 export interface UsageByModelRow {
   model: string
@@ -161,7 +159,7 @@ export function PaymentsTab({ state }: { state: TabState<PaymentsPayload> }) {
   const f = fmt(lang)
 
   return (
-    <StateShell state={state} isEmpty={(d) => d.payments.length === 0 && d.subscriptions.length === 0}>
+    <StateShell state={state} isEmpty={(d) => d.payments.length === 0}>
       {(d) => (
         <div className="space-y-4">
           {d.payments.length > 0 ? (
@@ -197,37 +195,6 @@ export function PaymentsTab({ state }: { state: TabState<PaymentsPayload> }) {
             </div>
           ) : (
             <p className="text-sm text-muted">{s.noPayments}</p>
-          )}
-          {d.subscriptions.length > 0 && (
-            <>
-              <h3 className="text-sm font-bold text-primary">{s.subscriptionsTitle}</h3>
-              <table className="admin-table w-full text-sm">
-                <thead>
-                  <tr>
-                    <th className="p-2">{s.colPlan}</th>
-                    <th className="p-2">{s.colStatus}</th>
-                    <th className="p-2">{s.colStart}</th>
-                    <th className="p-2">{s.colEnd}</th>
-                    <th className="p-2">{s.colAmount}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {d.subscriptions.map((sub, i) => (
-                    <tr key={sub.id ?? i}>
-                      <td className="p-2 text-xs font-medium">{sub.plan || '—'}</td>
-                      <td className="p-2">
-                        <span className={`badge ${sub.status === 'active' ? 'badge-positive' : 'badge-accent'}`}>
-                          {sub.status === 'active' ? s.subActive : sub.status || '—'}
-                        </span>
-                      </td>
-                      <td className="p-2 text-xs">{f.date(sub.starts_at)}</td>
-                      <td className="p-2 text-xs">{sub.ends_at ? f.date(sub.ends_at) : '—'}</td>
-                      <td className="p-2 text-xs">{f.price(sub.price_paid)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
           )}
         </div>
       )}

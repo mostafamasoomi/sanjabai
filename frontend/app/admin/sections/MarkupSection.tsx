@@ -131,7 +131,9 @@ export default function MarkupSection({ api }: MarkupSectionProps) {
   const f = fmt(lang)
   const [loading, setLoading] = useState(true)
   // Distinct from an empty table: a failed load must not look like "zero
-  // models exist" once the toast fades (see PlansSection's plansError).
+  // models exist" once the toast fades. (The pattern was borrowed from
+  // PlansSection's plansError, since deleted with the plan concept; the
+  // same shape survives in PurchasesSection.)
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const [globalPct, setGlobalPct] = useState(0)

@@ -159,17 +159,25 @@ _CEILING_REFRESH_LOCK = asyncio.Lock()
 def _normalize_upstream(upstream: Any) -> str:
     """The canonical upstream name, so a stray alias is not mistaken for paid.
 
-    `model_catalog.upstream` has historically held non-canonical values from
-    hand-run DB fixes ('9router' for the registered 'ninerouter'). margin.py's
-    FREE_UPSTREAMS matches canonical names only, so an un-normalized alias
-    classifies as PAID and gets costed at a ceiling it never actually paid.
-    That fails in the safe direction, but it is still wrong, and it would
-    show up in the report as phantom cost on free traffic.
-    """
-    from chat_models import _UPSTREAM_ALIASES
+    Thin wrapper over services.margin.normalize_upstream, kept so callers in
+    this module read locally. The map deliberately lives in margin.py beside
+    FREE_UPSTREAMS: recognising an upstream and classifying it are one
+    decision, and an un-normalized alias classifies as PAID and gets costed
+    at a category ceiling it never actually paid -- safe direction, still
+    wrong, and it shows up in the report as phantom cost on free traffic.
 
-    text = str(upstream or '').strip().lower()
-    return _UPSTREAM_ALIASES.get(text, text)
+    It used to import the map from `chat_models`, an app module. Live
+    verification caught the cost of that: under one import order the
+    deferred import raised, and because this function sits inside the
+    never-raises guard, EVERY event came back basis='error' with a NULL cost
+    and nothing louder than a log line. A silent, total loss of the profit
+    number is exactly what this feature exists to prevent, so the dependency
+    now points the correct way -- services/ owns the data, app modules
+    import it.
+    """
+    from services.margin import normalize_upstream
+
+    return normalize_upstream(upstream)
 
 
 async def _category_ceilings(session, upstream: str) -> tuple[float | None, float | None]:

@@ -141,10 +141,42 @@ def check_margin(
 # case must fail towards refusing, never towards approving.
 FREE_UPSTREAMS = frozenset({'litellm', 'ninerouter', 'omniroute'})
 
+#: Non-canonical values that have historically appeared in
+#: model_catalog.upstream -- hand-run DB fixes that used '9router' where the
+#: registered providers.Provider name is 'ninerouter'.
+#:
+#: This map lives HERE, beside FREE_UPSTREAMS, because the two are one
+#: decision: whether a row costs us money depends on recognising its upstream,
+#: and a name the map does not normalise is a name FREE_UPSTREAMS will not
+#: match. Keeping them apart is how a stray alias gets classified as a paid
+#: upstream and charged a category ceiling it never paid.
+#:
+#: chat_models.py imports it from here rather than the other way round.
+#: services/ is framework-agnostic domain logic and must not depend on an
+#: app module -- and it is not academic: a deferred import in that direction
+#: turned every cost capture into basis='error' under one import order,
+#: silently, with nothing but a log line to show for it.
+UPSTREAM_ALIASES = {
+    '9router': 'ninerouter',
+    'nine_router': 'ninerouter',
+    'omni': 'omniroute',
+    'omni_route': 'omniroute',
+}
+
+
+def normalize_upstream(upstream: str | None) -> str:
+    """The canonical upstream name for ``upstream``, lowercased."""
+    text = str(upstream or '').strip().lower()
+    return UPSTREAM_ALIASES.get(text, text)
+
 
 def is_paid_upstream(upstream: str | None) -> bool:
-    """Does serving a model through ``upstream`` cost us money per token?"""
-    return str(upstream or '').strip().lower() not in FREE_UPSTREAMS
+    """Does serving a model through ``upstream`` cost us money per token?
+
+    Normalises first, so a non-canonical alias is not mistaken for an
+    unclassified upstream and assumed paid.
+    """
+    return normalize_upstream(upstream) not in FREE_UPSTREAMS
 
 
 def upstream_cost_toman(

@@ -74,12 +74,11 @@ _UPSTREAM_CACHE_REFRESH_LOCK = asyncio.Lock()
 # instead of the registered 'ninerouter'). Normalizing here means a stray
 # non-canonical value in model_catalog.upstream degrades gracefully instead
 # of silently falling back to litellm.
-_UPSTREAM_ALIASES = {
-    '9router': 'ninerouter',
-    'nine_router': 'ninerouter',
-    'omni': 'omniroute',
-    'omni_route': 'omniroute',
-}
+# Single source of truth: services/margin.py, beside FREE_UPSTREAMS -- the
+# two are one decision, since a name the map does not normalise is a name
+# FREE_UPSTREAMS will not match. Re-exported under the original private name
+# so nothing that referenced it here has to change.
+from services.margin import UPSTREAM_ALIASES as _UPSTREAM_ALIASES
 
 
 async def _get_model_upstream(model_id: str) -> str | None:

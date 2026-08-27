@@ -232,6 +232,32 @@ class TestBasisLadder:
         assert snap.basis == 'unknown'
         assert snap.cost_toman is None
 
+    def test_upstream_normalization_does_not_reach_out_of_services(self):
+        """The alias map must not come from an app module.
+
+        Found by live verification, not by any test that existed at the
+        time: `_normalize_upstream` used to do a deferred
+        `from chat_models import _UPSTREAM_ALIASES`, and under one import
+        order that raised. Because the lookup sits inside the never-raises
+        guard, the result was not a crash -- it was EVERY event coming back
+        basis='error' with a NULL cost, and a log line. Total, silent loss of
+        the profit number, which is the precise failure this whole feature
+        exists to prevent.
+
+        services/ is framework-agnostic domain logic; the dependency must
+        point from app modules into it, never back out.
+        """
+        import inspect
+        src = inspect.getsource(cc)
+        assert 'from chat_models import' not in src, (
+            'services/cost_capture.py must not import an app module -- an '
+            'import failure here silently blanks every cost'
+        )
+        # And the map really is single-sourced, not copied.
+        from services.margin import UPSTREAM_ALIASES
+        import chat_models
+        assert chat_models._UPSTREAM_ALIASES is UPSTREAM_ALIASES
+
     @pytest.mark.asyncio
     async def test_capture_never_raises_and_reports_error(self, monkeypatch):
         import content

@@ -328,44 +328,17 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
         )
     cost = max(1, int((input_tokens * inp_rate + output_tokens * out_rate + 500_000) // 1_000_000))
 
-    # ── What this request cost US (migration 0048) ──────────────────────
-    # Captured HERE, above the entitlement branch, so that both billing
-    # paths record it. A package-covered request charges the user nothing
-    # but still costs us upstream; recording zero cost on those rows would
-    # make packages look infinitely profitable, which is the exact trap
-    # this placement closes.
-    #
-    # Costed on `prompt_tokens_raw`, NOT the possibly-discounted
-    # `input_tokens`: when a provider pads the prompt we refuse to bill the
-    # user for the padding, but the upstream still charges us for it.
-    # Revenue on discounted tokens, cost on raw tokens.
-    #
-    # `price_row` may be None (the L2 catalog-data-bug path above) -- then
-    # nothing is known about the upstream and the snapshot is honestly
-    # 'error', never a zero. capture_upstream_cost never raises.
-    # Belt AND braces: capture_upstream_cost already never raises, and this
-    # wraps it anyway. It is called from inside the billing transaction,
-    # beside the wallet charge (below) and the Ledger row -- an exception
-    # escaping here does not just lose a bookkeeping field, it rolls back the
-    # charge and serves the request free, silently, with nothing worse than a
-    # warning in the log. Cost accounting is worth exactly zero requests, so
-    # the guarantee is not left resting on one function's internal discipline.
-    from services.cost_capture import capture_upstream_cost, _ERROR_SNAPSHOT
-    cost_snapshot = _ERROR_SNAPSHOT
-    if price_row is not None:
-        try:
-            cost_snapshot = await capture_upstream_cost(
-                session,
-                upstream=getattr(price_row, 'upstream', None),
-                input_tokens=prompt_tokens_raw,
-                output_tokens=output_tokens,
-                usd_input_per_million=getattr(price_row, 'usd_input_per_million', None),
-                usd_output_per_million=getattr(price_row, 'usd_output_per_million', None),
-            )
-        except Exception as exc:
-            logger.warning(
-                f"_record_usage: cost capture raised model={model!r} uid={uid}: {exc}"
-            )
+    # What this request cost US (migration 0048). Taken HERE, above the
+    # entitlement branch, so BOTH billing paths record it -- see
+    # services/cost_capture.py::snapshot_for_price_row for why that
+    # placement, and why the cost is priced on raw rather than billed tokens.
+    from services.cost_capture import snapshot_for_price_row
+    cost_snapshot = await snapshot_for_price_row(
+        session, price_row,
+        input_tokens=prompt_tokens_raw,
+        output_tokens=output_tokens,
+        model=model, uid=uid,
+    )
 
     # Entitlement gate: real (not estimated) cost may be covered by a
     # package quota, consumed atomically before the wallet is touched --

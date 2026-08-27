@@ -293,6 +293,64 @@ async def capture_upstream_cost(
         return _ERROR_SNAPSHOT
 
 
+async def snapshot_for_price_row(
+    session,
+    price_row: Any,
+    *,
+    input_tokens: int,
+    output_tokens: int,
+    model: str = '',
+    uid: int | None = None,
+) -> CostSnapshot:
+    """Cost this request from the catalog row the billing path already read.
+
+    Lives here rather than inline in chat_billing._record_usage for two
+    reasons: that function was already at the house line cap, and everything
+    this does is cost policy, which belongs beside the rest of it.
+
+    ── Where the caller must invoke this ────────────────────────────────
+    ABOVE the entitlement branch, so BOTH billing paths record a cost. A
+    package-covered request charges the user nothing but still costs us
+    upstream; leaving it uncosted makes every package look infinitely
+    profitable, so the more we sell the better the dashboard looks while the
+    bill grows.
+
+    ── Which token count ────────────────────────────────────────────────
+    `input_tokens` must be the RAW prompt tokens the upstream reported, not
+    the overhead-discounted number the user is billed on. Revenue on
+    discounted tokens, cost on raw tokens; see capture_upstream_cost.
+
+    ── When price_row is None ───────────────────────────────────────────
+    That is the L2 catalog-data-bug path: we served a model with no catalog
+    row, so nothing is known about its upstream. The snapshot is honestly
+    'error' -- never a zero, which would claim the request was free.
+
+    Belt AND braces on the exception guard: capture_upstream_cost already
+    never raises, and this wraps it anyway. It runs inside the billing
+    transaction beside the wallet charge and the Ledger row, where an
+    escaping exception does not merely lose a bookkeeping field -- it rolls
+    the charge back and serves the request free, silently, with nothing worse
+    than a warning in the log. That guarantee is too expensive to leave
+    resting on one function's internal discipline.
+    """
+    if price_row is None:
+        return _ERROR_SNAPSHOT
+    try:
+        return await capture_upstream_cost(
+            session,
+            upstream=getattr(price_row, 'upstream', None),
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            usd_input_per_million=getattr(price_row, 'usd_input_per_million', None),
+            usd_output_per_million=getattr(price_row, 'usd_output_per_million', None),
+        )
+    except Exception as exc:
+        logger.warning(
+            f'cost_capture: snapshot raised model={model!r} uid={uid}: {exc}'
+        )
+        return _ERROR_SNAPSHOT
+
+
 def _is_usable(value: Any) -> bool:
     """Is this a real positive price? Mirrors margin._positive_float's rule.
 

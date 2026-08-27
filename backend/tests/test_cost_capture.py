@@ -475,6 +475,10 @@ class TestWalletPath:
         async def _boom(*a, **k):
             raise RuntimeError('cost capture exploded')
 
+        # Patched on the inner function, NOT on snapshot_for_price_row: that
+        # is what proves the wrapper's own try/except is doing the work. Patch
+        # the wrapper instead and this test would only be checking that a
+        # function which does not raise does not raise.
         monkeypatch.setattr(cc, 'capture_upstream_cost', _boom)
         broken_session = _RecordingSession(wallet_balance=1_000_000, price=_catalog_row('litellm'))
         broken = await chat_billing._record_usage(broken_session, 1, _payload(), _usage())

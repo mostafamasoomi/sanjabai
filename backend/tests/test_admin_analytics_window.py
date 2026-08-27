@@ -269,12 +269,30 @@ class TestEndpointHonesty:
         import admin_analytics_timeseries as mod
 
         src = inspect.getsource(mod)
-        cost_query = src[src.index('AS known_cost'):src.index('AS error_events')]
 
-        assert cost_query.count('FILTER (WHERE ue.upstream_cost_toman IS NOT NULL)') == 2, (
-            'measured_revenue and measured_events must each be filtered to '
-            'rows that have a cost'
+        # THREE queries compute measured_revenue/measured_events -- the daily
+        # series, the per-model table and the per-user table -- and all three
+        # feed the same coverage rule. An earlier version of this guard sliced
+        # out only the daily query; a review probe then mutated the per-model
+        # query's FILTERs the same way and every test stayed green. So the
+        # count is taken over the whole module: six clauses, two per query.
+        #
+        # `ue.` prefixed in the daily and per-user queries (both join
+        # usage_events as ue), bare in the per-model query (single table).
+        measured = (
+            src.count('FILTER (WHERE ue.upstream_cost_toman IS NOT NULL)')
+            + src.count('FILTER (WHERE upstream_cost_toman IS NOT NULL)')
         )
+        assert measured == 6, (
+            f'expected 6 measured-row filters (measured_revenue + measured_events '
+            f'across the daily, per-model and per-user queries), found {measured}. '
+            f'An unfiltered one reports unmeasured rows as measured, which lets '
+            f'the margin rule hand back a number computed with none of the cost in it.'
+        )
+        for label in ('AS measured_revenue', 'AS measured_events'):
+            assert src.count(label) == 3, (
+                f'{label} must be computed in all three buckets (daily, model, user)'
+            )
         # The one COALESCE allowed on the cost column is the known_cost sum,
         # where the zero means "nothing measured here yet", not "free".
         assert 'COALESCE(ue.upstream_cost_toman, 0)' not in src, (

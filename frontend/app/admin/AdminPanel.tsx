@@ -9,13 +9,13 @@ import { Field } from './sections/shared'
 import { api, setAdminToken, setUnauthorizedHandler } from './api'
 import DashboardSection from './sections/DashboardSection'
 import UsersSection from './sections/UsersSection'
-import FeaturesSection from './sections/FeaturesSection'
 import DiscountsSection from './sections/DiscountsSection'
-import AboutSection from './sections/AboutSection'
 import ProxySection from './sections/ProxySection'
 import SecuritySection from './sections/SecuritySection'
 import { tabFromSearch, type ModelsTab } from './sections/modelsTabs'
 import { useLang, LanguageToggle } from '@/components/LanguageToggle'
+import { usePersistedBoolean } from '@/components/usePersistedBoolean'
+import { navIcon } from '@/lib/i18n'
 import { t, ADMIN_CHROME } from './adminLabels'
 
 const MonitoringTab = dynamic(() => import('./components/MonitoringTab'), { ssr: false })
@@ -51,7 +51,7 @@ export type {
   UserRow, UserDetail, UserDetailTab,
 } from './types'
 
-type Page = 'dashboard' | 'analytics' | 'site-control' | 'models' | 'packages' | 'plans' | 'features' | 'discounts' | 'about' | 'proxy' | 'users' | 'security' | 'moderation' | 'watchdog' | 'free-tier' | 'monitoring'
+type Page = 'dashboard' | 'analytics' | 'site-control' | 'models' | 'packages' | 'plans' | 'discounts' | 'proxy' | 'users' | 'security' | 'moderation' | 'watchdog' | 'free-tier' | 'monitoring'
 
 /* Eight of these used to be separate entries -- مدل‌ها, عملیات کاتالوگ,
    مدل‌های منطقی, توکن تزریقی بالادست, تعرفه‌ها, قیمت‌گذاری تصویر, نرخ ارز,
@@ -70,9 +70,7 @@ const NAV_ITEMS: { key: Page; label: string; labelEn: string; icon: IconName }[]
   { key: 'users', label: 'کاربران', labelEn: 'Users', icon: 'profile' },
   { key: 'packages', label: 'بسته‌ها', labelEn: 'Packages', icon: 'wallet' },
   { key: 'plans', label: 'پلن و اشتراک', labelEn: 'Plans & Subscription', icon: 'wallet' },
-  { key: 'features', label: 'امکانات', labelEn: 'Features', icon: 'models' },
   { key: 'discounts', label: 'تخفیف‌ها', labelEn: 'Discounts', icon: 'wallet' },
-  { key: 'about', label: 'درباره ما', labelEn: 'About Us', icon: 'notification' },
   { key: 'proxy', label: 'پروکسی', labelEn: 'Proxy', icon: 'security' },
   { key: 'security', label: 'امنیت', labelEn: 'Security', icon: 'lock' },
   { key: 'moderation', label: 'پالایش محتوا', labelEn: 'Content Moderation', icon: 'warning' },
@@ -116,6 +114,11 @@ export default function AdminPage() {
   const [page, setPage] = useState<Page>(() => pageFromSearch(currentSearch()))
   const [modelsTab, setModelsTab] = useState<ModelsTab>(() => tabFromSearch(currentSearch()))
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  // Desktop collapse, persisted. `sidebarOpen` above is the MOBILE drawer and
+  // stays session-only on purpose -- a drawer that reopens itself on every
+  // load is a bug, not a preference. This one is the ≥lg icon-rail state, and
+  // an admin who chose the rail wants it again tomorrow.
+  const [navCollapsed, setNavCollapsed] = usePersistedBoolean('sanjabai_admin_nav_collapsed', false)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -263,10 +266,18 @@ export default function AdminPage() {
              scrolled underneath. Now the nav is the only scroll container
              and the footer is a normal flow item after it, so the button is
              always genuinely last and never overlaps a menu row. */
+          /* `admin-sidebar` replaces Tailwind's `w-64`: the width now comes
+             from --sidebar-w / --sidebar-w-collapsed in globals.css so the
+             collapsed rail and its transition live in one place. The mobile
+             drawer is never collapsed -- a 64px rail behind an overlay is
+             nothing anyone wants -- so the modifier is gated on `lg:`, which
+             is why it is applied through a lg-only class rather than the
+             width utility it replaced. */
           className={`
-            fixed lg:sticky top-0 right-0 z-40 h-screen w-64 shrink-0
+            fixed lg:sticky top-0 right-0 z-40 h-screen admin-sidebar shrink-0
             border-l flex flex-col transition-transform duration-200
             lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}
+            ${navCollapsed ? 'admin-sidebar--collapsed' : ''}
           `}
           style={{
             background: 'var(--bg-surface)',
@@ -283,9 +294,22 @@ export default function AdminPage() {
 
               Now bilingual: the caption follows `lang`, same as every nav
               label below. */}
-          <div className="shrink-0 p-5 border-b" style={{ borderColor: 'var(--border)' }}>
-            <BrandLockup height={33} />
-            <p className="text-[10px] text-muted mt-2">{t(ADMIN_CHROME.panelCaption, lang)}</p>
+          <div className="admin-sidebar-head shrink-0 p-5 border-b flex items-start justify-between gap-2" style={{ borderColor: 'var(--border)' }}>
+            <div className="admin-nav-chrome min-w-0">
+              <BrandLockup height={33} />
+              <p className="text-[10px] text-muted mt-2">{t(ADMIN_CHROME.panelCaption, lang)}</p>
+            </div>
+            {/* Desktop-only: below lg this same aside is the drawer, which is
+                dismissed by the overlay, not by a rail toggle. */}
+            <button
+              className="hidden lg:flex items-center justify-center shrink-0 rounded-lg p-1.5 text-muted transition-colors"
+              onClick={() => setNavCollapsed((v) => !v)}
+              title={t(navCollapsed ? ADMIN_CHROME.expandNav : ADMIN_CHROME.collapseNav, lang)}
+              aria-label={t(navCollapsed ? ADMIN_CHROME.expandNav : ADMIN_CHROME.collapseNav, lang)}
+              aria-expanded={!navCollapsed}
+            >
+              <Icon name={navIcon(lang, navCollapsed ? 'back' : 'forward')} size={16} />
+            </button>
           </div>
 
           {/* Navigation — the کاربران/مدل‌ها count badges are gone with the
@@ -298,9 +322,15 @@ export default function AdminPage() {
               <button
                 key={item.key}
                 className={`
-                  w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150
+                  admin-nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150
                   ${page === item.key ? 'font-medium' : 'hover:opacity-80'}
                 `}
+                /* Collapsed, the label is display:none and the icon is all
+                   that identifies the row -- so it must be named here, not
+                   only by the text. */
+                title={t(item, lang)}
+                aria-label={t(item, lang)}
+                aria-current={page === item.key ? 'page' : undefined}
                 style={{
                   background: page === item.key ? 'var(--accent-dim)' : 'transparent',
                   color: page === item.key ? 'var(--accent)' : 'var(--text-secondary)',
@@ -318,15 +348,20 @@ export default function AdminPage() {
               toggle sits next to logout, same row, same button language --
               it is the only way to flip the panel's language without
               leaving it. */}
-          <div className="shrink-0 p-3 border-t flex items-center gap-2" style={{ borderColor: 'var(--border)' }}>
+          <div className="admin-sidebar-foot shrink-0 p-3 border-t flex items-center gap-2" style={{ borderColor: 'var(--border)' }}>
             <button
-              className="flex-1 flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-muted"
+              className="admin-nav-item flex-1 flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-muted"
               onClick={logout}
+              title={t(ADMIN_CHROME.logout, lang)}
+              aria-label={t(ADMIN_CHROME.logout, lang)}
             >
               <Icon name="logout" size={18} />
               <span>{t(ADMIN_CHROME.logout, lang)}</span>
             </button>
-            <LanguageToggle />
+            {/* The toggle is a two-wide control with its own label; collapsed
+                to 64px it has nowhere to sit, and language is not a decision
+                anyone makes from an icon rail. */}
+            <span className="admin-nav-chrome"><LanguageToggle /></span>
           </div>
         </aside>
 
@@ -339,9 +374,7 @@ export default function AdminPage() {
         <main className="admin-main flex-1 min-w-0 p-4 lg:p-8 overflow-y-auto" style={{ background: 'var(--bg-base)' }}>
           {page === 'dashboard' && <DashboardSection />}
           {page === 'users' && <UsersSection />}
-          {page === 'features' && <FeaturesSection />}
           {page === 'discounts' && <DiscountsSection />}
-          {page === 'about' && <AboutSection />}
           {page === 'proxy' && <ProxySection />}
           {page === 'models' && <ModelsModule tab={modelsTab} onTabChange={setModelsTab} />}
           {page === 'security' && <SecuritySection />}

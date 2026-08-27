@@ -11,6 +11,8 @@ import { Icon, type IconName } from '@/components/ui/Icon'
 import { useCommandPalette } from '@/components/CommandPalette'
 import { isOnboarded } from '@/lib/onboarding'
 import { getPanelPreference, isNavItemVisibleForPanel } from '@/lib/panel'
+import { navIcon } from '@/lib/i18n'
+import { usePersistedBoolean } from './usePersistedBoolean'
 import { BrandLockup } from './BrandLockup'
 import { appShellStrings } from './AppShell.strings'
 
@@ -114,6 +116,9 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  // Desktop-only collapse of the app sidebar to an icon-only rail. Mobile
+  // has its own separate drawer (sidebarOpen above) and never collapses.
+  const [collapsed, setCollapsed] = usePersistedBoolean('sanjabai_sidebar_collapsed', false)
   const { CommandPalette, setOpen: openPalette } = useCommandPalette()
 
   // Consumer/developer panel preference (lib/panel.ts). This is a UI
@@ -212,11 +217,15 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
   if (!loading && !user && !isPublic) return null
 
+  // `title`/`aria-label` carry the name even when the collapsed rail's CSS
+  // hides the `<span>` -- a hidden label must not become an unlabelled icon.
   const NavItemLink = ({ item }: { item: NavItem }) => (
     <Link
       key={item.href}
       href={item.href}
       className={`sidebar-nav-item ${isActive(item.href) ? 'sidebar-nav-item--active' : ''}`}
+      title={item.label}
+      aria-label={item.label}
     >
       {isActive(item.href) && <span className="sidebar-active-bar" />}
       <Icon name={item.icon} size={18} />
@@ -239,14 +248,26 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
     <div className="layout-shell">
       {/* ── Desktop Sidebar — hidden when not logged in ── */}
       {user && (
-      <aside className="layout-sidebar hidden md:flex sidebar-glass">
+      <aside className={`layout-sidebar hidden md:flex sidebar-glass${collapsed ? ' layout-sidebar--collapsed' : ''}`}>
         {/* The lockup already contains the wordmark, so the tinted icon chip
             and the separate "Sanjabai" text next to it are both gone -- side
-            by side they printed the name twice. */}
-        <div className="flex items-center px-4 py-3.5">
-          <Link href="/" aria-label="Sanjabai">
+            by side they printed the name twice. Collapsed to an icon-only
+            rail, the wordmark has nowhere to go, so it hides and only the
+            collapse/expand toggle remains in this row. */}
+        <div className="flex items-center justify-between px-4 py-3.5">
+          <Link href="/" aria-label="Sanjabai" className={collapsed ? 'hidden' : undefined}>
             <BrandLockup height={30} />
           </Link>
+          <button
+            type="button"
+            className="btn btn-ghost btn-icon"
+            onClick={() => setCollapsed(!collapsed)}
+            title={collapsed ? s.expandMenu : s.collapseMenu}
+            aria-label={collapsed ? s.expandMenu : s.collapseMenu}
+            aria-expanded={!collapsed}
+          >
+            <Icon name={navIcon(lang, collapsed ? 'forward' : 'back')} size={18} />
+          </button>
         </div>
         <div className="divider" />
 

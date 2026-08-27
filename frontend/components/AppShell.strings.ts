@@ -46,6 +46,8 @@ const FA = {
   publicNavLabel: 'پیمایش عمومی',
   more: 'بیشتر',
   docs: 'مستندات',
+  collapseMenu: 'جمع کردن منو',
+  expandMenu: 'باز کردن منو',
 }
 
 const EN: typeof FA = {
@@ -88,6 +90,8 @@ const EN: typeof FA = {
   publicNavLabel: 'Public navigation',
   more: 'More',
   docs: 'Docs',
+  collapseMenu: 'Collapse menu',
+  expandMenu: 'Expand menu',
 }
 
 export const appShellStrings = dict(FA, EN)

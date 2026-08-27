@@ -53,11 +53,18 @@ describe('t() helper', () => {
 })
 
 describe('NAV_ITEMS bilingual labels', () => {
-  it('extracted all 16 nav entries from AdminPanel.tsx', () => {
+  it('extracted all 14 nav entries from AdminPanel.tsx', () => {
     // A sanity floor on the regex itself: if AdminPanel.tsx's NAV_ITEMS
     // shape changes and the extractor silently matches zero entries, every
     // other assertion in this block would vacuously pass.
-    expect(NAV_ITEMS.length).toBe(16)
+    //
+    // Was 16 until the «امکانات» and «درباره ما» entries were removed: both
+    // sections edited backend content that no public page has ever read
+    // (the landing page's features come from the static
+    // components/landing/content/features.ts), so they were orphaned admin
+    // surface. This number is meant to be updated deliberately when a
+    // section is added or removed -- that is the point of the floor.
+    expect(NAV_ITEMS.length).toBe(14)
   })
 
   it('has a non-empty English label for every entry', () => {

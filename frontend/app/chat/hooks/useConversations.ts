@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect, type MutableRefObject } from 
 import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
 import { useLang } from '@/components/LanguageToggle'
+import { usePersistedBoolean } from '@/components/usePersistedBoolean'
 import { type ModelCatalogItem } from '@/types/catalog'
 import type { Message, UsageStats, Conversation, ConversationDetail } from '../chatTypes'
 import { generateId, getDateGroup, makeWelcomeMessage, type DateGroupKey } from '../chatHelpers'
@@ -33,7 +34,11 @@ export function useConversations(params: UseConversationsParams) {
   const lang = useLang()
   const s = useConversationsStrings(lang)
 
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  // Persisted across reloads (same key/pattern as AppShell's sidebar
+  // collapse -- see components/usePersistedBoolean.ts). Default stays `true`
+  // so a first-time visitor with nothing in localStorage still sees the
+  // conversation list open, matching the previous behavior.
+  const [sidebarOpen, setSidebarOpen] = usePersistedBoolean('sanjabai_chat_sidebar_open', true)
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)

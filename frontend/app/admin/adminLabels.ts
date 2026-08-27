@@ -38,6 +38,8 @@ export const ADMIN_CHROME = {
   loginButton: { label: 'ورود', labelEn: 'Sign in' },
   loggingIn: { label: 'در حال ورود...', labelEn: 'Signing in...' },
   logout: { label: 'خروج', labelEn: 'Log out' },
+  collapseNav: { label: 'جمع کردن منو', labelEn: 'Collapse menu' },
+  expandNav: { label: 'باز کردن منو', labelEn: 'Expand menu' },
   sessionExpired: { label: 'نشست شما منقضی شد؛ دوباره وارد شوید', labelEn: 'Your session has expired -- please sign in again' },
   loginSuccess: { label: 'ورود موفقیت‌آمیز بود', labelEn: 'Signed in successfully' },
   invalidToken: { label: 'توکن نامعتبر است', labelEn: 'Invalid token' },

@@ -21,6 +21,7 @@ the day it is written instead of the day someone audits it.
 """
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -113,14 +114,33 @@ def test_the_premium_gate_runs_before_the_reservation(module):
     )
     assert premium_at is not None, f'{module}: no premium gate call'
 
-    # Only a real reserve() invocation counts -- prose in a docstring and the
-    # release/refund helpers mention BillingService too, and those legitimately
-    # appear elsewhere in the file.
-    reserve_at = next(
-        (i for i, ln in enumerate(lines)
-         if re.search(r'\.reserve\(', ln) and i > premium_at),
-        None,
+    # Only a real reserve() invocation counts, and "real" has to mean parsed,
+    # not matched. Two bugs lived here:
+    #
+    # 1. The scan was restricted to lines after the premium gate, which made
+    #    this assertion incapable of failing. With the gate in the right place
+    #    it found a reserve() below and `premium_at < reserve_at` was true by
+    #    construction; with the gate moved BELOW reserve() it found nothing and
+    #    skipped. Both branches green, so the one regression this test exists
+    #    to catch -- a rejection that leaves a reservation to unwind -- sailed
+    #    through. Found by mutation: moving the premium gate under reserve() in
+    #    chat_smart.py produced SKIPPED, not a failure.
+    # 2. Widening it to the whole file then failed on chat_web.py,
+    #    document_generator.py and task_execution.py, all three of which only
+    #    say "BillingService.reserve()" in DOCSTRING PROSE. A regex over source
+    #    text cannot tell an explanation from a call.
+    #
+    # So: walk the AST and take the line of the first genuine `*.reserve(...)`
+    # call node. Comments and docstrings are not Call nodes and cannot register.
+    tree = ast.parse(src)
+    reserve_lines = sorted(
+        node.lineno - 1
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == 'reserve'
     )
+    reserve_at = reserve_lines[0] if reserve_lines else None
     if reserve_at is None:
         pytest.skip(f'{module} opens no reservation of its own')
     assert premium_at < reserve_at, (

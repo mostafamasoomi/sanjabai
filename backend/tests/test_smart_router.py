@@ -359,7 +359,13 @@ def test_pool_sql_is_a_plain_string_literal():
             f'string literal ({type(arg).__name__}) -- the SQL audit will skip it'
         )
         literal_calls += 1
-    assert literal_calls == 1, f'expected exactly one text() call, found {literal_calls}'
+    # Guards the guard -- if the walk above ever stops matching, every
+    # assertion in the loop passes vacuously. A floor, not an exact count:
+    # pinning the number turned adding a legitimate second query (the combo
+    # lookup) into a test failure, which teaches people to edit the number
+    # rather than read the test. The invariant is "every text() argument is a
+    # plain literal", and that is asserted inside the loop for all of them.
+    assert literal_calls >= 1, 'no sqlalchemy.text() call found -- the scan is vacuous'
 
 
 def test_pool_sql_keeps_every_load_bearing_clause():

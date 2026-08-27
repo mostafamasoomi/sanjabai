@@ -267,12 +267,41 @@ class TestCollisionLoserStillWorksAsChatId:
     async def test_still_accepted_as_a_chat_model(self):
         """'mistral-large' (the bare collision loser) must keep working as a
         chat id -- it keeps its own id/route/price, it's just not publicly
-        listed. It's in chat.py's hardcoded verified working set, so this
-        must pass even with no DB configured at all."""
-        with patch.object(_db, '_real_async_session', None):
+        listed. `public_id IS NULL` gates *listing*, never *acceptance*.
+
+        This used to assert the same thing with no DB configured at all,
+        because the id happened to sit in chat.py's hardcoded verified
+        working set. That set is gone (it had drifted to eight models the
+        catalog could no longer serve), so the invariant is now proved where
+        it actually lives: against the catalog itself.
+
+        Honest scope note: acceptance is defended twice -- the working-set
+        fast path AND `_is_model_allowed`'s direct row-exists query -- so no
+        single-site mutation turns this red; it takes both paths dropping
+        public_id-NULL rows (verified). Read it as a redundancy check over
+        the pair, not as coverage of either path alone.
+        """
+        with _patch_resolve_db():
             chat_mod._WORKING_SET_CACHE = None
             allowed = await chat_mod._is_model_allowed('mistral-large')
         assert allowed is True
+
+    @pytest.mark.asyncio
+    async def test_rejected_when_db_is_down_and_cache_is_cold(self):
+        """Deliberate counterpart to the test above: with no DB *and* nothing
+        ever cached, acceptance fails closed.
+
+        Guards the removal of the hardcoded working set. That set answered
+        True here, which meant a model an admin had explicitly disabled in
+        the catalog became reachable again the moment the DB blinked -- the
+        one moment nothing could verify the decision. A cold-start rejection
+        is the safe direction: during a real outage billing and reservations
+        are down too, so the request could not have completed anyway.
+        """
+        with patch.object(_db, '_real_async_session', None):
+            chat_mod._WORKING_SET_CACHE = None
+            allowed = await chat_mod._is_model_allowed('mistral-large')
+        assert allowed is False
 
     @pytest.mark.asyncio
     async def test_resolver_leaves_collision_loser_id_unchanged(self):

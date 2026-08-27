@@ -2,10 +2,11 @@
 Model health: which models are actually answering right now.
 
 Before this module, "is this model working?" was answered by two hand-written
-lists — `_HARDCODED_WORKING` in chat.py and `WORKING_MODEL_IDS` in the
-frontend, the latter carrying a comment saying it was synced from a live test
-on a specific date. Both went stale the moment an upstream changed, and nothing
-noticed.
+lists — a hardcoded fallback set formerly in chat_models.py (deleted, see
+that module's history — it fell back to a set nothing in it could serve) and
+`WORKING_MODEL_IDS` in the frontend, the latter carrying a comment saying it
+was synced from a live test on a specific date. Both went stale the moment an
+upstream changed, and nothing noticed.
 
 Health is now measured from two sources and combined:
 

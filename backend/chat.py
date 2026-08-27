@@ -204,8 +204,6 @@ from chat_models import (
     get_working_models,
     is_working_model,
     _is_model_allowed,
-    _HARDCODED_WORKING,
-    WORKING_MODELS,
 )
 
 

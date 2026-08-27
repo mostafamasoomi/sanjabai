@@ -62,10 +62,11 @@ class TestChatRouter:
     def test_router_exists(self):
         from chat import router
         assert router is not None
-    
-    def test_working_models_defined(self):
-        from chat import _HARDCODED_WORKING
-        assert 'tencent-hy3' in _HARDCODED_WORKING
+
+    # test_working_models_defined was deleted (packet W): it only pinned
+    # a literal ('tencent-hy3') inside the now-deleted `_HARDCODED_WORKING`
+    # fallback set, which had gone entirely unservable months before this
+    # test would have caught it. See chat_models.py's get_working_models().
 
 
 class TestWalletRouter:

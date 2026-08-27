@@ -96,15 +96,45 @@ class TestServices:
 
 class TestModelsConfig:
     """Test model configuration"""
-    
-    def test_working_models_set(self):
-        from chat import _HARDCODED_WORKING, get_working_models
-        assert 'tencent-hy3' in _HARDCODED_WORKING
-        assert 'deepseek-v4-pro' in _HARDCODED_WORKING
-    
+
+    # test_working_models_set was deleted (packet W): it only asserted that
+    # specific model ids sat in the now-deleted `_HARDCODED_WORKING` fallback
+    # set -- a list that had gone stale (every member unservable) months
+    # before anyone noticed, precisely because this test kept reporting
+    # green against the pinned literal instead of live behaviour. See
+    # chat_models.py's get_working_models() for the fail-closed replacement.
+
     def test_model_catalog_table_exists(self):
         from models import ModelAlias
         assert ModelAlias is not None
+
+    @pytest.mark.asyncio
+    async def test_get_working_models_fails_closed_on_cold_cache(self):
+        """No hardcoded fallback survives: a cold cache (nothing ever read
+        successfully) plus an unreachable DB must return an EMPTY working
+        set, not some baked-in list -- see chat_models.py's get_working_models()
+        for why a non-empty fallback here is exactly the bug this deleted."""
+        from unittest.mock import patch
+        import chat as chat_mod
+        with patch.object(chat_mod, 'async_session', None), \
+             patch.object(chat_mod, '_WORKING_SET_CACHE', None):
+            working = await chat_mod.get_working_models()
+            assert working == frozenset()
+            assert await chat_mod.is_working_model('tencent-hy3') is False
+            assert await chat_mod.is_working_model('anything') is False
+
+    @pytest.mark.asyncio
+    async def test_get_working_models_serves_warm_cache_on_db_failure(self):
+        """A DB blip with a previously-populated cache must keep serving the
+        last-known-good set unchanged -- the normal transient-failure case
+        must not regress into the same empty-set behaviour as a cold cache."""
+        from unittest.mock import patch
+        import chat as chat_mod
+        with patch.object(chat_mod, 'async_session', None), \
+             patch.object(chat_mod, '_WORKING_SET_CACHE', {'tencent-hy3', 'mistral-large'}):
+            working = await chat_mod.get_working_models()
+            assert working == frozenset({'tencent-hy3', 'mistral-large'})
+            assert await chat_mod.is_working_model('tencent-hy3') is True
 
 
 class TestDependencies:

@@ -4,8 +4,7 @@ module docstring for why).
 Holds: upstream resolution (_get_model_upstream / _resolve_provider),
 public_id canonicalization (_resolve_public_model), the safe default-model
 lookup (_safe_default_model), and the "working model" allow-list
-(get_working_models / is_working_model / _is_model_allowed / WORKING_MODELS
-/ _HARDCODED_WORKING).
+(get_working_models / is_working_model / _is_model_allowed).
 
 MONKEYPATCH / SHARED-STATE CONTRACT -- read before touching this file:
 tests reach into chat.py's namespace directly, not this module's, for both
@@ -42,16 +41,15 @@ from providers import COMPLETION_TIMEOUT_SECONDS  # re-export: chat.py is at
 
 logger = logging.getLogger('chat')  # keep all chat_*.py logs under the pre-split 'chat' logger name
 
-# Working model set — now DYNAMIC from the model_catalog DB table.
+# Working model set — DYNAMIC from the model_catalog DB table.
 #
-# The single source of truth is model_catalog (availability='available'). When the
-# DB is unavailable we fall back to this verified hardcoded set so the service keeps
-# working. See get_working_models() / is_working_model() below.
-_HARDCODED_WORKING: frozenset[str] = frozenset({
-    'tencent-hy3', 'mistral-large', 'mistral-medium-3-5',
-    'deepseek-v4-pro', 'deepseek-v4-flash-bynara', 'deepseek-v4-pro-bynara',
-    'mimo-v2.5-pro', 'mimo-v2.5-pro-ultraspeed',
-})
+# The single source of truth is model_catalog (availability='available'). There
+# is deliberately NO hardcoded fallback set here anymore (removed — see
+# get_working_models() below for why). During a genuine DB outage, billing,
+# reservations and session lookup are all down too, so a chat request cannot
+# complete anyway; a hardcoded set bought no real resilience, it only widened
+# the window in which a model an admin had withdrawn (availability != 'available')
+# could still reach a user. Fail closed instead.
 
 # Cache of model id -> upstream name ('litellm' / 'ninerouter' / ...), for
 # models model_discovery.py tagged with a non-default upstream. Models an
@@ -352,11 +350,22 @@ async def get_working_models() -> frozenset[str]:
     """Return the set of model ids considered 'working' (available in catalog).
 
     Reads from model_catalog (availability='available'). Falls back to the
-    hardcoded verified set when the DB is unreachable so the service degrades
-    gracefully instead of rejecting every request.
+    last successful read (`chat._WORKING_SET_CACHE`) when the DB is
+    unreachable, so a brief blip keeps serving whatever was last known good.
+
+    There is NO hardcoded fallback set. On a cold cache (nothing has ever
+    succeeded — e.g. right after startup, before the first catalog read) this
+    returns an empty set, and every model is then rejected by
+    is_working_model()/_is_model_allowed(). That is intentional: during a
+    genuine DB outage, billing/reservations/session lookup are all down too,
+    so a chat request can't complete anyway, and a hardcoded set only bought
+    the risk of silently serving a model an admin had deliberately disabled.
     """
     if chat.async_session is None:
-        return _HARDCODED_WORKING
+        fallback = frozenset(chat._WORKING_SET_CACHE or ())
+        if not fallback:
+            logger.error("get_working_models: async_session is None and cache is cold -- returning EMPTY working set, every model will be rejected")
+        return fallback
     try:
         async with chat.async_session() as session:
             res = await session.execute(sqlalchemy.text(
@@ -373,7 +382,10 @@ async def get_working_models() -> frozenset[str]:
                 return frozenset(ids)
     except Exception as e:
         logger.warning(f"get_working_models DB read failed: {e}")
-    return frozenset(chat._WORKING_SET_CACHE or _HARDCODED_WORKING)
+    fallback = frozenset(chat._WORKING_SET_CACHE or ())
+    if not fallback:
+        logger.error("get_working_models: DB read failed/empty and cache is cold -- returning EMPTY working set, every model will be rejected")
+    return fallback
 
 
 async def is_working_model(model_id: str) -> bool:
@@ -385,16 +397,13 @@ async def is_working_model(model_id: str) -> bool:
     return bare in working or model_id in working
 
 
-# Backwards-compatible alias (deprecated — prefer is_working_model()).
-WORKING_MODELS = _HARDCODED_WORKING
-
-
 async def _is_model_allowed(model_id: str) -> bool:
     """Check if model is in the available catalog (dynamic from model_catalog).
 
     The working set is now sourced from model_catalog (availability='available').
     A model is allowed if it is present and available in the catalog, or if it
-    falls back to the verified hardcoded set when the DB is unreachable.
+    falls back to the last-known-good cached set when the DB is unreachable
+    (empty on a cold cache -- see get_working_models()).
     """
     if not model_id:
         return False

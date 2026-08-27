@@ -104,8 +104,11 @@ _REQUIRED_CALLABLES = [
 _REQUIRED_ATTRS = [
     'ChatRequest',
     'CompareRequest',
-    '_HARDCODED_WORKING',
-    'WORKING_MODELS',
+    # `_HARDCODED_WORKING` / `WORKING_MODELS` were DELETED (not moved) --
+    # the fallback set they held was unservable garbage that could route a
+    # withdrawn model to a user during a DB blip. See chat_models.py's
+    # get_working_models() for the fail-closed replacement. Do not re-add
+    # these names here; their absence from the facade is the fix.
     '_PERSIAN_STYLE_SYSTEM_MESSAGE',
     'FALLBACK_PRICE_PER_MILLION_IN',
     'FALLBACK_PRICE_PER_MILLION_OUT',

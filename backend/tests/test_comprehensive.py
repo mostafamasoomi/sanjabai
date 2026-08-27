@@ -87,12 +87,11 @@ class TestModels:
         ])
         response = client.get('/v1/models')
         assert response.status_code in [200, 401]
-    
-    def test_model_availability_check(self):
-        """Working models set should be defined"""
-        from chat import get_working_models, _HARDCODED_WORKING
-        assert 'tencent-hy3' in _HARDCODED_WORKING
-        assert 'deepseek-v4-pro' in _HARDCODED_WORKING
+
+    # test_model_availability_check was deleted (packet W): it only asserted
+    # specific ids sat in the now-deleted `_HARDCODED_WORKING` fallback set,
+    # every member of which had gone unservable months before this test
+    # would have caught it. See chat_models.py's get_working_models().
 
 
 # ── Wallet Tests ───────────────────────────────────────────────────────────

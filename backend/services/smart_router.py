@@ -10,9 +10,11 @@ is not a better hardcoded list: it is to stop hardcoding and ask the
 catalog which models are actually available, actually priced, and actually
 answered a probe.
 
-Scope: pool + price bands + rule selection + cost estimate. Combo selection
-and the LLM-driven router are deliberately NOT here -- they are a separate
-change and do not get to ride in on this one.
+Scope: pool + price bands + rule selection + cost estimate, plus combo
+selection (`select_for_combo`, added later against the migration-0050
+tables). The LLM-driven router is deliberately NOT here -- it is optional,
+costs money per message, and lives in services/smart_router_llm.py so that
+nothing on this rule-based path can be broken by it.
 
 MONEY: every amount in this module is an integer number of Toman. There is
 no float arithmetic anywhere and there must never be one -- see
@@ -23,6 +25,8 @@ balance as 995,551).
 through `chat.<name>` at call time, exactly as chat_smart.py does it -- see
 that module's docstring for why this is safe against the chat.py import
 cycle and why late binding is required for the test monkeypatch contract.
+`security` is imported the same way and reached as `security._get_redis()`
+at call time, for the same monkeypatch reason -- see security_lockout.py.
 """
 from __future__ import annotations
 
@@ -33,6 +37,7 @@ from dataclasses import dataclass
 import sqlalchemy
 
 import chat
+import security
 
 logger = logging.getLogger('chat')  # same logger name as the rest of the chat path
 
@@ -294,3 +299,113 @@ def estimate_cost_toman(c: Candidate) -> int:
         (_ESTIMATE_INPUT_TOKENS * c.input_per_million
          + _ESTIMATE_OUTPUT_TOKENS * c.output_per_million) // 1_000_000,
     )
+
+
+# ── Combo selection ──────────────────────────────────────────────────────
+
+# Plain string literal for the same reason as _POOL_SQL above -- an f-string
+# would drop this statement out of scripts/sql_schema_audit.py, and both
+# tables exist in production (migration 0050) so the auditor really does
+# EXPLAIN it.
+#
+# Every clause of the WHERE is load-bearing:
+#   c.id = :combo_id AND c.user_id = :uid -- ownership is enforced IN THE
+#       QUERY, exactly as combos._fetch_combo does it: a combo belonging to
+#       another user comes back as zero rows, indistinguishable from an id
+#       that does not exist. Selecting first and comparing user_id in Python
+#       would be one forgotten branch away from routing on someone else's
+#       combo.
+#   c.enabled = true              -- a disabled combo is not a combo; the
+#                                    caller must fall back to select_by_rules.
+# LEFT JOIN, not JOIN: a combo with no items still returns one row, so the
+# policy is readable and "combo exists but is empty" stays distinguishable
+# from "no such combo" in the log. Both end up returning None.
+_COMBO_SQL = sqlalchemy.text(
+    "SELECT c.policy, i.position, i.model_public_id "
+    "FROM user_model_combo c "
+    "LEFT JOIN user_model_combo_item i ON i.combo_id = c.id "
+    "WHERE c.id = :combo_id AND c.user_id = :uid AND c.enabled = true "
+    "ORDER BY i.position"
+)
+
+# Rotation counter for the round_robin policy. Per combo, not per user: the
+# combo is what is being rotated through.
+_COMBO_RR_KEY = 'smart:combo_rr:{}'
+
+
+async def _combo_rr_index(combo_id: int, count: int) -> int:
+    """Next index for a round_robin combo, or 0 when Redis cannot answer.
+
+    Reached through `security._get_redis()` AT CALL TIME, never via `from
+    security import _get_redis` -- tests monkeypatch `security._get_redis`
+    directly and a module-level binding here would freeze the pre-patch
+    function object (see security_lockout.py's IMPORT/MONKEYPATCH CONTRACT).
+
+    DEGRADES TO SEQUENTIAL (index 0) on any Redis trouble instead of
+    propagating. A rotation counter is a nicety; failing a chat request
+    because a counter was unreachable would trade the whole feature for it.
+    """
+    try:
+        counter = int(await security._get_redis().incr(_COMBO_RR_KEY.format(combo_id)))
+        return counter % count
+    except Exception as e:
+        logger.warning(
+            f"combo round-robin counter unavailable combo_id={combo_id}, "
+            f"falling back to sequential: {e}"
+        )
+        return 0
+
+
+async def select_for_combo(uid: int, combo_id: int, pool: list[Candidate]) -> Candidate | None:
+    """Pick one candidate from a user's saved combo, or None.
+
+    None means "this combo cannot serve the request" -- unknown id, someone
+    else's combo, disabled, empty, or every item dead -- and the caller
+    falls back to `select_by_rules`. Never raises.
+
+    DEAD ENTRIES ARE SKIPPED, NEVER FATAL. Items store the PUBLIC id the
+    user picked (`sanjab/...`, see combos.py); models get withdrawn,
+    quarantined or unpriced afterwards, at which point the saved id either
+    stops resolving or resolves to something no longer in the pool. A saved
+    combo has to degrade to its surviving members, not break, or one
+    withdrawn model would silently disable every combo that named it.
+    """
+    try:
+        if not pool or chat.async_session is None:
+            return None
+        async with chat.async_session() as session:
+            res = await session.execute(_COMBO_SQL, {'combo_id': combo_id, 'uid': uid})
+            rows = res.fetchall()
+        if not rows:
+            return None
+
+        policy = rows[0].policy
+        # provider_model_id is what _resolve_public_model canonicalizes to
+        # and what the pool is keyed on for routing/health/billing.
+        by_route = {c.provider_model_id: c for c in pool}
+        healthy: list[Candidate] = []
+        for row in rows:
+            public_id = row.model_public_id
+            if not public_id:
+                continue  # LEFT JOIN filler row: the combo has no items
+            resolved = await chat._resolve_public_model(public_id)
+            candidate = by_route.get(resolved) if resolved else None
+            if candidate is None:
+                logger.info(
+                    f"select_for_combo skipping dead item combo_id={combo_id} "
+                    f"model={public_id!r}: not in the servable pool"
+                )
+                continue
+            healthy.append(candidate)
+
+        if not healthy:
+            logger.info(
+                f"select_for_combo found no live member combo_id={combo_id} uid={uid}"
+            )
+            return None
+        if policy == 'round_robin':
+            return healthy[await _combo_rr_index(combo_id, len(healthy))]
+        return healthy[0]
+    except Exception as e:
+        logger.warning(f"select_for_combo failed uid={uid} combo_id={combo_id}: {e}")
+        return None

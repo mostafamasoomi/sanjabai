@@ -26,6 +26,12 @@ because `candidate_pool` is not bound yet, while `import services.
 smart_router as smart_router` only binds the module object and resolves
 every attribute at call time. Both import orders are covered by
 tests/test_smart_chat_v2_gates.py.
+
+WHICH selector runs (the `X-Smart-Mode` header: rules / LLM router / a
+saved combo) lives in chat_smart_mode.py -- this file only asks it for a
+pick and reports back which mode produced it. See that module's docstring;
+in particular services/smart_router_llm.py is reachable ONLY from there and
+ONLY through a call-time import, for the same cycle reason as above.
 """
 from __future__ import annotations
 
@@ -49,6 +55,7 @@ from model_output import clean_response_dict
 from i18n import err, err_openai
 
 import chat
+import chat_smart_mode
 import services.smart_router as smart_router  # module import on purpose -- see docstring
 from providers import COMPLETION_TIMEOUT_SECONDS
 from chat import ChatRequest
@@ -186,13 +193,29 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
         # -- a normal user must never see which upstream route a model
         # resolved to (see content.py's no-provider-leak rule).
         smart_model_label = force_model
+        # X-Smart-Model outranks X-Smart-Mode entirely: the caller named the
+        # model, so no selector runs and the mode header is not even read.
+        # The response still reports `auto`, because neither the LLM router
+        # nor a combo picked anything -- reporting a mode that did not run
+        # would be the same lie as reporting a mode that fell back.
+        smart_mode_used = chat_smart_mode.MODE_AUTO
         # Price the reservation on the forced model's real catalog rates when
         # the router knows it. Matched on provider_model_id, i.e. AFTER
         # _resolve_public_model canonicalised the header, because that is the
         # key the pool is built on.
         pick = next((c for c in _pool if c.provider_model_id == selected_model), None)
     else:
-        pick = smart_router.select_by_rules(category, balance, _pool)
+        # Optional strategies (LLM router / saved combo) behind the
+        # X-Smart-Mode header; both fall back to select_by_rules, and
+        # `smart_mode_used` is what actually ran, never what was asked for.
+        # A malformed header degrades to 'auto' instead of erroring -- see
+        # chat_smart_mode.parse_mode.
+        _mode, _combo_id = chat_smart_mode.parse_mode(request.headers.get('X-Smart-Mode'))
+        pick, smart_mode_used = await chat_smart_mode.select_for_mode(
+            _mode, _combo_id,
+            uid=uid, message=last_user_msg, category=category,
+            balance=balance, pool=_pool,
+        )
         if pick is None:
             # Nothing servable: the catalog has no available+priced+probed
             # model, or the DB could not answer. The old code fell back to a
@@ -316,7 +339,10 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
                     await _rel_session.commit()
             except Exception as _rel_e:
                 logger.warning(f"BillingService.release before stream failed uid={uid}: {_rel_e}")
-        return await chat._smart_chat_stream(payload_dict, request, selected_model, category, display_model=smart_model_label)
+        return await chat._smart_chat_stream(
+            payload_dict, request, selected_model, category,
+            display_model=smart_model_label, smart_mode=smart_mode_used,
+        )
 
     try:
         _provider = await chat._resolve_provider(selected_model)
@@ -374,6 +400,12 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
         # provider -- only an admin does, through the admin endpoints.
         resp.headers['X-Smart-Model'] = smart_model_label
         resp.headers['X-Smart-Category'] = category
+        # Which selector actually produced the model: 'auto', 'router' or
+        # 'combo:<id>'. A requested mode that declined and fell back reads
+        # 'auto' here -- the client has to be able to tell that its combo is
+        # dead or that the LLM router did not run. Safe to show: it names a
+        # strategy, never a provider or a route.
+        resp.headers['X-Smart-Mode'] = smart_mode_used
         if original_model and original_model != selected_model:
             resp.headers['X-Smart-Original-Model'] = original_model
         return resp

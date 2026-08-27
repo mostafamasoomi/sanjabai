@@ -260,6 +260,7 @@ async def _smart_chat_stream(
     selected_model: str,
     category: str,
     display_model: str | None = None,
+    smart_mode: str | None = None,
 ):
     """Stream smart chat completion via SSE.
 
@@ -313,7 +314,19 @@ async def _smart_chat_stream(
                 headers={**_provider.headers(), 'Accept': 'text/event-stream'},
                 timeout=httpx.Timeout(90, connect=10, read=90),
             ) as r:
-                yield f'data: {json.dumps({"type": "smart_info", "model": display_model, "category": category})}\n\n'
+                # `mode` is what actually produced the pick (auto / router /
+                # combo:<id>), never what the client asked for -- a router or
+                # combo that declined and fell back reports `auto`. The
+                # non-stream path says the same thing in its X-Smart-Mode
+                # response header, but the browser only ever takes this path:
+                # the frontend reads no response headers at all, and the Next
+                # proxy rebuilds the response without them anyway. Omitted
+                # entirely when the caller passes nothing, so an older caller
+                # keeps producing the exact event it produced before.
+                _info = {"type": "smart_info", "model": display_model, "category": category}
+                if smart_mode is not None:
+                    _info["mode"] = smart_mode
+                yield f'data: {json.dumps(_info)}\n\n'
                 async for line in r.aiter_lines():
                     if not client_gone and await request.is_disconnected():
                         client_gone = True

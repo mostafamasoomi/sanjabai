@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 import database as _db
 from app import app
+from i18n import err
 from tests.conftest import make_result, make_row
 
 client = TestClient(app)
@@ -19,6 +20,45 @@ def admin_ok():
         yield
 
 
+@pytest.fixture
+def gates_pass():
+    """Satisfy both promotion gates (probe + margin) so a flip to
+    'available' proceeds -- see admin_pricing.toggle_model's own comment on
+    why enabling a model is gated while disabling one is not.
+
+    Patches the module-level names `admin_pricing._refuse_unprobed` /
+    `admin_pricing._refuse_loss_making` rather than the `services.probe_gate`
+    / `services.margin` functions they wrap, because toggle_model reaches
+    them as bare module globals (`await _refuse_unprobed(...)`) -- same
+    monkeypatch shape as admin_pricing.py's own module docstring documents
+    for `admin.admin_required`.
+    """
+    with patch('admin_pricing._refuse_unprobed', new=AsyncMock(return_value=None)), \
+         patch('admin_pricing._refuse_loss_making', new=AsyncMock(return_value=None)):
+        yield
+
+
+def _spy_on_execute(session):
+    """Wrap ``session.execute`` to record every SQL text passed to it,
+    without changing what it returns (still ``session._execute_result``).
+
+    Used to prove a refused promotion never reaches the UPDATE -- asserting
+    only the response status code would still pass if the gate were checked
+    after the write, so the tests that use this look at what was actually
+    executed.
+    """
+    calls: list[str] = []
+    orig_execute = session.execute
+
+    async def spy_execute(*args, **kwargs):
+        if args:
+            calls.append(str(args[0]))
+        return await orig_execute(*args, **kwargs)
+
+    session.execute = spy_execute
+    return calls
+
+
 class TestToggleModel:
     def test_toggle_flips_available_to_disabled(self, mock_async_session, admin_ok):
         mock_async_session._execute_result = make_result(fetchone=make_row(availability='available'))
@@ -26,7 +66,7 @@ class TestToggleModel:
         assert resp.status_code == 200
         assert resp.json() == {'status': 'ok', 'model': 'tencent-hy3', 'availability': 'disabled'}
 
-    def test_toggle_flips_disabled_to_available(self, mock_async_session, admin_ok):
+    def test_toggle_flips_disabled_to_available(self, mock_async_session, admin_ok, gates_pass):
         mock_async_session._execute_result = make_result(fetchone=make_row(availability='disabled'))
         resp = client.post('/admin/models/tencent-hy3/toggle')
         assert resp.status_code == 200
@@ -41,6 +81,40 @@ class TestToggleModel:
         with patch('admin.admin_required', new=AsyncMock(return_value=False)):
             resp = client.post('/admin/models/tencent-hy3/toggle')
         assert resp.status_code == 401
+
+
+class TestTogglePromotionGates:
+    """«مدل فقط بعد از پروب زنده موفق ارائه می‌شود» و «هیچ درخواستی نباید
+    ضررده باشد» -- toggle_model must not just *report* a refusal when either
+    gate fires on a disabled -> available flip, it must not have written the
+    row at all. A status-code-only assertion would still pass if the UPDATE
+    ran before the gate check, so these look at what was actually executed.
+    """
+
+    def test_toggle_refuses_unprobed_model_and_does_not_write(self, mock_async_session, admin_ok):
+        mock_async_session._execute_result = make_result(fetchone=make_row(availability='disabled'))
+        calls = _spy_on_execute(mock_async_session)
+        refusal = err('پروب زنده این مدل را تأیید نکرده', 'Live probe has not confirmed this model.', 400)
+        with patch('admin_pricing._refuse_unprobed', new=AsyncMock(return_value=refusal)):
+            resp = client.post('/admin/models/tencent-hy3/toggle')
+        assert resp.status_code == 400
+        assert resp.json()['detail'] == 'پروب زنده این مدل را تأیید نکرده'
+        assert not any('UPDATE' in c for c in calls), (
+            f'toggle_model wrote to model_catalog despite the probe gate refusing: {calls}'
+        )
+
+    def test_toggle_refuses_loss_making_model_and_does_not_write(self, mock_async_session, admin_ok):
+        mock_async_session._execute_result = make_result(fetchone=make_row(availability='disabled'))
+        calls = _spy_on_execute(mock_async_session)
+        refusal = err('این قیمت ضررده است', 'This price is loss-making.', 400)
+        with patch('admin_pricing._refuse_unprobed', new=AsyncMock(return_value=None)), \
+             patch('admin_pricing._refuse_loss_making', new=AsyncMock(return_value=refusal)):
+            resp = client.post('/admin/models/tencent-hy3/toggle')
+        assert resp.status_code == 400
+        assert resp.json()['detail'] == 'این قیمت ضررده است'
+        assert not any('UPDATE' in c for c in calls), (
+            f'toggle_model wrote to model_catalog despite the margin gate refusing: {calls}'
+        )
 
 
 class TestTestModel:

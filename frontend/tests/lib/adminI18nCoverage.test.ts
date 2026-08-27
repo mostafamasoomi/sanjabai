@@ -29,8 +29,7 @@ const ALLOWED = new Set<string>([
   'adminLabels.ts',
   'sections/modelsTabs.ts',
   'sections/availability.ts',
-  // Both branches of a language ternary live here in full.
-  'components/AdminCharts.tsx',
+  // Bilingual fallback pairs for failed responses live here in full.
   'apiError.ts',
   'sections/ModelsModule.tsx',
 ])

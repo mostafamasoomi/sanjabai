@@ -1,5 +1,12 @@
 import { dict } from '@/lib/i18n'
 
+/* Dictionary for the analytics section shell (AnalyticsSection.tsx). The
+ * window-scoped chart/table/KPI wording lives with the surface that renders
+ * it, in ../components/AnalyticsCharts.strings.ts; this file keeps only the
+ * section chrome: the all-time stat cards, the CSV exports, and the
+ * load/error states. Same contract as every *.strings.ts (lib/i18n.ts):
+ * FA without `as const`, EN annotated `typeof FA`. */
+
 const FA = {
   title: 'تحلیل و درآمد',
   subtitle:
@@ -8,16 +15,12 @@ const FA = {
   loading: 'در حال بارگذاری…',
   loadError: 'دریافت اطلاعات تحلیلی ناموفق بود',
   downloadError: 'دریافت فایل خروجی ناموفق بود',
+  allTimeTitle: 'آمار کل از ابتدا',
   totalRevenue: 'درآمد واقعی (پرداخت‌های تکمیل‌شدهٔ درگاه)',
   totalAdminCredit: 'اعتبار دستی ادمین (غیر از درگاه)',
   totalUsers: 'تعداد کاربران',
   totalConversations: 'تعداد گفتگوها',
-  trend30d: 'روند ۳۰ روز اخیر',
-  noChartData: 'داده‌ای برای رسم نمودار ثبت نشده است',
-  consumptionLegend: (total: string) => `مصرف کاربران (charged_amount) — مجموع ${total}`,
-  gatewayLegend: (total: string) => `درآمد واقعی درگاه (پرداخت‌های تکمیل‌شده) — مجموع ${total}`,
-  chartExplainer: (days: string) =>
-    `مصرف یعنی چه مبلغی بابت استفاده از مدل‌ها از کاربران کسر شده — نه لزوماً پولی که وارد درگاه شده. برای ${days} روز اخیر، این دو عدد آگاهانه جدا از هم رسم شده‌اند تا با هم اشتباه گرفته نشوند.`,
+  trendTitle: 'تحلیل بازه انتخابی',
   exportTitle: 'خروجی داده',
   exportSubtitle: 'دانلود کامل دفتر تراکنش‌ها (ledger) یا فهرست کاربران به صورت CSV',
   exportLedger: 'خروجی دفتر تراکنش‌ها',
@@ -32,16 +35,12 @@ const EN: typeof FA = {
   loading: 'Loading…',
   loadError: 'Failed to load analytics data',
   downloadError: 'Failed to download export file',
+  allTimeTitle: 'All-time totals',
   totalRevenue: 'Real revenue (completed gateway payments)',
   totalAdminCredit: 'Manual admin credit (non-gateway)',
   totalUsers: 'Total users',
   totalConversations: 'Total conversations',
-  trend30d: 'Last 30 days trend',
-  noChartData: 'No data recorded to draw a chart',
-  consumptionLegend: (total) => `User consumption (charged_amount) — total ${total}`,
-  gatewayLegend: (total) => `Real gateway revenue (completed payments) — total ${total}`,
-  chartExplainer: (days) =>
-    `Consumption is how much was charged to users for using models — not necessarily money that reached the gateway. For the last ${days} days, these two numbers are deliberately plotted apart so they cannot be mistaken for each other.`,
+  trendTitle: 'Selected window analysis',
   exportTitle: 'Data export',
   exportSubtitle: 'Download the full transaction ledger or the user list as CSV',
   exportLedger: 'Export ledger',

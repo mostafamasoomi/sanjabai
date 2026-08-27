@@ -143,7 +143,7 @@ export function BulkLiveTestProgress({ state, onCancel }: { state: BulkTestState
         {s.progress(f.num(state.done), f.num(state.total), f.num(state.ok))}
       </span>
       {/* Progress is a plain div, not a chart: recharts breaks the build
-          (documented in AdminCharts.tsx). */}
+          (documented in components/AnalyticsCharts.tsx). */}
       <div className="h-1 rounded flex-1" style={{ minWidth: 120, background: 'var(--border)' }}>
         <div className="h-1 rounded" style={{
           width: `${Math.round((state.done / Math.max(1, state.total)) * 100)}%`,

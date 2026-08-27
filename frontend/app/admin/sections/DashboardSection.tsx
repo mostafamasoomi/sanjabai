@@ -10,7 +10,7 @@ import { useAdminResource } from '../useAdminResource'
 import type { Analytics } from '../types'
 import { dashboardStrings } from './DashboardSection.strings'
 
-const AdminCharts = dynamic(() => import('../components/AdminCharts'), { ssr: false })
+const DashboardCharts = dynamic(() => import('../components/DashboardCharts'), { ssr: false })
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Dashboard — GET /admin/analytics, fetched here rather than handed down
@@ -18,9 +18,15 @@ const AdminCharts = dynamic(() => import('../components/AdminCharts'), { ssr: fa
    sitting on the skeleton forever.
 
    Money is integer toman and renders through f.price; counts through f.num.
+
+   `onOpenAnalytics` lets the sparkline cards jump to the full analytics
+   section without a navigation (an href would reload the page and drop the
+   in-memory admin token — see ../api.ts). The shell wires it:
+   `<DashboardSection onOpenAnalytics={() => setPage('analytics')} />` in
+   AdminPanel.tsx; until it does, the link simply does not render.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-export default function DashboardSection() {
+export default function DashboardSection({ onOpenAnalytics }: { onOpenAnalytics?: () => void }) {
   const lang = useLang()
   const s = dashboardStrings(lang)
   const f = fmt(lang)
@@ -55,7 +61,7 @@ export default function DashboardSection() {
           </div>
 
           {/* Charts */}
-          <AdminCharts />
+          <DashboardCharts onOpenAnalytics={onOpenAnalytics} />
 
           <div className="admin-card">
             <div className="flex items-center gap-2 mb-4">

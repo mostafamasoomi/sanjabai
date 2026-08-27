@@ -372,7 +372,10 @@ export default function AdminPage() {
 
         {/* ─── Main Content ────────────────────────────────────────────── */}
         <main className="admin-main flex-1 min-w-0 p-4 lg:p-8 overflow-y-auto" style={{ background: 'var(--bg-base)' }}>
-          {page === 'dashboard' && <DashboardSection />}
+          {/* A callback, not an <a href="?page=analytics">: the admin token
+              lives in memory only, so a real navigation would sign the admin
+              out on the way to the chart they clicked. */}
+          {page === 'dashboard' && <DashboardSection onOpenAnalytics={() => setPage('analytics')} />}
           {page === 'users' && <UsersSection />}
           {page === 'discounts' && <DiscountsSection />}
           {page === 'proxy' && <ProxySection />}

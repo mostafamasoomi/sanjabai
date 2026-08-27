@@ -238,7 +238,7 @@ export function PaymentsTab({ state }: { state: TabState<PaymentsPayload> }) {
 // ─── usage ───────────────────────────────────────────────────────────────
 
 /** Hand-rolled SVG bars — recharts is banned in this project (breaks the
-    build; see AdminCharts.tsx). Oldest day at the trailing edge, newest at
+    build; see components/AnalyticsCharts.tsx). Oldest day at the trailing edge, newest at
     the leading edge, matching the panel's reading order. */
 function DailyUsageChart({ daily }: { daily: UsageDailyRow[] }) {
   const lang = useLang()

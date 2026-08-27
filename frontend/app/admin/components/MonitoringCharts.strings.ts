@@ -1,7 +1,7 @@
 import { dict } from '@/lib/i18n'
 
 /* Dictionary for MonitoringCharts.tsx — hand-rolled SVG/div charts used by
- * MonitoringTab.tsx. recharts is banned in this project (AdminCharts.tsx);
+ * MonitoringTab.tsx. recharts is banned in this project (AnalyticsCharts.tsx);
  * this file only translates labels, never touches the drawing code. */
 
 const FA = {

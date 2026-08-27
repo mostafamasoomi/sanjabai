@@ -8,7 +8,7 @@ import { monitoringChartsStrings } from './MonitoringCharts.strings'
 // ═══════════════════════════════════════════════════════════════════════════
 // Pure presentational chart primitives for the admin monitoring tab.
 //
-// recharts is FORBIDDEN — it breaks the production build (see AdminCharts.tsx
+// recharts is FORBIDDEN — it breaks the production build (see AnalyticsCharts.tsx
 // stub). Everything here is hand-written div-bars / inline <svg>, matching the
 // failed-login sparkline pattern in AdminPanel.tsx.
 // ═══════════════════════════════════════════════════════════════════════════

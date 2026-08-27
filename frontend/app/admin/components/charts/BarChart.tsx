@@ -26,7 +26,7 @@ import {
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Grouped/stacked bar chart, hand-written SVG — recharts is BANNED (see
-   ../AdminCharts.tsx). Same RTL contract as LineChart: the plot sits inside
+   ../AnalyticsCharts.tsx). Same RTL contract as LineChart: the plot sits inside
    `dir="ltr"` so categories run oldest→newest left-to-right, legend and
    tooltip stay in the language's direction.
 

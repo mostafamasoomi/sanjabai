@@ -26,7 +26,7 @@ import {
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Multi-series line chart, hand-written SVG — recharts is BANNED (breaks the
-   build, see ../AdminCharts.tsx). Follows the established pattern
+   build, see ../AnalyticsCharts.tsx). Follows the established pattern
    (MonitoringCharts.tsx, AnalyticsSection.tsx): the numeric plot lives inside
    a `dir="ltr"` wrapper so the x axis reads oldest→newest left-to-right even
    though the panel is RTL, while the legend and tooltip text stay in the

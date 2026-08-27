@@ -6,22 +6,24 @@ import { useLang } from '@/components/LanguageToggle'
 import { fmt } from '@/lib/i18n'
 import { toFaDigits } from '@/lib/format'
 import { profileAvatarCardStrings } from './ProfileAvatarCard.strings'
+import type { ProfileUser } from '../types'
 
 type ProfileAvatarCardProps = {
   avatarUrl: string
   avatarUploading: boolean
   handleAvatarUpload: (e: React.ChangeEvent<HTMLInputElement>) => void
+  handleRemoveAvatar: () => void
   userInitial: string
   displayName: string
   bio: string
-  user: any
+  user: ProfileUser | null
   balance: number | null
   usage: any
   statsError: boolean
 }
 
 export default function ProfileAvatarCard({
-  avatarUrl, avatarUploading, handleAvatarUpload, userInitial, displayName, bio, user,
+  avatarUrl, avatarUploading, handleAvatarUpload, handleRemoveAvatar, userInitial, displayName, bio, user,
   balance, usage, statsError,
 }: ProfileAvatarCardProps) {
   const lang = useLang()
@@ -73,6 +75,32 @@ export default function ProfileAvatarCard({
             className="hidden"
             onChange={handleAvatarUpload}
           />
+          {avatarUrl && (
+            // Positioned at the opposite corner from the camera badge, and
+            // -- critically -- stops event propagation first, before the
+            // handler runs. The whole circle above is a click target that
+            // opens the file picker; without stopPropagation a click here
+            // would both remove the avatar AND open the file dialog underneath it.
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleRemoveAvatar()
+              }}
+              disabled={avatarUploading}
+              aria-label={s.removeAvatar}
+              title={s.removeAvatar}
+              style={{
+                position: 'absolute', insetBlockStart: 0, insetInlineEnd: 0,
+                background: 'var(--danger)', borderRadius: '50%',
+                width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                border: '2px solid var(--bg-card)', cursor: avatarUploading ? 'default' : 'pointer',
+                opacity: avatarUploading ? 0.6 : 1, padding: 0,
+              }}
+            >
+              <Icon name="trash" size={11} style={{ color: 'var(--text-on-accent)' }} />
+            </button>
+          )}
         </div>
         <div>
           <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>

@@ -14,7 +14,6 @@ import NotificationsSection from './components/NotificationsSection'
 import ChangePasswordSection from './components/ChangePasswordSection'
 import TelegramLinkSection from './components/TelegramLinkSection'
 import ReferralSection from './components/ReferralSection'
-import DangerZoneSection from './components/DangerZoneSection'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Profile page. State/logic lives in hooks/useProfileData.ts (fetches, form
@@ -59,6 +58,7 @@ export default function ProfilePage() {
     handleSaveProfile,
     handlePinnedContextFileUpload,
     handleAvatarUpload,
+    handleRemoveAvatar,
     handleChangePassword,
     handleLinkTelegram,
     userInitial, isDirty,
@@ -96,6 +96,7 @@ export default function ProfilePage() {
         avatarUrl={avatarUrl}
         avatarUploading={avatarUploading}
         handleAvatarUpload={handleAvatarUpload}
+        handleRemoveAvatar={handleRemoveAvatar}
         userInitial={userInitial}
         displayName={displayName}
         bio={bio}
@@ -182,8 +183,6 @@ export default function ProfilePage() {
       />
 
       <ReferralSection user={user} />
-
-      <DangerZoneSection />
     </div>
   )
 }

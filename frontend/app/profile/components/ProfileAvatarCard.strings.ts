@@ -8,6 +8,7 @@ const FA = {
   tokens: (n: string) => `${n} توکن`,
   email: 'ایمیل',
   statsError: 'خطا در بارگذاری موجودی و آمار مصرف.',
+  removeAvatar: 'حذف تصویر پروفایل',
 }
 
 const EN: typeof FA = {
@@ -18,6 +19,7 @@ const EN: typeof FA = {
   tokens: (n) => `${n} tokens`,
   email: 'Email',
   statsError: 'Failed to load balance and usage stats.',
+  removeAvatar: 'Remove profile picture',
 }
 
 export const profileAvatarCardStrings = dict(FA, EN)

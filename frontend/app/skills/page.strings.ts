@@ -2,7 +2,7 @@ import { dict } from '@/lib/i18n'
 
 const FA = {
   sortOptions: [
-    { key: 'popular', label: 'محبوبترین' },
+    { key: 'popular', label: 'محبوب‌ترین' },
     { key: 'newest', label: 'جدیدترین' },
     { key: 'top_rated', label: 'بهترین امتیاز' },
   ],

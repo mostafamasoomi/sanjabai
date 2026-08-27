@@ -3,6 +3,25 @@
    Split out of page.tsx to keep every file under the project's 500-line cap.
    ═══════════════════════════════════════════════════════════════════════════ */
 
+/* User shape as returned by /api/auth/profile and /api/auth/me. Mirrors the
+   (unexported) `User` type in lib/auth.tsx -- duplicated rather than
+   imported since that file doesn't export it and isn't in this packet's
+   scope. Profile components should type their `user` prop with this
+   instead of `any`. */
+export type ProfileUser = {
+  id: number
+  email: string
+  is_admin?: boolean
+  created_at?: string
+  referral_code?: string
+  display_name?: string
+  avatar_url?: string
+  bio?: string
+  preferences?: Record<string, any>
+  timezone?: string
+  language?: string
+}
+
 export const AUTONOMY_LEVELS = [
   {
     value: 'low',

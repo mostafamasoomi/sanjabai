@@ -23,6 +23,13 @@ import { useProfileDataStrings } from './useProfileData.strings'
    below) like every other rendered string on the page; `language` itself is
    untouched and still round-trips to the API exactly as before.
    ═══════════════════════════════════════════════════════════════════════════ */
+
+// Mirrors the four signatures backend/auth_profile.py's POST /auth/avatar
+// sniffs from magic bytes (PNG/WEBP/GIF, else assumed JPEG) -- anything else
+// still gets base64-encoded and stored as a JPEG data URL server-side, which
+// silently mislabels the file. Reject early instead client-side.
+const ACCEPTED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+
 export function useProfileData() {
   const { user, token } = useAuth()
   const lang = useLang()
@@ -250,7 +257,17 @@ export function useProfileData() {
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    // Reset so re-selecting the same (rejected) file still fires onChange.
+    e.target.value = ''
     if (!file) return
+    if (!ACCEPTED_AVATAR_TYPES.includes(file.type)) {
+      toast(s.invalidImageType, 'error')
+      return
+    }
+    // Backend rejects decoded (post-base64) bytes over 2MB. Base64 inflates
+    // size by ~33% on the wire, but decodes back to ~the original byte
+    // count, so checking the raw file here before encoding matches the
+    // backend's real ceiling rather than inventing a separate number.
     if (file.size > 2 * 1024 * 1024) {
       toast(s.imageTooLarge, 'error')
       return
@@ -281,6 +298,44 @@ export function useProfileData() {
       reader.readAsDataURL(file)
     } catch {
       toast(s.avatarUploadError, 'error')
+      setAvatarUploading(false)
+    }
+  }
+
+  // Mirrors handleAvatarUpload's shape (same avatarUploading flag for the
+  // spinner, same apiFetch + r.ok + toast pattern) so the two controls
+  // behave identically. Confirmation follows this app's existing convention
+  // for destructive-but-recoverable actions (see revokeKey in
+  // app/developer/hooks/useApiKeys.ts) -- a plain window.confirm(), not a
+  // new modal system. avatarUrl is cleared optimistically so the UI updates
+  // without a reload; on failure it's restored. There is no user-state
+  // refresh to mirror beyond that: handleAvatarUpload above only ever
+  // updates this hook's local avatarUrl state, never the shared AuthContext
+  // user object (lib/auth.tsx has no such setter and is out of this
+  // packet's scope), so this does the same and nothing more.
+  const handleRemoveAvatar = async () => {
+    if (!avatarUrl) return
+    if (!confirm(s.removeAvatarConfirm)) return
+    const previousAvatarUrl = avatarUrl
+    setAvatarUrl('')
+    setAvatarUploading(true)
+    try {
+      const t = token || localStorage.getItem('sanjabai_auth_token')
+      const r = await apiFetch('/api/auth/avatar', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${t}` },
+      })
+      if (r.ok) {
+        toast(s.avatarRemoved, 'success')
+      } else {
+        setAvatarUrl(previousAvatarUrl)
+        const data = await r.json().catch(() => ({}))
+        toast(data.detail || s.avatarRemoveError, 'error')
+      }
+    } catch {
+      setAvatarUrl(previousAvatarUrl)
+      toast(s.avatarRemoveError, 'error')
+    } finally {
       setAvatarUploading(false)
     }
   }
@@ -406,6 +461,7 @@ export function useProfileData() {
     handleSaveProfile,
     handlePinnedContextFileUpload,
     handleAvatarUpload,
+    handleRemoveAvatar,
     handleChangePassword,
     handleLinkTelegram,
     userInitial, isDirty,

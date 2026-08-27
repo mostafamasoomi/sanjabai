@@ -23,6 +23,8 @@ import json
 import logging
 import re as _re
 import secrets
+import time
+from dataclasses import dataclass
 from typing import Any
 
 import sqlalchemy
@@ -178,12 +180,89 @@ def _select_smart_model(category: str, balance: int) -> tuple[str, str]:
     return _DEFAULT_MODEL
 
 
+@dataclass(frozen=True)
+class _CheapestModel:
+    """One row from `_cheapest_live_model`, priced+labelled for the caller."""
+    provider_model_id: str
+    public_id: str
+    input_per_million: int
+    output_per_million: int
+    upstream: str | None
 
-async def _select_smart_model_safe(category: str, balance: int) -> tuple[str, str]:
+
+_CHEAPEST_CACHE_TTL_SECONDS = 60
+_cheapest_cache: _CheapestModel | None = None
+_cheapest_cache_at: float = 0.0
+
+# Plain string literal, NOT an f-string -- scripts/sql_schema_audit.py only
+# EXPLAINs literals; tests mock the DB, so an f-string would hide a wrong
+# column/table name until it broke in production.
+_CHEAPEST_MODEL_SQL = sqlalchemy.text(
+    "SELECT c.provider_model_id, c.public_id, c.input_per_million, "
+    "c.output_per_million, c.upstream FROM model_catalog c "
+    "JOIN model_health_state s "
+    "ON s.model_id = c.id OR s.model_id = c.provider_model_id "
+    "WHERE c.availability = 'available' AND c.public_id IS NOT NULL "
+    "AND c.input_per_million > 0 AND c.output_per_million > 0 "
+    "AND s.last_ok_at IS NOT NULL "
+    "ORDER BY (3 * c.input_per_million + c.output_per_million) ASC, "
+    "c.context_window DESC, c.public_id ASC LIMIT 1"
+)
+
+
+async def _cheapest_live_model() -> _CheapestModel | None:
+    """Cheapest available+priced+public+live-probed catalog row, or None.
+    Hotfix H rescue path -- see `_select_smart_model_safe`'s docstring.
+
+    `> 0`, never `IS NOT NULL`: per-million columns are NUMERIC NOT NULL
+    DEFAULT 0, so unpriced reads as 0 and would sort first if admitted.
+    `last_ok_at IS NOT NULL`, never `status = 'healthy'`: `_derive_status`
+    can say 'healthy' for a model whose every probe failed
+    (services/probe_gate.py). `public_id IS NOT NULL`: never a raw route.
+    Cached `_CHEAPEST_CACHE_TTL_SECONDS`; never raises -- on failure returns
+    the last cached value, or None if cold.
+    """
+    global _cheapest_cache, _cheapest_cache_at
+    if chat.async_session is None:
+        return _cheapest_cache
+    now = time.monotonic()
+    if _cheapest_cache_at and now - _cheapest_cache_at < _CHEAPEST_CACHE_TTL_SECONDS:
+        return _cheapest_cache
+    try:
+        async with chat.async_session() as session:
+            res = await session.execute(_CHEAPEST_MODEL_SQL)
+            row = res.fetchone()
+            _cheapest_cache = _CheapestModel(
+                provider_model_id=str(row.provider_model_id),
+                public_id=str(row.public_id),
+                input_per_million=int(row.input_per_million),
+                output_per_million=int(row.output_per_million),
+                upstream=row.upstream,
+            ) if row is not None else None
+            _cheapest_cache_at = now
+    except Exception as e:
+        logger.warning(f"_cheapest_live_model DB read failed, keeping previous cache: {e}")
+    return _cheapest_cache
+
+
+async def _select_smart_model_safe(category: str, balance: int) -> tuple[str, str, _CheapestModel | None]:
+    """Hotfix H: the old rescue path returned `_DEFAULT_MODEL` unchecked --
+    itself a member of the hardcoded set just picked from, and all six of
+    those ids are unservable today (measured live: 32/32 category x balance
+    combos landed on `_DEFAULT_MODEL`, which 404s upstream). Falls back to
+    the live cheapest priced+probed row instead; `_DEFAULT_MODEL` still
+    applies only when the DB can't answer either.
+
+    Third return value is the price row backing a fallback pick (None
+    otherwise) -- `smart_chat()` prices on it and labels with `public_id`.
+    """
     model, provider = _select_smart_model(category, balance)
-    if not await chat.is_working_model(model):
-        return _DEFAULT_MODEL
-    return model, provider
+    if await chat.is_working_model(model):
+        return model, provider, None
+    cheapest = await _cheapest_live_model()
+    if cheapest is not None:
+        return cheapest.provider_model_id, cheapest.upstream or provider, cheapest
+    return _DEFAULT_MODEL[0], _DEFAULT_MODEL[1], None
 
 # Working model set (confirmed via live test 2026-07-16)
 # _WORKING_SET moved to top of file (near WORKING_MODELS)
@@ -243,9 +322,11 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
         # already returns bare/hardcoded ids that predate public_id and were
         # never gated behind this rule.
         smart_model_label = force_model
+        _price_row = None
     else:
-        selected_model, selected_provider = await _select_smart_model_safe(category, balance)
-        smart_model_label = selected_model
+        selected_model, selected_provider, _price_row = await _select_smart_model_safe(category, balance)
+        # Fallback picks are labelled by public_id, never the raw id (Hotfix H).
+        smart_model_label = _price_row.public_id if _price_row is not None else selected_model
 
     # FIX 2: counteract the injected caveman-style system prompt -- see
     # chat()'s comment / _REASONING_INJECTING_PROVIDERS docstring. Runs on
@@ -274,7 +355,12 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
         async with chat.async_session() as _bill_session:
             _repo = SqlBillingRepo(_bill_session)
             _bill_svc = chat.BillingService(_repo)
-            _est_cost = 1000 if await chat.is_working_model(selected_model) else 5000
+            if _price_row is not None:
+                # Hotfix H: price on the fallback row's real rates -- flat 1000
+                # toman covers only ~525 input tokens on the dearest model.
+                _est_cost = max(1000, (2000 * _price_row.input_per_million + 800 * _price_row.output_per_million) // 1_000_000)
+            else:
+                _est_cost = 1000 if await chat.is_working_model(selected_model) else 5000
             # Package quota covers this request -> skip the wallet reservation
             # (reservation stays None; the release/settle code below already
             # treats None as a no-op). See services/entitlement_gate.py.

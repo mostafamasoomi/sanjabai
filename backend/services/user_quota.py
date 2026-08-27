@@ -190,8 +190,14 @@ async def _best_package_value(uid: int, sql) -> Optional[int]:
 # Existence-only sibling of _PACKAGE_LIMIT_SQL / _PREMIUM_LIMIT_SQL: same
 # active/unexpired predicate, but does not care which tiering columns (if
 # any) the held package sets -- used where the caller only needs "does this
-# user hold ANY live package" (security.py's chat limiter tier,
-# chat_smart.py's model eligibility), not a specific numeric cap.
+# user hold ANY live package" (security.py's chat limiter tier), not a
+# specific numeric cap.
+#
+# This comment used to also name "chat_smart.py's model eligibility". It
+# never shipped and it is not coming: the owner decided on 2026-08-27 that
+# holding a package does NOT earn a better model -- wallet balance alone
+# gates the price band. security.py:206 is the only consumer. See
+# has_active_package's docstring below.
 _ACTIVE_PACKAGE_SQL = sqlalchemy.text(
     "SELECT 1 "
     "FROM package_entitlement pe "

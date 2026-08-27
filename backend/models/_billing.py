@@ -133,6 +133,19 @@ class UsageEvent(Base):
     subscription_id: Mapped[int | None] = mapped_column(nullable=True)
     credits_charged: Mapped[int] = mapped_column(default=0)
     payg_charged: Mapped[int] = mapped_column(default=0)
+    # ── What this request cost US upstream (migration 0048) ──────────
+    # charged_amount above is what the USER paid; these are what we paid.
+    # Both integer Toman. Every one of them defaults to NULL rather than 0,
+    # and NULL means "unknown", never "free" -- reports may not COALESCE
+    # them to zero. The full column semantics, the allowed values of
+    # upstream_cost_basis, the revenue-weighted coverage contract the read
+    # side is bound by, and the reason the migration MUST be applied before
+    # this model deploys, are all in migrations/0048_usage_event_cost.sql.
+    upstream_cost_toman: Mapped[int | None] = mapped_column(nullable=True)
+    upstream_cost_basis: Mapped[str | None] = mapped_column(nullable=True)
+    fx_rate_irt: Mapped[float | None] = mapped_column(nullable=True)
+    usd_input_per_million: Mapped[float | None] = mapped_column(nullable=True)
+    usd_output_per_million: Mapped[float | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=_utcnow)
 
 

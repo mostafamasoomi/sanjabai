@@ -1,0 +1,136 @@
+-- 0048_usage_event_cost.sql
+--
+-- WHY
+-- Until this migration nothing recorded what an upstream model call
+-- actually COST us. Profit could only ever be reconstructed as
+-- `model_catalog.usd_*_per_million x tokens x TODAY's exchange rate`, which
+-- means every historical cost number silently slid every time the rate
+-- moved -- a "profit" chart drawn that way is redrawn differently tomorrow
+-- from the same rows. The owner decided (session 23) to capture the real
+-- cost at write time instead, so that from this migration forward profit is
+-- exact rather than reconstructed.
+--
+-- Deliberately NO backfill. Every pre-existing row keeps NULL in all five
+-- columns, and NULL means "not measured", never zero. See the read-side
+-- contract below -- that distinction is the whole point of the change.
+--
+-- ── The five columns on usage_events ───────────────────────────────────
+--
+--   upstream_cost_toman     Integer Toman we paid upstream for THIS event.
+--                           Same unit and type as charged_amount (house law:
+--                           money is integer Toman everywhere; Rial exists
+--                           only inside the payment-gateway adapter).
+--                           Rounded UP: understating cost is the single
+--                           rounding direction that can hide a loss.
+--                           NULL = unknown, NEVER zero-by-default.
+--
+--   upstream_cost_basis     How that number was reached. One of:
+--                             'listed'           -- the model's own synced
+--                                                   USD price was used.
+--                             'category_ceiling' -- no USD price for this
+--                                                   model, so its upstream's
+--                                                   MAXIMUM price was used
+--                                                   (project law: an unpriced
+--                                                   model costs the category
+--                                                   ceiling, never the mean).
+--                             'free_upstream'    -- served through the
+--                                                   owner's own aggregating
+--                                                   infrastructure, which
+--                                                   costs ~0 per token. Cost
+--                                                   is 0 and no exchange rate
+--                                                   was read.
+--                             'unknown'          -- capture ran correctly and
+--                                                   could not know the cost
+--                                                   (no USD price AND no
+--                                                   category ceiling). A DATA
+--                                                   gap: fixed by syncing
+--                                                   prices. Cost is NULL.
+--                             'error'            -- the capture code itself
+--                                                   raised. A CODE gap: these
+--                                                   cluster after a bad deploy
+--                                                   and are meant to be loud.
+--                                                   Cost is NULL.
+--                           NULL basis is reserved for rows that predate this
+--                           migration. 'unknown' means measured-and-
+--                           unknowable; NULL means never-measured. Reports
+--                           must not conflate the two.
+--
+--   fx_rate_irt             The USD->Toman rate used, snapshotted. Without it
+--                           a stored cost is unauditable, because the rate it
+--                           was computed from no longer exists anywhere.
+--
+--   usd_input_per_million   The USD rates ACTUALLY USED, per side, after any
+--   usd_output_per_million  category-ceiling fallback. Per side because input
+--                           and output are evaluated independently
+--                           (services/margin.py) -- one event can be 'listed'
+--                           on input and ceiling-priced on output, which the
+--                           single basis column cannot express. Storing the
+--                           inputs alongside the answer means every row stays
+--                           recomputable and cross-checkable forever, even if
+--                           the formula later ships with a bug.
+--
+-- No cached-input or reasoning cost column: reasoning tokens are already
+-- folded into output_tokens before metering, and no caller ever passes
+-- cached_input_tokens, so cost is a function of the two token counts each
+-- row already carries.
+--
+-- ── READ-SIDE CONTRACT (binding on every consumer of these columns) ────
+--
+--   1. `upstream_cost_toman IS NULL` means UNKNOWN. No query may
+--      COALESCE(upstream_cost_toman, 0) into a profit figure. A NULL folded
+--      to zero draws a beautiful, fake-profitable past.
+--   2. Every profit bucket (per day / model / user) reports four fields:
+--      revenue, known_cost (sum over non-NULL rows only), cost_coverage --
+--      REVENUE-weighted, not row-counted, so one large unmeasured request
+--      cannot hide behind ninety-nine tiny measured ones -- and profit,
+--      which is NULL unless coverage is exactly 1.0. A NULL profit renders
+--      as "اندازه‌گیری‌نشده", never as a number.
+--   3. `revenue - SUM(upstream_cost_toman)` is GROSS MARGIN ON UPSTREAM
+--      TOKEN COST. It is not net profit: it excludes the fixed monthly cost
+--      of the infrastructure the free upstreams run on. Naming it "سود خالص"
+--      would repeat the exact class of lie commit 81d8240 removed when the
+--      dashboard reported ten million Toman of revenue from zero sales.
+--   4. The cutover date is discoverable, not hardcoded:
+--      SELECT applied_at FROM schema_migrations WHERE version LIKE '0048%'
+--   5. Any future "estimated historical cost at today's rate" feature must
+--      live in separately labelled fields. These five are write-time
+--      snapshots by definition and must never be recomputed in place.
+--
+-- ── DEPLOY ORDER IS MANDATORY, NOT HYGIENE ────────────────────────────
+-- Apply this migration BEFORE deploying the code that writes these columns.
+-- The usage-event INSERT shares a transaction with the wallet charge and the
+-- ledger row, and its commit sits inside a try/except that only logs a
+-- warning. If the ORM model carries columns the database lacks, that commit
+-- raises, the WHOLE transaction rolls back -- charge and ledger included --
+-- and the request is served completely free, silently, with nothing worse
+-- than a warning in the log. Migration first. Always.
+--
+-- ── Idempotency ───────────────────────────────────────────────────────
+-- ADD COLUMN IF NOT EXISTS (house style, see 0032/0034/0045/0046). No CHECK
+-- constraint on upstream_cost_basis: Postgres has no ADD CONSTRAINT IF NOT
+-- EXISTS, so it would break migrate.py's idempotent re-run. The allowed set
+-- is enforced in services/cost_capture.py, which coerces anything outside it
+-- to 'error' rather than raising, and is pinned by a test.
+--
+-- No DO block, no dollar-quoting -- migrate.py's split_sql() splits on every
+-- top-level semicolon. Every colon in this file is followed by a space or
+-- sits inside prose, never immediately before an identifier, so SQLAlchemy's
+-- text() cannot misread one as a bind parameter (migration 0029's lesson --
+-- comments are NOT stripped before that check).
+--
+-- Leaving every column NULL is a strict no-op on today's behaviour: nothing
+-- reads them until the analytics endpoint ships, and the read-side contract
+-- above makes an all-NULL history report as unmeasured rather than free.
+--
+-- APPEND-ONLY -- never edit after the session that added it; a later
+-- correction is 0049+.
+
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS upstream_cost_toman INTEGER;
+
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS upstream_cost_basis TEXT;
+
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS fx_rate_irt DOUBLE PRECISION;
+
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS usd_input_per_million DOUBLE PRECISION;
+
+ALTER TABLE usage_events ADD COLUMN IF NOT EXISTS usd_output_per_million DOUBLE PRECISION;

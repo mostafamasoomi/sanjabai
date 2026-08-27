@@ -1,9 +1,11 @@
 """Schema-drift guard derived from ``Base.metadata`` -- not a hand-maintained
 list of models.
 
-tests/test_schema_drift.py pins six specific models (Feature, Discount,
-AboutContent, Assistant, Plan, CreditPackage) because those were the models
-known to have drifted *at the time each fix shipped*. That is precisely why
+tests/test_schema_drift.py pins specific models (Feature, Discount,
+AboutContent, Assistant, CreditPackage -- Plan was among them too until
+migration 0049 retired plans/subscriptions and removed the ORM class
+entirely) because those were the models known to have drifted *at the time
+each fix shipped*. That is precisely why
 it missed two more: ``Notification`` (models.py line 282, ``__tablename__ =
 'notifications'``) had no backing table in production at all -- confirmed
 2026-08-22 via ``SELECT to_regclass('public.notifications')`` returning null
@@ -93,10 +95,16 @@ def test_orm_has_the_expected_number_of_mapped_tables():
     empty parametrize list, hiding real drift instead of catching it. Pin a
     floor rather than an exact count so new models don't need this test
     edited every time -- 37 were mapped when this file was written
-    (2026-08-22)."""
-    assert len(_ORM_TABLE_NAMES) >= 37, (
+    (2026-08-22).
+
+    Deliberately lowered to 36 (migration 0049, session 23): `plans` and
+    `subscriptions` were retired and their ORM classes (`Plan`,
+    `Subscription`) removed entirely -- this is exactly the "models.py
+    legitimately shrank" case this docstring already anticipated, not a
+    silent drop of the discovery mechanism."""
+    assert len(_ORM_TABLE_NAMES) >= 36, (
         f"only {len(_ORM_TABLE_NAMES)} ORM tables discovered via "
-        "Base.metadata.tables -- expected at least 37. If models.py legitimately "
+        "Base.metadata.tables -- expected at least 36. If models.py legitimately "
         "shrank, lower this floor deliberately; if not, Base.metadata is not "
         "being populated the way this guard assumes and every other test in "
         "this file is passing vacuously."

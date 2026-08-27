@@ -85,8 +85,11 @@ _REQUIRED_CALLABLES = [
     '_apply_persian_style_guard_for_model',
     '_fire_memory_extraction',
     '_record_model_health',
-    # security.py: `from chat import _get_user_plan` (chat_smart.py).
-    '_get_user_plan',
+    # `_get_user_plan` used to be re-exported here for security.py's lazy
+    # `from chat import _get_user_plan`. Migration 0049 retired plans and
+    # subscriptions; security.py now asks
+    # services.user_quota.has_active_package directly, so there is nothing
+    # left for chat.py to forward.
     # Re-exported third-party names some tests patch on `chat` directly
     # rather than on the service module that originally defines them.
     'async_session',
@@ -162,7 +165,7 @@ def test_streaming_and_billing_functions_are_coroutine_functions():
         '_apply_web_search', '_web_search', '_release_reservation',
         '_check_quota_pre', '_track_usage', '_bill_stream_usage',
         '_record_usage', '_chat_stream', '_smart_chat_stream',
-        'chat', 'compare_models', 'smart_chat', '_get_user_plan',
+        'chat', 'compare_models', 'smart_chat',
     ):
         fn = getattr(chat_mod, name)
         assert inspect.iscoroutinefunction(fn), f"chat.{name} should be an async def"
@@ -199,7 +202,6 @@ def test_moved_functions_physically_live_in_the_expected_submodule():
         '_smart_chat_stream': 'chat_stream',
         'compare_models': 'chat_compare',
         'smart_chat': 'chat_smart',
-        '_get_user_plan': 'chat_smart',
     }
     wrong_home = {}
     for name, expected_mod in expected_module.items():

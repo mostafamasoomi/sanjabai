@@ -41,7 +41,7 @@ from __future__ import annotations
 import pathlib
 import re
 
-from models import AboutContent, Assistant, CreditPackage, Discount, Feature, Plan
+from models import AboutContent, Assistant, CreditPackage, Discount, Feature
 
 MIGRATIONS_DIR = pathlib.Path(__file__).resolve().parent.parent / 'migrations'
 BASELINE_FILE = MIGRATIONS_DIR / '0001_baseline.sql'
@@ -159,29 +159,30 @@ def test_discount_orm_matches_sql_schema():
     _assert_orm_matches_sql(Discount, 'discounts')
 
 
-# ── plans / credit_packages: the same drift, third occurrence ──────────────
+# ── credit_packages: the same drift, third occurrence ──────────────────────
 #
-# Found 2026-08-22 while fixing admin_create_plan. Seven columns on `plans`
-# and six on `credit_packages` that the ORM declares and the running code
-# queries every day appear in ZERO migration files -- they exist on
-# production only because someone added them by hand through psql. Proven by
-# applying the real chain through migrate.py to a throwaway database and
-# diffing against production - without 0037 the fresh build was missing all
-# thirteen, and `SELECT id, name_fa, monthly_token_quota FROM plans` (what
-# pricing.py runs) died with `column "name_fa" does not exist`.
+# Found 2026-08-22 while fixing admin_create_plan. Six columns on
+# `credit_packages` that the ORM declares and the running code queries every
+# day appeared in ZERO migration files -- they existed on production only
+# because someone added them by hand through psql. Proven by applying the
+# real chain through migrate.py to a throwaway database and diffing against
+# production - without 0037 the fresh build was missing them, e.g. reads
+# through the new column names died with `column ... does not exist`.
 #
-# 0023_schema_drift_fix.sql looks like it covers these tables and does not.
-# Its `CREATE TABLE IF NOT EXISTS plans` describes a different table entirely
-# and is a silent no-op because 0004 already created it. That near-miss is
-# exactly why these two tables need their own pinned test rather than trusting
-# a reading of the migration files.
+# 0023_schema_drift_fix.sql looks like it covers this table and does not.
+# Its `CREATE TABLE IF NOT EXISTS credit_packages` describes a different
+# table entirely and is a silent no-op because 0004 already created it.
+# That near-miss is exactly why this table needs its own pinned test rather
+# than trusting a reading of the migration files.
 #
-# migrations/0037_plans_packages_schema_drift.sql is the repair; these two
-# tests are what stop a fourth occurrence.
-
-
-def test_plan_orm_matches_sql_schema():
-    _assert_orm_matches_sql(Plan, 'plans')
+# migrations/0037_plans_packages_schema_drift.sql is the repair; this test
+# is what stops a fourth occurrence.
+#
+# `plans` (and its sibling test, `test_plan_orm_matches_sql_schema`) was
+# retired here (migration 0049, session 23): the owner dropped the
+# `plans`/`subscriptions` tables entirely and the `Plan` ORM class no longer
+# exists (see models/_billing.py's module docstring) -- there is nothing
+# left for a schema-drift guard to pin.
 
 
 def test_credit_package_orm_matches_sql_schema():

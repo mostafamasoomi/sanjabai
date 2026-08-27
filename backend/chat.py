@@ -507,6 +507,5 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
 # /v1/compare -> chat_compare.py
 from chat_compare import compare_models, _check_quota_pre  # noqa: E402
 
-# /v1/smart-chat -> chat_smart.py. `_get_user_plan` is re-exported because
-# security.py does a lazy `from chat import _get_user_plan` at call time.
-from chat_smart import smart_chat, _get_user_plan  # noqa: E402
+# /v1/smart-chat -> chat_smart.py.
+from chat_smart import smart_chat  # noqa: E402

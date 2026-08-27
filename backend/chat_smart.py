@@ -23,15 +23,12 @@ import json
 import logging
 import re as _re
 import secrets
-from datetime import datetime, timezone
 from typing import Any
 
 import sqlalchemy
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
-from sqlalchemy import select
 
-from models import Subscription
 from services.context_injection import inject_messages
 from services.token_budget import apply_outbound_budget
 from services.billing import SqlBillingRepo, InsufficientBalanceError
@@ -89,8 +86,13 @@ _CODING_MODELS = [('deepseek-v4-pro', 'bynara'), ('mistral-large', 'bynara')]
 _REASONING_MODELS = [('deepseek-v4-pro', 'bynara'), ('mimo-v2.5-pro', 'bynara')]
 _CREATIVE_MODELS = [('mistral-large', 'bynara'), ('mistral-medium-3-5', 'bynara')]
 _DEFAULT_MODEL = ('tencent-hy3', 'bynara')            # cheapest, 1M ctx, reliable
-_ADVANCED_MODEL = ('deepseek-v4-pro', 'bynara')        # best reasoning
-_PREMIUM_MODEL = ('mimo-v2.5-pro', 'bynara')           # premium coding
+# _ADVANCED_MODEL and _PREMIUM_MODEL lived here and are gone. _PREMIUM_MODEL
+# was already referenced by nothing at HEAD; _ADVANCED_MODEL had exactly one
+# reference, inside the plan-tier branch _select_smart_model no longer has
+# (see its docstring for why that branch was retired rather than re-pointed).
+# Both values still exist as list entries above -- deepseek-v4-pro is
+# _REASONING_MODELS[0], mimo-v2.5-pro is _REASONING_MODELS[1] -- so nothing
+# about the catalog changed, only two aliases nobody read.
 
 
 def _analyze_message(text: str) -> str:
@@ -128,44 +130,41 @@ async def _get_user_balance(uid: int) -> int:
         return 0
 
 
-async def _get_user_plan(uid: int) -> str:
-    if chat.async_session is None:
-        return 'free'
-    try:
-        async with chat.async_session() as session:
-            now = datetime.now(timezone.utc).replace(tzinfo=None)
-            res = await session.execute(
-                select(Subscription)
-                .where(
-                    Subscription.user_id == uid,
-                    Subscription.status == 'active',
-                    (Subscription.ends_at.is_(None)) | (Subscription.ends_at > now),
-                )
-                .order_by(Subscription.created_at.desc())
-                .limit(1)
-            )
-            sub = res.scalar_one_or_none()
-            return sub.plan if sub else 'free'
-    except Exception as e:
-        logger.warning(f"_get_user_plan failed uid={uid}: {e}")
-        return 'free'
+def _select_smart_model(category: str, balance: int) -> tuple[str, str]:
+    """Pick a model for a classified message. BEHAVIOUR-PRESERVING as of
+    migration 0049 -- deliberately, and that deserves an explanation.
 
+    This function used to take a third argument, ``plan``, and branch on
+    ``plan in ('pro', 'enterprise', 'unlimited')`` to serve a costlier
+    model tier. That plan came from ``_get_user_plan``, which read the
+    ``subscriptions`` table. Production held ZERO active subscription rows,
+    so ``plan`` was always ``'free'`` and that whole tier branch was dead
+    code for every user who ever called this.
 
-def _select_smart_model(category: str, balance: int, plan: str) -> tuple[str, str]:
+    When plans were retired, the obvious move was to re-point the branch at
+    ``services.user_quota.has_active_package`` -- and that was rejected on
+    purpose. It would have taken a branch that had never once executed and
+    switched it on for real paying users, changing which model they are
+    served, as a side effect of a merge whose sanctioned scope was
+    "packages and plans become one product". A change to what a customer
+    gets for their money is a product decision, not a refactor, and it does
+    not get to ride in on one.
+
+    It is also about to be moot: the next phase replaces every hardcoded
+    list in this module with a live, priced, health-checked candidate pool
+    (``services/smart_router.py``). Reviving a dead branch one phase before
+    deleting it is risk with no payoff.
+
+    So: package holding is NOT read here. Balance still gates -- a user
+    under 10,000 Toman gets the cheapest model, exactly as before. When
+    the router lands, tiering by entitlement is a decision to make on
+    purpose, with the owner, against a pool that knows what each model
+    actually costs.
+    """
     if balance < 10000:
         return _FREE_MODELS[0]
     if category in ('greeting', 'simple'):
         return _FREE_MODELS[0]
-    if plan in ('pro', 'enterprise', 'unlimited'):
-        if category == 'complex':
-            return _ADVANCED_MODEL
-        if category == 'reasoning':
-            return _REASONING_MODELS[1]
-        if category == 'code':
-            return _CODING_MODELS[0]
-        if category == 'creative':
-            return _CREATIVE_MODELS[1]
-        return _DEFAULT_MODEL
     if category == 'complex':
         return _REASONING_MODELS[0]
     if category == 'reasoning':
@@ -180,8 +179,8 @@ def _select_smart_model(category: str, balance: int, plan: str) -> tuple[str, st
 
 
 
-async def _select_smart_model_safe(category: str, balance: int, plan: str) -> tuple[str, str]:
-    model, provider = _select_smart_model(category, balance, plan)
+async def _select_smart_model_safe(category: str, balance: int) -> tuple[str, str]:
+    model, provider = _select_smart_model(category, balance)
     if not await chat.is_working_model(model):
         return _DEFAULT_MODEL
     return model, provider
@@ -216,7 +215,6 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
 
     category = _analyze_message(last_user_msg)
     balance = await _get_user_balance(uid)
-    plan = await _get_user_plan(uid)
 
     original_model = payload_dict.get('model', '')
     force_model = request.headers.get('X-Smart-Model', '').strip()
@@ -246,7 +244,7 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
         # never gated behind this rule.
         smart_model_label = force_model
     else:
-        selected_model, selected_provider = await _select_smart_model_safe(category, balance, plan)
+        selected_model, selected_provider = await _select_smart_model_safe(category, balance)
         smart_model_label = selected_model
 
     # FIX 2: counteract the injected caveman-style system prompt -- see

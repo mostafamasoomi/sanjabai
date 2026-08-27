@@ -187,6 +187,57 @@ async def _best_package_value(uid: int, sql) -> Optional[int]:
         return None
 
 
+# Existence-only sibling of _PACKAGE_LIMIT_SQL / _PREMIUM_LIMIT_SQL: same
+# active/unexpired predicate, but does not care which tiering columns (if
+# any) the held package sets -- used where the caller only needs "does this
+# user hold ANY live package" (security.py's chat limiter tier,
+# chat_smart.py's model eligibility), not a specific numeric cap.
+_ACTIVE_PACKAGE_SQL = sqlalchemy.text(
+    "SELECT 1 "
+    "FROM package_entitlement pe "
+    "JOIN credit_packages cp ON cp.id = pe.package_id "
+    "WHERE pe.user_id = :uid "
+    "AND pe.active = true "
+    "AND (pe.expires_at IS NULL OR pe.expires_at > now()) "
+    "LIMIT 1"
+)
+
+
+async def has_active_package(uid: int) -> bool:
+    """True iff the user holds any active, unexpired package entitlement.
+
+    Used by security.py to pick the chat rate-limiter tier (package holder
+    -> pro limiter, everyone else -> free limiter). That is its ONLY
+    consumer, deliberately: chat_smart.py was going to read it for model
+    eligibility and that was reversed before it shipped, because switching
+    on a never-executed tier branch would have changed which model paying
+    customers are served as a side effect of a refactor. See
+    chat_smart.py::_select_smart_model's docstring. Deliberately
+    existence-only: unlike
+    :func:`package_window_limit` it does not require any particular
+    tiering column to be set on the held package.
+
+    Fails OPEN like the rest of this module (see the module docstring) --
+    but "open" here means the SAME thing it means everywhere else in this
+    file: never let an infrastructure hiccup make a request MORE
+    restricted than it would otherwise be. Concretely that means returning
+    True on error, handing the caller the more permissive (pro) limiter
+    tier rather than silently downgrading a possible package holder to the
+    free tier's tighter cap. This is a UX nudge, not a money gate --
+    BillingService.reserve() still guards spend on every path regardless
+    of what this returns.
+    """
+    try:
+        if async_session is None:
+            return True
+        async with async_session() as session:
+            res = await session.execute(_ACTIVE_PACKAGE_SQL, {'uid': int(uid)})
+            return res.fetchone() is not None
+    except Exception as e:
+        logger.warning(f"user_quota.has_active_package failed uid={uid}: {e}")
+        return True
+
+
 async def package_window_limit(uid: int) -> Optional[int]:
     """The rate-limit window granted by the user's best active package, or
     None -- see :func:`_best_package_value`."""

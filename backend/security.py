@@ -28,6 +28,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from i18n import err
+from services.user_quota import has_active_package
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +95,7 @@ signup_limiter = RateLimiter(window_seconds=60, max_requests=5)        # 5 req/m
 forgot_password_limiter = RateLimiter(window_seconds=60, max_requests=20)  # 20 req/min
 auth_limiter = RateLimiter(window_seconds=60, max_requests=60)        # 60 req/min (general auth)
 chat_free_limiter = RateLimiter(window_seconds=60, max_requests=30)        # 30 req/min (free tier)
-chat_pro_limiter = RateLimiter(window_seconds=60, max_requests=120)       # 120 req/min (pro tier)
-chat_enterprise_limiter = RateLimiter(window_seconds=60, max_requests=300)  # 300 req/min (enterprise tier)
+chat_pro_limiter = RateLimiter(window_seconds=60, max_requests=120)       # 120 req/min (package holder)
 admin_limiter = RateLimiter(window_seconds=60, max_requests=30)      # 30 req/min
 # RAG endpoints — stricter limits to protect embedding/LLM compute + storage
 rag_upload_limiter = RateLimiter(window_seconds=60, max_requests=5)   # 5 uploads/min
@@ -196,14 +196,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         identifier = await get_client_identifier(request)
         limiter = select_limiter(request.url.path)
 
-        # Tiered rate limits for chat endpoints
+        # Tiered rate limits for chat endpoints: package holder -> pro
+        # limiter, everyone else -> free limiter. Plans/subscriptions were
+        # retired (migration 0049); package entitlement is the only
+        # remaining tier.
         if request.url.path.startswith('/v1/chat/'):
             uid = await _extract_user_id(request)
             if uid is not None:
-                plan = await _get_user_plan(uid)
-                if plan == 'enterprise':
-                    limiter = chat_enterprise_limiter
-                elif plan == 'pro':
+                if await has_active_package(uid):
                     limiter = chat_pro_limiter
                 else:
                     limiter = chat_free_limiter
@@ -252,12 +252,6 @@ async def _extract_user_id(request: Request) -> int | None:
     except Exception:
         pass
     return None
-
-
-async def _get_user_plan(uid: int) -> str:
-    """Lazy-import _get_user_plan from chat module to avoid circular imports."""
-    from chat import _get_user_plan as _gup
-    return await _gup(uid)
 
 
 # ── Session Security -- moved to security_session.py ────────

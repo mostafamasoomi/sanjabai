@@ -24,16 +24,18 @@ from __future__ import annotations
 import re
 from typing import Any
 
-_LEGACY_MONEY_FIELDS = ('price', 'credits', 'bonus_credits')
-
 # Live money columns: what pricing.py/payment_endpoints.py actually read.
+# The legacy trio (`price`, `credits`, `bonus_credits`) that used to live
+# here alongside these is gone -- migration 0049 dropped those columns
+# entirely (plans/subscriptions retired), so this router no longer accepts
+# or validates them.
 _LIVE_MONEY_FIELDS = ('base_amount', 'total_credits')
 
 # The loss-protection ceiling. Nullable; NULL means "no ceiling set yet".
 _CEILING_FIELD = 'max_cost_per_request_toman'
 
 # All Toman fields share the same "non-negative integer, no floats" rule.
-_ALL_MONEY_FIELDS = _LEGACY_MONEY_FIELDS + _LIVE_MONEY_FIELDS + (_CEILING_FIELD,)
+_ALL_MONEY_FIELDS = _LIVE_MONEY_FIELDS + (_CEILING_FIELD,)
 
 # migrations/0034_*: nullable quota fields. NULL means "this package does
 # not grant that kind of quota". Positive-only when set -- a zero-request
@@ -50,7 +52,22 @@ _QUOTA_FIELDS = ('request_quota', 'token_quota', 'validity_days')
 # `rate_limit_per_window`, not an additional cap.
 _RATE_LIMIT_FIELDS = ('rate_limit_per_window', 'premium_rate_limit_per_window')
 
-_TEXT_FIELDS = ('name_fa', 'name_en', 'description', 'name')
+# The legacy `name` column (pre-rename original of name_fa/name_en) was
+# dropped by migration 0049 along with the money trio above -- see this
+# module's earlier comment. It is not an editable field any more.
+#
+# `model_id` (migration 0018): optional display metadata, "which model this
+# bundle is framed around" -- nullable FK to model_catalog.id (ON DELETE SET
+# NULL), does not change checkout math. Same nullable-text shape as
+# `description`: NULL clears the label, an empty/blank string is not
+# specially rejected here (the FK itself would reject an unknown model_id
+# at the DB level).
+_TEXT_FIELDS = ('name_fa', 'name_en', 'description', 'model_id')
+
+# Text fields where NULL is a legitimate, meaningful value rather than "the
+# caller forgot to fill this in" -- see the per-field loop in
+# _validate_payload below.
+_NULLABLE_TEXT_FIELDS = ('description', 'model_id')
 
 _PERCENT_FIELD = 'bonus_percent'
 
@@ -88,9 +105,6 @@ def _parse_int_field(raw: Any, *, label: str, allow_null: bool, min_value: int) 
 
 
 _MONEY_LABELS = {
-    'price': 'قیمت (ستون قدیمی)',
-    'credits': 'اعتبار (ستون قدیمی)',
-    'bonus_credits': 'اعتبار پاداش (ستون قدیمی)',
     'base_amount': 'مبلغ پرداختی',
     'total_credits': 'مبلغ واریزی به کیف پول',
     'max_cost_per_request_toman': 'سقف هزینه هر درخواست',
@@ -122,11 +136,11 @@ def _validate_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], str | No
     for field in _ALL_MONEY_FIELDS:
         if field not in payload:
             continue
-        # price/credits/bonus_credits are NOT NULL in the DB (no default on
-        # price/credits); base_amount, total_credits and the ceiling are
-        # nullable columns, so an explicit `null` legitimately clears them.
-        allow_null = field not in _LEGACY_MONEY_FIELDS
-        value, perr = _parse_int_field(payload[field], label=_MONEY_LABELS[field], allow_null=allow_null, min_value=0)
+        # base_amount, total_credits and the ceiling are all nullable
+        # columns, so an explicit `null` legitimately clears them. (The
+        # legacy NOT-NULL trio that used to force allow_null=False here is
+        # gone -- migration 0049 dropped those columns.)
+        value, perr = _parse_int_field(payload[field], label=_MONEY_LABELS[field], allow_null=True, min_value=0)
         if perr:
             return {}, perr
         cleaned[field] = value
@@ -161,11 +175,11 @@ def _validate_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], str | No
         if field not in payload:
             continue
         raw = payload[field]
-        if field == 'description':
+        if field in _NULLABLE_TEXT_FIELDS:
             cleaned[field] = None if raw is None else str(raw)
             continue
         if raw is None or not str(raw).strip():
-            return {}, f'{"نام" if field != "description" else field} نمی‌تواند خالی باشد'
+            return {}, 'نام نمی‌تواند خالی باشد'
         cleaned[field] = str(raw)
 
     if 'active' in payload:

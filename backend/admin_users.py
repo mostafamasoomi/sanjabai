@@ -341,13 +341,9 @@ async def admin_user_payments(request: Request, uid: int) -> JSONResponse:
             {'uid': uid},
         )
         rows = [dict(r._mapping) for r in res.fetchall()]
-        # Subscription info
-        sub_res = await session.execute(
-            sqlalchemy.text('''SELECT * FROM subscriptions WHERE user_id = :uid
-                              ORDER BY created_at DESC LIMIT 5'''),
-            {'uid': uid},
-        )
-        subs = [dict(r._mapping) for r in sub_res.fetchall()]
-    return JSONResponse(jsonable_encoder({'payments': rows, 'subscriptions': subs}))
+    # Plans/subscriptions retired (migration 0049) -- the response no longer
+    # carries a 'subscriptions' key. See this packet's Decision/contract for
+    # the response-shape change the frontend owner needs to know about.
+    return JSONResponse(jsonable_encoder({'payments': rows}))
 
 

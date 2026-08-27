@@ -98,7 +98,6 @@ class TestSmartChatReserveSite:
         with patch.object(chat_mod, '_get_user_id', AsyncMock(return_value=1)), \
              patch.object(chat_mod, '_chat_disabled_response', AsyncMock(return_value=None)), \
              patch.object(chat_smart_mod, '_get_user_balance', AsyncMock(return_value=0)), \
-             patch.object(chat_smart_mod, '_get_user_plan', AsyncMock(return_value='free')), \
              patch.object(chat_mod, '_resolve_public_model', AsyncMock(return_value='kr/gpt-4o-mini')), \
              patch.object(chat_mod, '_is_model_allowed', AsyncMock(return_value=True)), \
              patch.object(chat_mod, '_apply_persian_style_guard_for_model', AsyncMock(return_value=None)), \

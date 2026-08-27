@@ -27,9 +27,9 @@ class TestModels:
     def test_all_core_models_exist(self):
         """All core models should be importable"""
         from models import (
-            User, Subscription, Ledger, Quota, ModelAlias, Pricing, Feature, Discount,
+            User, Ledger, Quota, ModelAlias, Pricing, Feature, Discount,
             AboutContent, ProxyConfig, Assistant, Conversation, Payment, Wallet,
-            WalletReservation, UsageEvent, Notification, ApiKey, AuditLog, Plan,
+            WalletReservation, UsageEvent, Notification, ApiKey, AuditLog,
             CreditPackage, UserBillingSetting, UserMemory, SkillTemplate,
             SkillTemplateRating, ScheduledTask, TaskExecution,
             RagDocument, RagChunk, RagEmbeddingUsage
@@ -143,10 +143,17 @@ class TestPricingConfig:
         from models import Pricing
         assert Pricing is not None
     
-    def test_plan_model_exists(self):
-        from models import Plan
-        assert Plan is not None
-    
+    def test_plan_model_is_gone(self):
+        """Migration 0049 retired the plan/subscription concept outright.
+
+        Inverted rather than deleted on purpose: a re-added `Plan` would be
+        someone reviving a product the owner decided against, and that
+        should trip a test rather than pass silently.
+        """
+        import models
+        assert not hasattr(models, 'Plan')
+        assert not hasattr(models, 'Subscription')
+
     def test_credit_package_model_exists(self):
         from models import CreditPackage
         assert CreditPackage is not None

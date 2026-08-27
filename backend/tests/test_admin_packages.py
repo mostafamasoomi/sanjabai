@@ -62,12 +62,16 @@ class _MappingRow:
 
 def _pkg_row(**overrides) -> _MappingRow:
     """A full credit_packages row, including the four migration-0034
-    columns, shaped like the real seed data (see docstring in
-    admin_packages.py for why `credits`/`total_credits` are NOT summed with
-    `bonus_credits`), plus the two migration-0046 rate-limit columns."""
+    columns, shaped like the real seed data, plus the two migration-0046
+    rate-limit columns.
+
+    The legacy `name`/`price`/`credits`/`bonus_credits` columns that used
+    to be part of this fixture were dropped by migration 0049
+    (plans/subscriptions retired) -- they are gone from the real table now,
+    not just unused."""
     row = dict(
-        id='starter-credits', name='Starter Credits', description='Test credit',
-        price=100_000, credits=100_000, bonus_credits=0, active=True,
+        id='starter-credits', description='Test credit',
+        active=True,
         created_at='2026-08-17T00:00:00Z', updated_at='2026-08-17T00:00:00Z',
         model_id=None, name_fa='بسته شروع', name_en='Starter', base_amount=100_000,
         bonus_percent=0, total_credits=100_000, sort_order=1,
@@ -95,6 +99,83 @@ class TestListPackages:
         assert body[0]['id'] == 'starter-credits'
         assert body[0]['request_quota'] is None
         assert body[0]['max_cost_per_request_toman'] is None
+
+
+# ── GET /admin/purchases ──────────────────────────────────────────────────
+
+class _CountResult:
+    def __init__(self, c: int):
+        self.c = c
+
+
+def _purchase_row(**overrides) -> _MappingRow:
+    row = dict(
+        id=1, user_id=42, email='buyer@example.com', phone=None,
+        package_id='starter-credits', name_fa='بسته شروع',
+        name_en='Starter', amount=100_000, total_credits=100_000,
+        status='completed',
+        created_at='2026-08-17T00:00:00Z', verified_at='2026-08-17T00:01:00Z',
+    )
+    row.update(overrides)
+    return _MappingRow(**row)
+
+
+class TestListPurchases:
+    def test_requires_admin(self, app_client, admin_denied):
+        resp = app_client.get('/admin/purchases')
+        assert resp.status_code == 401
+
+    def test_returns_paginated_shape(self, app_client, admin_ok, mock_async_session):
+        async def mock_execute(stmt, params=None, *a, **k):
+            sql = str(stmt)
+            if 'COUNT(*)' in sql:
+                return make_result(fetchone=_CountResult(1))
+            return make_result(fetchall=[_purchase_row()])
+
+        mock_async_session.execute = mock_execute
+        resp = app_client.get('/admin/purchases')
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body['total'] == 1
+        assert body['page'] == 1
+        assert body['limit'] == 50
+        assert len(body['purchases']) == 1
+        item = body['purchases'][0]
+        assert item['user_id'] == 42
+        assert item['package_id'] == 'starter-credits'
+        assert item['amount'] == 100_000
+        assert item['status'] == 'completed'
+
+    def test_limit_capped_at_200(self, app_client, admin_ok, mock_async_session):
+        captured = {}
+
+        async def mock_execute(stmt, params=None, *a, **k):
+            sql = str(stmt)
+            if 'COUNT(*)' in sql:
+                return make_result(fetchone=_CountResult(0))
+            captured['params'] = params
+            return make_result(fetchall=[])
+
+        mock_async_session.execute = mock_execute
+        resp = app_client.get('/admin/purchases?limit=9999')
+        assert resp.status_code == 200
+        assert resp.json()['limit'] == 200
+        assert captured['params']['limit'] == 200
+
+    def test_page_offsets_correctly(self, app_client, admin_ok, mock_async_session):
+        captured = {}
+
+        async def mock_execute(stmt, params=None, *a, **k):
+            sql = str(stmt)
+            if 'COUNT(*)' in sql:
+                return make_result(fetchone=_CountResult(0))
+            captured['params'] = params
+            return make_result(fetchall=[])
+
+        mock_async_session.execute = mock_execute
+        resp = app_client.get('/admin/purchases?page=3&limit=20')
+        assert resp.status_code == 200
+        assert captured['params']['offset'] == 40
 
 
 # ── POST /admin/packages/{package_id} ────────────────────────────────────

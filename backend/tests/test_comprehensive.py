@@ -127,12 +127,12 @@ class TestWallet:
 
 class TestPricing:
     """Pricing and billing tests"""
-    
-    def test_list_plans(self, mock_async_session):
-        """Should list subscription plans"""
-        response = client.get('/plans')
-        assert response.status_code in [200, 401]
-    
+
+    # test_list_plans (GET /plans) removed: plans/subscriptions were
+    # retired (migration 0049, session 23) and pricing.py no longer
+    # registers a /plans route at all -- credit_packages is the only
+    # product concept left, see test_credit_packages below.
+
     def test_credit_packages(self, mock_async_session):
         """Should list credit packages"""
         response = client.get('/credit-packages')

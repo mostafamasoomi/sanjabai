@@ -38,9 +38,9 @@ from database import (
 
 # ── Import all ORM models (for backward compat: from app import User, etc.) ──
 from models import (
-    User, Subscription, Ledger, Quota, ModelAlias, Pricing, Feature, Discount,
+    User, Ledger, Quota, ModelAlias, Pricing, Feature, Discount,
     AboutContent, ProxyConfig, Assistant, Conversation, Payment, Wallet,
-    WalletReservation, UsageEvent, Notification, ApiKey, AuditLog, Plan,
+    WalletReservation, UsageEvent, Notification, ApiKey, AuditLog,
     CreditPackage, UserBillingSetting, UserMemory, SkillTemplate,
     SkillTemplateRating, ScheduledTask, TaskExecution,
     RagDocument, RagChunk, RagEmbeddingUsage,

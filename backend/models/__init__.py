@@ -32,13 +32,11 @@ from ._users import (
     UserMemory,
 )
 from ._billing import (
-    Subscription,
     Ledger,
     Payment,
     Wallet,
     WalletReservation,
     UsageEvent,
-    Plan,
     CreditPackage,
 )
 from ._catalog import (
@@ -82,10 +80,10 @@ __all__ = [
     'Conversation', 'CreditPackage', 'Decimal', 'Discount', 'Feature',
     'HermesAgentEvent', 'HermesOffering', 'HermesOrder', 'HermesServer',
     'HermesServerSkill', 'HermesSkillCatalog', 'JSONB', 'Ledger', 'Mapped',
-    'ModelAlias', 'Notification', 'Payment', 'Plan', 'Pricing',
+    'ModelAlias', 'Notification', 'Payment', 'Pricing',
     'ProxyConfig', 'Quota', 'RagChunk', 'RagDocument', 'RagEmbeddingUsage',
     'ScheduledTask', 'SkillTemplate', 'SkillTemplateRating',
-    'StatusIncident', 'Subscription', 'TaskExecution', 'UsageEvent',
+    'StatusIncident', 'TaskExecution', 'UsageEvent',
     'User', 'UserBillingSetting', 'UserMemory', 'UserSkillActivation',
     'Vector', 'Wallet', 'WalletReservation', 'datetime', 'func',
     'mapped_column', 'select', 'sqlalchemy', 'timezone',

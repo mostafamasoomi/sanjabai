@@ -1,5 +1,10 @@
-"""Billing/wallet/subscription ORM models: subscriptions, ledger, payments,
-wallet + reservations, usage events, plans, and credit packages.
+"""Billing/wallet ORM models: ledger, payments, wallet + reservations,
+usage events, and credit packages.
+
+``Subscription`` and ``Plan`` were removed in migration 0049: the owner
+retired the plan/subscription concept entirely and ``CreditPackage`` is now
+the only product concept. ``UsageEvent.subscription_id`` survives them on
+purpose -- see its own comment.
 """
 from __future__ import annotations
 
@@ -10,29 +15,6 @@ import sqlalchemy
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ._base import Base, _utcnow
-
-
-class Subscription(Base):
-    __tablename__ = 'subscriptions'
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(sqlalchemy.ForeignKey('users.id'), index=True)
-    plan: Mapped[str] = mapped_column(sqlalchemy.String(32))
-    # Column has existed in the DB since migrations/0005_pricing_system.sql;
-    # it was never mapped here, so payment_endpoints.py's paid-subscription
-    # checkout completion (Subscription(..., plan_id=plan.id, ...)) raised
-    # TypeError on every successful payment ("plan_id is an invalid keyword
-    # argument for Subscription") before this was added.
-    plan_id: Mapped[str | None] = mapped_column(sqlalchemy.ForeignKey('plans.id'), nullable=True)
-    starts_at: Mapped[datetime] = mapped_column(default=_utcnow)
-    ends_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    status: Mapped[str] = mapped_column(default='active')
-    monthly_token_quota: Mapped[int] = mapped_column(default=0)
-    tokens_used_this_period: Mapped[int] = mapped_column(default=0)
-    auto_renew: Mapped[bool] = mapped_column(default=True)
-    cancelled_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    price_paid: Mapped[int] = mapped_column(default=0)
-    created_at: Mapped[datetime] = mapped_column(default=_utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=_utcnow)
 
 
 class Ledger(Base):
@@ -130,6 +112,10 @@ class UsageEvent(Base):
     upstream_error: Mapped[str | None] = mapped_column(nullable=True)
     meta: Mapped[dict[str, Any] | None] = mapped_column(sqlalchemy.JSON, nullable=True)
     billing_source: Mapped[str] = mapped_column(default='wallet')
+    # Outlived the Subscription model it named (dropped in migration 0049).
+    # Kept deliberately: it carries no foreign key, every row holds NULL, and
+    # it is the only trace historical usage rows have of the retired concept.
+    # Dropping it would rewrite history rather than record it.
     subscription_id: Mapped[int | None] = mapped_column(nullable=True)
     credits_charged: Mapped[int] = mapped_column(default=0)
     payg_charged: Mapped[int] = mapped_column(default=0)
@@ -147,24 +133,6 @@ class UsageEvent(Base):
     usd_input_per_million: Mapped[float | None] = mapped_column(nullable=True)
     usd_output_per_million: Mapped[float | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=_utcnow)
-
-
-class Plan(Base):
-    """Subscription plan definitions."""
-    __tablename__ = 'plans'
-    id: Mapped[str] = mapped_column(primary_key=True)
-    name_fa: Mapped[str]
-    name_en: Mapped[str]
-    price_monthly: Mapped[int] = mapped_column(default=0)
-    monthly_token_quota: Mapped[int] = mapped_column(default=0)
-    daily_token_limit: Mapped[int] = mapped_column(default=0)
-    models_allowed: Mapped[list | None] = mapped_column(sqlalchemy.JSON, default=list)
-    priority_queue: Mapped[bool] = mapped_column(default=False)
-    features: Mapped[list | None] = mapped_column(sqlalchemy.JSON, default=list)
-    active: Mapped[bool] = mapped_column(default=True)
-    sort_order: Mapped[int] = mapped_column(default=0)
-    created_at: Mapped[datetime] = mapped_column(default=_utcnow)
-    updated_at: Mapped[datetime] = mapped_column(default=_utcnow)
 
 
 class CreditPackage(Base):

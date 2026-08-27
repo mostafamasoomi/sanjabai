@@ -3,7 +3,7 @@ Admin endpoints aggregator.
 
 Historically a single ~1,864-line file covering user management, pricing,
 features, discounts, about, proxy config, org default model, analytics,
-stats, plans, credit packages, subscriptions, data export, `/me/usage*`,
+stats, credit packages, data export, `/me/usage*`,
 admin MFA and lockout management. Split (house 500-line cap) into one
 module per section, following the same aggregator pattern already used by
 chat.py/chat_web.py (see chat.py's module docstring):
@@ -17,7 +17,12 @@ chat.py/chat_web.py (see chat.py's module docstring):
                          margin, growth) over a selectable window; split off
                          when the migration-0048 cost series pushed
                          admin_analytics.py past the 500-line cap
-  admin_plans.py      -- Plans, credit packages, subscriptions
+                         admin_plans.py -- Plans, credit packages and
+                         subscriptions -- was deleted in migration 0049's
+                         session: the owner retired the plan/subscription
+                         concept, and the credit-package routes it also
+                         carried were an unvalidated duplicate of the
+                         loss-path-checked ones in admin_packages.py.
   admin_usage_me.py   -- /me/usage* (NOT admin-only -- a regular logged-in
                           user's own usage summary)
   admin_mfa.py         -- Admin MFA (TOTP) skeleton + lockout management
@@ -67,7 +72,6 @@ from admin_content import router as _content_router
 from admin_users import router as _users_router
 from admin_analytics import router as _analytics_router
 from admin_analytics_timeseries import router as _analytics_timeseries_router
-from admin_plans import router as _plans_router
 from admin_usage_me import router as _usage_me_router
 from admin_mfa import router as _mfa_router
 from admin_security import router as _security_router
@@ -80,7 +84,6 @@ router.include_router(_content_router)
 router.include_router(_users_router)
 router.include_router(_analytics_router)
 router.include_router(_analytics_timeseries_router)
-router.include_router(_plans_router)
 router.include_router(_usage_me_router)
 router.include_router(_mfa_router)
 router.include_router(_security_router)

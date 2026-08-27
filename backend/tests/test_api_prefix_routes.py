@@ -24,7 +24,23 @@ import pytest
 
 BACKEND = pathlib.Path(__file__).resolve().parent.parent
 
-_ROUTE = re.compile(r"@router\.(?:get|post|put|delete|patch)\(\s*'([^']+)'")
+# Matches both the plain `@router.get('/x')` form and the dotted-owner form
+# used by content_catalog.py/hermes.py/chat.py/admin_logical.py --
+# `@content.router.get('/x')` -- and accepts either quote character. Widened
+# from a `@router\.` -only, single-quote-only pattern that silently missed 38
+# of ~223 route decorators, including `/api/pricing` (content_catalog.py:348)
+# -- the exact route class this file exists to protect. Still a literal-path
+# scanner: decorators whose path is not a string literal are correctly
+# skipped, and only `backend/*.py` top-level modules are scanned (verified:
+# zero route decorators live in backend subdirectories).
+#
+# Anchored to the start of a line because an unanchored scan counts a
+# commented-out `# @router.get('/x')` as still registered -- which would let
+# the twin check below pass over a route that no longer exists.
+_ROUTE = re.compile(
+    r"^\s*@(?:\w+\.)?router\.(?:get|post|put|delete|patch)\(\s*['\"]([^'\"]+)['\"]",
+    re.MULTILINE,
+)
 
 
 def _registered_paths() -> dict[str, set[str]]:
@@ -37,9 +53,17 @@ def _registered_paths() -> dict[str, set[str]]:
 
 
 def test_route_scan_finds_something():
-    """Guards the guard: a broken regex would make the test below vacuous."""
+    """Guards the guard: a broken regex would make the test below vacuous.
+
+    Measured at 180 unique registered paths after widening `_ROUTE` to catch
+    the dotted-owner/double-quote decorators (was 148 unique paths / 185
+    matches under the old single-quote-only, `@router.`-only pattern). The
+    floor is set to 170, a margin below the measured count that reflects
+    reality without pinning an exact number that would turn every route
+    removal into a test-file chore.
+    """
     paths = _registered_paths()
-    assert len(paths) > 50, f'suspiciously few routes found: {len(paths)}'
+    assert len(paths) > 170, f'suspiciously few routes found: {len(paths)}'
     assert '/v1/models' in paths
 
 

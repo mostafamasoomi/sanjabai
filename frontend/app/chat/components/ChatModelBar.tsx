@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
 import ModelPicker from './ModelPicker'
+import SmartModePopover, { type SmartStrategy } from './SmartModePopover'
 import { type ModelCatalogItem } from '@/types/catalog'
 import { chatModelBarStrings } from './ChatModelBar.strings'
 
@@ -16,8 +17,13 @@ type ChatModelBarProps = {
   model: ModelCatalogItem | null
   setModel: (m: ModelCatalogItem) => void
   loading: boolean
+  token: string | null
   smartMode: boolean
   setSmartMode: (updater: (prev: boolean) => boolean) => void
+  smartStrategy: SmartStrategy
+  setSmartStrategy: (v: SmartStrategy) => void
+  /** `mode` from the backend's smart_info event — the strategy that ran. */
+  smartRunMode: string | null
   smartModel: string | null
   activeConversationId: string | null
   exportMenuOpen: boolean
@@ -30,7 +36,8 @@ type ChatModelBarProps = {
 
 export default function ChatModelBar({
   isMobile, setMobileDrawerOpen, sidebarOpen, setSidebarOpen,
-  catalogError, models, model, setModel, loading, smartMode, setSmartMode, smartModel,
+  catalogError, models, model, setModel, loading, token,
+  smartMode, setSmartMode, smartStrategy, setSmartStrategy, smartRunMode, smartModel,
   activeConversationId, exportMenuOpen, setExportMenuOpen, exportMenuRef, exportConversation,
   streaming, cancel,
 }: ChatModelBarProps) {
@@ -66,22 +73,17 @@ export default function ChatModelBar({
         )}
       </div>
       <div className="flex items-center gap-2">
-        {/* Smart Mode toggle. Was a <label> wrapping an .sr-only
-            checkbox — a 1×1px hit target in the tab order. role="switch"
-            announces the state without needing the hidden input. */}
-        <button
-          type="button"
-          role="switch"
-          aria-checked={smartMode}
-          onClick={() => setSmartMode(prev => !prev)}
-          className="smart-mode-toggle"
-          title={smartMode ? s.smartModeActive : s.smartModeInactive}
-        >
-          <span className={`smart-mode-switch ${smartMode ? 'smart-mode-on' : ''}`}>
-            <span className="smart-mode-knob" />
-          </span>
-          <span className="select-none">Smart Mode</span>
-        </button>
+        {/* Smart Mode. Was an on/off switch with a hardcoded English label;
+            it now picks HOW smart mode chooses (auto / router / a combo) and
+            reports which strategy the backend actually ran. */}
+        <SmartModePopover
+          token={token}
+          smartMode={smartMode}
+          setSmartMode={setSmartMode}
+          strategy={smartStrategy}
+          setStrategy={setSmartStrategy}
+          ranMode={smartRunMode}
+        />
         {smartMode && smartModel && (
           <span className="badge badge-accent text-[9px]" dir="ltr" title={s.smartModePicked}>
             🧠 {smartModel}

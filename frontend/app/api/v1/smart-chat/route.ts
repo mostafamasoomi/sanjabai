@@ -6,6 +6,10 @@ export async function POST(request: Request) {
     const upstream = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
     const auth = request.headers.get('Authorization') || ''
     const smartModel = request.headers.get('X-Smart-Model') || ''
+    // How smart mode should pick: auto | router | combo:<id>. This proxy
+    // forwards an allow-list, so a header missing from it never reaches the
+    // backend and the feature dies silently on this line.
+    const smartModeHeader = request.headers.get('X-Smart-Mode') || ''
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -13,6 +17,7 @@ export async function POST(request: Request) {
     }
     if (auth) headers['Authorization'] = auth
     if (smartModel) headers['X-Smart-Model'] = smartModel
+    if (smartModeHeader) headers['X-Smart-Mode'] = smartModeHeader
 
     const res = await fetch(`${upstream}/v1/smart-chat`, {
       method: 'POST',

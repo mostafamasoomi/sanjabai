@@ -6,6 +6,7 @@ import { type ModelCatalogItem } from '@/types/catalog'
 import { StreamAccumulator } from '../useStreamAccumulator'
 import type { Message, UsageStats, Assistant } from '../chatTypes'
 import { generateId, hasSearchIntent } from '../chatHelpers'
+import type { SmartStrategy } from '../components/SmartModePopover'
 import { chatHelpersStrings } from '../chatHelpers.strings'
 import { useChatStreamStrings } from './useChatStream.strings'
 
@@ -17,6 +18,8 @@ type UseChatStreamParams = {
   setModel: (m: ModelCatalogItem) => void
   token: string | null
   smartMode: boolean
+  /** How smart mode should pick: sent as `X-Smart-Mode` (auto|router|combo:N). */
+  smartStrategy: SmartStrategy
   webSearch: boolean
   setWebSearch: (v: boolean) => void
   attachedFile: File | null
@@ -30,6 +33,9 @@ type UseChatStreamParams = {
   createConversation: (firstUserMsg: string) => Promise<string | null>
   saveMessages: (convId: string, msgs: Message[]) => Promise<void>
   setSmartModel: (v: string | null) => void
+  /** The `mode` the backend reports having actually run, which may differ from
+   *  `smartStrategy` when a combo or the router declines and rules take over. */
+  setSmartRunMode: (v: string | null) => void
   setShowPresets: (v: boolean) => void
   setWalletBalance: (v: number) => void
   abortRef: MutableRefObject<AbortController | null>
@@ -52,9 +58,9 @@ type UseChatStreamParams = {
 // note on why this file was left alone before.
 export function useChatStream(params: UseChatStreamParams) {
   const {
-    model, models, setModel, token, smartMode, webSearch, setWebSearch,
+    model, models, setModel, token, smartMode, smartStrategy, webSearch, setWebSearch,
     attachedFile, setAttachedFile, activeAssistant, messages, setMessages, setInput, messagesRef,
-    activeConversationIdRef, createConversation, saveMessages, setSmartModel, setShowPresets,
+    activeConversationIdRef, createConversation, saveMessages, setSmartModel, setSmartRunMode, setShowPresets,
     setWalletBalance, abortRef, setStreaming, setError, setUsageStats, setTokensPerSec,
     searchHintFor, setSearchHintFor,
   } = params
@@ -95,6 +101,9 @@ export function useChatStream(params: UseChatStreamParams) {
     setShowPresets(false)
     setStreaming(true)
     setError('')
+    // Last turn's answer says nothing about this one -- clear it so a stale
+    // "fell back" marker cannot survive into a request that never ran.
+    setSmartRunMode(null)
     streamStartTimeRef.current = Date.now()
     setTokensPerSec(0)
 
@@ -111,7 +120,11 @@ export function useChatStream(params: UseChatStreamParams) {
     let streamAccumulator: StreamAccumulator | null = null
 
     try {
-      const chatUrl = (smartMode && !attachedFile) ? '/api/v1/smart-chat' : '/api/v1/chat/completions'
+      // An attached file silently bypasses smart mode (the with-file endpoint
+      // has no picker), so the smart headers must be gated on the same
+      // condition as the URL -- never sent to /v1/chat/completions.
+      const smartRequest = smartMode && !attachedFile
+      const chatUrl = smartRequest ? '/api/v1/smart-chat' : '/api/v1/chat/completions'
       let res: Response
       if (attachedFile) {
         const fd = new FormData()
@@ -129,7 +142,10 @@ export function useChatStream(params: UseChatStreamParams) {
           headers: {
             'Content-Type': 'application/json',
             ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-            ...(smartMode ? { 'X-Smart-Model': currentModel!.providerModelId || currentModel!.id } : {}),
+            ...(smartRequest ? {
+              'X-Smart-Model': currentModel!.providerModelId || currentModel!.id,
+              'X-Smart-Mode': smartStrategy,
+            } : {}),
           },
           body: JSON.stringify({
             model: currentModel!.providerModelId || currentModel!.id,
@@ -257,6 +273,10 @@ export function useChatStream(params: UseChatStreamParams) {
         // ── smart_info event ──
         if (obj.type === 'smart_info') {
           setSmartModel(obj.model)
+          // `mode` is what RAN, not what was asked for: ask for combo:3 and get
+          // "auto" back when the combo declined. Recorded verbatim so the bar
+          // can admit the fallback instead of still claiming the combo.
+          if (typeof obj.mode === 'string') setSmartRunMode(obj.mode)
         }
         // ── tokens/sec ──
         if (streamStartTimeRef.current > 0) {
@@ -351,7 +371,7 @@ export function useChatStream(params: UseChatStreamParams) {
       setStreaming(false)
       abortRef.current = null
     }
-  }, [messages, model, models, token, smartMode, webSearch, setWebSearch, setModel, createConversation, saveMessages, attachedFile, setAttachedFile, activeAssistant, setMessages, setInput, setShowPresets, setSmartModel, setWalletBalance, messagesRef, activeConversationIdRef, abortRef, setStreaming, setError, setUsageStats, setTokensPerSec, setSearchHintFor, s])
+  }, [messages, model, models, token, smartMode, smartStrategy, webSearch, setWebSearch, setModel, createConversation, saveMessages, attachedFile, setAttachedFile, activeAssistant, setMessages, setInput, setShowPresets, setSmartModel, setSmartRunMode, setWalletBalance, messagesRef, activeConversationIdRef, abortRef, setStreaming, setError, setUsageStats, setTokensPerSec, setSearchHintFor, s])
 
   // Keep ref in sync so retry() can call sendMessage without circular deps
   useEffect(() => { sendMessageRef.current = sendMessage }, [sendMessage])

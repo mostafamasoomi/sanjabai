@@ -13,6 +13,7 @@ import { isUsableModel } from './components/modelUtils'
 import ChatMessageItem from './components/ChatMessageItem'
 import ConversationSidebar from './components/ConversationSidebar'
 import ChatModelBar from './components/ChatModelBar'
+import { loadSmartMode, persistSmartMode, type SmartStrategy } from './components/SmartModePopover'
 import AssistantBanner from './components/AssistantBanner'
 import SearchHintBanner from './components/SearchHintBanner'
 import ChatErrorBanner from './components/ChatErrorBanner'
@@ -53,9 +54,13 @@ export default function ChatPage() {
   const [showPresets, setShowPresets] = useState(true)
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
-  const [smartMode, setSmartMode] = useState<boolean>(() => {
-    try { return localStorage.getItem('sanjabai_smart_mode') === 'true' } catch { return false }
-  })
+  // Smart mode is now on/off PLUS a strategy (auto | router | combo:N); both
+  // are read and written by SmartModePopover's helpers, which keep the old
+  // boolean key untouched so a returning user lands on "auto", not the
+  // metered router. smartRunMode is what the backend says actually ran.
+  const [smartMode, setSmartMode] = useState<boolean>(() => loadSmartMode().on)
+  const [smartStrategy, setSmartStrategy] = useState<SmartStrategy>(() => loadSmartMode().strategy)
+  const [smartRunMode, setSmartRunMode] = useState<string | null>(null)
   const [smartModel, setSmartModel] = useState<string | null>(null)
   // SSE-stream-derived state, written by useChatStream (and reset by
   // useConversations on new-chat/switch-conversation) -- owned here rather
@@ -107,9 +112,7 @@ export default function ChatPage() {
   }, [promptParam])
 
   useEffect(() => { messagesRef.current = messages }, [messages])
-  useEffect(() => {
-    try { localStorage.setItem('sanjabai_smart_mode', smartMode ? 'true' : 'false') } catch {}
-  }, [smartMode])
+  useEffect(() => { persistSmartMode(smartMode, smartStrategy) }, [smartMode, smartStrategy])
   useEffect(() => {
     try { localStorage.setItem('sanjabai_web_search', webSearch ? 'true' : 'false') } catch {}
   }, [webSearch])
@@ -146,12 +149,12 @@ export default function ChatPage() {
   })
 
   const chat = useChatStream({
-    model, models, setModel, token, smartMode, webSearch, setWebSearch,
+    model, models, setModel, token, smartMode, smartStrategy, webSearch, setWebSearch,
     attachedFile, setAttachedFile, activeAssistant, messages, setMessages, setInput, messagesRef,
     activeConversationIdRef: conv.activeConversationIdRef,
     createConversation: conv.createConversation,
     saveMessages: conv.saveMessages,
-    setSmartModel, setShowPresets, setWalletBalance, abortRef,
+    setSmartModel, setSmartRunMode, setShowPresets, setWalletBalance, abortRef,
     setStreaming, setError, setUsageStats, setTokensPerSec,
     searchHintFor, setSearchHintFor,
   })
@@ -317,8 +320,16 @@ export default function ChatPage() {
             model={model}
             setModel={setModel}
             loading={loading}
+            token={token}
             smartMode={smartMode}
             setSmartMode={setSmartMode}
+            smartStrategy={smartStrategy}
+            setSmartStrategy={(v) => {
+              // Changing the ask invalidates the last answer's "what ran", or a
+              // stale mismatch would read as a fallback that never happened.
+              setSmartStrategy(v); setSmartRunMode(null)
+            }}
+            smartRunMode={smartRunMode}
             smartModel={smartModel}
             activeConversationId={conv.activeConversationId}
             exportMenuOpen={conv.exportMenuOpen}

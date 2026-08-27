@@ -277,8 +277,13 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
     price_row = None
     try:
         price_res = await session.execute(
+            # `upstream` and the two usd_* columns are here purely to cost
+            # the request (migration 0048). They sit on the SAME row this
+            # query already fetches, so capturing what we paid costs zero
+            # extra round trips on the chat hot path.
             sqlalchemy.text(
-                'SELECT input_per_million, output_per_million, markup_pct '
+                'SELECT input_per_million, output_per_million, markup_pct, '
+                'upstream, usd_input_per_million, usd_output_per_million '
                 'FROM model_catalog '
                 'WHERE provider_model_id = :mid AND availability = :avail LIMIT 1'
             ),
@@ -323,6 +328,45 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
         )
     cost = max(1, int((input_tokens * inp_rate + output_tokens * out_rate + 500_000) // 1_000_000))
 
+    # ── What this request cost US (migration 0048) ──────────────────────
+    # Captured HERE, above the entitlement branch, so that both billing
+    # paths record it. A package-covered request charges the user nothing
+    # but still costs us upstream; recording zero cost on those rows would
+    # make packages look infinitely profitable, which is the exact trap
+    # this placement closes.
+    #
+    # Costed on `prompt_tokens_raw`, NOT the possibly-discounted
+    # `input_tokens`: when a provider pads the prompt we refuse to bill the
+    # user for the padding, but the upstream still charges us for it.
+    # Revenue on discounted tokens, cost on raw tokens.
+    #
+    # `price_row` may be None (the L2 catalog-data-bug path above) -- then
+    # nothing is known about the upstream and the snapshot is honestly
+    # 'error', never a zero. capture_upstream_cost never raises.
+    # Belt AND braces: capture_upstream_cost already never raises, and this
+    # wraps it anyway. It is called from inside the billing transaction,
+    # beside the wallet charge (below) and the Ledger row -- an exception
+    # escaping here does not just lose a bookkeeping field, it rolls back the
+    # charge and serves the request free, silently, with nothing worse than a
+    # warning in the log. Cost accounting is worth exactly zero requests, so
+    # the guarantee is not left resting on one function's internal discipline.
+    from services.cost_capture import capture_upstream_cost, _ERROR_SNAPSHOT
+    cost_snapshot = _ERROR_SNAPSHOT
+    if price_row is not None:
+        try:
+            cost_snapshot = await capture_upstream_cost(
+                session,
+                upstream=getattr(price_row, 'upstream', None),
+                input_tokens=prompt_tokens_raw,
+                output_tokens=output_tokens,
+                usd_input_per_million=getattr(price_row, 'usd_input_per_million', None),
+                usd_output_per_million=getattr(price_row, 'usd_output_per_million', None),
+            )
+        except Exception as exc:
+            logger.warning(
+                f"_record_usage: cost capture raised model={model!r} uid={uid}: {exc}"
+            )
+
     # Entitlement gate: real (not estimated) cost may be covered by a
     # package quota, consumed atomically before the wallet is touched --
     # fail-safe fallback to the wallet path lives in entitlement_gate.py.
@@ -338,6 +382,7 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
         await record_entitlement_usage(
             session, uid, model, entitlement['id'], cost,
             input_tokens, output_tokens, reasoning_tokens, estimated,
+            cost_snapshot=cost_snapshot,
         )
         return result
 
@@ -419,6 +464,7 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
             output_tokens=output_tokens,
             reasoning_tokens=reasoning_tokens,
             meta=meta,
+            **cost_snapshot.as_kwargs(),
         )
     except Exception as e:
         logger.warning(f"_record_usage metering failed model={model} uid={uid}: {e}")

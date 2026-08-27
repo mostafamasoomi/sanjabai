@@ -205,13 +205,29 @@ async def _bill_embedding_usage(
                     'model': EMBEDDING_MODEL,
                 },
             )
-            # Also record in usage_events for billing consistency
+            # Also record in usage_events for billing consistency.
+            #
+            # This is the one usage_events writer that bypasses
+            # services/metering.py entirely, so the migration-0048 cost
+            # columns have to be written by hand here or embedding traffic
+            # would be permanently invisible to the profit report -- and
+            # invisible reads as unmeasured, which would drag the coverage
+            # figure down on every day RAG is used.
+            #
+            # The literals are honest ONLY because embeddings go through the
+            # LiteLLM proxy (EMBEDDING_MODEL is served by `litellm`, which is
+            # in services/margin.py's FREE_UPSTREAMS): the owner's own
+            # infrastructure, ~zero marginal cost per token. THE MOMENT
+            # EMBEDDINGS MOVE TO A PAID UPSTREAM THIS BECOMES A LIE and must
+            # be replaced with a real services/cost_capture call.
             await session.execute(
                 __import__('sqlalchemy').text("""
                     INSERT INTO usage_events
-                        (request_id, user_id, model, input_tokens, charged_amount, upstream_status)
+                        (request_id, user_id, model, input_tokens, charged_amount, upstream_status,
+                         upstream_cost_toman, upstream_cost_basis)
                     VALUES
-                        (:rid, :uid, :model, :tokens, :charged, 'success')
+                        (:rid, :uid, :model, :tokens, :charged, 'success',
+                         0, 'free_upstream')
                 """),
                 {
                     'rid': request_id,

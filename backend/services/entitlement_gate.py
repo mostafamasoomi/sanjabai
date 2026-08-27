@@ -108,6 +108,7 @@ async def record_entitlement_usage(
     output_tokens: int,
     reasoning_tokens: int,
     estimated: bool,
+    cost_snapshot=None,
 ) -> None:
     """Record the usage_events row for a request paid by quota, not wallet.
 
@@ -119,6 +120,18 @@ async def record_entitlement_usage(
     here overrides that column directly), so the fact that this request was
     quota-covered goes into ``meta`` instead, alongside the entitlement id
     and what the wallet charge would have been -- never silently dropped.
+
+    ``cost_snapshot`` is a :class:`services.cost_capture.CostSnapshot` -- what
+    the request cost US upstream. It matters MORE on this path than on the
+    wallet path, not less: the user paid nothing here, so without it a
+    package-covered request records revenue 0 and cost 0 and every package
+    looks infinitely profitable. Defaults to None so an older caller still
+    works, and None honestly records "not measured" rather than zero.
+
+    Note for the read side: a row with charged_amount 0 and a real
+    upstream_cost_toman is NOT a loss. The revenue for it arrived earlier
+    through the payment gateway when the package was bought; ``meta``'s
+    ``wallet_cost_toman`` below records what the wallet would have paid.
 
     Never raises: a failure to write the usage event must not turn an
     already-consumed entitlement into a failed request, the same best-effort
@@ -146,6 +159,7 @@ async def record_entitlement_usage(
                 'entitlement_id': entitlement_id,
                 'wallet_cost_toman': cost_toman,
             },
+            **(cost_snapshot.as_kwargs() if cost_snapshot is not None else {}),
         )
     except Exception as e:
         logger.warning(

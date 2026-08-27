@@ -80,10 +80,33 @@ async def record_usage(
     reservation_id: Optional[str] = None,
     upstream_error: Optional[str] = None,
     meta: Optional[dict] = None,
+    upstream_cost_toman: Optional[int] = None,
+    upstream_cost_basis: Optional[str] = None,
+    fx_rate_irt: Optional[float] = None,
+    usd_input_per_million: Optional[float] = None,
+    usd_output_per_million: Optional[float] = None,
 ) -> dict:
-    """Persist a usage event. ``charge`` must be a :class:`Money`."""
+    """Persist a usage event. ``charge`` must be a :class:`Money`.
+
+    ``charge`` is what the USER paid. The ``upstream_cost_*`` /
+    ``fx_rate_irt`` / ``usd_*_per_million`` group is what WE paid, snapshotted
+    at write time by :mod:`services.cost_capture` -- see
+    ``migrations/0048_usage_event_cost.sql`` for the full column semantics and
+    the read-side contract they bind consumers to.
+
+    All five default to None so that a caller which knows nothing about cost
+    still works unchanged. **None means unknown, never zero** -- a caller that
+    passes nothing produces a row indistinguishable from the pre-0048
+    history, which is exactly right: it did not measure anything.
+    """
     if not isinstance(charge, Money):
         raise TypeError("charge must be a Money instance")
+    if upstream_cost_basis is not None:
+        # Coerced, never rejected. This is called from inside the billing
+        # transaction; raising on a bad basis string would roll back the
+        # wallet charge and the ledger row to protect a bookkeeping field.
+        from .cost_capture import normalize_basis
+        upstream_cost_basis = normalize_basis(upstream_cost_basis)
     data = {
         "request_id": request_id,
         "user_id": user_id,
@@ -100,6 +123,11 @@ async def record_usage(
         "upstream_status": upstream_status,
         "upstream_error": upstream_error,
         "meta": meta,
+        "upstream_cost_toman": upstream_cost_toman,
+        "upstream_cost_basis": upstream_cost_basis,
+        "fx_rate_irt": fx_rate_irt,
+        "usd_input_per_million": usd_input_per_million,
+        "usd_output_per_million": usd_output_per_million,
     }
     await repo.append_usage_event(data)
     return data

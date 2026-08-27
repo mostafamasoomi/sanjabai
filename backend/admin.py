@@ -12,7 +12,11 @@ chat.py/chat_web.py (see chat.py's module docstring):
   admin_content.py    -- Features, Discounts, About, Proxy Config,
                           org-default-model
   admin_users.py      -- User management + per-user detail endpoints
-  admin_analytics.py  -- Data export, analytics/stats, timeseries, audit log
+  admin_analytics.py  -- Data export, analytics/stats, audit log
+  admin_analytics_timeseries.py -- the dashboard timeseries (money, cost,
+                         margin, growth) over a selectable window; split off
+                         when the migration-0048 cost series pushed
+                         admin_analytics.py past the 500-line cap
   admin_plans.py      -- Plans, credit packages, subscriptions
   admin_usage_me.py   -- /me/usage* (NOT admin-only -- a regular logged-in
                           user's own usage summary)
@@ -62,6 +66,7 @@ from admin_pricing import router as _pricing_router
 from admin_content import router as _content_router
 from admin_users import router as _users_router
 from admin_analytics import router as _analytics_router
+from admin_analytics_timeseries import router as _analytics_timeseries_router
 from admin_plans import router as _plans_router
 from admin_usage_me import router as _usage_me_router
 from admin_mfa import router as _mfa_router
@@ -74,6 +79,7 @@ router.include_router(_pricing_router)
 router.include_router(_content_router)
 router.include_router(_users_router)
 router.include_router(_analytics_router)
+router.include_router(_analytics_timeseries_router)
 router.include_router(_plans_router)
 router.include_router(_usage_me_router)
 router.include_router(_mfa_router)

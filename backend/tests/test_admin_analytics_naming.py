@@ -47,6 +47,11 @@ def _series_result(day_amount_pairs, amount_key='amount'):
 def _empty_result():
     res = MagicMock()
     res.fetchall.return_value = []
+    # Explicitly None, not a bare MagicMock: the endpoint's schema_migrations
+    # lookup does `row[0]` on whatever fetchone() returns, and a MagicMock
+    # would sail through that and then break jsonable_encoder far from the
+    # cause.
+    res.fetchone.return_value = None
     return res
 
 
@@ -71,10 +76,39 @@ def _make_fake_db(consumption_days, gateway_days):
         if 'total_cost' in sql:
             return _empty_result()
 
-        # daily_gateway_revenue: reads payments/payment_orders, never
-        # usage_events. Checked early since nothing else matches both.
+        # daily_gateway_revenue AND daily_purchasers: reads
+        # payments/payment_orders, never usage_events. One query now backs
+        # both series -- a "buyer" is someone whose money actually arrived,
+        # so the buyer count must come from the same rows as the revenue.
         if 'FROM payments' in sql and 'FROM payment_orders' in sql:
-            return _series_result(gateway_days)
+            rows = [make_row(_mapping={'day': day, 'amount': amount, 'purchasers': 1 if amount else 0})
+                    for day, amount in gateway_days]
+            res = MagicMock()
+            res.fetchall.return_value = rows
+            return res
+
+        # daily_cost (migration 0048). Must be matched BEFORE the generic
+        # `ue.charged_amount` branch below, which its coverage arithmetic
+        # also contains. Every row here is fully measured so this fake does
+        # not accidentally exercise the NULL-margin path -- that path has
+        # its own dedicated tests in test_admin_analytics_window.py.
+        if 'unknown_events' in sql:
+            rows = [make_row(_mapping={
+                'day': day, 'known_cost': 0, 'measured_revenue': amount,
+                'total_revenue': amount, 'measured_events': 1, 'total_events': 1,
+                'unknown_events': 0, 'error_events': 0,
+            }) for day, amount in consumption_days]
+            res = MagicMock()
+            res.fetchall.return_value = rows
+            return res
+
+        # daily_conversations -- chat growth, no billing involvement.
+        if 'FROM conversations' in sql:
+            return _empty_result()
+
+        # The cost-capture cutover timestamp.
+        if 'schema_migrations' in sql:
+            return _empty_result()
 
         # daily_users
         if 'active_users' in sql and 'new_users' in sql:
@@ -86,8 +120,10 @@ def _make_fake_db(consumption_days, gateway_days):
 
         # consumption_by_model (current month, grouped by model)
         if 'GROUP BY model' in sql and 'AS consumption' in sql:
-            rows = [make_row(_mapping={'model': 'gpt-x', 'consumption': consumption_days[0][1] if consumption_days else 0,
-                                        'users': 1, 'calls': 1})]
+            _amount = consumption_days[0][1] if consumption_days else 0
+            rows = [make_row(_mapping={'model': 'gpt-x', 'consumption': _amount,
+                                       'known_cost': 0, 'measured_revenue': _amount,
+                                       'measured_events': 1, 'users': 1, 'calls': 1})]
             res = MagicMock()
             res.fetchall.return_value = rows
             return res

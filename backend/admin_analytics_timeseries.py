@@ -116,22 +116,6 @@ def margin_or_none(revenue: int, known_cost: int, coverage: float) -> int | None
     return (revenue - known_cost) if coverage >= 1.0 else None
 
 
-def _dates_cte() -> str:
-    """The zero-filled day spine every series is left-joined against.
-
-    Without it a day with no traffic is simply absent from the result and the
-    chart draws a straight line between the days on either side -- a quiet
-    day and a busy one become indistinguishable.
-    """
-    return """
-        SELECT generate_series(
-            (NOW() - make_interval(days => :days))::date,
-            NOW()::date,
-            '1 day'
-        )::date AS day
-    """
-
-
 @router.get('/admin/analytics/timeseries')
 async def admin_analytics_timeseries(request: Request) -> JSONResponse:
     """Timeseries for the admin dashboard over a `days` window.
@@ -158,13 +142,18 @@ async def admin_analytics_timeseries(request: Request) -> JSONResponse:
 
     days = resolve_window(request.query_params.get('days'))
     params = {'days': days}
-    dates = _dates_cte()
 
     async with async_session() as session:
         # 1) Daily consumption -- what users were charged for usage. NOT
         # revenue; see the module docstring.
-        res = await session.execute(sqlalchemy.text(f"""
-            WITH dates AS ({dates})
+        res = await session.execute(sqlalchemy.text("""
+            WITH dates AS (
+                SELECT generate_series(
+                    (NOW() - make_interval(days => :days))::date,
+                    NOW()::date,
+                    '1 day'
+                )::date AS day
+            )
             SELECT d.day::text AS day,
                    COALESCE(SUM(ue.charged_amount), 0) AS amount
             FROM dates d
@@ -181,8 +170,14 @@ async def admin_analytics_timeseries(request: Request) -> JSONResponse:
         # integer RIAL (the column name says so; it predates the Money/toman
         # refactor and has no active writer left), which is the one
         # legitimate rial conversion outside the gateway adapter.
-        res = await session.execute(sqlalchemy.text(f"""
-            WITH dates AS ({dates}),
+        res = await session.execute(sqlalchemy.text("""
+            WITH dates AS (
+                SELECT generate_series(
+                    (NOW() - make_interval(days => :days))::date,
+                    NOW()::date,
+                    '1 day'
+                )::date AS day
+            ),
             gateway AS (
                 SELECT DATE(verified_at) AS day, user_id, amount AS amount_toman
                 FROM payments
@@ -211,8 +206,14 @@ async def admin_analytics_timeseries(request: Request) -> JSONResponse:
                             for r in gateway_rows]
 
         # 2) Daily active + new users
-        res = await session.execute(sqlalchemy.text(f"""
-            WITH dates AS ({dates})
+        res = await session.execute(sqlalchemy.text("""
+            WITH dates AS (
+                SELECT generate_series(
+                    (NOW() - make_interval(days => :days))::date,
+                    NOW()::date,
+                    '1 day'
+                )::date AS day
+            )
             SELECT d.day::text AS day,
                    COUNT(DISTINCT ue.user_id) AS active_users,
                    COUNT(DISTINCT CASE
@@ -230,8 +231,14 @@ async def admin_analytics_timeseries(request: Request) -> JSONResponse:
                        for r in res.fetchall()]
 
         # 3) Daily token volume
-        res = await session.execute(sqlalchemy.text(f"""
-            WITH dates AS ({dates})
+        res = await session.execute(sqlalchemy.text("""
+            WITH dates AS (
+                SELECT generate_series(
+                    (NOW() - make_interval(days => :days))::date,
+                    NOW()::date,
+                    '1 day'
+                )::date AS day
+            )
             SELECT d.day::text AS day,
                    COALESCE(SUM(ue.input_tokens), 0) AS input_tokens,
                    COALESCE(SUM(ue.output_tokens), 0) AS output_tokens
@@ -250,8 +257,14 @@ async def admin_analytics_timeseries(request: Request) -> JSONResponse:
         # the revenue of exactly those same rows. Their ratio against total
         # revenue is the coverage figure -- which is why measured_revenue is
         # selected at all rather than being inferred later.
-        res = await session.execute(sqlalchemy.text(f"""
-            WITH dates AS ({dates})
+        res = await session.execute(sqlalchemy.text("""
+            WITH dates AS (
+                SELECT generate_series(
+                    (NOW() - make_interval(days => :days))::date,
+                    NOW()::date,
+                    '1 day'
+                )::date AS day
+            )
             SELECT d.day::text AS day,
                    COALESCE(SUM(ue.upstream_cost_toman), 0) AS known_cost,
                    COALESCE(SUM(ue.charged_amount)
@@ -308,8 +321,14 @@ async def admin_analytics_timeseries(request: Request) -> JSONResponse:
         top_users = [_with_margin(dict(r._mapping), 'total_cost') for r in res.fetchall()]
 
         # 6) Daily conversations -- chat growth, independent of billing.
-        res = await session.execute(sqlalchemy.text(f"""
-            WITH dates AS ({dates})
+        res = await session.execute(sqlalchemy.text("""
+            WITH dates AS (
+                SELECT generate_series(
+                    (NOW() - make_interval(days => :days))::date,
+                    NOW()::date,
+                    '1 day'
+                )::date AS day
+            )
             SELECT d.day::text AS day,
                    COUNT(c.id) AS count
             FROM dates d

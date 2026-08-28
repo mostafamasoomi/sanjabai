@@ -1,10 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
 import { dirFor, fmt } from '@/lib/i18n'
+import { useKeepInViewport } from '../hooks/useKeepInViewport'
 import { smartModePopoverStrings } from './SmartModePopover.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -135,28 +136,10 @@ export default function SmartModePopover({
   // `.chat-model-bar`, which is often nowhere near a screen edge on narrow
   // viewports, so the popover's far edge can land off-screen (measured: 100px
   // past the right edge of a 375px viewport, containing block at x:175-359).
-  // Pull it back with a plain horizontal translate after layout: direction-
-  // agnostic (doesn't care whether the overflow is on the RTL-left or the
-  // LTR-right), and re-derived from a fresh measurement every open so it
-  // never accumulates drift. Does not touch `.export-dropdown` itself, so the
-  // conversation export menu (the class's other consumer) is unaffected.
-  useLayoutEffect(() => {
-    if (!open) return
-    const PAD = 8
-    const reposition = () => {
-      const pop = popoverRef.current
-      if (!pop) return
-      pop.style.transform = ''
-      const rect = pop.getBoundingClientRect()
-      let dx = 0
-      if (rect.right > window.innerWidth - PAD) dx = (window.innerWidth - PAD) - rect.right
-      if (rect.left + dx < PAD) dx = PAD - rect.left
-      pop.style.transform = dx ? `translateX(${dx}px)` : ''
-    }
-    reposition()
-    window.addEventListener('resize', reposition)
-    return () => window.removeEventListener('resize', reposition)
-  }, [open])
+  // `useKeepInViewport` corrects this after layout without touching
+  // `.export-dropdown` itself, so the conversation export menu (the class's
+  // other consumer) is unaffected.
+  useKeepInViewport(popoverRef, open)
 
   const selectedComboId = comboIdOf(strategy)
   const selectedCombo = useMemo(

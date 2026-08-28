@@ -6,6 +6,7 @@ import { Icon } from '@/components/ui/Icon'
 import { useLang, type Lang } from '@/components/LanguageToggle'
 import { fmt, dirFor } from '@/lib/i18n'
 import { priceBand, priceBandLabel, PRICE_BAND_ORDER, type PriceBand } from '@/lib/useCatalog'
+import { useKeepInViewport } from '../hooks/useKeepInViewport'
 import {
   healthOf,
   isUsableModel,
@@ -57,6 +58,7 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Persist selection
   useEffect(() => {
@@ -116,6 +118,15 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
     if (window.innerWidth < 640) document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = prevOverflow }
   }, [open])
+
+  // `.model-picker-dropdown` (globals.css) anchors via `inset-inline-start: 0`
+  // against ITS OWN containing block (`.model-picker-root`, sized to the
+  // trigger) -- not the viewport. On narrow/mid screens where the trigger
+  // isn't flush against a screen edge the dropdown's far edge lands
+  // off-screen (measured: up to -130px past the left edge on a 768px
+  // viewport). Same fix as SmartModePopover, shared via the hook so the two
+  // don't diverge.
+  useKeepInViewport(dropdownRef, open)
 
   const filtered = useMemo(() => {
     // Models the backend has measured as down are dropped before anything else
@@ -284,6 +295,7 @@ export default function ModelPicker({ models, selected, onSelect, loading, disab
         <>
           <div className="model-picker-overlay" onClick={() => setOpen(false)} />
           <div
+            ref={dropdownRef}
             className="model-picker-dropdown"
             role="dialog"
             aria-label={s.selectModel}

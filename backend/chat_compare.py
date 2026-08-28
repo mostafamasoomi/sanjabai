@@ -33,6 +33,7 @@ from services.token_budget import apply_outbound_budget
 from services.billing import SqlBillingRepo, InsufficientBalanceError
 from services.money import Money
 from services.entitlement_gate import covering_entitlement
+from services.free_tier import covers_request
 from middleware.compression import compress_messages
 from model_output import clean_response_dict
 from i18n import err, err_openai
@@ -253,16 +254,22 @@ async def compare_models(request: Request, payload: CompareRequest) -> Response:
             # consume_for_usage. If the entitlement only has one request left,
             # the first actual consume wins and the second falls through to
             # the wallet on its own, same as any other race on consume.
-            reservation_a = None if await covering_entitlement(uid, 1000) is not None else await _bill_svc.reserve(
-                uid, Money(1000),
-                idempotency_key=f"cmp:{secrets.token_hex(8)}",
-                model=model_a,
-            )
-            reservation_b = None if await covering_entitlement(uid, 1000) is not None else await _bill_svc.reserve(
-                uid, Money(1000),
-                idempotency_key=f"cmp:{secrets.token_hex(8)}",
-                model=model_b,
-            )
+            if await covering_entitlement(uid, 1000) is not None or await covers_request(uid):
+                reservation_a = None
+            else:
+                reservation_a = await _bill_svc.reserve(
+                    uid, Money(1000),
+                    idempotency_key=f"cmp:{secrets.token_hex(8)}",
+                    model=model_a,
+                )
+            if await covering_entitlement(uid, 1000) is not None or await covers_request(uid):
+                reservation_b = None
+            else:
+                reservation_b = await _bill_svc.reserve(
+                    uid, Money(1000),
+                    idempotency_key=f"cmp:{secrets.token_hex(8)}",
+                    model=model_b,
+                )
             await _bill_session.commit()
     except InsufficientBalanceError:
         return err_openai(

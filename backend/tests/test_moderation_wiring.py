@@ -100,6 +100,7 @@ def _chat_patches(billing, http):
         patch.object(chat_mod, 'check_and_consume', AsyncMock(return_value=None)),
         patch.object(chat_mod, 'is_working_model', AsyncMock(return_value=True)),
         patch.object(chat_mod, 'covering_entitlement', AsyncMock(return_value=None)),
+        patch.object(chat_mod, 'covers_request', AsyncMock(return_value=False)),
         patch.object(chat_mod, 'get_injection_messages', AsyncMock(return_value=[])),
         patch.object(chat_mod, 'BillingService', MagicMock(return_value=billing)),
         patch.object(chat_mod, '_http', http),

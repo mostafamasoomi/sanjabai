@@ -224,6 +224,27 @@ async def _lifetime_incr(uid: int) -> None:
         logger.warning(f"free_tier._lifetime_incr failed uid={uid}: {e}")
 
 
+async def covers_request(uid: int) -> bool:
+    """True iff the FREE TIER, not the wallet, is paying for this request.
+
+    Reservation call sites must skip ``BillingService.reserve()`` when this
+    is True and only then fall through to :func:`check_and_consume`'s gate --
+    that is the only thing that can still refuse the request (cheap-model /
+    lifetime / hourly). Kept as a standalone, side-effect-free companion so
+    that a call site's "should I reserve?" branch and this module's own
+    has_paid/has_balance short-circuit in :func:`check_and_consume` can never
+    diverge; the latter calls this function too.
+
+    Delegates entirely to :func:`has_paid` / :func:`has_balance`, which each
+    fail CLOSED (return False) on a storage error, so an unreadable
+    paid/balance signal here correctly resolves to True (the free tier
+    absorbs the request) -- consistent with this module's fail-open policy:
+    refusing a *hold* costs no money because the real charge happens in
+    ``_record_usage``, and a storage hiccup must never lock a user out.
+    """
+    return not await has_paid(uid) and not await has_balance(uid)
+
+
 async def check_and_consume(uid: int, models: list[str]) -> Optional[dict]:
     """Apply the free tier to a chat request for ``models`` and, only if all
     three limits pass, consume one message. Returns ``None`` when allowed;
@@ -233,9 +254,7 @@ async def check_and_consume(uid: int, models: list[str]) -> Optional[dict]:
     Fails open: any Redis/DB error is logged and treated as an allow.
     """
     try:
-        if await has_paid(uid):
-            return None
-        if await has_balance(uid):
+        if not await covers_request(uid):
             return None
 
         cfg = await get_config()

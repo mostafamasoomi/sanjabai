@@ -74,13 +74,18 @@ class TestChatCompletionsReserveSite:
         assert 'کافی نیست' not in resp.text
 
     def test_uncovered_empty_wallet_request_is_still_rejected(self, client, mock_async_session):
-        """Baseline, unchanged behavior: no entitlement -> normal 429."""
+        """Baseline, unchanged behavior: no entitlement AND no free tier
+        (a normal paid/balance wallet user, e.g. an empty balance after
+        spending it all) -> normal 429. covers_request is mocked False here
+        precisely because it is NOT what this test is about -- that path has
+        its own dedicated coverage in test_free_tier_reservation_wiring.py."""
         billing_instance = _billing_instance(raise_on_reserve=True)
         with patch.object(chat_mod, '_get_user_id', AsyncMock(return_value=1)), \
              patch.object(chat_mod, '_chat_disabled_response', AsyncMock(return_value=None)), \
              patch.object(chat_mod, '_resolve_public_model', AsyncMock(return_value='kr/gpt-4o-mini')), \
              patch.object(chat_mod, '_apply_persian_style_guard_for_model', AsyncMock(return_value=None)), \
              patch.object(chat_mod, 'check_and_consume', AsyncMock(return_value=None)), \
+             patch.object(chat_mod, 'covers_request', AsyncMock(return_value=False)), \
              patch.object(chat_mod, 'is_working_model', AsyncMock(return_value=True)), \
              patch.object(chat_mod, 'covering_entitlement', AsyncMock(return_value=None)), \
              patch.object(chat_mod, 'BillingService', MagicMock(return_value=billing_instance)):
@@ -166,13 +171,17 @@ class TestCompareReserveSites:
     def test_only_first_model_covered_second_still_reserves(self, client, mock_async_session):
         """Not an all-or-nothing gate: model_a's check hits, model_b's
         doesn't -- model_b must still go through the normal wallet
-        reservation on its own."""
+        reservation on its own. covers_request is mocked False (a normal
+        paid/balance user) so this stays a test of the entitlement-only
+        branch, not the free-tier branch covered separately in
+        test_free_tier_reservation_wiring.py."""
         billing_instance = _billing_instance(raise_on_reserve=False)
         with patch.object(chat_mod, '_get_user_id', AsyncMock(return_value=1)), \
              patch.object(chat_mod, '_chat_disabled_response', AsyncMock(return_value=None)), \
              patch.object(chat_mod, '_resolve_public_model', AsyncMock(side_effect=lambda m: m)), \
              patch.object(chat_mod, '_is_model_allowed', AsyncMock(return_value=True)), \
              patch.object(chat_mod, 'check_and_consume', AsyncMock(return_value=None)), \
+             patch.object(chat_compare_mod, 'covers_request', AsyncMock(return_value=False)), \
              patch.object(chat_compare_mod, 'covering_entitlement', AsyncMock(side_effect=[{'id': 1}, None])), \
              patch.object(chat_mod, 'BillingService', MagicMock(return_value=billing_instance)), \
              patch.object(chat_compare_mod, '_call_model_once',

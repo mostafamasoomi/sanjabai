@@ -120,6 +120,12 @@ class _Patches:
         self.screen_request = AsyncMock(return_value=self.verdict)
         self.check_and_consume = AsyncMock(return_value=self.ft_gate)
         self.user_quota_check = AsyncMock(return_value=self.q_gate)
+        # Neither an entitlement nor the free tier covers this request by
+        # default -- the normal wallet reservation path, matching every
+        # test below written before these two gates existed at this call
+        # site. Reused (not each test's own concern here).
+        self.covering_entitlement = AsyncMock(return_value=None)
+        self.covers_request = AsyncMock(return_value=False)
 
         self.resolve_public_model = AsyncMock(side_effect=lambda m: m)
         self.safe_default_model = AsyncMock(
@@ -140,6 +146,8 @@ class _Patches:
             patch.object(document_generator_mod, 'screen_request', self.screen_request),
             patch.object(document_generator_mod, 'check_and_consume', self.check_and_consume),
             patch.object(document_generator_mod, '_user_quota_check', self.user_quota_check),
+            patch.object(document_generator_mod, 'covering_entitlement', self.covering_entitlement),
+            patch.object(document_generator_mod, 'covers_request', self.covers_request),
             patch.object(document_generator_mod, 'BillingService', self.billing_cls),
             patch.object(document_generator_mod, 'async_session', MagicMock(return_value=self.session)),
             patch.object(document_generator_mod, 'generate_content', self.generate_content),

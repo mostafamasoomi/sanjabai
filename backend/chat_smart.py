@@ -50,6 +50,7 @@ from services.token_budget import apply_outbound_budget
 from services.billing import SqlBillingRepo, InsufficientBalanceError
 from services.money import Money
 from services.entitlement_gate import covering_entitlement
+from services.free_tier import covers_request
 from middleware.compression import compress_messages, estimate_savings
 from model_output import clean_response_dict
 from i18n import err, err_openai
@@ -276,7 +277,7 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
             # Package quota covers this request -> skip the wallet reservation
             # (reservation stays None; the release/settle code below already
             # treats None as a no-op). See services/entitlement_gate.py.
-            if await covering_entitlement(uid, _est_cost) is not None:
+            if await covering_entitlement(uid, _est_cost) is not None or await covers_request(uid):
                 reservation = None
             else:
                 reservation = await _bill_svc.reserve(

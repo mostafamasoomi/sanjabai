@@ -36,6 +36,7 @@ from services.token_budget import apply_outbound_budget
 from services.billing import SqlBillingRepo, BillingService, InsufficientBalanceError
 from services.money import Money
 from services.entitlement_gate import covering_entitlement
+from services.free_tier import covers_request
 from services.moderation import moderation_preflight
 from services.user_quota import check_and_consume as _user_quota_check
 from services.premium_quota import check_and_consume as _premium_quota_check
@@ -309,7 +310,7 @@ async def chat_with_file(
             # Package quota covers this request -> skip the wallet reservation
             # (reservation stays None; the release/settle code below already
             # treats None as a no-op). See services/entitlement_gate.py.
-            if await covering_entitlement(uid, _est_cost) is not None:
+            if await covering_entitlement(uid, _est_cost) is not None or await covers_request(uid):
                 reservation = None
             else:
                 reservation = await _bill_svc.reserve(

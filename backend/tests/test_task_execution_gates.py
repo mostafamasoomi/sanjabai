@@ -153,6 +153,12 @@ class _Patches:
         self.check_and_consume = AsyncMock(return_value=self.ft_gate)
         self.user_quota_check = AsyncMock(return_value=self.q_gate)
         self.bill_mock = AsyncMock(return_value=self.bill_result)
+        # Neither an entitlement nor the free tier covers this request by
+        # default -- the normal wallet reservation path, matching every
+        # test below written before these two gates existed at this call
+        # site.
+        self.covering_entitlement = AsyncMock(return_value=None)
+        self.covers_request = AsyncMock(return_value=False)
         self._patches = [
             patch.object(task_execution_mod, 'async_session', MagicMock(return_value=self.session)),
             patch.object(task_execution_mod, '_http', self.fake_http),
@@ -161,6 +167,8 @@ class _Patches:
             patch.object(task_execution_mod, 'screen_request', self.screen_request),
             patch.object(task_execution_mod, 'check_and_consume', self.check_and_consume),
             patch.object(task_execution_mod, '_user_quota_check', self.user_quota_check),
+            patch.object(task_execution_mod, 'covering_entitlement', self.covering_entitlement),
+            patch.object(task_execution_mod, 'covers_request', self.covers_request),
             patch.object(tasks_mod, '_resolve_task_model', AsyncMock(return_value=self.resolved_model)),
             patch.object(chat_mod, 'is_working_model', AsyncMock(return_value=True)),
             patch.object(chat_mod, '_resolve_provider', AsyncMock(return_value=_fake_provider())),

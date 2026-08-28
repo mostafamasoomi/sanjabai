@@ -148,6 +148,7 @@ class _Env:
             patch.object(chat_mod, '_resolve_provider', AsyncMock(return_value=_FakeProvider())),
             patch.object(chat_mod, '_smart_chat_stream', self.stream),
             patch.object(chat_smart_mod, 'covering_entitlement', AsyncMock(return_value=None)),
+            patch.object(chat_smart_mod, 'covers_request', AsyncMock(return_value=False)),
             patch.object(chat_smart_mod, '_get_user_balance', AsyncMock(return_value=balance)),
             patch.object(sr, 'candidate_pool', AsyncMock(return_value=pool)),
             patch.object(sr, 'select_by_rules', select),

@@ -255,6 +255,7 @@ class _Env:
             patch.object(chat_mod, 'get_injection_messages', AsyncMock(return_value=[])),
             patch.object(chat_mod, '_track_usage', AsyncMock(return_value=None)),
             patch.object(chat_smart_mod, 'covering_entitlement', AsyncMock(return_value=None)),
+            patch.object(chat_smart_mod, 'covers_request', AsyncMock(return_value=False)),
             patch.object(chat_smart_mod, '_get_user_balance', AsyncMock(return_value=balance)),
             patch.object(sr, 'candidate_pool', AsyncMock(return_value=pool)),
             patch.object(sr, 'select_for_combo', self.select_for_combo),

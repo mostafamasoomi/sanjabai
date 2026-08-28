@@ -158,6 +158,12 @@ class _Patches:
             patch.object(task_execution_mod, 'BillingService', self.billing_cls),
             patch.object(task_execution_mod, 'check_and_consume', AsyncMock(return_value=self.ft_gate)),
             patch.object(task_execution_mod, '_user_quota_check', AsyncMock(return_value=self.q_gate)),
+            # Neither an entitlement nor the free tier covers this request by
+            # default -- the normal wallet reservation path, matching every
+            # test below written before these two gates existed at this
+            # call site.
+            patch.object(task_execution_mod, 'covering_entitlement', AsyncMock(return_value=None)),
+            patch.object(task_execution_mod, 'covers_request', AsyncMock(return_value=False)),
             patch.object(tasks_mod, '_resolve_task_model', AsyncMock(return_value=self.resolved_model)),
             patch.object(chat_mod, 'is_working_model', AsyncMock(return_value=self.is_working)),
             patch.object(chat_mod, '_resolve_provider', AsyncMock(return_value=_fake_provider())),
@@ -419,6 +425,8 @@ class TestRunTaskEndpointTranslatesInsufficientBalance:
              patch.object(tasks_mod, '_resolve_task_model', AsyncMock(return_value='bynara/some-model')), \
              patch.object(task_execution_mod, 'async_session', MagicMock(return_value=session)), \
              patch.object(task_execution_mod, 'check_and_consume', AsyncMock(return_value=None)), \
+             patch.object(task_execution_mod, 'covering_entitlement', AsyncMock(return_value=None)), \
+             patch.object(task_execution_mod, 'covers_request', AsyncMock(return_value=False)), \
              patch.object(task_execution_mod, 'BillingService', _billing_mock(reserve_side_effect=_boom)[0]):
             resp = await tasks_mod.run_task(MagicMock(), 1)
 

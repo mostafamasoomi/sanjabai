@@ -171,6 +171,7 @@ class _SmartChatEnv:
             patch.object(chat_mod, 'async_session', _maker(session)),
             patch.object(chat_smart_mod, '_get_user_balance', AsyncMock(return_value=50_000)),
             patch.object(chat_smart_mod, 'covering_entitlement', AsyncMock(return_value=None)),
+            patch.object(chat_smart_mod, 'covers_request', AsyncMock(return_value=False)),
             patch.object(_db, '_real_http', self.http),
         )
         self._entered = []

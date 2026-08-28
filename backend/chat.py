@@ -54,7 +54,7 @@ from services.billing import SqlBillingRepo, BillingService, InsufficientBalance
 from services.money import Money
 from services.entitlement_gate import covering_entitlement
 from services.memory_extractor import extract_memories, MIN_MSG_COUNT
-from services.free_tier import check_and_consume
+from services.free_tier import check_and_consume, covers_request
 from services.premium_quota import check_and_consume as premium_check_and_consume
 from middleware.compression import compress_messages, estimate_savings
 from model_output import clean_response_dict
@@ -362,11 +362,14 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
             _bill_svc = BillingService(_repo)
             _model = payload_dict.get('model', '')
             _est_cost = 1000 if (_model and await is_working_model(_model)) else 5000
-            reservation = None if (await covering_entitlement(uid, _est_cost)) is not None else await _bill_svc.reserve(
-                uid, Money(_est_cost),
-                idempotency_key=f"chat:{secrets.token_hex(8)}",
-                model=_model,
-            )
+            if await covering_entitlement(uid, _est_cost) is not None or await covers_request(uid):
+                reservation = None
+            else:
+                reservation = await _bill_svc.reserve(
+                    uid, Money(_est_cost),
+                    idempotency_key=f"chat:{secrets.token_hex(8)}",
+                    model=_model,
+                )
             await _bill_session.commit()
     except InsufficientBalanceError:
         return err_openai(

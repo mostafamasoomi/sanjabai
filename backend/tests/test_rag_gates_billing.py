@@ -139,6 +139,12 @@ class _RagPatches:
         self.screen_request = AsyncMock(return_value=self.verdict)
         self.free_tier_check = AsyncMock(return_value=self.ft_gate)
         self.user_quota_check = AsyncMock(return_value=self.q_gate)
+        # Neither an entitlement nor the free tier covers this request by
+        # default -- the normal wallet reservation path, matching every
+        # test below written before these two gates existed at this call
+        # site.
+        self.covering_entitlement = AsyncMock(return_value=None)
+        self.covers_request = AsyncMock(return_value=False)
         self.embed_single = AsyncMock(return_value=[0.1, 0.2, 0.3])
         self.keyword_search = AsyncMock(return_value=self.rows)
         self.embedding_is_hash = MagicMock(return_value=True)
@@ -151,6 +157,8 @@ class _RagPatches:
             patch.object(rag_mod, 'screen_request', self.screen_request),
             patch.object(rag_mod, '_free_tier_check', self.free_tier_check),
             patch.object(rag_mod, '_user_quota_check', self.user_quota_check),
+            patch.object(rag_mod, 'covering_entitlement', self.covering_entitlement),
+            patch.object(rag_mod, 'covers_request', self.covers_request),
             patch.object(rag_mod, 'embed_single', self.embed_single),
             patch.object(rag_mod, '_keyword_search', self.keyword_search),
             patch.object(rag_mod, '_embedding_is_hash', self.embedding_is_hash),

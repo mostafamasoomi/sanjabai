@@ -20,7 +20,8 @@ from database import async_session, _http, LITELLM_HOST
 from dependencies import _to_fa
 from services.billing import SqlBillingRepo, BillingService, InsufficientBalanceError
 from services.embeddings import embed_single
-from services.free_tier import check_and_consume as _free_tier_check
+from services.entitlement_gate import covering_entitlement
+from services.free_tier import check_and_consume as _free_tier_check, covers_request
 from services.moderation import screen_request, BLOCK_MESSAGE_FA
 from services.money import Money
 from services.rag_retrieval import (
@@ -341,11 +342,14 @@ async def query_documents(
         async with async_session() as bill_session:
             repo = SqlBillingRepo(bill_session)
             bill_svc = BillingService(repo)
-            reservation = await bill_svc.reserve(
-                user_id, Money(est_cost),
-                idempotency_key=f"rag:{secrets.token_hex(8)}",
-                model=resolved_model,
-            )
+            if await covering_entitlement(user_id, est_cost) is not None or await covers_request(user_id):
+                reservation = None
+            else:
+                reservation = await bill_svc.reserve(
+                    user_id, Money(est_cost),
+                    idempotency_key=f"rag:{secrets.token_hex(8)}",
+                    model=resolved_model,
+                )
             await bill_session.commit()
     except InsufficientBalanceError:
         return {'answer': _INSUFFICIENT_BALANCE_MESSAGE, 'sources': []}

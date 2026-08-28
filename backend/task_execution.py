@@ -102,7 +102,8 @@ from sqlalchemy import select
 from database import _http, async_session
 from models import ScheduledTask, TaskExecution
 from services.billing import BillingService, InsufficientBalanceError, SqlBillingRepo
-from services.free_tier import check_and_consume
+from services.entitlement_gate import covering_entitlement
+from services.free_tier import check_and_consume, covers_request
 from services.moderation import BLOCK_MESSAGE_FA, screen_request
 from services.money import Money
 from services.premium_quota import check_and_consume as _premium_quota_check
@@ -328,11 +329,14 @@ async def _execute_task(task: Any, uid: int) -> dict[str, Any]:
         async with async_session() as bill_session:
             repo = SqlBillingRepo(bill_session)
             svc = BillingService(repo)
-            reservation = await svc.reserve(
-                uid, Money(est_cost),
-                idempotency_key=f"task:{secrets.token_hex(8)}",
-                model=model_to_call,
-            )
+            if await covering_entitlement(uid, est_cost) is not None or await covers_request(uid):
+                reservation = None
+            else:
+                reservation = await svc.reserve(
+                    uid, Money(est_cost),
+                    idempotency_key=f"task:{secrets.token_hex(8)}",
+                    model=model_to_call,
+                )
             await bill_session.commit()
     except InsufficientBalanceError:
         return await _finalize(

@@ -387,6 +387,7 @@ export default function ChatPage() {
                 onCopy={copyToClipboard}
                 onRetry={chat.retry}
                 onContinue={chat.handleContinue}
+                toolEvents={chat.toolEventsByMessageId[msg.id]}
               />
             ))}
 

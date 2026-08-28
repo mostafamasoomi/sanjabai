@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, type MutableRefObject } from 'react'
+import { useRef, useCallback, useEffect, useState, type MutableRefObject } from 'react'
 import { apiFetch } from '@/lib/apiFetch'
 import { toast } from '@/components/ui'
 import { useLang } from '@/components/LanguageToggle'
@@ -9,8 +9,51 @@ import { generateId, hasSearchIntent } from '../chatHelpers'
 import type { SmartStrategy } from '../components/SmartModePopover'
 import { chatHelpersStrings } from '../chatHelpers.strings'
 import { useChatStreamStrings } from './useChatStream.strings'
+import { applyToolCallEvent, finalizeToolCalls, type ToolCallEntry } from '../components/ToolCallChip.strings'
+import { applyToolConfirmEvent, type ToolConfirmEntry } from '../components/ToolConfirmCard.strings'
 
 type SearchHint = { userMsgId: string; content: string } | null
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Tool-calling loop events (design doc §ب‑۲/§ب‑۶ -- P-B6)
+
+   The backend half (SSE loop, chat_stream.py) is a parallel, not-yet-landed
+   packet. These are three new `obj.type` values on the SAME SSE line shape
+   `billing`/`smart_info` already use below, so an unrecognised `obj.type`
+   (no backend loop yet, or any future addition) falls through every `if`
+   untouched -- exactly like `billing`/`smart_info` do today. Never an `else
+   throw`. The actual per-event reducers live next to the component that
+   owns each shape of state (ToolCallChip.strings.ts for
+   tool_call/tool_result, ToolConfirmCard.strings.ts for tool_confirm) --
+   this file only combines them, to stay under the 500-line file cap. */
+
+export type ToolStreamState = { calls: ToolCallEntry[]; confirm: ToolConfirmEntry | null }
+export const EMPTY_TOOL_STREAM_STATE: ToolStreamState = { calls: [], confirm: null }
+
+/** Pure reducer: one already-JSON-parsed SSE line in, next state out. Never
+ *  throws. Any `obj.type` other than the three handled below returns
+ *  `state` unchanged -- the proof that the addition is additive (see
+ *  tests/lib/toolEvents.test.ts). */
+export function applyToolStreamEvent(state: ToolStreamState, obj: any): ToolStreamState {
+  if (!obj || typeof obj !== 'object') return state
+  if (obj.type === 'tool_call' || obj.type === 'tool_result') {
+    const calls = applyToolCallEvent(state.calls, obj)
+    return calls === state.calls ? state : { ...state, calls }
+  }
+  if (obj.type === 'tool_confirm') {
+    const confirm = applyToolConfirmEvent(state.confirm, obj)
+    return confirm === state.confirm ? state : { ...state, confirm }
+  }
+  return state
+}
+
+/** Called once when a stream ends (success, upstream error, or client abort)
+ *  -- the disconnect-mid-loop case from §ب‑۲: a `tool_call` never followed by
+ *  its `tool_result` must not leave the chip spinning forever. */
+export function finalizeToolStreamState(state: ToolStreamState): ToolStreamState {
+  const calls = finalizeToolCalls(state.calls)
+  return calls === state.calls ? state : { ...state, calls }
+}
 
 type UseChatStreamParams = {
   model: ModelCatalogItem | null
@@ -68,6 +111,11 @@ export function useChatStream(params: UseChatStreamParams) {
   const lang = useLang()
   const s = useChatStreamStrings(lang)
   const streamStartTimeRef = useRef<number>(0)
+  // Live tool-call/confirm state, keyed by assistant message id. Ephemeral
+  // (not persisted/restored on reload -- see ToolStreamState above). Not
+  // consumed yet by the chat page/ChatMessageItem (senior-owned, outside
+  // this packet); returned below so wiring it in is a pure addition later.
+  const [toolEventsByMessageId, setToolEventsByMessageId] = useState<Record<string, ToolStreamState>>({})
 
   const cancel = useCallback(() => {
     abortRef.current?.abort()
@@ -118,6 +166,18 @@ export function useChatStream(params: UseChatStreamParams) {
 
     // Outside try so the AbortError catch branch can flush pending tokens.
     let streamAccumulator: StreamAccumulator | null = null
+    // Same reason -- the AbortError branch needs it to finalize any
+    // still-`running` tool chip on client-side cancel (§ب‑۲ disconnect case).
+    let currentAssistantId: string | null = null
+    const finalizeToolChips = (id: string | null) => {
+      if (!id) return
+      setToolEventsByMessageId(prev => {
+        const cur = prev[id]
+        if (!cur) return prev
+        const next = finalizeToolStreamState(cur)
+        return next === cur ? prev : { ...prev, [id]: next }
+      })
+    }
 
     try {
       // An attached file silently bypasses smart mode (the with-file endpoint
@@ -182,6 +242,7 @@ export function useChatStream(params: UseChatStreamParams) {
       const reader = res.body?.getReader()
       const decoder = new TextDecoder()
       const assistantId = generateId()
+      currentAssistantId = assistantId
       setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '' }])
 
       // Throttles setMessages to ~once/frame instead of once per SSE token
@@ -270,6 +331,14 @@ export function useChatStream(params: UseChatStreamParams) {
             estimatedCost: obj.cost ?? prev.estimatedCost
           }))
         }
+        // ── tool_call / tool_result / tool_confirm events (§ب‑۲/§ب‑۶) --
+        // backend loop not live yet, see the ToolStreamState comment above.
+        if (obj.type === 'tool_call' || obj.type === 'tool_result' || obj.type === 'tool_confirm') {
+          setToolEventsByMessageId(prev => ({
+            ...prev,
+            [assistantId]: applyToolStreamEvent(prev[assistantId] ?? EMPTY_TOOL_STREAM_STATE, obj),
+          }))
+        }
         // ── smart_info event ──
         if (obj.type === 'smart_info') {
           setSmartModel(obj.model)
@@ -324,6 +393,9 @@ export function useChatStream(params: UseChatStreamParams) {
         })
       }
 
+      // Stream ended -- any chip still `running` never got its `tool_result`.
+      finalizeToolChips(assistantId)
+
       // Auto-save after streaming completes
       if (convId) {
         const finalMsgs = [...updated, { id: assistantId, role: 'assistant' as const, content: accumulator.getText() }]
@@ -360,6 +432,8 @@ export function useChatStream(params: UseChatStreamParams) {
           }
           return copy
         })
+        // Client-side cancel is a disconnect too -- same terminal-chip rule.
+        finalizeToolChips(currentAssistantId)
       } else {
         setError(errMsg)
       }
@@ -371,7 +445,7 @@ export function useChatStream(params: UseChatStreamParams) {
       setStreaming(false)
       abortRef.current = null
     }
-  }, [messages, model, models, token, smartMode, smartStrategy, webSearch, setWebSearch, setModel, createConversation, saveMessages, attachedFile, setAttachedFile, activeAssistant, setMessages, setInput, setShowPresets, setSmartModel, setSmartRunMode, setWalletBalance, messagesRef, activeConversationIdRef, abortRef, setStreaming, setError, setUsageStats, setTokensPerSec, setSearchHintFor, s])
+  }, [messages, model, models, token, smartMode, smartStrategy, webSearch, setWebSearch, setModel, createConversation, saveMessages, attachedFile, setAttachedFile, activeAssistant, setMessages, setInput, setShowPresets, setSmartModel, setSmartRunMode, setWalletBalance, messagesRef, activeConversationIdRef, abortRef, setStreaming, setError, setUsageStats, setTokensPerSec, setSearchHintFor, setToolEventsByMessageId, s])
 
   // Keep ref in sync so retry() can call sendMessage without circular deps
   useEffect(() => { sendMessageRef.current = sendMessage }, [sendMessage])
@@ -417,5 +491,8 @@ export function useChatStream(params: UseChatStreamParams) {
     handleContinue,
     handleResendWithSearch,
     cancel,
+    // Live tool-call/confirm chip state, keyed by message id -- not yet
+    // wired into ChatMessageItem/the chat page (outside this packet).
+    toolEventsByMessageId,
   }
 }

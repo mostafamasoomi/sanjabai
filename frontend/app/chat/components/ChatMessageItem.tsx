@@ -6,6 +6,9 @@ import { getTruncationStatus } from '../finishReason'
 import type { Message } from '../chatTypes'
 import { CopyIcon, CheckIcon } from './ChatIcons'
 import { chatMessageItemStrings } from './ChatMessageItem.strings'
+import ToolCallChip from './ToolCallChip'
+import ToolConfirmCard from './ToolConfirmCard'
+import type { ToolStreamState } from '../hooks/useChatStream'
 
 type ChatMessageItemProps = {
   msg: Message
@@ -17,6 +20,10 @@ type ChatMessageItemProps = {
   onCopy: (id: string, content: string) => void
   onRetry: (index: number) => void
   onContinue: (index: number) => void
+  /** Tool activity the loop reported for THIS assistant turn. Undefined for
+   *  every message today: nothing emits these events until the backend loop
+   *  lands, and an ordinary message must render exactly as it always has. */
+  toolEvents?: ToolStreamState
 }
 
 const ChatMessageItem = memo(function ChatMessageItem({
@@ -29,6 +36,7 @@ const ChatMessageItem = memo(function ChatMessageItem({
   onCopy,
   onRetry,
   onContinue,
+  toolEvents,
 }: ChatMessageItemProps) {
   const s = chatMessageItemStrings(useLang())
   // finishReason is only populated once this message's own stream finished
@@ -51,6 +59,17 @@ const ChatMessageItem = memo(function ChatMessageItem({
         )}
         {msg.role === 'assistant' ? (
           <div className="chat-bubble-content">
+            {/* Above the answer, in the order the loop produced them: the
+                chips are what happened on the way to the text below. */}
+            {toolEvents?.calls.map((c, i) => (
+              <ToolCallChip key={`${c.name}-${i}`} name={c.name} status={c.status} />
+            ))}
+            {toolEvents?.confirm && (
+              <ToolConfirmCard
+                name={toolEvents.confirm.name}
+                preview={toolEvents.confirm.preview}
+              />
+            )}
             <MarkdownRenderer content={msg.content} />
             {streaming && isLast && msg.content && (
               <div className="stream-cursor-line" aria-hidden="true">

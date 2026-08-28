@@ -9,6 +9,7 @@ import ProfileAvatarCard from './components/ProfileAvatarCard'
 import PersonalInfoSection from './components/PersonalInfoSection'
 import AIPreferencesSection from './components/AIPreferencesSection'
 import AutonomySection from './components/AutonomySection'
+import SmartFeaturesSection from './components/SmartFeaturesSection'
 import AppearanceSection from './components/AppearanceSection'
 import NotificationsSection from './components/NotificationsSection'
 import ChangePasswordSection from './components/ChangePasswordSection'
@@ -132,6 +133,8 @@ export default function ProfilePage() {
         autonomyLevel={autonomyLevel}
         setAutonomyLevel={setAutonomyLevel}
       />
+
+      <SmartFeaturesSection />
 
       <AppearanceSection
         theme={theme}

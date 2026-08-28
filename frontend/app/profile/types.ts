@@ -22,29 +22,42 @@ export type ProfileUser = {
   language?: string
 }
 
+/* What each level actually does, as of 2026-08-28.
+ *
+ * Until phase 8 this setting was stored, validated, echoed back to this page,
+ * and read by nothing -- so its three descriptions described a product that
+ * did not exist ("only irreversible actions require confirmation" asked about
+ * nothing, because nothing ever asked). services/chat_tools.py's
+ * announced_tools() gives it a real consumer, and this copy now says what that
+ * consumer does and no more.
+ *
+ * Two invariants hold at EVERY level and are deliberately repeated in the
+ * copy, because a user choosing "high" is entitled to know what it does not
+ * hand over: a task the model creates is always inactive until the user
+ * activates it, and an assistant it creates is always private. */
 export const AUTONOMY_LEVELS = [
   {
     value: 'low',
-    label_fa: 'پایین — تأیید قبل از هر عمل',
-    label_en: 'Low — Confirm before actions',
-    desc_fa: 'هوش مصنوعی قبل از انجام هر عملیاتی از شما تأیید می‌گیرد. مناسب برای کاربرانی که کنترل کامل می‌خواهند.',
-    desc_en: 'AI asks for your confirmation before performing any action. Suitable for users who want full control.',
+    label_fa: 'پایین — فقط پیشنهاد، بدون ساخت',
+    label_en: 'Low — suggests only, never creates',
+    desc_fa: 'ابزارهای ساخت اصلاً به مدل معرفی نمی‌شوند؛ مدل فقط می‌تواند مدل‌های در دسترس را فهرست کند و به شما بگوید خودتان کجا بروید. هیچ چیزی ساخته نمی‌شود.',
+    desc_en: 'The creating tools are not even offered to the model. It can list the available models and tell you where to go build something yourself. Nothing is created.',
     icon: 'lock',
   },
   {
     value: 'medium',
-    label_fa: 'متوسط — اجرای خودکار وظایف رایج',
-    label_en: 'Medium — Auto-execute common tasks',
-    desc_fa: 'وظایف رایج و امن به صورت خودکار اجرا می‌شوند. اعمال حساس همچنان نیاز به تأیید دارند.',
-    desc_en: 'Common and safe tasks execute automatically. Sensitive actions still require confirmation.',
+    label_fa: 'متوسط — پیش‌نویس می‌کند، شما تأیید می‌کنید',
+    label_en: 'Medium — drafts it, you confirm',
+    desc_fa: 'مدل می‌تواند وظیفه یا دستیار پیشنهاد بدهد، ولی به‌جای ساختن، یک کارت تأیید در گفتگو نشان می‌دهد. تا وقتی روی آن کلیک نکنید هیچ چیزی ساخته نمی‌شود. پیش‌فرض.',
+    desc_en: 'The model can propose a task or an assistant, but instead of creating it you get a confirmation card in the conversation. Nothing exists until you click it. The default.',
     icon: 'settings',
   },
   {
     value: 'high',
-    label_fa: 'بالا — خودمختاری کامل با محدودیت‌های امنیتی',
-    label_en: 'High — Full autonomy with safety limits',
-    desc_fa: 'هوش مصنوعی با بیشترین آزادی عمل می‌کند. فقط اعمال غیرقابل‌برگشت نیاز به تأیید دارند.',
-    desc_en: 'AI operates with maximum freedom. Only irreversible actions require confirmation.',
+    label_fa: 'بالا — بدون پرسیدن می‌سازد',
+    label_en: 'High — creates without asking',
+    desc_fa: 'وظیفه و دستیار بدون تأیید شما ساخته می‌شوند. دو چیز در این سطح هم عوض نمی‌شود: وظیفهٔ ساخته‌شده غیرفعال است تا خودتان فعالش کنید، و دستیار ساخته‌شده خصوصی است.',
+    desc_en: 'Tasks and assistants are created without asking you. Two things do not change even here: a created task stays inactive until you activate it, and a created assistant stays private.',
     icon: 'rocket',
   },
 ]

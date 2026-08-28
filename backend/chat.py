@@ -253,6 +253,7 @@ from chat_billing import (  # noqa: E402
 # ── SSE streaming (chat_stream.py) ────────────────────────────────────
 from chat_stream import _chat_stream, _smart_chat_stream  # noqa: E402
 import chat_tool_loop  # noqa: E402 -- the tool-calling loop; see ChatRequest.tools
+import chat_stream_tools  # noqa: E402 -- its SSE half
 
 
 # ── Routes ──────────────────────────────────────────────────────
@@ -416,19 +417,13 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
     await apply_outbound_budget(payload_dict)
 
     if _tool_loop_requested:
-        # REFUSED, not quietly downgraded: running the non-streaming loop for
-        # a caller who asked for SSE answers a different question and gives
-        # them no way to find out. Streaming tool support is a later packet.
-        if payload_dict.get('stream', False):
-            return err_openai(
-                'حالت ابزار فعلاً با پاسخ جریانی کار نمی‌کند. لطفاً stream را false بگذارید.',
-                'Tool mode does not support streaming yet. Please set stream to false.',
-                400, code='tools_stream_unsupported', err_type='invalid_request_error',
-            )
+        # Both halves of the loop own the whole reserve -> rounds -> release
+        # cycle themselves, which is why the block above skipped reserving.
+        # `covered` is passed rather than re-derived: one place decides whether
+        # this user pays for this request.
+        _loop = chat_stream_tools.stream_tool_loop if payload_dict.get('stream', False) else chat_tool_loop.run_tool_loop
         try:
-            return await chat_tool_loop.run_tool_loop(
-                request, uid, payload_dict, covered=_tool_loop_covered,
-            )
+            return await _loop(request, uid, payload_dict, covered=_tool_loop_covered)
         except InsufficientBalanceError:
             return err_openai(
                 'موجودی کیف پول شما کافی نیست. لطفاً حساب خود را شارژ کنید.',

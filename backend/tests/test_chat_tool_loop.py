@@ -566,18 +566,34 @@ class TestTheLoopIsActuallyReachable:
     def test_chat_module_reaches_this_module(self):
         assert chat_mod.chat_tool_loop is chat_tool_loop
 
-    def test_the_refusal_and_the_delegation_both_precede_the_stream_branch(self):
-        """Order matters twice over. The `tools` branch must be reached before
-        `if stream:` or a streaming tool request would silently take the SSE
-        path with tools stripped; and the refusal must come before the
-        delegation or `tools + stream=true` would quietly get a JSON answer to
-        an SSE question. Structural, because the alternative is standing up
-        the whole endpoint to assert on statement order."""
+    def test_the_delegation_precedes_the_ordinary_stream_branch(self):
+        """The `tools` branch must be reached before `if stream:`, or a
+        streaming tool request would silently take the ordinary SSE path with
+        its tools stripped -- an answer to a question nobody asked. Structural,
+        because the alternative is standing up the whole endpoint to assert on
+        statement order.
+
+        This test used to pin a `tools_stream_unsupported` refusal that stood
+        here while only the non-streaming half existed. The refusal is gone
+        because the SSE half landed; what it was protecting -- that the two
+        paths cannot be silently confused -- is what the assertion below keeps.
+        """
         src = Path(chat_mod.__file__).read_text(encoding='utf-8')
-        refusal = src.index('tools_stream_unsupported')
-        delegation = src.index('chat_tool_loop.run_tool_loop')
+        delegation = src.index('_loop(request, uid, payload_dict, covered=')
         stream_branch = src.index("stream = payload_dict.get('stream', False)")
-        assert refusal < delegation < stream_branch
+        assert delegation < stream_branch
+        assert 'tools_stream_unsupported' not in src, (
+            'the streaming refusal is back; either the SSE half regressed or '
+            'this test was left behind'
+        )
+
+    def test_each_half_of_the_loop_is_chosen_by_the_stream_flag(self):
+        """A `tools` request with stream=true must reach the SSE half and one
+        with stream=false the JSON half. Getting this backwards would be
+        invisible in every unit test on either side."""
+        src = Path(chat_mod.__file__).read_text(encoding='utf-8')
+        assert 'chat_stream_tools.stream_tool_loop if' in src
+        assert 'else chat_tool_loop.run_tool_loop' in src
 
     def test_chat_py_hands_the_coverage_decision_down_rather_than_reserving_twice(self):
         """If chat.py reserved AND the loop reserved, one message would hold

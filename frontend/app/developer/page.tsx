@@ -11,6 +11,7 @@ import { ApiInfoCard } from './components/ApiInfoCard'
 import { ApiKeysSection } from './components/ApiKeysSection'
 import { CodeExamplesSection } from './components/CodeExamplesSection'
 import { EndpointDocsSection } from './components/EndpointDocsSection'
+import { SmartModeSection } from './components/SmartModeSection'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Developer API Page
@@ -89,6 +90,8 @@ export default function DeveloperPage() {
       <CodeExamplesSection />
 
       <EndpointDocsSection />
+
+      <SmartModeSection />
 
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 

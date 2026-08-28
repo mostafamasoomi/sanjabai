@@ -25,7 +25,7 @@ import pytest
 import chat as chat_mod
 import services.router_probe as router_probe
 import services.smart_router_llm as llm
-from services.smart_router import Candidate
+from services.smart_router import Candidate, band_of
 
 
 # ── doubles ──────────────────────────────────────────────────────────────
@@ -421,6 +421,20 @@ async def test_the_prompt_is_a_numbered_menu_of_public_ids(env):
 
 
 @pytest.mark.asyncio
+async def test_the_prompt_carries_a_band_label_per_line(env):
+    """2026-08-28 fix: production's prompt must be the SAME annotated menu
+    the acceptance probe measures (services/router_prompt.py), not the bare
+    menu `smart_router_llm._prompt` used to send. Live measurement proved a
+    bare menu makes the router pick randomly -- a middle-band model for
+    "hello" -- which is worse than no router at all."""
+    await llm.llm_route('hello', _POOL, _ABOVE_FLOOR)
+    prompt = env.http.calls[0]['json']['messages'][1]['content']
+    thresholds = llm.band_thresholds(_POOL)
+    for i, c in enumerate(_POOL, start=1):
+        assert f'{i}. {c.public_id} (band {band_of(c, thresholds)} of 3)' in prompt
+
+
+@pytest.mark.asyncio
 async def test_the_user_message_is_fenced_as_data(env):
     await llm.llm_route('do the thing', _POOL, _ABOVE_FLOOR)
     prompt = env.http.calls[0]['json']['messages'][1]['content']
@@ -504,9 +518,10 @@ def _floor_for(message: str, pool: list) -> int:
     instead of a hand-typed number that silently rots the moment either
     changes."""
     menu = llm._menu(pool)
+    thresholds = llm.band_thresholds(pool)
     return llm._estimate_input_tokens([
         {'role': 'system', 'content': llm._SYSTEM_PROMPT},
-        {'role': 'user', 'content': llm._prompt(message, menu)},
+        {'role': 'user', 'content': llm.build_prompt(message, menu, thresholds)},
     ])
 
 
@@ -524,15 +539,20 @@ async def test_the_router_call_is_metered_as_a_usage_event(env):
     # MEASURED, not assumed: the fake upstream's usage.prompt_tokens is 120,
     # but the floor (chat_billing._estimate_input_tokens over the actual
     # system+menu+user prompt _meter sends, see _floor_for above) comes out
-    # to 384 for this pool/message -- well ABOVE 120. discounted_input_tokens
+    # to 456 for this pool/message -- well ABOVE 120. discounted_input_tokens
     # never bills below that floor, so the floor wins here, not the raw 120.
     # This is the answer to the packet's open question: the naive inference
     # that upstream 'ninerouter' being absent from the (unreachable-in-tests,
     # fail-safe-zero) overhead map would leave 120 unchanged is WRONG --
     # get_prompt_overhead returning 0 only means no *discount* is applied;
     # the floor clamp is a second, independent mechanism that still fires.
+    # 456, not the pre-2026-08-28 384: services.router_prompt.build_prompt
+    # (packet P-MENU) adds a " (band N of 3)" label to every menu line, so
+    # the same pool/message now renders a longer prompt and a higher floor
+    # -- see services/router_prompt.py's module docstring for why the label
+    # is there at all.
     expected_input_tokens = _floor_for('hello', _POOL)
-    assert expected_input_tokens == 384, (
+    assert expected_input_tokens == 456, (
         f'the floor this test setup produces has drifted to {expected_input_tokens}; '
         f'update the comment above, do not just change this number blind'
     )

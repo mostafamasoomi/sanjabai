@@ -32,6 +32,11 @@ const ALLOWED = new Set<string>([
   // Bilingual fallback pairs for failed responses live here in full.
   'apiError.ts',
   'sections/ModelsModule.tsx',
+  // The products module is the same bilingual-table shape as the models one:
+  // productsTabs.ts holds `{ label, labelEn }` pairs and ProductsModule renders
+  // whichever the language calls for through t() (ProductsModule.tsx:85).
+  'sections/productsTabs.ts',
+  'sections/ProductsModule.tsx',
 ])
 
 function walk(dir: string, base = ''): [string, string][] {

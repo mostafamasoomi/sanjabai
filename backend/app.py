@@ -232,12 +232,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from services.task_scheduler import scheduler_loop
     _task_scheduler_task = asyncio.create_task(scheduler_loop())
 
+    # Releases reservations stranded in status='reserved'. Not gated: it only
+    # ever moves money back TO a user, and there was no sweeper at all until
+    # now -- a 1000-toman hold from 2026-08-23 sat untouched for five days
+    # because watchdog_rules.py:203 only *alerts*, above a threshold
+    # (>5 rows OR >100000 toman) that a single small leak never reaches.
+    # Verified against the live database on 2026-08-28: a synthetic 2h-old
+    # reservation was swept, and both writes landed -- the row went
+    # 'released' AND wallet.reserved dropped. Releasing the row alone is the
+    # half-fix that leaves the money held; see services/reservation_sweeper.py.
+    from services.reservation_sweeper import reservation_sweeper_loop
+    _reservation_sweeper_task = asyncio.create_task(reservation_sweeper_loop())
+
     yield
 
     _health_task.cancel()
     _discovery_task.cancel()
     _provider_catalog_task.cancel()
     _task_scheduler_task.cancel()
+    _reservation_sweeper_task.cancel()
     _pricing_task.cancel()
     _hermes_renewal_task.cancel()
     if _db._real_http:

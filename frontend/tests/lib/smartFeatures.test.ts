@@ -110,10 +110,17 @@ describe('both strings files carry Persian for every user-visible key', () => {
     // of this file's strings do, so a simple single-quote match is enough).
     const entries = [...faBlock.matchAll(/(\w+):\s*'([^']*)'/g)]
     expect(entries.length).toBeGreaterThanOrEqual(6) // title, intro, 2 labels, 2 descs, saveError
+    // Format names with no Persian equivalent are allowed to appear verbatim
+    // -- "JSON" is what the user sees in their own conversation, so
+    // transliterating it would be less clear, not more Persian. Keep this
+    // list tiny and specific: it is an exception to the rule, not a hole in
+    // it. Anything not listed here still fails.
+    const TECHNICAL_TERMS = /\b(JSON)\b/g
     const latinLetters = /[A-Za-z]/
     for (const [, key, value] of entries) {
       expect(value.length, `${key} is empty`).toBeGreaterThan(0)
-      expect(value, `${key} contains Latin letters, not pure Persian: "${value}"`).not.toMatch(latinLetters)
+      const stripped = value.replace(TECHNICAL_TERMS, '')
+      expect(stripped, `${key} contains Latin letters, not pure Persian: "${value}"`).not.toMatch(latinLetters)
     }
   })
 
@@ -121,8 +128,25 @@ describe('both strings files carry Persian for every user-visible key', () => {
     expect(STRINGS).toMatch(/فعال نشده/)
   })
 
-  it('states plainly that only older messages are affected by compression', () => {
-    expect(STRINGS).toContain('فقط پیام‌های قدیمی‌تر')
+  /* Anti-overclaim guard for compression, and the reason it is worded the way
+     it is.
+
+     Measured on the real library in the live container (2026-08-28): headroom
+     protects user messages and recent code BY DESIGN and does nothing at all
+     to ordinary prose. Persian prose compressed 0%. Only bulk JSON (-47%) and
+     logs (-97%) actually shrink.
+
+     So the honest copy has to admit that a normal conversation will see no
+     difference. An earlier draft said older parts "are summarised so the
+     conversation uses fewer tokens", which would have been a promise the
+     product does not keep. These assertions pin the two halves of the honest
+     version: what is never touched, and that a normal chat sees nothing. */
+  it('does not overclaim compression: names what is never touched', () => {
+    expect(STRINGS).toContain('پیام‌های خودتان هرگز دست نمی‌خورند')
+  })
+
+  it('does not overclaim compression: admits a normal chat sees no difference', () => {
+    expect(STRINGS).toMatch(/هیچ تفاوتی حس نمی‌کنید/)
   })
 
   it('the EN block mirrors every FA key (typeof FA contract)', () => {

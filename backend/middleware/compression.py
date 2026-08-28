@@ -1,6 +1,28 @@
 """
 Token compression middleware using headroom-ai.
 
+── What headroom ACTUALLY compresses (measured in the live API container,
+   2026-08-28, on the real library -- not the fakes the tests use) ──────────
+
+  assistant prose (Persian)   654 ->  654    0%   router:protected:user_message
+  assistant code block        497 ->  497    0%   router:protected:recent_code
+  assistant JSON              819 ->  430  -47%   router:smart_crusher:0.38
+  assistant logs             1533 ->   40  -97%   router:log:0.02
+
+headroom protects user messages and recent code BY DESIGN, and does nothing to
+ordinary prose. It only earns its keep on bulk structured content. So for a
+normal Persian conversation this middleware is close to a no-op even when the
+user has opted in -- which is what the profile page's copy now says, rather
+than promising a saving that will not arrive.
+
+Note the irony before "improving" this: the biggest JSON payloads in this
+system are `role='tool'` messages, and those are deliberately excluded below.
+Compressing them would hand the model malformed JSON and break the tool loop.
+The exclusion is not an oversight to be optimised away.
+
+`model_limit` is NOT the lever -- verified at 200000 / 2000 / 800 / 400, all
+identical output. Do not spend an afternoon tuning it again.
+
 Reduces LLM token usage by compressing older conversation messages.
 Only compresses request messages (not responses). Last N messages
 are preserved intact for immediate context.

@@ -13,10 +13,23 @@ import { dict } from '@/lib/i18n'
    endpoint reports the flag) -- the sentence lives in the normal copy
    instead, so the claim is correct without needing extra UI.
 
-   `compression_enabled` never promises a token/cost saving figure (no
-   measured number exists) and is explicit that only OLDER messages are
-   summarised -- recent ones are sent untouched. That distinction is the one
-   thing tests/lib/smartFeatures.test.ts checks for in the fa copy.
+   `compression_enabled`'s copy was rewritten after the feature was measured
+   on the real headroom library in the live container (2026-08-28):
+
+     assistant prose (Persian)   0%   -- protected, never compressed
+     assistant code block        0%   -- protected, never compressed
+     user messages               0%   -- protected BY DESIGN by headroom
+     assistant JSON            -47%
+     assistant logs            -97%
+
+   The first draft said older parts "are summarised so the conversation uses
+   fewer tokens". True in principle, false for almost every real Persian
+   conversation -- a promise the product does not keep. The copy now names
+   what actually shrinks (bulk JSON and logs in assistant replies), names what
+   is never touched, and says outright that a normal chat will feel no
+   difference. It still promises no percentage: none is measured for real
+   traffic. See middleware/compression.py's module docstring for the raw
+   numbers.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const FA = {
@@ -27,7 +40,7 @@ const FA = {
     'وقتی روشن است، به‌جای همیشه استفاده از مدل پیش‌فرض شما، سنجاب‌بای برای هر پرسش مدل مناسب را خودش انتخاب می‌کند. این قابلیت با یک کلید سراسری در سمت مدیر کنترل می‌شود که هنوز فعال نشده؛ تا وقتی مدیر آن را فعال نکند، روشن‌کردن این کلید هیچ تغییری در رفتار گفتگوهای شما ایجاد نمی‌کند.',
   compressionLabel: 'فشرده‌سازی گفتگوهای طولانی',
   compressionDesc:
-    'وقتی روشن است، در یک گفتگوی طولانی، بخش‌های قدیمی‌تر پیش از ارسال به مدل خلاصه می‌شوند تا گفتگو توکن کمتری مصرف کند. فقط پیام‌های قدیمی‌تر تحت تأثیر قرار می‌گیرند؛ پیام‌های اخیر بدون تغییر و کامل ارسال می‌شوند.',
+    'وقتی روشن است، در گفتگوهای طولانی بخش‌های قدیمی‌ترِ پاسخ‌های دستیار که دادهٔ حجیم دارند — مثل JSON یا لاگ — پیش از ارسال دوباره به مدل خلاصه می‌شوند. متن معمولی، کد، و پیام‌های خودتان هرگز دست نمی‌خورند و کامل ارسال می‌شوند، پس در گفتگوی معمولی احتمالاً هیچ تفاوتی حس نمی‌کنید. اگر روی خروجی‌های حجیم کار می‌کنید به کارتان می‌آید.',
   saveError: 'ذخیرهٔ تنظیم انجام نشد. دوباره تلاش کنید.',
 }
 
@@ -39,7 +52,7 @@ const EN: typeof FA = {
     'When on, instead of always using your default model, Sanjabai picks a suitable model for each question itself. This is controlled by a site-wide switch on the admin side that is not enabled yet; until an admin turns it on, switching this on makes no difference to your conversations.',
   compressionLabel: 'Compress Long Conversations',
   compressionDesc:
-    'When on, in a long conversation, older parts are summarised before being sent to the model, so the conversation uses fewer tokens. Only older messages are affected — recent ones are still sent in full, untouched.',
+    'When on, older assistant replies carrying bulk data — JSON or logs — are summarised before being sent to the model again. Ordinary prose, code, and your own messages are never touched and are always sent in full, so in a normal conversation you will probably notice no difference. It helps if you work with large outputs.',
   saveError: 'Could not save the setting. Try again.',
 }
 

@@ -89,6 +89,13 @@ else
   bad "/me/usage without token -> $auth_code (expected 401)"
 fi
 
+combos_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$BACKEND/me/combos")
+if [ "$combos_code" = "401" ]; then
+  ok "/me/combos without token -> $combos_code"
+else
+  bad "/me/combos without token -> $combos_code (expected 401)"
+fi
+
 # ── 5. No secret leakage in served HTML/JS ────────────────────────────────
 log "==> Checking for secret leakage in frontend assets"
 leak=0

@@ -11,6 +11,7 @@ import { AVAILABILITY_OPTIONS, AVAILABILITY_COLOR, TOGGLEABLE, availabilityLabel
 import { BulkActionBar, BulkConfirmModal } from './ModelOpsBulkControls'
 import CatalogFilterBar, { type ProbeFilter } from './CatalogFilterBar'
 import { useBulkLiveTest, BulkLiveTestProgress, type TestResult } from './BulkLiveTest'
+import BulkTestSummary from './BulkTestSummary'
 import { modelOpsStrings } from './ModelOpsSection.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -134,6 +135,10 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [testingId, setTestingId] = useState<string | null>(null)
   const [testResults, setTestResults] = useState<Record<string, TestResult>>({})
+  // Only the most recently finished BULK run (not per-row retests below) --
+  // BulkTestSummary reads this, separately from testResults, so a one-off
+  // «تست زنده» click on a single row doesn't silently mutate the summary.
+  const [lastBulkResults, setLastBulkResults] = useState<Record<string, TestResult> | null>(null)
 
   const [upstreamEditId, setUpstreamEditId] = useState<string | null>(null)
   const [upstreamDraft, setUpstreamDraft] = useState('')
@@ -155,7 +160,7 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
 
   const { bulkTest, run: runBulkTest, cancel: cancelBulkTest } = useBulkLiveTest({
     api,
-    onResults: (results) => setTestResults((prev) => ({ ...prev, ...results })),
+    onResults: (results) => { setTestResults((prev) => ({ ...prev, ...results })); setLastBulkResults(results) },
     onDone: load,
   })
 
@@ -336,6 +341,7 @@ export default function ModelOpsSection({ api }: ModelOpsSectionProps) {
       />
 
       {bulkTest && <BulkLiveTestProgress state={bulkTest} onCancel={cancelBulkTest} />}
+      {!bulkTest && lastBulkResults && <BulkTestSummary results={lastBulkResults} api={api} onDone={load} />}
 
       <div className="admin-card">
         <div className="overflow-x-auto">

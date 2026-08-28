@@ -14,7 +14,7 @@ const FA = {
   modelResultLabel: (model: string) => `مدل: ${model}`,
   yourRating: 'امتیاز شما:',
   starAria: (n: number) => `${n} ستاره`,
-  toastUseError: 'خطا در اجرای اسکیل',
+  toastUseError: 'خطا در اجرای مهارت',
   toastServerError: 'خطا در ارتباط با سرور',
   toastRateSuccess: 'امتیاز شما ثبت شد',
   toastRateError: 'خطا در ثبت امتیاز',

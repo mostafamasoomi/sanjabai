@@ -101,6 +101,13 @@ export default function SkillCard({ skill, onUse }: { skill: Skill; onUse: (s: S
           {s.useAction}
         </button>
       </div>
+
+      {/* Clarifies /use is a single one-shot run, unlike permanent activation
+          via SkillActivationPanel — the two are easy to confuse and the
+          wrong assumption costs the user money either direction. */}
+      <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'end', lineHeight: 1.4 }}>
+        {s.useOnceHint}
+      </p>
     </div>
   )
 }

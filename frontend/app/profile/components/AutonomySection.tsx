@@ -4,6 +4,7 @@ import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
 import { AUTONOMY_LEVELS } from '../types'
 import { autonomySectionStrings } from './AutonomySection.strings'
+import Hint from '@/components/Hint'
 
 type AutonomySectionProps = {
   autonomyLevel: string
@@ -21,6 +22,7 @@ export default function AutonomySection({ autonomyLevel, setAutonomyLevel }: Aut
         <h2 className="card-title">
           {s.title}
         </h2>
+        <Hint id="profile.autonomy" />
       </div>
       <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
         {s.intro}

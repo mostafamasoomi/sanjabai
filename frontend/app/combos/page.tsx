@@ -8,6 +8,7 @@ import { useLang } from '@/components/LanguageToggle'
 import { dirFor } from '@/lib/i18n'
 import ComboManager from './components/ComboManager'
 import { comboStrings } from './components/ComboManager.strings'
+import Hint from '@/components/Hint'
 
 /* ═══════════════════════════════════════════════════════════════
    /combos — manage the user's own ordered model combos.
@@ -41,7 +42,7 @@ export default function CombosPage() {
           <Icon name="models" size={18} />
         </span>
         <div>
-          <h1 className="page-title">{s.pageTitle}</h1>
+          <h1 className="page-title">{s.pageTitle}<Hint id="combos.build" /></h1>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.7 }}>
             {s.pageSubtitle}
           </p>

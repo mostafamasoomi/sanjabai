@@ -5,6 +5,7 @@ import { useLang } from '@/components/LanguageToggle'
 import { fmt } from '@/lib/i18n'
 import { type Skill, CATEGORY_BADGES, categoryLabel, renderStars, getAverageRating } from '../types'
 import { skillCardStrings } from './SkillCard.strings'
+import Hint from '@/components/Hint'
 
 /* ═══════════════════════════════════════════════════════════════
    Skill Card
@@ -100,6 +101,7 @@ export default function SkillCard({ skill, onUse }: { skill: Skill; onUse: (s: S
           <Icon name="send" size={14} />
           {s.useAction}
         </button>
+        <Hint id="skills.useButton" />
       </div>
 
       {/* Clarifies /use is a single one-shot run, unlike permanent activation

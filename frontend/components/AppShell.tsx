@@ -63,6 +63,9 @@ function getNav(lang: Lang): NavItem[] {
        exist, instead of needing a frontend change to become visible. */
     { href: '/images', label: n.images, icon: 'camera', section: 'tools' },
     { href: '/developer', label: n.developer, icon: 'code', section: 'tools' },
+    // Last in `tools` on purpose: the guide explains the features above it, so
+    // it reads as the footnote to that list rather than as another feature.
+    { href: '/guide', label: n.guide, icon: 'info', section: 'tools' },
     { href: '/profile', label: n.profile, icon: 'profile', section: 'account' },
     { href: '/referral', label: n.referral, icon: 'referral', section: 'account' },
     { href: '/admin', label: n.admin, icon: 'settings', section: 'account', admin: true },

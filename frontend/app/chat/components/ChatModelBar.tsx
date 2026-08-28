@@ -6,6 +6,7 @@ import ModelPicker from './ModelPicker'
 import SmartModePopover, { type SmartStrategy } from './SmartModePopover'
 import { type ModelCatalogItem } from '@/types/catalog'
 import { chatModelBarStrings } from './ChatModelBar.strings'
+import Hint from '@/components/Hint'
 
 type ChatModelBarProps = {
   isMobile: boolean
@@ -76,6 +77,7 @@ export default function ChatModelBar({
         {/* Smart Mode. Was an on/off switch with a hardcoded English label;
             it now picks HOW smart mode chooses (auto / router / a combo) and
             reports which strategy the backend actually ran. */}
+        <Hint id="chat.smartMode" />
         <SmartModePopover
           token={token}
           smartMode={smartMode}

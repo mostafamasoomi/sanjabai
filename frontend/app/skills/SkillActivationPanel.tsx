@@ -8,6 +8,7 @@ import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
 import { fmt } from '@/lib/i18n'
 import { skillActivationPanelStrings } from './SkillActivationPanel.strings'
+import Hint from '@/components/Hint'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Skill activation — until today "skill" meant a prompt-template library:
@@ -140,6 +141,7 @@ export default function SkillActivationPanel() {
           <h2 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)' }}>
             {s.heading}
           </h2>
+          <Hint id="skills.activate" />
         </div>
         {!loading && !loadFailed && skills.length > 0 && (
           <span className="badge">

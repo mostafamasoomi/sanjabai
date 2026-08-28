@@ -3,6 +3,7 @@ import type { Lang } from '@/components/LanguageToggle'
 import { faNum } from '@/lib/format'
 import { useCatalog } from '@/lib/useCatalog'
 import { modelCount } from '@/lib/claims'
+import { useLandingOverrides, applyModuleOverride } from '@/lib/landingOverrides'
 
 /* ── Comparison ───────────────────────────────────────────────────────────
    Every "sanjabai" cell restates a claim already established elsewhere in
@@ -93,14 +94,35 @@ const comparisonContentFor = dict(FA, EN)
  *  Hero.strings.ts. */
 function useComparisonContent(lang: Lang): { rows: ComparisonRow[] } {
   const { models, loading } = useCatalog()
+  const overrides = useLandingOverrides()
   const count = !loading && modelCount(models) > 0 ? modelCount(models) : null
   const base = comparisonContentFor(lang)
-  return {
+  const resolved = {
     rows: base.rows.map((row) => ({
       ...row,
       sanjabai: typeof row.sanjabai === 'function' ? row.sanjabai(count) : row.sanjabai,
     })),
   }
+  return applyModuleOverride('comparison', lang, resolved, overrides)
 }
 
 export const comparisonContent = useComparisonContent
+
+/** Today's static FA/EN values with the live-count leaf resolved against
+ *  `count = null` (the same fallback wording a visitor sees while the
+ *  catalog is loading) — admin editor placeholders only, see the matching
+ *  comment in hero.ts. `rows.0.sanjabai` itself is never schema-editable
+ *  (frozen), so this fallback wording only ever shows up as a read-only
+ *  placeholder, never as something the editor lets an admin type over. */
+function resolveComparisonRows(base: { rows: ComparisonRowTemplate[] }): { rows: ComparisonRow[] } {
+  return {
+    rows: base.rows.map((row) => ({
+      ...row,
+      sanjabai: typeof row.sanjabai === 'function' ? row.sanjabai(null) : row.sanjabai,
+    })),
+  }
+}
+export const comparisonStaticDefaults = {
+  fa: resolveComparisonRows(FA),
+  en: resolveComparisonRows(EN),
+}

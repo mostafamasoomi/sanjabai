@@ -3,6 +3,7 @@ import type { Lang } from '@/components/LanguageToggle'
 import { faNum } from '@/lib/format'
 import { useCatalog } from '@/lib/useCatalog'
 import { modelCount } from '@/lib/claims'
+import { useLandingOverrides, applyModuleOverride } from '@/lib/landingOverrides'
 import { MIN_TOPUP_LABEL_FA, MIN_TOPUP_LABEL_EN } from './constants'
 
 /* ── Pricing ──────────────────────────────────────────────────────────────────
@@ -130,14 +131,32 @@ const pricingContentFor = dict(FA, EN)
  *  hook-inside-a-plain-name note in Hero.strings.ts. */
 function usePricingContent(lang: Lang): { columns: PricingColumn[] } {
   const { models, loading } = useCatalog()
+  const overrides = useLandingOverrides()
   const count = !loading && modelCount(models) > 0 ? modelCount(models) : null
   const base = pricingContentFor(lang)
-  return {
+  const resolved = {
     columns: base.columns.map((column) => ({
       ...column,
       features: column.features.map((line) => (typeof line === 'function' ? line(count) : line)),
     })),
   }
+  return applyModuleOverride('pricing', lang, resolved, overrides)
 }
 
 export const pricingContent = usePricingContent
+
+/** Today's static FA/EN values with the live-count leaf resolved against
+ *  `count = null` — admin editor placeholders only, see the matching
+ *  comment in comparison.ts's comparisonStaticDefaults. */
+function resolvePricingColumns(base: { columns: PricingColumnTemplate[] }): { columns: PricingColumn[] } {
+  return {
+    columns: base.columns.map((column) => ({
+      ...column,
+      features: column.features.map((line) => (typeof line === 'function' ? line(null) : line)),
+    })),
+  }
+}
+export const pricingStaticDefaults = {
+  fa: resolvePricingColumns(FA),
+  en: resolvePricingColumns(EN),
+}

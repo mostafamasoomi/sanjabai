@@ -1,4 +1,6 @@
 import { dict } from '@/lib/i18n'
+import type { Lang } from '@/components/LanguageToggle'
+import { useLandingOverrides, applyModuleOverride } from '@/lib/landingOverrides'
 import type { IconName } from '../../ui/Icon'
 
 /* ── Capability showcase (memory / documents / scheduled tasks) ─────────────
@@ -119,4 +121,17 @@ const EN: typeof FA = {
   ],
 }
 
-export const capabilitiesContent = dict(FA, EN)
+const capabilitiesContentFor = dict(FA, EN)
+
+/** Resolves the capability showcase for a language, applying any
+ *  admin-stored override. */
+function useCapabilitiesContent(lang: Lang) {
+  const overrides = useLandingOverrides()
+  return applyModuleOverride('capabilities', lang, capabilitiesContentFor(lang), overrides)
+}
+
+export const capabilitiesContent = useCapabilitiesContent
+
+/** Today's static FA/EN values — admin editor placeholders only, see the
+ *  matching comment in hero.ts. */
+export const capabilitiesStaticDefaults = { fa: FA, en: EN }

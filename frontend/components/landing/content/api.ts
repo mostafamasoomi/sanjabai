@@ -1,4 +1,6 @@
 import { dict } from '@/lib/i18n'
+import type { Lang } from '@/components/LanguageToggle'
+import { useLandingOverrides, applyModuleOverride } from '@/lib/landingOverrides'
 import { API_BASE_URL } from './constants'
 
 /* ── API section ──────────────────────────────────────────────────────────── */
@@ -117,4 +119,17 @@ for await (const chunk of stream) {
   },
 }
 
-export const apiContent = dict(FA, EN)
+const apiContentFor = dict(FA, EN)
+
+/** Resolves the API section copy for a language, applying any admin-stored
+ *  override. */
+function useApiContent(lang: Lang) {
+  const overrides = useLandingOverrides()
+  return applyModuleOverride('api', lang, apiContentFor(lang), overrides)
+}
+
+export const apiContent = useApiContent
+
+/** Today's static FA/EN values — admin editor placeholders only, see the
+ *  matching comment in hero.ts. */
+export const apiStaticDefaults = { fa: FA, en: EN }

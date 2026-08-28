@@ -27,6 +27,7 @@ const ModelsModule = dynamic(() => import('./sections/ModelsModule'), { ssr: fal
 const ModerationSection = dynamic(() => import('./sections/ModerationSection'), { ssr: false })
 const WatchdogSection = dynamic(() => import('./sections/WatchdogSection'), { ssr: false })
 const FreeTierSection = dynamic(() => import('./sections/FreeTierSection'), { ssr: false })
+const LandingContentSection = dynamic(() => import('./sections/LandingContentSection'), { ssr: false })
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Sanjabai Admin Panel — Aurora Design System
@@ -51,7 +52,7 @@ export type {
   UserRow, UserDetail, UserDetailTab,
 } from './types'
 
-type Page = 'dashboard' | 'analytics' | 'site-control' | 'models' | 'packages' | 'discounts' | 'proxy' | 'users' | 'security' | 'moderation' | 'watchdog' | 'free-tier' | 'monitoring'
+type Page = 'dashboard' | 'analytics' | 'site-control' | 'models' | 'packages' | 'discounts' | 'proxy' | 'users' | 'security' | 'moderation' | 'watchdog' | 'free-tier' | 'landing-content' | 'monitoring'
 
 /* Eight of these used to be separate entries -- مدل‌ها, عملیات کاتالوگ,
    مدل‌های منطقی, توکن تزریقی بالادست, تعرفه‌ها, قیمت‌گذاری تصویر, نرخ ارز,
@@ -83,6 +84,7 @@ const NAV_ITEMS: { key: Page; label: string; labelEn: string; icon: IconName }[]
   { key: 'moderation', label: 'پالایش محتوا', labelEn: 'Content Moderation', icon: 'warning' },
   { key: 'watchdog', label: 'هشدارهای تلگرام', labelEn: 'Telegram Alerts', icon: 'notification' },
   { key: 'free-tier', label: 'حساب رایگان', labelEn: 'Free Tier', icon: 'gift' },
+  { key: 'landing-content', label: 'محتوای صفحهٔ اصلی', labelEn: 'Landing Content', icon: 'palette' },
   { key: 'monitoring', label: 'پایش', labelEn: 'Monitoring', icon: 'chart' },
 ]
 
@@ -401,6 +403,7 @@ export default function AdminPage() {
           {page === 'site-control' && <SiteControlSection api={api} />}
           {page === 'watchdog' && <WatchdogSection api={api} />}
           {page === 'free-tier' && <FreeTierSection api={api} />}
+          {page === 'landing-content' && <LandingContentSection api={api} />}
           {page === 'monitoring' && <MonitoringTab api={api} />}
         </main>
       </div>

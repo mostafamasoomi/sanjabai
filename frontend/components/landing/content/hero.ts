@@ -1,4 +1,6 @@
 import { dict } from '@/lib/i18n'
+import type { Lang } from '@/components/LanguageToggle'
+import { useLandingOverrides, applyModuleOverride } from '@/lib/landingOverrides'
 
 /* ── Hero ─────────────────────────────────────────────────────────────────── */
 
@@ -101,4 +103,20 @@ const EN: typeof FA = {
   ],
 }
 
-export const heroContent = dict(FA, EN)
+const heroContentFor = dict(FA, EN)
+
+/** Resolves hero copy for a language, applying any admin-stored content
+ *  override — see the hook-inside-a-plain-name note in comparison.ts's
+ *  useComparisonContent. */
+function useHeroContent(lang: Lang) {
+  const overrides = useLandingOverrides()
+  return applyModuleOverride('hero', lang, heroContentFor(lang), overrides)
+}
+
+export const heroContent = useHeroContent
+
+/** Today's static FA/EN values, unresolved by any override — used only as
+ *  the admin editor's placeholders (LandingContentSection.tsx), never to
+ *  render the public page. Hero has no live-count-dependent leaf, so this
+ *  is exactly what a visitor sees with an empty override store. */
+export const heroStaticDefaults = { fa: FA, en: EN }

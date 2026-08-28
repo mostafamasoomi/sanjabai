@@ -1,4 +1,6 @@
 import { dict } from '@/lib/i18n'
+import type { Lang } from '@/components/LanguageToggle'
+import { useLandingOverrides, applyModuleOverride } from '@/lib/landingOverrides'
 
 /* ── Navigation ───────────────────────────────────────────────────────────── */
 
@@ -20,4 +22,16 @@ const EN: typeof FA = {
   ],
 }
 
-export const navContent = dict(FA, EN)
+const navContentFor = dict(FA, EN)
+
+/** Resolves nav links for a language, applying any admin-stored override. */
+function useNavContent(lang: Lang) {
+  const overrides = useLandingOverrides()
+  return applyModuleOverride('nav', lang, navContentFor(lang), overrides)
+}
+
+export const navContent = useNavContent
+
+/** Today's static FA/EN values — admin editor placeholders only, see the
+ *  matching comment in hero.ts. */
+export const navStaticDefaults = { fa: FA, en: EN }

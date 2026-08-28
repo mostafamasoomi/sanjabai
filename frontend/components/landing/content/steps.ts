@@ -1,4 +1,6 @@
 import { dict } from '@/lib/i18n'
+import type { Lang } from '@/components/LanguageToggle'
+import { useLandingOverrides, applyModuleOverride } from '@/lib/landingOverrides'
 import { MIN_TOPUP_LABEL_FA, MIN_TOPUP_LABEL_EN } from './constants'
 
 /* ── Steps ────────────────────────────────────────────────────────────────── */
@@ -37,4 +39,17 @@ const EN: typeof FA = {
   ],
 }
 
-export const stepsContent = dict(FA, EN)
+const stepsContentFor = dict(FA, EN)
+
+/** Resolves the "how it works" steps for a language, applying any
+ *  admin-stored override. */
+function useStepsContent(lang: Lang) {
+  const overrides = useLandingOverrides()
+  return applyModuleOverride('steps', lang, stepsContentFor(lang), overrides)
+}
+
+export const stepsContent = useStepsContent
+
+/** Today's static FA/EN values — admin editor placeholders only, see the
+ *  matching comment in hero.ts. */
+export const stepsStaticDefaults = { fa: FA, en: EN }

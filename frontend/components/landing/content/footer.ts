@@ -1,4 +1,6 @@
 import { dict } from '@/lib/i18n'
+import type { Lang } from '@/components/LanguageToggle'
+import { useLandingOverrides, applyModuleOverride } from '@/lib/landingOverrides'
 
 /* ── Footer ───────────────────────────────────────────────────────────────── */
 
@@ -68,4 +70,17 @@ const EN: typeof FA = {
   ],
 }
 
-export const footerContent = dict(FA, EN)
+const footerContentFor = dict(FA, EN)
+
+/** Resolves the footer columns for a language, applying any admin-stored
+ *  override. */
+function useFooterContent(lang: Lang) {
+  const overrides = useLandingOverrides()
+  return applyModuleOverride('footer', lang, footerContentFor(lang), overrides)
+}
+
+export const footerContent = useFooterContent
+
+/** Today's static FA/EN values — admin editor placeholders only, see the
+ *  matching comment in hero.ts. */
+export const footerStaticDefaults = { fa: FA, en: EN }

@@ -1,4 +1,6 @@
 import { dict } from '@/lib/i18n'
+import type { Lang } from '@/components/LanguageToggle'
+import { useLandingOverrides, applyModuleOverride } from '@/lib/landingOverrides'
 import type { IconName } from '../../ui/Icon'
 
 /* ── Features ─────────────────────────────────────────────────────────────── */
@@ -147,4 +149,17 @@ const EN: typeof FA = {
   ],
 }
 
-export const featuresContent = dict(FA, EN)
+const featuresContentFor = dict(FA, EN)
+
+/** Resolves the feature grid for a language, applying any admin-stored
+ *  override. */
+function useFeaturesContent(lang: Lang) {
+  const overrides = useLandingOverrides()
+  return applyModuleOverride('features', lang, featuresContentFor(lang), overrides)
+}
+
+export const featuresContent = useFeaturesContent
+
+/** Today's static FA/EN values — admin editor placeholders only, see the
+ *  matching comment in hero.ts. */
+export const featuresStaticDefaults = { fa: FA, en: EN }

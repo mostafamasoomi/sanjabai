@@ -3,6 +3,7 @@ import type { Lang } from '@/components/LanguageToggle'
 import { faNum } from '@/lib/format'
 import { useCatalog } from '@/lib/useCatalog'
 import { modelCount } from '@/lib/claims'
+import { useLandingOverrides, applyModuleOverride } from '@/lib/landingOverrides'
 import { MIN_TOPUP_LABEL_FA, MIN_TOPUP_LABEL_EN } from './constants'
 
 /* ── Stats ────────────────────────────────────────────────────────────────── */
@@ -42,9 +43,24 @@ const statsContentFor = dict(FA, EN)
  *  — see the hook-inside-a-plain-name note in Hero.strings.ts. */
 function useStatsContent(lang: Lang) {
   const { models, loading } = useCatalog()
+  const overrides = useLandingOverrides()
   const count = !loading && modelCount(models) > 0 ? modelCount(models) : null
   const base = statsContentFor(lang)
-  return { items: base.items.map((item) => ({ value: item.value(count), label: item.label(count) })) }
+  const resolved = { items: base.items.map((item) => ({ value: item.value(count), label: item.label(count) })) }
+  return applyModuleOverride('stats', lang, resolved, overrides)
 }
 
 export const statsContent = useStatsContent
+
+/** Today's static FA/EN values with the live-count leaf resolved against
+ *  `count = null` — admin editor placeholders only, see the matching
+ *  comment in comparison.ts's comparisonStaticDefaults. `items.0.*` is
+ *  never schema-editable (frozen), so this fallback wording only ever
+ *  shows up read-only. */
+function resolveStatsItems(base: typeof FA) {
+  return { items: base.items.map((item) => ({ value: item.value(null), label: item.label(null) })) }
+}
+export const statsStaticDefaults = {
+  fa: resolveStatsItems(FA),
+  en: resolveStatsItems(EN),
+}

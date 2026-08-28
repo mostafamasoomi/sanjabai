@@ -69,7 +69,7 @@ describe('NAV_ITEMS bilingual labels', () => {
     // into one sidebar entry). This number is meant to be updated
     // deliberately when a section is added or removed -- that is the point
     // of the floor.
-    expect(NAV_ITEMS.length).toBe(13)
+    expect(NAV_ITEMS.length).toBe(14)
   })
 
   it('has a non-empty English label for every entry', () => {

@@ -3,6 +3,7 @@ import type { Lang } from '@/components/LanguageToggle'
 import { faNum } from '@/lib/format'
 import { useCatalog } from '@/lib/useCatalog'
 import { modelCount } from '@/lib/claims'
+import { useLandingOverrides, applyModuleOverride } from '@/lib/landingOverrides'
 import {
   API_BASE_URL,
   MIN_TOPUP_LABEL_FA,
@@ -89,12 +90,25 @@ const faqContentFor = dict(FA, EN)
  *  Hero.strings.ts. */
 function useFaqContent(lang: Lang) {
   const { models, loading } = useCatalog()
+  const overrides = useLandingOverrides()
   const count = !loading && modelCount(models) > 0 ? modelCount(models) : null
   const base = faqContentFor(lang)
-  return { items: base.items.map((item) => ({ q: item.q, a: typeof item.a === 'function' ? item.a(count) : item.a })) }
+  const resolved = { items: base.items.map((item) => ({ q: item.q, a: typeof item.a === 'function' ? item.a(count) : item.a })) }
+  return applyModuleOverride('faq', lang, resolved, overrides)
 }
 
 export const faqContent = useFaqContent
+
+/** Today's static FA/EN values with the live-count leaf resolved against
+ *  `count = null` — admin editor placeholders only, see the matching
+ *  comment in comparison.ts's comparisonStaticDefaults. */
+function resolveFaqItems(base: typeof FA) {
+  return { items: base.items.map((item) => ({ q: item.q, a: typeof item.a === 'function' ? item.a(null) : item.a })) }
+}
+export const faqStaticDefaults = {
+  fa: resolveFaqItems(FA),
+  en: resolveFaqItems(EN),
+}
 
 /** Backward-compatible flat array for the JSON-LD FAQ schema in app/page.tsx
  *  (a Server Component outside this scope). Structured data isn't rendered

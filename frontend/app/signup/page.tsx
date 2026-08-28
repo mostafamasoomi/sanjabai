@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { Icon } from '@/components/ui/Icon'
 import { BrandLockup } from '@/components/BrandLockup'
@@ -12,6 +12,13 @@ import { signupPageStrings } from './page.strings'
 export default function SignupPage() {
   const lang = useLang()
   const s = signupPageStrings(lang)
+  // useSearchParams() called directly in a 'use client' page with no Suspense
+  // boundary, matching the only other call site (app/dashboard/page.tsx:34).
+  // Next needs a boundary only for a statically prerendered page; `npm run
+  // build` reports /signup as ƒ (Dynamic), so there is nothing to bail out of.
+  // If this page ever becomes static, the build breaks here and says so.
+  const searchParams = useSearchParams()
+  const ref = searchParams.get('ref') || ''
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [password2, setPassword2] = useState('')
@@ -55,7 +62,7 @@ export default function SignupPage() {
     setBusy(true)
     setError('')
     try {
-      await signup(email.trim(), password, captchaToken, captchaAnswer)
+      await signup(email.trim(), password, captchaToken, captchaAnswer, ref)
       router.push('/onboarding')
     } catch (err: unknown) {
       // err.message may be a backend-sourced Persian error string (e.g.
@@ -82,6 +89,13 @@ export default function SignupPage() {
           <h1 className="text-xl font-extrabold mb-1 text-gradient">{s.title}</h1>
           <p className="text-sm text-[var(--text-dim)]">{s.subtitle}</p>
         </div>
+
+        {ref && (
+          <div className="aurora-signup-referral-banner bg-[var(--accent-dim)] text-[var(--accent)] rounded-lg p-3 text-sm mb-4 flex items-center gap-2">
+            <Icon name="referral" size={14} />
+            {s.referralBanner}
+          </div>
+        )}
 
         {error && (
           <div className="aurora-signup-error bg-[var(--danger-dim)] text-[var(--danger)] rounded-lg p-3 text-sm mb-4 flex items-center gap-2">

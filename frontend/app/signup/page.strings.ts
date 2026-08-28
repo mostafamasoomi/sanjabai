@@ -31,6 +31,10 @@ const FA = {
   errPasswordsMismatch: 'رمزهای عبور یکسان نیستند',
   errCaptchaRequired: 'پاسخ کپچا را وارد کنید',
   errSignupFailed: 'خطا در ثبت‌نام',
+  // Shown only when the URL carries ?ref=. Deliberately promises no amount:
+  // the reward seeds at zero and pays out after the invitee's first
+  // successful top-up, never at signup (services/referral.py).
+  referralBanner: 'با دعوت یک دوست وارد می‌شوید.',
 }
 
 const EN: typeof FA = {
@@ -61,6 +65,7 @@ const EN: typeof FA = {
   errPasswordsMismatch: 'Passwords don’t match',
   errCaptchaRequired: 'Enter the captcha answer',
   errSignupFailed: 'Sign up failed',
+  referralBanner: "You're signing up from a friend's invite.",
 }
 
 export const signupPageStrings = dict(FA, EN)

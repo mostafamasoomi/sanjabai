@@ -9,11 +9,14 @@
  * eagerly for free.
  */
 
-export type ProductsTab = 'packages' | 'limits' | 'purchases'
+export type ProductsTab = 'packages' | 'limits' | 'purchases' | 'referral'
 
-/* Three sub-tabs, in the order the work happens in: edit what a package
+/* Four sub-tabs, in the order the work happens in: edit what a package
  * sells and costs, then its rate-limit threshold, then what buyers actually
- * paid for it.
+ * paid for it, then the separate referral-reward settings (F-REF phase 5 --
+ * unrelated to credit_packages, but there is no other nav slot for it and
+ * AdminPanel.tsx is senior-owned, so it rides here as a fourth sub-tab
+ * rather than a new sidebar entry).
  *
  * `label` is the Persian string and `labelEn` its sibling; ProductsModule.tsx
  * renders whichever the active language calls for via the `t()` helper in
@@ -22,6 +25,7 @@ export const PRODUCTS_TABS: { key: ProductsTab; label: string; labelEn: string }
   { key: 'packages', label: 'بسته‌ها', labelEn: 'Packages' },
   { key: 'limits', label: 'سقف مصرف', labelEn: 'Limits' },
   { key: 'purchases', label: 'خریدها', labelEn: 'Purchases' },
+  { key: 'referral', label: 'دعوت دوستان', labelEn: 'Referrals' },
 ]
 
 export const DEFAULT_PRODUCTS_TAB: ProductsTab = 'packages'

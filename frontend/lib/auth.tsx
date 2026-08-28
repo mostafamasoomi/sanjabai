@@ -15,7 +15,7 @@ type AuthCtx = {
   token: string | null
   loading: boolean
   login: (email: string, password: string, captchaToken?: string, captchaAnswer?: string) => Promise<void>
-  signup: (email: string, password: string, captchaToken?: string, captchaAnswer?: string) => Promise<void>
+  signup: (email: string, password: string, captchaToken?: string, captchaAnswer?: string, ref?: string) => Promise<void>
   logout: () => void
 }
 
@@ -23,6 +23,26 @@ const AuthContext = createContext<AuthCtx>({
   user: null, token: null, loading: true,
   login: async () => {}, signup: async () => {}, logout: () => {},
 })
+
+/** Pure body-builder for `POST /api/auth/signup`, pulled out of the `signup`
+ *  useCallback below so it is unit-testable without rendering AuthProvider
+ *  (this repo has no React Testing Library installed -- see
+ *  tests/lib/referralSignupChain.test.ts).
+ *
+ *  `ref` is the referral code read from `?ref=` on /signup (backend/auth.py's
+ *  `AuthSignup.ref`). Deliberately silent about a blank one: an empty or
+ *  whitespace-only ref is not an error, it just means "no invite", and the
+ *  backend already no-ops an unmatched code rather than rejecting the
+ *  signup over it -- so there is nothing for the client to validate either,
+ *  only whether there is a ref worth sending at all. */
+export function buildSignupBody(
+  email: string, password: string, captchaToken?: string, captchaAnswer?: string, ref?: string,
+): Record<string, unknown> {
+  const body: Record<string, unknown> = { email, password }
+  if (captchaToken && captchaAnswer) { body.captcha_token = captchaToken; body.captcha_answer = captchaAnswer }
+  if (ref && ref.trim()) { body.ref = ref.trim() }
+  return body
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -91,9 +111,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await hydrateFullUser(data.token, data.user)
   }, [hydrateFullUser])
 
-  const signup = useCallback(async (email: string, password: string, captchaToken?: string, captchaAnswer?: string) => {
-    const body: any = { email, password }
-    if (captchaToken && captchaAnswer) { body.captcha_token = captchaToken; body.captcha_answer = captchaAnswer }
+  const signup = useCallback(async (email: string, password: string, captchaToken?: string, captchaAnswer?: string, ref?: string) => {
+    const body = buildSignupBody(email, password, captchaToken, captchaAnswer, ref)
     const res = await apiFetch('/api/auth/signup', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

@@ -8,7 +8,7 @@ import { t as label } from '../adminLabels'
 import { PRODUCTS_TABS, DEFAULT_PRODUCTS_TAB, isProductsTab, type ProductsTab } from './productsTabs'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Products — one sidebar entry, three sub-tabs, replacing the split
+   Products — one sidebar entry, four sub-tabs, replacing the split
    «بسته‌ها» (Packages) and «پلن‌ها و اشتراک» (Plans & Subscriptions) nav
    entries. The owner decided (session 23, recorded) to retire the
    plan/subscription concept entirely: `credit_packages` is the only
@@ -21,9 +21,9 @@ import { PRODUCTS_TABS, DEFAULT_PRODUCTS_TAB, isProductsTab, type ProductsTab } 
    keeps every file under the 500-line house cap and means only the
    visible sub-tab's endpoints are ever hit.
 
-   Three sub-tabs, in the order the work happens in -- edit what a package
+   Four sub-tabs, in the order the work happens in -- edit what a package
    sells and costs, then its rate-limit threshold, then what buyers
-   actually paid for it:
+   actually paid for it, then the (unrelated) referral reward settings:
      packages  (default) -- PackagesSection.tsx, unchanged except the four
                              now-dropped legacy money columns (migration
                              0049: name/price/credits/bonus_credits) and no
@@ -35,11 +35,18 @@ import { PRODUCTS_TABS, DEFAULT_PRODUCTS_TAB, isProductsTab, type ProductsTab } 
      purchases           -- PurchasesSection.tsx, new: a paginated table of
                              completed credit-package purchases against a
                              new backend endpoint (GET /api/admin/purchases).
+     referral             -- ReferralSettingsSection.tsx, new (F-REF phase 5):
+                             referrer/invitee reward amounts, the per-referrer
+                             cap, and payout stats. Nothing to do with
+                             credit_packages -- it rides this shell only
+                             because AdminPanel.tsx's sidebar is senior-owned
+                             and there is no other slot for it.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const PackagesSection = dynamic(() => import('./PackagesSection'), { ssr: false })
 const PackagesPremiumThreshold = dynamic(() => import('./PackagesPremiumThreshold'), { ssr: false })
 const PurchasesSection = dynamic(() => import('./PurchasesSection'), { ssr: false })
+const ReferralSettingsSection = dynamic(() => import('./ReferralSettingsSection'), { ssr: false })
 
 type ProductsModuleProps = {
   tab: ProductsTab
@@ -90,6 +97,7 @@ export default function ProductsModule({ tab, onTabChange }: ProductsModuleProps
       {active === 'packages' && <PackagesSection api={api} />}
       {active === 'limits' && <PackagesPremiumThreshold api={api} />}
       {active === 'purchases' && <PurchasesSection api={api} />}
+      {active === 'referral' && <ReferralSettingsSection api={api} />}
     </div>
   )
 }

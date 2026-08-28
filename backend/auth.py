@@ -53,6 +53,7 @@ from security import (
     track_session, get_lockout_info,
 )
 from i18n import err
+from services import referral as referral_service
 
 router = APIRouter()
 
@@ -193,6 +194,13 @@ async def signup(payload: AuthSignup, request: Request) -> JSONResponse:
                         {'referred_by': referrer.id}
                     )
                     await s2.commit()
+                    # services/referral.py: record the (inviter, invitee)
+                    # pair as 'pending' -- payout, if any, only happens on
+                    # this invitee's first successful payment (owner
+                    # decision 2026-08-28; see that module's docstring).
+                    # Never raises, so a bookkeeping failure here can never
+                    # fail this signup.
+                    await referral_service.record_attribution(s2, referrer.id, user.id)
 
         # No signup gift: a new user starts at a zero wallet balance. The
         # on-ramp is the existing free-tier allowance (services/free_tier.py),
@@ -328,17 +336,22 @@ async def referral_stats(request: Request) -> JSONResponse:
         )
         count = count_res.fetchone().c
 
-        bonus_res = await session.execute(
-            sqlalchemy.text("SELECT COALESCE(SUM(amount), 0) as total FROM ledger WHERE user_id = :uid AND reason LIKE 'پاداش%'"),
-            {'uid': uid}
-        )
-        bonus = bonus_res.fetchone().total
+    # total_bonus used to be SUM(ledger.amount) WHERE reason LIKE 'پاداش%',
+    # which was always zero -- the signup/referral gifts that reason string
+    # matched were removed, and no code path ever wrote a matching ledger
+    # row again. services/referral.py::stats() is the real source now: the
+    # sum of what has actually been PAID (status='paid' rows only, never
+    # pending/capped) to this user as an inviter. Existing response keys
+    # are unchanged (no rename); paid_count/pending_count are additive.
+    referral_stats_data = await referral_service.stats(uid)
 
     return JSONResponse({
         'referral_code': user.referral_code if user else None,
         'referral_count': count,
-        'total_bonus': bonus,
+        'total_bonus': referral_stats_data['total_bonus_toman'],
         'referral_url': f'{BASE_URL}/signup?ref={user.referral_code}' if user and user.referral_code else None,
+        'referral_paid_count': referral_stats_data['paid_count'],
+        'referral_pending_count': referral_stats_data['pending_count'],
     })
 
 

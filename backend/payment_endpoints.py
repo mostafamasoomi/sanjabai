@@ -216,6 +216,28 @@ async def payment_callback(request: Request) -> JSONResponse:
                 f"package={credit_pkg.id} authority={authority_str}: {e}"
             )
 
+        # Referral reward settlement (services/referral.py, phase 5). Owner
+        # decision 2026-08-28: a referral reward is paid on the invitee's
+        # FIRST successful payment, never at signup -- this credit_package
+        # branch is that trigger. Same defence-in-depth shape as the
+        # entitlement grant above: the user already paid and the wallet was
+        # already credited above, so a referral bug must never fail this
+        # callback, change the redirect, or roll back the real payment.
+        # settle_on_first_payment() itself never raises (see its
+        # docstring); this try/except is a second, independent guard
+        # against that contract, exactly like the entitlement grant's.
+        try:
+            from services.referral import settle_on_first_payment
+            _referral_uid = p.user_id if pay_row else 0
+            referral_result = await settle_on_first_payment(_referral_uid)
+            if referral_result is not None:
+                extra_data['referral'] = referral_result
+        except Exception as e:
+            logger.error(
+                f"payment_callback: referral settlement threw uid={p.user_id if pay_row else 0} "
+                f"authority={authority_str}: {e}"
+            )
+
     elif payment_type == 'hermes_order' and hermes_order is not None:
         # The wallet effect (crediting only included_credit, never the full
         # amount charged) already happened atomically inside

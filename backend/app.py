@@ -318,6 +318,9 @@ from admin_logical import router as admin_logical_router
 from site_settings import router as site_settings_router
 from admin_watchdog import router as admin_watchdog_router
 from admin_free_tier import router as admin_free_tier_router
+from admin_referral import router as admin_referral_router
+from landing_content import router as landing_content_router
+from admin_landing import router as admin_landing_router
 from exchange_rate_admin import router as exchange_rate_admin_router
 from admin_overhead import router as admin_overhead_router
 from images import router as images_router
@@ -359,6 +362,15 @@ app.include_router(admin_logical_router)
 app.include_router(site_settings_router)
 app.include_router(admin_watchdog_router)
 app.include_router(admin_free_tier_router)
+app.include_router(admin_referral_router)
+# Landing copy overrides: the public read is unauthenticated and fails open
+# to {} (landing_content.py); the admin write is admin_required
+# (admin_landing.py). Safe to register before migration 0052 is applied --
+# measured with the table absent, /landing/content answers
+# {"data":{},"updated_at":null} rather than 500ing, and both admin routes
+# answer 401 without a token.
+app.include_router(landing_content_router)
+app.include_router(admin_landing_router)
 app.include_router(exchange_rate_admin_router)
 app.include_router(admin_overhead_router)
 app.include_router(images_router)

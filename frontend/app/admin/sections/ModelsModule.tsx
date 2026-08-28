@@ -37,6 +37,7 @@ import { MODELS_TABS, DEFAULT_MODELS_TAB, isModelsTab, type ModelsTab } from './
 const ModelOpsSection = dynamic(() => import('./ModelOpsSection'), { ssr: false })
 const LogicalModelsSection = dynamic(() => import('./LogicalModelsSection'), { ssr: false })
 const UpstreamOverheadSection = dynamic(() => import('./UpstreamOverheadSection'), { ssr: false })
+const RouterProbeSection = dynamic(() => import('./RouterProbeSection'), { ssr: false })
 const ModelsSection = dynamic(() => import('./ModelsSection'), { ssr: false })
 const PricingSection = dynamic(() => import('./PricingSection'), { ssr: false })
 const ImagePricingSection = dynamic(() => import('./ImagePricingSection'), { ssr: false })
@@ -96,6 +97,7 @@ export default function ModelsModule({ tab, onTabChange }: ModelsModuleProps) {
       {active === 'catalog' && <ModelOpsSection api={api} />}
       {active === 'logical' && <LogicalModelsSection api={api} />}
       {active === 'overhead' && <UpstreamOverheadSection api={api} />}
+      {active === 'router-probe' && <RouterProbeSection api={api} />}
       {active === 'default' && <ModelsSection />}
       {active === 'pricing' && <PricingSection />}
       {active === 'image-pricing' && <ImagePricingSection api={api} />}

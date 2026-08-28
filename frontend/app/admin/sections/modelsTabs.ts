@@ -9,7 +9,7 @@
  */
 
 export type ModelsTab =
-  | 'catalog' | 'logical' | 'overhead' | 'default'
+  | 'catalog' | 'logical' | 'overhead' | 'router-probe' | 'default'
   | 'pricing' | 'image-pricing' | 'exchange-rate' | 'markup'
 
 /* Two groups, rendered with a divider between them: what a model IS, then
@@ -23,6 +23,7 @@ export const MODELS_TABS: { key: ModelsTab; label: string; labelEn: string; grou
   { key: 'catalog', label: 'کاتالوگ و عملیات', labelEn: 'Catalog & Operations', group: 'catalog' },
   { key: 'logical', label: 'مدل‌های منطقی', labelEn: 'Logical Models', group: 'catalog' },
   { key: 'overhead', label: 'توکن تزریقی بالادست', labelEn: 'Upstream Token Overhead', group: 'catalog' },
+  { key: 'router-probe', label: 'پروب روتر هوشمند', labelEn: 'Smart Router Probe', group: 'catalog' },
   { key: 'default', label: 'مدل پیش‌فرض', labelEn: 'Default Model', group: 'catalog' },
   { key: 'pricing', label: 'تعرفه‌ها', labelEn: 'Tariffs', group: 'pricing' },
   { key: 'image-pricing', label: 'قیمت‌گذاری تصویر', labelEn: 'Image Pricing', group: 'pricing' },

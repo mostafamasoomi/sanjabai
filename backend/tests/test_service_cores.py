@@ -121,6 +121,54 @@ class TestTaskServiceCoreOwnership:
         assert session.added == []
 
 
+class TestATaskCanBeBornDormant:
+    """`activate=False` is what keeps a model-authored task from being armed.
+
+    The tool layer used to get this with a corrective UPDATE straight after
+    the insert, which left a window in which the row was live and
+    schedulable. The senior moved it into the insert; these tests are what
+    stop it drifting back out. Money is on the other side of that window:
+    an armed task is services/task_scheduler.py spending the user's balance
+    later with no human on the trigger.
+    """
+
+    @pytest.mark.asyncio
+    async def test_the_row_is_inserted_already_inactive_and_unscheduled(self):
+        session = _FakeSession()
+        spec = TaskSpec(title='t', prompt='p', cron_expression='0 9 * * *')
+        with _install_task_session(session):
+            await create_task(7, spec, activate=False)
+        row = session.added[0]
+        assert row.is_active is False, 'a dormant task was inserted armed'
+        assert row.next_run_at is None, 'a dormant task was inserted with a schedule'
+
+    @pytest.mark.asyncio
+    async def test_the_default_is_still_an_armed_task_for_the_http_handler(self):
+        """A human who clicks "create" asked for a live task. The new
+        parameter must not quietly disarm the route that has worked for
+        months."""
+        session = _FakeSession()
+        spec = TaskSpec(title='t', prompt='p', cron_expression='0 9 * * *')
+        with _install_task_session(session):
+            await create_task(7, spec)
+        row = session.added[0]
+        assert row.next_run_at is not None
+        assert row.is_active is not False
+
+    @pytest.mark.asyncio
+    async def test_a_bad_cron_is_still_rejected_when_the_task_is_dormant(self):
+        """Validation and arming are separate concerns. Skipping the cron
+        check for a dormant task would let the model store an expression
+        that can never run, and the user would only find out after
+        activating it by hand."""
+        session = _FakeSession()
+        spec = TaskSpec(title='t', prompt='p', cron_expression='not a cron at all')
+        with _install_task_session(session):
+            with pytest.raises(TaskValidationError):
+                await create_task(1, spec, activate=False)
+        assert session.added == []
+
+
 class TestAssistantServiceCoreOwnership:
     @pytest.mark.asyncio
     async def test_create_assistant_row_is_owned_by_the_explicit_uid(self):

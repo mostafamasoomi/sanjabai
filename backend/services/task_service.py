@@ -61,13 +61,32 @@ class TaskSpec:
     delivery_channel: str = 'dashboard'
 
 
-async def create_task(uid: int, spec: TaskSpec) -> dict:
+async def create_task(uid: int, spec: TaskSpec, *, activate: bool = True) -> dict:
     """Insert a `ScheduledTask` row owned by `uid`.
 
     `uid` is an explicit parameter, never read from a `Request`/session --
     that is the entire point of this extraction (see module docstring).
     Raises `TaskValidationError` on an invalid cron expression, matching
     what the handler used to return inline as a 400.
+
+    ``activate=False`` inserts the row already dormant: `is_active=False`
+    and `next_run_at=NULL`, set BEFORE the insert rather than corrected
+    after it.
+
+    Why before, and why this parameter exists at all: a task created by the
+    LLM tool-calling loop must never be live, because a live task is
+    `services/task_scheduler.py` spending the user's money later with no
+    human on the trigger -- which is why `app.py` keeps TASK_SCHEDULER_ENABLED
+    off. The tool layer originally got this by issuing a corrective UPDATE
+    straight after the insert, which leaves a window, however short, in which
+    a model-authored task is armed and schedulable. A window with money on
+    the other side of it is not a window worth keeping, and it stops being
+    theoretical the day that flag flips. So the caller declares its intent
+    and one transaction writes the truth.
+
+    The cron expression is still validated when ``activate=False`` -- the
+    caller gets the same loud error for a bad expression -- it is simply not
+    stored. Validation and arming are separate concerns.
     """
     async with async_session() as session:
         task = ScheduledTask(
@@ -81,11 +100,16 @@ async def create_task(uid: int, spec: TaskSpec) -> dict:
         # silently sitting with next_run_at=NULL forever, never picked up
         # by the scheduler.
         try:
-            task.next_run_at = compute_next_run(spec.cron_expression, datetime.now(timezone.utc))
+            next_run = compute_next_run(spec.cron_expression, datetime.now(timezone.utc))
         except ValueError as e:
             raise TaskValidationError(
                 f'عبارت زمان‌بندی نامعتبر است: {e}', f'Invalid schedule expression: {e}',
             ) from e
+        if activate:
+            task.next_run_at = next_run
+        else:
+            task.is_active = False
+            task.next_run_at = None
         session.add(task)
         await session.commit()
         await session.refresh(task)

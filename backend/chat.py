@@ -120,6 +120,12 @@ class ChatRequest(BaseModel):
     max_tokens: int | None = None
     web_search: bool = False
     assistant_id: int | None = None
+    # Opt-in to the tool-calling loop; the VALUE is discarded. What the model
+    # is offered is built server-side from the user's autonomy level
+    # (services/chat_tools.py) -- forwarding a caller's definition would hand
+    # an API key an open dispatch surface. Absent, exclude_none=True omits it,
+    # so today's traffic reaches the upstream byte-identical.
+    tools: list | None = None
 
 
 class CompareRequest(BaseModel):
@@ -246,6 +252,7 @@ from chat_billing import (  # noqa: E402
 
 # ── SSE streaming (chat_stream.py) ────────────────────────────────────
 from chat_stream import _chat_stream, _smart_chat_stream  # noqa: E402
+import chat_tool_loop  # noqa: E402 -- the tool-calling loop; see ChatRequest.tools
 
 
 # ── Routes ──────────────────────────────────────────────────────
@@ -303,13 +310,24 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
     # P1: BillingService reserve (replaces _check_quota_pre with proper FOR UPDATE locking)
     # Fall back to legacy _check_quota_pre if BillingService fails
     reservation = None
+    _tool_loop_requested = payload_dict.get('tools') is not None
+    _tool_loop_covered = False
     try:
         async with async_session() as _bill_session:
             _repo = SqlBillingRepo(_bill_session)
             _bill_svc = BillingService(_repo)
             _model = payload_dict.get('model', '')
             _est_cost = 1000 if (_model and await is_working_model(_model)) else 5000
-            if await covering_entitlement(uid, _est_cost) is not None or await covers_request(uid):
+            # Coverage is decided HERE for both paths and handed to the loop,
+            # so there is exactly one place that answers "does this user pay
+            # for this request". Two places would disagree eventually.
+            _tool_loop_covered = (
+                await covering_entitlement(uid, _est_cost) is not None or await covers_request(uid)
+            )
+            if _tool_loop_covered or _tool_loop_requested:
+                # The loop takes its own reservation, for MAX_TOOL_ROUNDS x the
+                # estimate. Reserving here too would hold the user's money twice
+                # for one message.
                 reservation = None
             else:
                 reservation = await _bill_svc.reserve(
@@ -396,6 +414,27 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
     # Phase E: the only ceiling on outbound payload size / output tokens now
     # that the upstream-side compression is gone. See services/token_budget.py.
     await apply_outbound_budget(payload_dict)
+
+    if _tool_loop_requested:
+        # REFUSED, not quietly downgraded: running the non-streaming loop for
+        # a caller who asked for SSE answers a different question and gives
+        # them no way to find out. Streaming tool support is a later packet.
+        if payload_dict.get('stream', False):
+            return err_openai(
+                'حالت ابزار فعلاً با پاسخ جریانی کار نمی‌کند. لطفاً stream را false بگذارید.',
+                'Tool mode does not support streaming yet. Please set stream to false.',
+                400, code='tools_stream_unsupported', err_type='invalid_request_error',
+            )
+        try:
+            return await chat_tool_loop.run_tool_loop(
+                request, uid, payload_dict, covered=_tool_loop_covered,
+            )
+        except InsufficientBalanceError:
+            return err_openai(
+                'موجودی کیف پول شما کافی نیست. لطفاً حساب خود را شارژ کنید.',
+                'Your wallet balance is not enough. Please top up your account.',
+                429, code='balance', err_type='quota_exceeded',
+            )
 
     stream = payload_dict.get('stream', False)
     if stream:

@@ -141,39 +141,105 @@ def _parse_choice(reply: str, count: int) -> int | None:
 
 
 async def _router_model(pool: list[Candidate]) -> Candidate | None:
-    """The model that does the routing. ALWAYS a member of `pool`.
+    """The model that does the routing, or None -- and None is now the
+    normal answer for an unconfigured or unproven router, not a fallback to
+    degrade gracefully from.
 
-    Never a hardcoded id: chat_smart.py's hardcoded tuples all became
-    unservable and took Smart Mode down in production. The app_setting value
-    is matched against the pool by public_id or provider_model_id, and a
-    value naming something outside the pool is IGNORED -- an admin typo must
-    degrade to the cheapest live model, not route to a dead one.
+    ── FAIL-CLOSED, decided 2026-08-28, replacing the "cheapest pool member"
+    default ────────────────────────────────────────────────────────────────
+    Live measurement the same day (see services/router_probe.py's module
+    docstring for the full numbers) proved "cheapest pool member" was not a
+    safe fallback: 7 of the pool's 11 cheapest members could not even
+    survive `_parse_choice` on a bare menu, and the actual cheapest,
+    `ag/gpt-oss-120b-medium`, dumps its whole token budget into
+    `reasoning_content` and returns `content=''`. That default was not
+    fail-open (falling back to a known-safe state), it was fail-RANDOM --
+    a coin flip, re-flipped every time pricing changes, on whether Smart
+    Mode's optional router silently became a worse-than-no-router tax on
+    every message. The house rule "a model is offered only after a
+    successful live probe" applies to THIS role too: being the router is a
+    kind of serving, and a model whose routing ability has never been
+    confirmed must not be handed traffic just because it happened to be the
+    cheapest thing in the catalog this hour.
+
+    New contract, every branch returning None:
+      1. `app_setting['smart_router_model']` is unset/empty      -> None
+      2. its value does not name a live pool member               -> None (+warn)
+      3. `services.router_probe` has no result for that model     -> None (+warn)
+      4. the router acceptance probe's stored result is `ok=false`
+         for that model                                           -> None (+warn)
+      5. reading `app_setting` or the probe result raised          -> None
+      otherwise (ok=true, possibly stale -- see below)             -> that Candidate
+
+    A stored `ok=true` result older than 7 days is still ACCEPTED, with one
+    `logger.warning` -- this function never re-probes (see router_probe.py's
+    "never on the chat path" red line); staleness is visible, not blocking.
+
+    THE FAILURE MODE THIS PRESERVES: if `services/router_probe.py` is
+    itself broken or has simply never been run, every branch above lands on
+    None, `llm_route` returns None, and the caller falls back to
+    `select_by_rules` -- exactly today's (pre-router) behaviour. The worst
+    thing a broken or unconfigured probe can do is leave Smart Mode exactly
+    as it already is; it can never make routing worse than "off".
+
+    2026-08-28: this INTENTIONALLY breaks three tests in
+    tests/test_smart_router_llm.py that pinned the old "cheapest pool
+    member" default (`test_router_model_defaults_to_the_cheapest_pool_member`,
+    `test_app_setting_naming_a_model_outside_the_pool_is_ignored`,
+    `test_router_model_survives_an_app_setting_read_failure`) -- they were
+    updated in the same change, not repaired to fit the old contract.
     """
     if not pool:
         return None
-    cheapest = min(pool, key=lambda c: (c.blended, c.public_id))
     try:
         if async_session is None:
-            return cheapest
+            return None
         async with async_session() as session:
             res = await session.execute(_ROUTER_MODEL_SQL, {'key': _ROUTER_MODEL_KEY})
             row = res.fetchone()
-        raw = None if row is None else row.value
-        # app_setting.value is JSONB; a string arrives as a str, and asyncpg
-        # can hand back the raw JSON text for a hand-edited row.
-        if isinstance(raw, str):
-            wanted = raw.strip().strip('"')
+            raw = None if row is None else row.value
+            # app_setting.value is JSONB; a string arrives as a str, and
+            # asyncpg can hand back the raw JSON text for a hand-edited row.
+            wanted = raw.strip().strip('"') if isinstance(raw, str) else None
+            if not wanted:
+                return None
+
+            candidate = None
             for c in pool:
-                if wanted and wanted in (c.public_id, c.provider_model_id):
-                    return c
-            if wanted:
+                if wanted in (c.public_id, c.provider_model_id):
+                    candidate = c
+                    break
+            if candidate is None:
                 logger.warning(
                     f"{_ROUTER_MODEL_KEY}={wanted!r} is not in the servable pool, "
-                    f"using the cheapest live model instead"
+                    f"router disabled until an admin sets it to a live model"
                 )
+                return None
+
+            # Deferred import: router_probe imports FROM this module at its
+            # own top level (reusing _prompt/_menu/_parse_choice/_SYSTEM_PROMPT
+            # so the probe's call shape can never drift from the real one),
+            # so importing router_probe here at module scope would be a
+            # circular import. This import only runs once a router model has
+            # already been named and found live -- never on every chat
+            # message with the feature off.
+            from services.router_probe import router_eligibility
+            ok, reason = await router_eligibility(session, candidate.public_id)
+            if not ok:
+                logger.warning(
+                    f"router acceptance probe for {candidate.public_id!r} is "
+                    f"not ok (reason={reason}), router disabled"
+                )
+                return None
+            if reason == 'stale':
+                logger.warning(
+                    f"router acceptance probe for {candidate.public_id!r} is "
+                    f"older than 7 days, accepting the stale result without re-probing"
+                )
+            return candidate
     except Exception as e:
-        logger.warning(f"{_ROUTER_MODEL_KEY} read failed, using the cheapest live model: {e}")
-    return cheapest
+        logger.warning(f"{_ROUTER_MODEL_KEY} read failed, router disabled: {e}")
+        return None
 
 
 def _prompt(message: str, menu: list[Candidate]) -> str:

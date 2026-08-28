@@ -17,11 +17,13 @@ from __future__ import annotations
 
 import ast
 import pathlib
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
 
 import chat as chat_mod
+import services.router_probe as router_probe
 import services.smart_router_llm as llm
 from services.smart_router import Candidate
 
@@ -86,12 +88,39 @@ def _reply(content, usage=None):
     })
 
 
-class _FakeSession:
-    """Answers the app_setting lookup and collects the ORM objects the real
-    usage-event write path adds."""
+# Default router model for the `env` fixture -- see _FakeSession's
+# docstring for why this must resolve to something eligible by default.
+_DEFAULT_ROUTER_MODEL = 'sanjab/cheap'
 
-    def __init__(self, router_model=None, boom=False):
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+class _FakeSession:
+    """Answers BOTH app_setting lookups `_router_model` makes since the
+    2026-08-28 fail-closed change -- `smart_router_model` (this module's own
+    query) and, via `services.router_probe.router_eligibility` reusing the
+    SAME session, `smart_router_probe` -- and collects the ORM objects the
+    real usage-event write path adds.
+
+    By default the router model is `_DEFAULT_ROUTER_MODEL`
+    ('sanjab/cheap', matching _POOL's cheapest member) and the acceptance
+    probe reports it `ok=true`, freshly measured -- i.e. CONFIGURED AND
+    ELIGIBLE by default, so the large majority of this file (menu shape,
+    injection defence, call shape, metering...) keeps exercising
+    `llm_route` end-to-end exactly as it did before fail-closed landed.
+    Only the tests that exist to pin `_router_model`'s OWN contract
+    override `router_model`/`probe_results`/`probe_measured_at` explicitly.
+    """
+
+    def __init__(self, router_model=_DEFAULT_ROUTER_MODEL, probe_results=None,
+                 probe_measured_at='fresh', boom=False):
         self.router_model = router_model
+        if probe_results is None:
+            probe_results = {router_model: {'ok': True}} if router_model else {}
+        self.probe_results = probe_results
+        self.probe_measured_at = _now_iso() if probe_measured_at == 'fresh' else probe_measured_at
         self.boom = boom
         self.added: list = []
         self.commits = 0
@@ -105,6 +134,11 @@ class _FakeSession:
     async def execute(self, stmt, params=None):
         if self.boom:
             raise RuntimeError('db down')
+        key = (params or {}).get('key')
+        if key == router_probe.SETTING_KEY:
+            value = {'version': 1, 'measured_at': self.probe_measured_at, 'results': self.probe_results}
+            row = SimpleNamespace(value=value)
+            return SimpleNamespace(fetchone=lambda: row, fetchall=lambda: [row])
         row = None if self.router_model is None else SimpleNamespace(value=self.router_model)
         return SimpleNamespace(fetchone=lambda: row, fetchall=lambda: ([] if row is None else [row]))
 
@@ -218,9 +252,19 @@ async def test_empty_pool_returns_none(env):
 # ── the router model always comes from the pool ──────────────────────────
 
 @pytest.mark.asyncio
-async def test_router_model_defaults_to_the_cheapest_pool_member(env):
-    await llm.llm_route('hello', _POOL, _ABOVE_FLOOR)
-    assert env.http.calls[0]['json']['model'] == 'up/cheap'
+async def test_router_model_unset_disables_the_router(env, monkeypatch):
+    """2026-08-28, fail-closed (see _router_model's own docstring for the
+    full rationale and the live measurement behind it): "cheapest pool
+    member" is no longer a fallback for an unset app_setting. Live
+    measurement the same day proved cheapest was not even a SAFE fallback
+    -- 7 of the pool's 11 cheapest members could not survive `_parse_choice`
+    at all, and the actual cheapest routinely returns `content=''`. An
+    unconfigured router is now OFF, exactly like the flag being off.
+    Replaces test_router_model_defaults_to_the_cheapest_pool_member, which
+    pinned the withdrawn default and asserted `model == 'up/cheap'`."""
+    monkeypatch.setattr(llm, 'async_session', _SessionFactory(_FakeSession(router_model=None)))
+    assert await llm.llm_route('hello', _POOL, _ABOVE_FLOOR) is None
+    assert env.http.calls == [], 'an unconfigured router must not spend money'
 
 
 @pytest.mark.asyncio
@@ -231,21 +275,28 @@ async def test_router_model_honours_the_app_setting(env, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_app_setting_naming_a_model_outside_the_pool_is_ignored(env, monkeypatch):
-    """Never a hardcoded/unchecked id: an admin typo (or a model withdrawn
-    after the setting was written) must degrade to the cheapest LIVE model,
-    not route to something that is not servable."""
+async def test_app_setting_naming_a_model_outside_the_pool_disables_the_router(env, monkeypatch):
+    """2026-08-28, fail-closed: an admin typo (or a model withdrawn after
+    the setting was written) now disables the router entirely -- it no
+    longer degrades to the cheapest live model, because "cheapest" stopped
+    being a safe thing to degrade to (see _router_model's docstring).
+    Replaces test_app_setting_naming_a_model_outside_the_pool_is_ignored,
+    which asserted the old degrade-to-cheapest behaviour."""
     monkeypatch.setattr(llm, 'async_session', _SessionFactory(_FakeSession(router_model='sanjab/withdrawn')))
-    await llm.llm_route('hello', _POOL, _ABOVE_FLOOR)
-    assert env.http.calls[0]['json']['model'] == 'up/cheap'
+    assert await llm.llm_route('hello', _POOL, _ABOVE_FLOOR) is None
+    assert env.http.calls == []
 
 
 @pytest.mark.asyncio
-async def test_router_model_survives_an_app_setting_read_failure(env, monkeypatch):
+async def test_router_model_read_failure_disables_the_router(env, monkeypatch):
+    """2026-08-28, fail-closed: a DB read failure now means "router
+    disabled" (branch 5 of _router_model's new contract), not "fall back to
+    cheapest". Replaces test_router_model_survives_an_app_setting_read_failure,
+    which asserted `picked is not None`."""
     monkeypatch.setattr(llm, 'async_session', _SessionFactory(_FakeSession(boom=True)))
     picked = await llm.llm_route('hello', _POOL, _ABOVE_FLOOR)
-    assert picked is not None
-    assert env.http.calls[0]['json']['model'] == 'up/cheap'
+    assert picked is None
+    assert env.http.calls == []
 
 
 @pytest.mark.asyncio

@@ -336,6 +336,10 @@ from landing_content import router as landing_content_router
 from admin_landing import router as admin_landing_router
 from exchange_rate_admin import router as exchange_rate_admin_router
 from admin_overhead import router as admin_overhead_router
+# Beside admin_overhead deliberately: same problem, same idiom -- an expensive
+# live measurement whose result is persisted in app_setting and read back
+# lazily, triggered by an admin rather than by a loop on the hot path.
+from admin_smart_router import router as admin_smart_router_router
 from images import router as images_router
 from admin_user_ops import router as admin_user_ops_router
 from api_keys import router as api_keys_router
@@ -387,6 +391,7 @@ app.include_router(landing_content_router)
 app.include_router(admin_landing_router)
 app.include_router(exchange_rate_admin_router)
 app.include_router(admin_overhead_router)
+app.include_router(admin_smart_router_router)
 app.include_router(images_router)
 app.include_router(admin_user_ops_router)
 app.include_router(api_keys_router)

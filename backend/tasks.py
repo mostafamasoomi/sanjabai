@@ -16,6 +16,7 @@ from i18n import err
 from models import ScheduledTask, TaskExecution
 from dependencies import _get_user_id
 from services.task_scheduler import compute_next_run
+from services.task_service import TaskSpec, TaskValidationError, create_task as _create_task_core
 import chat as chat_mod
 import task_execution
 
@@ -137,35 +138,26 @@ async def list_tasks(request: Request) -> JSONResponse:
 
 @router.post('/tasks')
 async def create_task(request: Request, payload: ScheduledTaskCreate) -> JSONResponse:
+    """Auth + parse, then delegate to services.task_service.create_task --
+    the ONE place a ScheduledTask row is ever inserted. See that module's
+    docstring: this split exists so an LLM tool-calling loop (a later
+    packet) can create a task on a user's behalf with an explicit uid,
+    without forging a Request the way calling this handler directly would
+    require.
+    """
     uid = await _get_user_id(request)
     if not uid:
         return err('لطفاً وارد حساب خود شوید', 'Please sign in to your account', 401)
-    async with async_session() as session:
-        task = ScheduledTask(
-            user_id=uid, title=payload.title, description=payload.description,
-            prompt=payload.prompt, model=payload.model,
-            cron_expression=payload.cron_expression, delivery_channel=payload.delivery_channel,
-        )
-        # So next_run_at stops being decorative -- see
-        # services/task_scheduler.py's module docstring. A task created
-        # with an invalid cron expression fails loudly here (400) rather
-        # than silently sitting with next_run_at=NULL forever, never picked
-        # up by the scheduler.
-        try:
-            task.next_run_at = compute_next_run(payload.cron_expression, datetime.now(timezone.utc))
-        except ValueError as e:
-            return err(f'عبارت زمان‌بندی نامعتبر است: {e}', f'Invalid schedule expression: {e}', 400)
-        session.add(task)
-        await session.commit()
-        await session.refresh(task)
-        return JSONResponse({
-            'id': task.id, 'title': task.title, 'description': task.description,
-            'prompt': task.prompt, 'model': task.model, 'cron_expression': task.cron_expression,
-            'is_active': task.is_active, 'run_count': task.run_count,
-            'delivery_channel': task.delivery_channel,
-            'next_run_at': task.next_run_at.isoformat() if task.next_run_at else None,
-            'created_at': task.created_at.isoformat() if task.created_at else None,
-        })
+    spec = TaskSpec(
+        title=payload.title, prompt=payload.prompt, description=payload.description,
+        model=payload.model, cron_expression=payload.cron_expression,
+        delivery_channel=payload.delivery_channel,
+    )
+    try:
+        result = await _create_task_core(uid, spec)
+    except TaskValidationError as e:
+        return err(e.message_fa, e.message_en, 400)
+    return JSONResponse(result)
 
 
 @router.put('/tasks/{task_id}')

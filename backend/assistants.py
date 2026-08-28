@@ -16,6 +16,7 @@ from models import Assistant
 import sqlalchemy
 from dependencies import _get_user_id
 from i18n import err
+from services.assistant_service import AssistantSpec, create_assistant as _create_assistant_core
 
 router = APIRouter()
 
@@ -53,21 +54,24 @@ async def list_assistants(request: Request) -> JSONResponse:
 
 @router.post('/assistants')
 async def create_assistant(request: Request, payload: AssistantCreate) -> JSONResponse:
+    """Auth + parse, then delegate to services.assistant_service.create_assistant
+    -- the ONE place an Assistant row is ever inserted. Same split as
+    tasks.py's create_task (see services/assistant_service.py's docstring):
+    lets an LLM tool-calling loop create an assistant on a user's behalf
+    with an explicit uid, without forging a Request.
+    """
     uid = await _get_user_id(request)
     if not uid:
         return err('لطفاً وارد حساب خود شوید', 'Please sign in.', 401)
-    if async_session is None:
+    spec = AssistantSpec(
+        name=payload.name, description=payload.description,
+        system_prompt=payload.system_prompt, model_id=payload.model_id,
+        icon=payload.icon, is_public=payload.is_public,
+    )
+    result = await _create_assistant_core(uid, spec)
+    if result is None:
         return err('پایگاه داده در دسترس نیست', 'Database unavailable.', 500)
-    async with async_session() as session:
-        obj = Assistant(
-            user_id=uid, name=payload.name, description=payload.description,
-            system_prompt=payload.system_prompt, model_id=payload.model_id,
-            icon=payload.icon, is_public=payload.is_public,
-        )
-        session.add(obj)
-        await session.commit()
-        await session.refresh(obj)
-    return JSONResponse({'status': 'ok', 'id': obj.id})
+    return JSONResponse(result)
 
 
 @router.get('/assistants/{assistant_id}')

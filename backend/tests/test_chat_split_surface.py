@@ -196,6 +196,16 @@ def test_moved_functions_physically_live_in_the_expected_submodule():
         # if the split had gone wrong, so the DEFINITION site is pinned here.
         '_apply_web_search': 'chat_search',
         '_web_search': 'chat_search',
+        # Moved chat -> chat_style_guard on 2026-08-28. chat.py was 512 lines,
+        # over the house cap, and phase 8's tool-calling loop has to touch it.
+        # The definition site is pinned here for the same reason chat_search is
+        # above, plus one specific to this pair: chat_style_guard reaches
+        # `_resolve_provider` as `chat._resolve_provider` at CALL time. Bind it
+        # at import time and every `patch.object(chat_mod, '_resolve_provider')`
+        # in the suite silently stops applying -- measured: that mutation turns
+        # 3 tests in test_chat_output_hygiene.py red.
+        '_apply_persian_style_guard': 'chat_style_guard',
+        '_apply_persian_style_guard_for_model': 'chat_style_guard',
         '_release_reservation': 'chat_web',
         '_check_quota_pre': 'chat_compare',
         '_record_usage': 'chat_billing',

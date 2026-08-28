@@ -44,13 +44,19 @@ import logging
 import re
 import secrets
 
+import httpx
+
 import sqlalchemy
 
 import chat
+from chat_billing import _estimate_input_tokens
 from database import async_session
 from services.billing import SqlBillingRepo
-from services.metering import UPSTREAM_SUCCESS, compute_charge, record_usage
+from services.cost_capture import snapshot_for_price_row
+from services.metering import UPSTREAM_FAILURE, UPSTREAM_SUCCESS, record_usage
+from services.money import Money
 from services.smart_router import Candidate
+from services.upstream_overhead import discounted_input_tokens, get_prompt_overhead
 from site_settings import get_site_flag
 
 logger = logging.getLogger('chat')  # same logger name as the rest of the chat path
@@ -183,17 +189,55 @@ def _prompt(message: str, menu: list[Candidate]) -> str:
     )
 
 
-async def _meter(uid: int | None, model: Candidate, data: dict, chosen: bool) -> None:
-    """Record the router call as a usage_event, best-effort.
+async def _meter(
+    uid: int | None,
+    model: Candidate,
+    data: dict | None,
+    *,
+    chosen: bool,
+    outcome: str,
+    floor: int,
+) -> None:
+    """Record the router call as a usage_event, best-effort. Called from
+    EVERY exit of llm_route once a router model has been picked and the call
+    attempted -- a usable answer, an unusable one, an HTTP error, a timeout,
+    or an exception -- so a router that is failing is visible in the same
+    table a healthy one shows up in, not silently invisible the way a
+    pre-200-check `return None` used to make it.
 
     Goes through services/metering.record_usage + SqlBillingRepo -- the
     same write path every other upstream call uses -- rather than a hand-
     written INSERT, so the row carries the standard columns and shows up in
     the existing reports. It writes a usage_event only: no ledger entry and
     no wallet debit, matching services/embeddings.py's precedent for an
-    internal call the user did not directly ask for. The spend is therefore
-    VISIBLE but not CHARGED; whether it should be charged is a product
-    decision for the owner, not one to smuggle in here.
+    internal call the user did not directly ask for.
+
+    `charged_amount` is ALWAYS 0 (Money(0)): usage_events.charged_amount is
+    contractually "what the USER paid" (services/metering.py, cost_capture.py)
+    and this call was never billed to anyone -- a non-zero number here would
+    be revenue nobody paid, invisibly summed by every admin report that reads
+    that column with no `meta->>'purpose'` filter. The spend is VISIBLE but
+    not CHARGED; whether it should be charged is a product decision for the
+    owner, not one to smuggle in here.
+
+    `input_tokens` runs through the SAME upstream-prompt-overhead discount
+    chat_billing.py applies to every normal billed row (services/
+    upstream_overhead.py's `discounted_input_tokens`/`get_prompt_overhead`),
+    using `floor` (the caller's own local estimate of the router prompt it
+    actually sent, `chat_billing._estimate_input_tokens`) as the same
+    never-bill-below-what-we-can-verify floor chat_billing.py enforces. Only
+    applied when a response body actually came back (`data is not None`) --
+    an HTTP error/timeout/exception path has no real upstream number to
+    discount, and forcing the floor onto a call that never even reached the
+    upstream would fabricate tokens on a row that spent none.
+
+    `upstream_cost_*` is captured via services/cost_capture.py's
+    `snapshot_for_price_row`, the same path every other billed call uses, on
+    the RAW (undiscounted) tokens per that module's own contract -- so
+    `upstream_cost_toman` is never NULL on a row this function writes, and
+    the day the router's upstream stops being a free one
+    (services.margin.FREE_UPSTREAMS) the real cost appears with no code
+    change here.
 
     `uid` is required for the row (usage_events.user_id is a NOT NULL FK).
     A caller that does not pass one simply gets no row and a debug line.
@@ -205,29 +249,46 @@ async def _meter(uid: int | None, model: Candidate, data: dict, chosen: bool) ->
     try:
         if async_session is None:
             return
-        usage = data.get('usage') or {}
-        input_tokens = int(usage.get('prompt_tokens') or 0)
+        usage = (data or {}).get('usage') or {}
+        prompt_tokens_raw = int(usage.get('prompt_tokens') or 0)
         output_tokens = int(usage.get('completion_tokens') or 0)
-        charge = compute_charge(
-            {
-                'input_per_million': model.input_per_million,
-                'output_per_million': model.output_per_million,
-            },
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-        )
+
+        input_tokens = 0
+        prompt_overhead_discounted = 0
+        if data is not None:
+            overhead = await get_prompt_overhead(model.upstream, model.provider_model_id)
+            billed = discounted_input_tokens(prompt_tokens_raw, overhead, floor)
+            if billed < prompt_tokens_raw:
+                prompt_overhead_discounted = prompt_tokens_raw - billed
+            input_tokens = billed
+
         async with async_session() as session:
+            cost_snapshot = await snapshot_for_price_row(
+                session,
+                model,
+                input_tokens=prompt_tokens_raw,
+                output_tokens=output_tokens,
+                model=model.provider_model_id,
+                uid=uid,
+            )
             await record_usage(
                 SqlBillingRepo(session),
                 request_id=f'smartrt-{secrets.token_hex(16)}',
                 user_id=uid,
                 model=model.provider_model_id,
-                charge=charge,
-                upstream_status=UPSTREAM_SUCCESS,
+                charge=Money(0),
+                upstream_status=UPSTREAM_SUCCESS if data is not None else UPSTREAM_FAILURE,
                 provider=model.upstream,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
-                meta={'purpose': 'smart_router', 'chosen': chosen},
+                meta={
+                    'purpose': 'smart_router',
+                    'chosen': chosen,
+                    'prompt_tokens_raw': prompt_tokens_raw,
+                    'prompt_overhead_discounted': prompt_overhead_discounted,
+                    'outcome': outcome,
+                },
+                **cost_snapshot.as_kwargs(),
             )
             await session.commit()
     except Exception as e:
@@ -269,32 +330,86 @@ async def llm_route(
         if router is None:
             return None
 
-        provider = await chat._resolve_provider(router.provider_model_id)
-        r = await chat._http.post(
-            f'{provider.v1}/chat/completions',
-            json={
-                'model': router.provider_model_id,
-                'messages': [
-                    {'role': 'system', 'content': _SYSTEM_PROMPT},
-                    {'role': 'user', 'content': _prompt(message, menu)},
-                ],
-                'max_tokens': _MAX_TOKENS,
-                'temperature': _TEMPERATURE,
-            },
-            headers={**provider.headers(), 'Accept': 'application/json'},
-            timeout=_TIMEOUT_SECONDS,
-        )
+        # Built once and reused for both the outgoing payload and the local
+        # floor estimate _meter needs -- one source of truth for "what we
+        # actually sent", so the two can never quietly drift apart.
+        messages = [
+            {'role': 'system', 'content': _SYSTEM_PROMPT},
+            {'role': 'user', 'content': _prompt(message, menu)},
+        ]
+        floor = _estimate_input_tokens(messages)
+
+        # Every exit from here on has made (or tried to make) the call, so
+        # every one of them is metered -- with charge=0, a metered row costs
+        # nothing to write and is the only way a failing router is visible
+        # at all (point (a) of the accounting fix: a router that constantly
+        # errors used to be completely invisible).
+        try:
+            provider = await chat._resolve_provider(router.provider_model_id)
+        except Exception as e:
+            logger.warning(f"smart_router provider resolution failed, falling back to rules: {e}")
+            await _meter(uid, router, None, chosen=False, outcome='exception', floor=floor)
+            return None
+
+        try:
+            r = await chat._http.post(
+                f'{provider.v1}/chat/completions',
+                json={
+                    'model': router.provider_model_id,
+                    'messages': messages,
+                    'max_tokens': _MAX_TOKENS,
+                    'temperature': _TEMPERATURE,
+                },
+                headers={**provider.headers(), 'Accept': 'application/json'},
+                timeout=_TIMEOUT_SECONDS,
+            )
+        except Exception as e:
+            # A router that is merely slow reads very differently in a
+            # failure-rate report than one that is erroring outright, so
+            # timeouts get their own outcome label.
+            #
+            # httpx.TimeoutException is NOT a subclass of the builtin
+            # TimeoutError -- measured in the live image on 2026-08-28:
+            #   ReadTimeout.__mro__ = ReadTimeout, TimeoutException,
+            #   TransportError, RequestError, HTTPError, Exception
+            # so testing only the builtin would file every real httpx timeout
+            # under 'exception'. That is the failure this label exists to
+            # separate: ReadTimeout is the second most common failure in
+            # audit_logs' admin.model.test history (43 of 237). Both classes
+            # are checked -- the builtin covers asyncio.TimeoutError (its
+            # alias since 3.11), which the tests raise.
+            call_outcome = (
+                'timeout' if isinstance(e, (TimeoutError, httpx.TimeoutException))
+                else 'exception'
+            )
+            logger.info(f"smart_router call failed ({call_outcome}), falling back to rules: {e}")
+            await _meter(uid, router, None, chosen=False, outcome=call_outcome, floor=floor)
+            return None
+
         if r.status_code != 200:
             logger.info(f"smart_router call returned {r.status_code}, falling back to rules")
+            await _meter(uid, router, None, chosen=False, outcome=f'http_{r.status_code}', floor=floor)
             return None
-        data = r.json()
+
+        try:
+            data = r.json()
+        except Exception as e:
+            logger.warning(f"smart_router reply body was not parseable JSON, falling back to rules: {e}")
+            await _meter(uid, router, None, chosen=False, outcome='exception', floor=floor)
+            return None
+
         reply = (
             ((data.get('choices') or [{}])[0].get('message') or {}).get('content')
         )
         index = _parse_choice(reply, len(menu))
         # Metered either way: the call was made and the tokens were spent
         # whether or not the answer was usable.
-        await _meter(uid, router, data, chosen=index is not None)
+        await _meter(
+            uid, router, data,
+            chosen=index is not None,
+            outcome='picked' if index is not None else 'unparseable',
+            floor=floor,
+        )
         if index is None:
             logger.info(f"smart_router reply not a valid menu index ({reply!r}), falling back to rules")
             return None

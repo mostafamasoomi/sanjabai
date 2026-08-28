@@ -28,14 +28,22 @@ from services.smart_router import Candidate
 
 # ── doubles ──────────────────────────────────────────────────────────────
 
-def _cand(name: str, blended: int) -> Candidate:
+def _cand(name: str, blended: int, upstream: str = 'ninerouter') -> Candidate:
+    # upstream defaults to 'ninerouter' -- a member of services.margin's
+    # FREE_UPSTREAMS -- so the cost-capture call _meter now makes
+    # (services/cost_capture.py::snapshot_for_price_row) takes the
+    # free-upstream short circuit (cost=0, basis='free_upstream') instead of
+    # reaching for a live exchange rate / network call that has no place in
+    # a unit test. See test_smart_router_llm.py's metering section for a
+    # candidate built with a paid upstream, used only where a test actually
+    # needs one.
     return Candidate(
         provider_model_id=f'up/{name}',
         public_id=f'sanjab/{name}',
         input_per_million=blended // 4,
         output_per_million=blended - 3 * (blended // 4),
         context_window=100_000,
-        upstream='bynara',
+        upstream=upstream,
         blended=blended,
     )
 
@@ -434,18 +442,56 @@ async def test_a_broken_flag_read_returns_none(env, monkeypatch):
 
 # ── metering ─────────────────────────────────────────────────────────────
 
+def _events(env):
+    return [o for o in env.session.added if o.__class__.__name__ == 'UsageEvent']
+
+
+def _floor_for(message: str, pool: list) -> int:
+    """The exact local floor _meter will compute for one llm_route call --
+    built the same way llm_route itself does (system prompt + numbered
+    menu + fenced user message), so assertions track the real prompt text
+    instead of a hand-typed number that silently rots the moment either
+    changes."""
+    menu = llm._menu(pool)
+    return llm._estimate_input_tokens([
+        {'role': 'system', 'content': llm._SYSTEM_PROMPT},
+        {'role': 'user', 'content': llm._prompt(message, menu)},
+    ])
+
+
 @pytest.mark.asyncio
 async def test_the_router_call_is_metered_as_a_usage_event(env):
     picked = await llm.llm_route('hello', _POOL, _ABOVE_FLOOR, uid=42)
     assert picked is not None
-    events = [o for o in env.session.added if o.__class__.__name__ == 'UsageEvent']
+    events = _events(env)
     assert len(events) == 1, 'the router call must be visible in usage_events'
     ev = events[0]
     assert ev.meta['purpose'] == 'smart_router'
+    assert ev.meta['outcome'] == 'picked'
     assert ev.user_id == 42
     assert ev.model == 'up/cheap'
-    assert ev.input_tokens == 120 and ev.output_tokens == 2
+    # MEASURED, not assumed: the fake upstream's usage.prompt_tokens is 120,
+    # but the floor (chat_billing._estimate_input_tokens over the actual
+    # system+menu+user prompt _meter sends, see _floor_for above) comes out
+    # to 384 for this pool/message -- well ABOVE 120. discounted_input_tokens
+    # never bills below that floor, so the floor wins here, not the raw 120.
+    # This is the answer to the packet's open question: the naive inference
+    # that upstream 'ninerouter' being absent from the (unreachable-in-tests,
+    # fail-safe-zero) overhead map would leave 120 unchanged is WRONG --
+    # get_prompt_overhead returning 0 only means no *discount* is applied;
+    # the floor clamp is a second, independent mechanism that still fires.
+    expected_input_tokens = _floor_for('hello', _POOL)
+    assert expected_input_tokens == 384, (
+        f'the floor this test setup produces has drifted to {expected_input_tokens}; '
+        f'update the comment above, do not just change this number blind'
+    )
+    assert expected_input_tokens > 120, 'the test must exercise the floor clamp, not raw survival'
+    assert ev.input_tokens == expected_input_tokens
+    assert ev.output_tokens == 2
+    assert ev.charged_amount == 0, 'usage_events.charged_amount is what the USER paid -- nobody paid for this'
     assert type(ev.charged_amount) is int, 'money is integer Toman only'
+    assert ev.upstream_cost_toman is not None, 'a metered router row must always carry a cost snapshot'
+    assert ev.upstream_cost_basis == 'free_upstream'
     assert env.session.commits == 1
 
 
@@ -455,9 +501,128 @@ async def test_a_wasted_call_is_metered_too(env):
     make the feature look cheaper than it is."""
     _set_reply(env, 'sanjab/expensive')
     assert await llm.llm_route('hello', _POOL, _ABOVE_FLOOR, uid=42) is None
-    events = [o for o in env.session.added if o.__class__.__name__ == 'UsageEvent']
+    events = _events(env)
     assert len(events) == 1
-    assert events[0].meta == {'purpose': 'smart_router', 'chosen': False}
+    meta = events[0].meta
+    # Subset, not exact-equality: the accounting fix adds token/outcome
+    # bookkeeping keys that did not exist when this test was first written.
+    # The two keys this test actually exists to guard -- purpose, and
+    # chosen=False on a call that could not be used -- must still hold
+    # exactly; a dict merely containing extra junk keys would NOT satisfy
+    # these two asserts, so this is not weakened into a no-op.
+    assert meta['purpose'] == 'smart_router'
+    assert meta['chosen'] is False
+    assert meta['outcome'] == 'unparseable'
+    assert events[0].charged_amount == 0
+
+
+@pytest.mark.asyncio
+async def test_charged_amount_is_zero_on_every_metered_router_row(env):
+    """usage_events.charged_amount is contractually 'what the USER paid'
+    (services/metering.py, services/cost_capture.py). This call is never
+    charged to anyone, on ANY exit path -- a picked call, a wasted one, or
+    an outright failure."""
+    _set_reply(env, '1')
+    assert await llm.llm_route('hello', _POOL, _ABOVE_FLOOR, uid=42) is not None
+    _set_reply(env, 'not a number')
+    assert await llm.llm_route('hello', _POOL, _ABOVE_FLOOR, uid=42) is None
+    env.http.response = _FakeResponse({'error': 'nope'}, status_code=500)
+    assert await llm.llm_route('hello', _POOL, _ABOVE_FLOOR, uid=42) is None
+    events = _events(env)
+    assert len(events) == 3
+    assert all(e.charged_amount == 0 for e in events)
+    assert all(type(e.charged_amount) is int for e in events)
+
+
+@pytest.mark.asyncio
+async def test_input_tokens_are_discounted_not_raw(env, monkeypatch):
+    """The normal billing path (chat_billing.py:216) corrects raw upstream
+    prompt_tokens for server-side preamble injection before billing them;
+    an un-corrected router row would overstate 'consumption' in every admin
+    report that sums usage_events.input_tokens with no purpose filter, by
+    roughly the upstream's injected overhead. Uses an upstream WITH overhead
+    (monkeypatched -- the real services.upstream_overhead lookup is
+    unreachable in this test harness and fails safe to 0, which is exactly
+    why a monkeypatch is needed to exercise this branch at all) and a raw
+    token count picked so the discount actually dominates, not the floor --
+    proving the subtraction happened, not just the clamp from the test above.
+    """
+    async def _overhead(provider, model):
+        assert provider == 'ninerouter'
+        return 500
+
+    monkeypatch.setattr(llm, 'get_prompt_overhead', _overhead)
+    _set_reply(env, '1', usage={'prompt_tokens': 3000, 'completion_tokens': 2})
+    picked = await llm.llm_route('hello', _POOL, _ABOVE_FLOOR, uid=42)
+    assert picked is not None
+    ev = _events(env)[0]
+    floor = _floor_for('hello', _POOL)
+    expected = max(3000 - 500, floor, 1)
+    assert expected < 3000, 'test setup must exercise the discount itself, not just the floor'
+    assert ev.input_tokens == expected == 2500
+    assert ev.meta['prompt_tokens_raw'] == 3000
+    assert ev.meta['prompt_overhead_discounted'] == 3000 - expected == 500
+
+
+@pytest.mark.asyncio
+async def test_upstream_cost_toman_is_never_null_on_a_metered_row(env):
+    """Before this fix, _meter passed no cost_snapshot at all, so
+    upstream_cost_toman was NULL on every router row -- which silently
+    dropped them out of admin_analytics_timeseries.py's measured_events
+    coverage percentage. ninerouter is in services.margin.FREE_UPSTREAMS
+    today, so the honest answer is cost=0/basis='free_upstream', not NULL;
+    pinning the basis here makes a future change to FREE_UPSTREAMS a loud
+    test failure instead of a silent NULL regression."""
+    await llm.llm_route('hello', _POOL, _ABOVE_FLOOR, uid=42)
+    ev = _events(env)[0]
+    assert ev.upstream_cost_toman is not None
+    assert ev.upstream_cost_basis == 'free_upstream'
+
+
+@pytest.mark.asyncio
+async def test_http_error_status_is_metered_with_its_outcome(env):
+    env.http.response = _FakeResponse({'error': 'nope'}, status_code=503)
+    assert await llm.llm_route('hello', _POOL, _ABOVE_FLOOR, uid=42) is None
+    events = _events(env)
+    assert len(events) == 1, 'a router that only ever errors must still be visible'
+    ev = events[0]
+    assert ev.meta['outcome'] == 'http_503'
+    assert ev.upstream_status == llm.UPSTREAM_FAILURE
+    assert ev.charged_amount == 0
+    assert ev.input_tokens == 0 and ev.output_tokens == 0, 'no response body means no real usage to report'
+    assert ev.upstream_cost_toman is not None
+
+
+@pytest.mark.asyncio
+async def test_a_timeout_is_metered_with_outcome_timeout(env, monkeypatch):
+    monkeypatch.setattr(chat_mod, '_http', _FakeHttp(raises=TimeoutError('read timeout')))
+    assert await llm.llm_route('hello', _POOL, _ABOVE_FLOOR, uid=42) is None
+    events = _events(env)
+    assert len(events) == 1
+    assert events[0].meta['outcome'] == 'timeout'
+    assert events[0].upstream_status == llm.UPSTREAM_FAILURE
+    assert events[0].charged_amount == 0
+
+
+@pytest.mark.asyncio
+async def test_an_upstream_post_exception_is_metered_with_outcome_exception(env, monkeypatch):
+    monkeypatch.setattr(chat_mod, '_http', _FakeHttp(raises=RuntimeError('connection reset')))
+    assert await llm.llm_route('hello', _POOL, _ABOVE_FLOOR, uid=42) is None
+    events = _events(env)
+    assert len(events) == 1
+    assert events[0].meta['outcome'] == 'exception'
+    assert events[0].upstream_status == llm.UPSTREAM_FAILURE
+    assert events[0].charged_amount == 0
+
+
+@pytest.mark.asyncio
+async def test_unparseable_json_is_metered_with_outcome_exception(env):
+    env.http.response = _FakeResponse(ValueError('not json'))
+    assert await llm.llm_route('hello', _POOL, _ABOVE_FLOOR, uid=42) is None
+    events = _events(env)
+    assert len(events) == 1
+    assert events[0].meta['outcome'] == 'exception'
+    assert events[0].charged_amount == 0
 
 
 @pytest.mark.asyncio

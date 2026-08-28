@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import secrets
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -332,14 +333,33 @@ async def list_models(p: Provider, timeout: float = 10.0) -> list[dict[str, Any]
 async def probe_model(p: Provider, model_id: str, timeout: float = 20.0) -> ProbeResult:
     """Send the smallest possible completion to check a model actually answers.
 
-    `max_tokens=1` keeps the cost of a probe to a single output token. A 4xx
-    that is clearly about the request rather than the model (401/403) is
+    A 4xx that is clearly about the request rather than the model (401/403) is
     reported as a provider-level failure by the caller, not as the model being
     broken.
+
+    Every probe carries a unique nonce. It used to send a fixed 'ping', and
+    omniroute caches on request content, so the probe answered itself out of
+    cache instead of reaching a supplying account. Measured on 2026-08-28
+    against antigravity/gemini-3.5-flash-low:
+
+        content='ping'            -> x-omniroute-cache: HIT   (twice running)
+        content='ping <nonce>'    -> x-omniroute-cache: MISS
+
+    That is not a cosmetic waste. A cached 200 makes record_probe_sample write
+    ok=True, which fills model_health_state.last_ok_at, which is the single
+    condition services/probe_gate.py:97 checks before allowing a model to be
+    put on sale. So a model whose supplying account had since gone 401/402/403
+    could still pass the gate that exists to stop exactly that -- breaking the
+    product rule that a model is only offered after a successful LIVE probe.
+
+    `max_tokens=1` is a request, not a guarantee: the same measurement returned
+    completion_tokens=13 with finish_reason='stop'. Do not build a cost or
+    calibration estimate on the assumption that it is honoured.
     """
     payload = {
         'model': model_id,
-        'messages': [{'role': 'user', 'content': 'ping'}],
+        # The nonce is what makes this a live probe rather than a cache read.
+        'messages': [{'role': 'user', 'content': f'ping {secrets.token_hex(8)}'}],
         'max_tokens': 1,
         'temperature': 0,
         'stream': False,
@@ -355,6 +375,19 @@ async def probe_model(p: Provider, model_id: str, timeout: float = 20.0) -> Prob
         elapsed = int((time.monotonic() - started) * 1000)
         if r.status_code >= 400:
             return ProbeResult(False, elapsed, f'http_{r.status_code}', r.status_code)
+        # A cached answer proves the cache is warm, not that any supplying
+        # account is alive. The nonce above should make this unreachable; this
+        # is the guard for the day a router stops keying its cache on content,
+        # so that regression surfaces as a probe failure instead of silently
+        # restoring the bug. Deliberately checked BEFORE the body is examined:
+        # a cache hit is not a valid probe no matter how well-formed it looks.
+        #
+        # ok=False is the safe direction here. A failing probe never erases an
+        # earlier success (see tests/test_probe_retry_and_record.py:165), so a
+        # false negative only withholds a promotion; a false positive would put
+        # a model on sale that nothing live has answered for.
+        if r.headers.get('x-omniroute-cache-hit', '').strip().lower() == 'true':
+            return ProbeResult(False, elapsed, 'cached_response', r.status_code)
         body = r.json()
         # A 200 with no choices is a broken upstream pretending to succeed.
         if not body.get('choices'):
@@ -376,10 +409,13 @@ async def probe_model(p: Provider, model_id: str, timeout: float = 20.0) -> Prob
 #: single sample was deciding a model's fate, so a 40-second cooldown read as
 #: permanent death and the model was parked. 401/403/404 are NOT here: a
 #: missing credential or a model the upstream does not have is not a moment.
+#: 'cached_response' belongs here for a different reason than the rest: the
+#: retry regenerates the nonce, so it genuinely can turn into a real answer.
+#: Describing a moment is exactly what it does -- the moment the cache was warm.
 TRANSIENT_PROBE_REASONS = frozenset({
     'http_402', 'http_429', 'http_500', 'http_502', 'http_503', 'http_504',
     'timeout', 'ReadTimeout', 'ConnectTimeout', 'ConnectError', 'ReadError',
-    'RemoteProtocolError', 'PoolTimeout',
+    'RemoteProtocolError', 'PoolTimeout', 'cached_response',
 })
 
 #: Wait between the first probe and its retry. Long enough for a router's

@@ -330,6 +330,7 @@ from combos import router as combos_router
 from pricing import router as pricing_router
 from payment_endpoints import router as payment_router
 from notifications import router as notifications_router
+from support import router as support_router
 from tasks import router as tasks_router
 from websocket import router as websocket_router
 from rag_endpoints import router as rag_router
@@ -380,6 +381,12 @@ app.include_router(combos_router)
 app.include_router(pricing_router)
 app.include_router(payment_router)
 app.include_router(notifications_router)
+# Telegram support bridge. Inert until BOTH TELEGRAM_BOT_TOKEN is set (unset
+# today -- the bot container has been stopped for six days) and an admin puts
+# a group id in app_setting.support_tg_group_id. /support/admin-reply refuses
+# every call while the token is unset rather than treating "no secret" as
+# "no check needed".
+app.include_router(support_router)
 app.include_router(tasks_router)
 app.include_router(websocket_router)
 app.include_router(rag_router)

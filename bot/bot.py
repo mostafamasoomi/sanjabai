@@ -23,6 +23,8 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 from telegram.constants import ParseMode
 
+import support
+
 # ── API helpers ────────────────────────────────────────────
 
 async def api_request(method: str, path: str, token: str = '', json_data: dict = None) -> dict:
@@ -272,6 +274,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         '/start — شروع\n'
         '/link _ایمیل_ _رمز_ — اتصال حساب\n'
         '/chat _متن_ — گفتگو با AI\n'
+        '/support _متن_ — تماس با پشتیبانی\n'
         '/wallet — موجودی کیف پول\n'
         '/models — لیست مدل‌ها\n'
         '/help — این راهنما\n\n'
@@ -288,9 +291,22 @@ def main():
     app.add_handler(CommandHandler('start', cmd_start))
     app.add_handler(CommandHandler('link', cmd_link))
     app.add_handler(CommandHandler('chat', cmd_chat))
+    app.add_handler(CommandHandler('support', support.cmd_support))
     app.add_handler(CommandHandler('wallet', cmd_wallet))
     app.add_handler(CommandHandler('models', cmd_models))
     app.add_handler(CommandHandler('help', cmd_help))
+    # Support-bridge group-reply handler MUST be registered before the
+    # generic handle_message catch-all below: python-telegram-bot
+    # dispatches only the FIRST matching handler within a handler group
+    # (every handler in this file uses the default group=0), and
+    # handle_message's filter (TEXT & ~COMMAND) has no chat-type
+    # restriction -- without this ordering an admin's reply in the support
+    # group would be sent to /v1/chat/completions as an ordinary AI chat
+    # message instead of reaching support.handle_group_reply.
+    app.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND & filters.ChatType.GROUPS & filters.REPLY,
+        support.handle_group_reply,
+    ))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print('🤖 Sanjabai Bot started...')

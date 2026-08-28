@@ -65,9 +65,20 @@ def apply_history_window(
     """Cap the conversation to the newest MAX_HISTORY_MESSAGES non-system
     messages, keeping every system/injected message where it is.
 
+    An `assistant` message carrying `tool_calls` and every `tool` message
+    answering it are one indivisible unit: the age-based cut is pushed
+    *backwards* (dropping MORE, never fewer) until it does not land inside
+    such a group, because a `role='tool'` message reaching an
+    OpenAI-compatible upstream without its matching assistant turn is a
+    guaranteed 400 on the whole request. An orphan `tool` message that has
+    no matching assistant anywhere in the input (malformed input, not
+    something windowing created) is always dropped, even when nothing else
+    needs trimming.
+
     Returns a new list; the caller's list is not mutated. Idempotent: a
     payload already inside the window comes back unchanged, so applying it
-    twice on a path that goes through two modules is harmless.
+    twice on a path that goes through two modules is harmless. A no-op for
+    every conversation that has no tool messages -- today's traffic.
     """
     try:
         if not isinstance(messages, list):
@@ -78,12 +89,73 @@ def apply_history_window(
         if limit <= 0:
             return list(messages)
 
-        body = [i for i, m in enumerate(messages) if not _is_system(m)]
-        if len(body) <= limit:
+        # `body` is the non-system messages, kept in order, as (orig_idx, msg).
+        body = [(i, m) for i, m in enumerate(messages) if not _is_system(m)]
+
+        # -- Union-find over body positions: merge an assistant's tool_calls
+        # with every tool message answering it into one group. Positions
+        # untouched by any union stay their own singleton group, so this
+        # is a strict no-op when there are no tool messages at all.
+        parent = list(range(len(body)))
+
+        def _find(x: int) -> int:
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        def _union(a: int, b: int) -> None:
+            ra, rb = _find(a), _find(b)
+            if ra != rb:
+                parent[rb] = ra
+
+        call_owner: dict[str, int] = {}
+        for pos, (_, m) in enumerate(body):
+            if isinstance(m, dict) and m.get('role') == 'assistant':
+                for tc in (m.get('tool_calls') or []):
+                    if isinstance(tc, dict) and tc.get('id'):
+                        call_owner[tc['id']] = pos
+
+        orphan_positions: set[int] = set()
+        for pos, (_, m) in enumerate(body):
+            if isinstance(m, dict) and m.get('role') == 'tool':
+                cid = m.get('tool_call_id')
+                owner = call_owner.get(cid) if cid is not None else None
+                if owner is not None:
+                    _union(owner, pos)
+                else:
+                    orphan_positions.add(pos)
+
+        if len(body) <= limit and not orphan_positions:
             return list(messages)
 
-        dropped = set(body[: len(body) - limit])
-        kept = [m for i, m in enumerate(messages) if i not in dropped]
+        groups: dict[int, list[int]] = {}
+        for pos in range(len(body)):
+            groups.setdefault(_find(pos), []).append(pos)
+
+        drop_count = max(len(body) - limit, 0)
+
+        # Push the cut backwards (drop MORE, never fewer) until it does not
+        # land inside a tool-call group. Loops to a fixed point because
+        # pushing past one group can newly straddle the next one.
+        changed = True
+        while changed and drop_count < len(body):
+            changed = False
+            for check_pos in (drop_count - 1, drop_count):
+                if not (0 <= check_pos < len(body)):
+                    continue
+                grp = groups[_find(check_pos)]
+                lo, hi = min(grp), max(grp)
+                if lo < drop_count <= hi and hi + 1 > drop_count:
+                    drop_count = hi + 1
+                    changed = True
+
+        dropped_positions = set(range(drop_count)) | orphan_positions
+        if not dropped_positions:
+            return list(messages)
+
+        dropped_orig = {body[p][0] for p in dropped_positions}
+        kept = [m for i, m in enumerate(messages) if i not in dropped_orig]
         if not any(
             isinstance(m, dict) and m.get('content') == HISTORY_TRIM_NOTE for m in kept
         ):

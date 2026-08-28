@@ -38,9 +38,15 @@ def compress_messages(messages: list[dict], preserve_last: int = 2) -> list[dict
     Preserves the last N messages intact (immediate context).
     Strategy:
       - system: keep intact (instructions must stay clear)
+      - tool: keep intact (its string `content` is a JSON payload the model
+        parses structurally, not prose -- "smart" compression hands it
+        malformed JSON or silently altered data, not a shorter summary)
+      - any message carrying a `tool_calls` key, whatever its role: keep
+        intact, byte-identical -- a client that reads content/tool_calls as
+        one turn must never see them desync
       - old messages (>2): compress via headroom smart mode
       - last 2 messages: untouched
-      - non-string content (lists, tool calls): untouched
+      - non-string content (e.g. multimodal content lists): untouched
 
     Returns new list; original is not mutated.
     Gracefully returns original if headroom unavailable.
@@ -62,13 +68,30 @@ def compress_messages(messages: list[dict], preserve_last: int = 2) -> list[dict
         role = msg_copy.get('role', '')
         content = msg_copy.get('content', '')
 
+        # An assistant turn carrying tool_calls must reach upstream
+        # byte-identical, whatever its role and however long its `content`
+        # string is -- see the docstring above.
+        if 'tool_calls' in msg_copy:
+            compressed.append(msg_copy)
+            continue
+
         # Skip if: should preserve, or content is not a string, or too short
         if should_preserve or not isinstance(content, str) or len(content) < 300:
             compressed.append(msg_copy)
             continue
 
-        # Never compress system messages (instructions must stay intact)
-        if role == 'system':
+        # Never compress system messages (instructions must stay intact) or
+        # tool messages (their string content is a structural JSON payload,
+        # not prose -- see the docstring above).
+        #
+        # `function` is the pre-2023.7 OpenAI spelling of the same thing and
+        # carries the same structural JSON. Nothing in this repository emits it
+        # today (`grep -rn "role.*function"` -> nothing outside tests), so this
+        # is latent, not live -- but it costs one word and the failure it
+        # prevents is silent JSON corruption on the way to an upstream, which is
+        # the worst kind. Review found it by probing the guard's role coverage
+        # rather than its happy path.
+        if role in ('system', 'tool', 'function'):
             compressed.append(msg_copy)
             continue
 

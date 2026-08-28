@@ -121,6 +121,8 @@ async def get_profile(request: Request) -> JSONResponse:
                     'email': True,
                     'telegram': False,
                 }),
+                'smart_router_enabled': prefs.get('smart_router_enabled', True),
+                'compression_enabled': prefs.get('compression_enabled', False),
             },
             'created_at': user.created_at,
             'referral_code': user.referral_code,
@@ -169,6 +171,16 @@ async def update_profile(request: Request, payload: UpdateProfileRequest) -> JSO
                 return err('یادداشت دائمی باید متن باشد', 'Pinned context must be text.', 400)
             if len(pinned) > 20000:
                 return err('یادداشت دائمی نباید بیشتر از ۲۰,۰۰۰ کاراکتر باشد', 'Pinned context must not exceed 20,000 characters.', 400)
+
+        if 'smart_router_enabled' in payload.preferences:
+            smart_router = payload.preferences['smart_router_enabled']
+            if not isinstance(smart_router, bool):
+                return err('روتر هوشمند باید true یا false باشد', 'smart_router_enabled must be a boolean (true or false).', 400)
+
+        if 'compression_enabled' in payload.preferences:
+            compression = payload.preferences['compression_enabled']
+            if not isinstance(compression, bool):
+                return err('فشرده‌سازی پیام باید true یا false باشد', 'compression_enabled must be a boolean (true or false).', 400)
 
         existing_prefs.update(payload.preferences)
         update_data['preferences'] = existing_prefs

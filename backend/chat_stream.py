@@ -27,7 +27,7 @@ from fastapi.responses import StreamingResponse
 
 from services.context_injection import get_injection_messages, inject_messages
 from services.token_budget import apply_outbound_budget
-from middleware.compression import compress_messages, estimate_savings
+from middleware.compression import compress_messages, compression_enabled_for, estimate_savings
 from model_output import ReasoningStreamFilter
 
 import chat
@@ -58,15 +58,16 @@ async def _chat_stream(payload: dict[str, Any], request: Request):
         except Exception as e:
             logger.warning(f"_chat_stream injection failed uid={uid}: {e}")
 
-    # Compress old messages to reduce token usage
-    try:
-        _orig = [m.copy() for m in payload.get("messages", [])]
-        payload["messages"] = compress_messages(payload.get("messages", []), preserve_last=2)
-        _sav = estimate_savings(_orig, payload["messages"])
-        if _sav["savings_pct"] > 0:
-            logger.info(f"Headroom stream: {_sav['savings_pct']}% saved ({_sav['saved_chars']} chars)")
-    except Exception as e:
-        logger.debug(f"Compression skipped: {e}")
+    # Compress old messages -- opt-in only; see the gate's rationale in chat.py.
+    if await compression_enabled_for(uid):
+        try:
+            _orig = [m.copy() for m in payload.get("messages", [])]
+            payload["messages"] = compress_messages(payload.get("messages", []), preserve_last=2)
+            _sav = estimate_savings(_orig, payload["messages"])
+            if _sav["savings_pct"] > 0:
+                logger.info(f"Headroom stream: {_sav['savings_pct']}% saved ({_sav['saved_chars']} chars)")
+        except Exception as e:
+            logger.debug(f"Compression skipped: {e}")
 
     # Phase E ceiling -- idempotent, so the chat.py path that already applied
     # it before calling here is not penalized twice.

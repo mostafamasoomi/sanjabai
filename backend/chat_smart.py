@@ -51,7 +51,7 @@ from services.billing import SqlBillingRepo, InsufficientBalanceError
 from services.money import Money
 from services.entitlement_gate import covering_entitlement
 from services.free_tier import covers_request
-from middleware.compression import compress_messages, estimate_savings
+from middleware.compression import compress_messages, compression_enabled_for, estimate_savings
 from model_output import clean_response_dict
 from i18n import err, err_openai
 
@@ -315,15 +315,16 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
     # AND the stray key was forwarded upstream in the JSON body unread.
     await chat._apply_web_search(payload_dict, handler='smart-chat')
 
-    # Compress old messages to reduce token usage (smart_chat)
-    try:
-        _orig = [m.copy() for m in payload_dict.get('messages', [])]
-        payload_dict['messages'] = compress_messages(payload_dict.get('messages', []), preserve_last=2)
-        _sav = estimate_savings(_orig, payload_dict['messages'])
-        if _sav['savings_pct'] > 0:
-            logger.info(f"Headroom smart: {_sav['savings_pct']}%% saved ({_sav['saved_chars']} chars)")
-    except Exception as e:
-        logger.debug(f"Compression skipped: {e}")
+    # Compress old messages -- opt-in only; see the gate's rationale in chat.py.
+    if await compression_enabled_for(uid):
+        try:
+            _orig = [m.copy() for m in payload_dict.get('messages', [])]
+            payload_dict['messages'] = compress_messages(payload_dict.get('messages', []), preserve_last=2)
+            _sav = estimate_savings(_orig, payload_dict['messages'])
+            if _sav['savings_pct'] > 0:
+                logger.info(f"Headroom smart: {_sav['savings_pct']}%% saved ({_sav['saved_chars']} chars)")
+        except Exception as e:
+            logger.debug(f"Compression skipped: {e}")
 
     # Phase E ceiling -- see services/token_budget.py.
     await apply_outbound_budget(payload_dict)

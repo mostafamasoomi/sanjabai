@@ -56,7 +56,7 @@ from services.entitlement_gate import covering_entitlement
 from services.memory_extractor import extract_memories, MIN_MSG_COUNT
 from services.free_tier import check_and_consume, covers_request
 from services.premium_quota import check_and_consume as premium_check_and_consume
-from middleware.compression import compress_messages, estimate_savings
+from middleware.compression import compress_messages, compression_enabled_for, estimate_savings
 from model_output import clean_response_dict
 
 logger = logging.getLogger(__name__)
@@ -402,15 +402,21 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
     # Web search injection (shared helper -- see _apply_web_search)
     await _apply_web_search(payload_dict, handler='chat.completions')
 
-    # Compress old messages to reduce token usage
-    try:
-        _orig = [m.copy() for m in payload_dict.get('messages', [])]
-        payload_dict['messages'] = compress_messages(payload_dict.get('messages', []), preserve_last=2)
-        _sav = estimate_savings(_orig, payload_dict['messages'])
-        if _sav['savings_pct'] > 0:
-            logger.info(f"Headroom: {_sav['savings_pct']}%% saved ({_sav['saved_chars']} chars)")
-    except Exception as e:
-        logger.debug(f"Compression skipped: {e}")
+    # Compress old messages to reduce token usage -- ONLY for a user who has
+    # explicitly opted in. Until 2026-08-28 this ran for everybody and silently
+    # did nothing (a string was passed where headroom wants a list, and the
+    # TypeError was swallowed below). Fixing that turned a dead branch into a
+    # live one that moves input token counts, i.e. the money path, so the gate
+    # lands in the same change as the fix -- never after it.
+    if await compression_enabled_for(uid):
+        try:
+            _orig = [m.copy() for m in payload_dict.get('messages', [])]
+            payload_dict['messages'] = compress_messages(payload_dict.get('messages', []), preserve_last=2)
+            _sav = estimate_savings(_orig, payload_dict['messages'])
+            if _sav['savings_pct'] > 0:
+                logger.info(f"Headroom: {_sav['savings_pct']}%% saved ({_sav['saved_chars']} chars)")
+        except Exception as e:
+            logger.debug(f"Compression skipped: {e}")
 
     # Phase E: the only ceiling on outbound payload size / output tokens now
     # that the upstream-side compression is gone. See services/token_budget.py.

@@ -7,11 +7,12 @@ absolutely any doubt. None means "caller uses the rule-based path", which
 is the safe answer everywhere in this file -- there is no failure mode here
 that is worth degrading the chat request over.
 
-── THREE GATES ────────────────────────────────────────────────────────────
-All three must be open before a router call happens:
+── FOUR GATES ─────────────────────────────────────────────────────────────
+All four must be open before a router call happens:
   1. the user's own opt-in            -- checked by the CALLER, not here;
   2. site flag ``smart_llm_router_enabled``  -- checked here;
-  3. a balance floor of 10,000 Toman  -- checked here.
+  3. a balance floor of 10,000 Toman  -- checked here;
+  4. persistent per-user opt-out (default True, smart_router_prefs.py), checked here LAST.
 Gate 3 is BALANCE ONLY. Holding an active credit package does NOT earn a
 better model: the owner decided that on 2026-08-27, and
 ``services.user_quota.has_active_package`` is deliberately neither imported
@@ -67,6 +68,7 @@ from services.metering import UPSTREAM_FAILURE, UPSTREAM_SUCCESS, record_usage
 from services.money import Money
 from services.router_prompt import build_prompt
 from services.smart_router import Candidate, band_thresholds
+from services.smart_router_prefs import user_allows_router
 from services.upstream_overhead import discounted_input_tokens, get_prompt_overhead
 from site_settings import get_site_flag
 
@@ -374,9 +376,9 @@ async def llm_route(
     in-range menu number. The caller treats None as "use select_by_rules".
     Never raises.
 
-    `uid` is keyword-only and optional so the (message, pool, balance)
-    signature stays exactly what the caller was told to expect; it is used
-    for the usage_event only, never for any selection decision.
+    `uid` is keyword-only and optional; used for the usage_event AND gate 4
+    (smart_router_prefs.user_allows_router), never for which candidate is
+    picked. uid=None is unreadable, so treated as opted-in.
     """
     try:
         if not pool:
@@ -386,6 +388,8 @@ async def llm_route(
         if balance < _MIN_BALANCE_TOMAN:
             return None
         if not await get_site_flag('smart_llm_router_enabled'):
+            return None
+        if not await user_allows_router(uid):  # gate 4, LAST -- pricier still: a Postgres read
             return None
 
         menu = _menu(pool)

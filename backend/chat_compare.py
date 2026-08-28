@@ -34,7 +34,7 @@ from services.billing import SqlBillingRepo, InsufficientBalanceError
 from services.money import Money
 from services.entitlement_gate import covering_entitlement
 from services.free_tier import covers_request
-from middleware.compression import compress_messages
+from middleware.compression import compress_messages, compression_enabled_for
 from model_output import clean_response_dict
 from i18n import err, err_openai
 
@@ -113,12 +113,13 @@ async def _call_model_once(
     except Exception as e:
         logger.warning(f"_call_model_once injection failed uid={uid} model={model}: {e}")
 
-    # Compress
-    try:
-        _orig = [m.copy() for m in payload.get('messages', [])]
-        payload['messages'] = compress_messages(payload.get('messages', []), preserve_last=2)
-    except Exception as e:
-        logger.debug(f"Compression skipped in compare: {e}")
+    # Compress -- opt-in only; see the gate's rationale in chat.py.
+    if await compression_enabled_for(uid):
+        try:
+            _orig = [m.copy() for m in payload.get('messages', [])]
+            payload['messages'] = compress_messages(payload.get('messages', []), preserve_last=2)
+        except Exception as e:
+            logger.debug(f"Compression skipped in compare: {e}")
 
     # Phase E ceiling -- compare fans one prompt out to two models, so an
     # unbounded payload/answer is paid twice here.

@@ -672,6 +672,20 @@ input[type='number']:focus::-webkit-inner-spin-button { opacity: 1; }
      for /chat, and re-adding a cap to the base class later should not have to
      remember to also delete it here. */
   max-width: none;
+  /* `.layout-content` sets `flex: 1`, i.e. flex-basis: 0%. A flex-basis of 0
+     wins over the `height` below for sizing purposes, and neither
+     `.layout-shell` nor `.layout-main` (both only `min-height: 100dvh`, never
+     `height`) give this item a definite space to grow into -- so without this
+     override the browser fell back to sizing the box by its CONTENT's
+     max-content height instead of the calc() below. That is invisible on a
+     tall/maximized window, where the content happens to be shorter than one
+     screen, and breaks the moment the window is short enough that it isn't:
+     the whole page then grows past the viewport and the composer scrolls off
+     the bottom of the document instead of staying pinned inside this box.
+     `flex: none` (grow:0 shrink:0 basis:auto) makes `height` the actual basis
+     again, so this box is always exactly one viewport tall regardless of
+     window size or ancestor height. */
+  flex: none;
   height: calc(100dvh - var(--topbar-h));
   min-height: 0;
   overflow: hidden;

@@ -178,7 +178,13 @@ export default function DocumentsPage() {
         {/* Format selector */}
         <div className="card" style={{ marginBottom: '1.5rem' }}>
           <div className="card-header">{s.docTypeCardHeader}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+          {/* minmax(0, 1fr), not plain 1fr: a bare `1fr` track keeps an
+              implicit `min-width: auto`, i.e. it will not shrink below the
+              content's min-content width. Below ~420px the three buttons'
+              label+description text was wider than a third of the column,
+              so the grid forced the whole page wider than the viewport and
+              produced a horizontal scrollbar. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '1rem' }}>
             {types.map(dt => (
               <button
                 key={dt.id}

@@ -26,12 +26,8 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     metadataBase: new URL('https://sanjabai.com'),
-    // TEMPORARY: matches the static <title> in RootLayout's <head> below so
-    // the async-resolved title can't flip it back after hydration while the
-    // gateway's title-based verification is pending. REVERT together with
-    // that <title> tag once the gateway confirms.
     title: {
-      default: '22040799',
+      default: 'Sanjabai — پلتفرم هوش مصنوعی فارسی',
       template: '%s | Sanjabai',
     },
     description,
@@ -86,17 +82,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fa" dir="rtl" data-theme="dark" suppressHydrationWarning>
       <head>
-        {/* TEMPORARY — payment gateway asked for the verification code as the
-            page <title> ("عنوان تایید"). Static JSX, not generateMetadata's
-            `title`, for the same streaming reason as the enamad meta tag
-            below. REMOVE this line after clicking "تایید عنوان" in the
-            gateway panel — it overrides the real title while present. */}
-        <title>22040799</title>
-        {/* Payment gateway domain-verification tag. Must be a static JSX tag
-            here, not part of generateMetadata's returned object — that path
-            renders async and streams into <head> via client JS, which is
-            invisible to a bot that doesn't execute JavaScript. */}
-        <meta name="enamad" content="22040799" />
         {/* The two weights used above the fold. Everything else in the family
             loads normally via @font-face in globals.css. */}
         <link

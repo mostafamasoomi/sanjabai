@@ -30,7 +30,11 @@ export async function generateMetadata(): Promise<Metadata> {
       : 'با مدل‌های متعدد هوش مصنوعی — DeepSeek، Mistral، Gemini، Llama و بیشتر — چت کنید، عامل بسازید و همه را با یک API سازگار با OpenAI به محصولتان وصل کنید. پرداخت به تومان به‌ازای مصرف، بدون اشتراک ماهانه و بدون نیاز به فیلترشکن.'
 
   return {
-    title: 'Sanjabai — دسترسی به همه‌ی مدل‌های هوش مصنوعی با یک اشتراک',
+    // TEMPORARY: pinned to the gateway's domain-verification code, matching
+    // the static <title> in app/layout.tsx's <head>. REVERT together with
+    // that <title> tag and layout.tsx's `title.default` once the gateway
+    // confirms.
+    title: '22040799',
     description,
     alternates: { canonical: '/' },
   }

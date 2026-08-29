@@ -45,6 +45,18 @@ export function SiteFooter() {
         <div className="lp-footer__bottom">
           <span>{s.copyright(year)}</span>
           <span>{s.madeFor}</span>
+          {/* eNamad trust seal. Markup is exactly what enamad.ir's badge
+              generator issues for this site's id/Code — kept verbatim via
+              dangerouslySetInnerHTML (including the nonstandard `code`
+              attribute on <img>) rather than hand-converted to JSX, since
+              enamad's own verification may depend on the exact markup. */}
+          <span
+            className="lp-footer__enamad"
+            dangerouslySetInnerHTML={{
+              __html:
+                "<a referrerpolicy='origin' target='_blank' href='https://trustseal.enamad.ir/?id=7527649&Code=438FIkEWAO3ftUDcIFWbdnA9GyyRducv'><img referrerpolicy='origin' src='https://trustseal.enamad.ir/logo.aspx?id=7527649&Code=438FIkEWAO3ftUDcIFWbdnA9GyyRducv' alt='' style='cursor:pointer' code='438FIkEWAO3ftUDcIFWbdnA9GyyRducv'></a>",
+            }}
+          />
         </div>
       </div>
     </footer>

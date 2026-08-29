@@ -193,11 +193,19 @@ export default function ChatPage() {
     }
   }, [modelParam, models, model, s])
 
+  // Default-model fallback. MUST NOT fire while a ?model= deep link is being
+  // honoured: both this effect and the modelParam effect above run in the same
+  // commit phase and both see `model === null`, so without the `!modelParam`
+  // guard this one's setModel(models[0]) would be queued *after* the param
+  // effect's setModel(found) and win — the user's picked model was silently
+  // replaced by the default. The param effect already handles its own fallback
+  // (found-but-unusable / not-found both land on models[0] + a toast), so when
+  // modelParam is present this effect has nothing left to do.
   useEffect(() => {
-    if (!model && models.length > 0) {
+    if (!model && models.length > 0 && !modelParam) {
       setModel(models[0]); // Always set the first model as default if no model is selected
     }
-  }, [models, model]);
+  }, [models, model, modelParam]);
 
   useEffect(() => {
     if (catalogError) toast(s.catalogLoadError, 'error')

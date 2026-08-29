@@ -3,6 +3,7 @@
 import { useLang } from '../LanguageToggle'
 import { toFaDigits } from '@/lib/format'
 import { BrandMark } from './primitives'
+import { EnamadBadge } from './EnamadBadge'
 import { footerContent } from './content'
 import { siteFooterStrings } from './SiteFooter.strings'
 
@@ -28,6 +29,7 @@ export function SiteFooter() {
               <BrandMark />
             </a>
             <p className="lp-footer__tagline">{s.tagline}</p>
+            <EnamadBadge compact />
           </div>
 
           {columns.map((column) => (

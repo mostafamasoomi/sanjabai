@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLang } from '../LanguageToggle'
 import { CheckGlyph, ForwardArrow, ProviderLogo } from './primitives'
-import { EnamadBadge } from './EnamadBadge'
 import { heroContent } from './content'
 import { heroStrings } from './Hero.strings'
 import { useTilt } from './useTilt'
@@ -197,8 +196,6 @@ export function Hero() {
           </h1>
 
           <p className="lp-hero__lead">{s.lead}</p>
-
-          <EnamadBadge compact />
 
           <div className="lp-hero__actions">
             <a href="/signup" className="lp-btn lp-btn--primary lp-btn--lg lp-btn--glow">

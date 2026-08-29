@@ -82,6 +82,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fa" dir="rtl" data-theme="dark" suppressHydrationWarning>
       <head>
+        {/* TEMPORARY — payment gateway asked for the verification code as the
+            page <title> ("عنوان تایید"). Static JSX, not generateMetadata's
+            `title`, for the same streaming reason as the enamad meta tag
+            below. REMOVE this line after clicking "تایید عنوان" in the
+            gateway panel — it overrides the real title while present. */}
+        <title>22040799</title>
         {/* Payment gateway domain-verification tag. Must be a static JSX tag
             here, not part of generateMetadata's returned object — that path
             renders async and streams into <head> via client JS, which is

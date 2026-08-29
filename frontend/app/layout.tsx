@@ -42,9 +42,6 @@ export async function generateMetadata(): Promise<Metadata> {
       description: ogDescription,
     },
     robots: { index: true, follow: true },
-    other: {
-      enamad: '22040799',
-    },
   }
 }
 
@@ -85,6 +82,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fa" dir="rtl" data-theme="dark" suppressHydrationWarning>
       <head>
+        {/* Payment gateway domain-verification tag. Must be a static JSX tag
+            here, not part of generateMetadata's returned object — that path
+            renders async and streams into <head> via client JS, which is
+            invisible to a bot that doesn't execute JavaScript. */}
+        <meta name="enamad" content="22040799" />
         {/* The two weights used above the fold. Everything else in the family
             loads normally via @font-face in globals.css. */}
         <link

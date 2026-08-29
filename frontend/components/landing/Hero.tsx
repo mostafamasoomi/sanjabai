@@ -198,6 +198,8 @@ export function Hero() {
 
           <p className="lp-hero__lead">{s.lead}</p>
 
+          <EnamadBadge compact />
+
           <div className="lp-hero__actions">
             <a href="/signup" className="lp-btn lp-btn--primary lp-btn--lg lp-btn--glow">
               {s.ctaPrimary}
@@ -216,8 +218,6 @@ export function Hero() {
               </li>
             ))}
           </ul>
-
-          <EnamadBadge compact />
         </div>
 
         <ProductPreview />

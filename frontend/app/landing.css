@@ -845,7 +845,6 @@ a.lp-pill:hover {
 .lp-enamad {
   display: flex;
   justify-content: center;
-  margin-block-start: 0.75rem;
 }
 
 .lp-enamad img {
@@ -2267,7 +2266,6 @@ a.lp-pill:hover {
 
 .lp-footer__bottom .lp-enamad {
   flex-shrink: 0;
-  margin-block-start: 0;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

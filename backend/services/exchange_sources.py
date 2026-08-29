@@ -8,16 +8,12 @@ from Bonbast.com next to tgju.org, and leave the source list open so a
 future reference site can be added from the panel without a deploy.
 
 ── Where this plugs into content.py's resolver ─────────────────────────
-content.py's _compute_exchange_rate() keeps its original 4-tier ladder
-(db_override -> tgju -> er_api -> hardcoded_fallback) byte-for-byte --
-tests/test_exchange_rate_source.py patches content._fetch_tgju_rate
-directly and asserts that exact tier order, so it was not touched. This
-module supplies one EXTRA rung, resolve_configured_sources(), which
-content.py tries only when tgju has already failed and only before falling
-back to open.er-api.com. It walks every enabled row of
-exchange_rate_sources (Bonbast plus any admin-added custom_regex row) in
-priority order and returns the first candidate that both fetches
-successfully and passes is_plausible_usd_irt_toman() below.
+2026-08-29: content.py's _compute_exchange_rate() moved to a loss-safe
+MAX-of-market-sources policy (see its own docstring) -- it ALWAYS calls
+both _fetch_tgju_rate() and resolve_configured_sources() below (when
+there is no db_override) and takes the higher plausible one, so a
+frozen-LOW tgju never silently wins for answering "first". The latter
+mirrors that one level down: MAXIMUM, not first, candidate per row.
 
 ── Trust boundary (custom_regex sources) ────────────────────────────────
 An admin-supplied source is a URL plus a DECLARATIVE extraction rule --
@@ -60,6 +56,7 @@ import json
 import logging
 import re
 import signal
+from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
@@ -93,6 +90,74 @@ def is_plausible_usd_irt_toman(rate_toman: Any) -> bool:
     if r != r or r in (float('inf'), float('-inf')):  # NaN / inf
         return False
     return SANITY_MIN_TOMAN <= r <= SANITY_MAX_TOMAN
+
+
+# ── Last-known-good rate + bounded open.er-api.com fallback ──────────────
+# 2026-08-29: content.py's tier 3, reached only when neither tgju nor a
+# configured source is plausible. er-api has been seen ~30% below real
+# market (~143,644 vs ~200,000+ Toman) while still inside the sanity band,
+# so it's bounded against a separately-persisted anchor (NOT
+# content.EXCHANGE_RATE_CACHE_KEY, already expired by the time this runs).
+LAST_KNOWN_GOOD_CACHE_KEY = "exchange_rate:usd_irt:last_known_good"
+LAST_KNOWN_GOOD_TTL = 30 * 24 * 3600  # 30 days
+ER_API_MAX_DEVIATION_PCT = 15.0
+
+
+async def save_last_known_good(rate_irt: float, source: str) -> None:
+    """Persist as last-known-good, resetting its TTL. Never called for the
+    hardcoded fallback (not a market observation). Best-effort."""
+    payload = json.dumps({"rate_irt": rate_irt, "source": source,
+                           "saved_at": datetime.now(timezone.utc).isoformat()})
+    try:
+        await rds.setex(LAST_KNOWN_GOOD_CACHE_KEY, LAST_KNOWN_GOOD_TTL, payload)
+    except Exception as e:
+        logger.warning("last-known-good exchange rate cache write failed: %s", e)
+
+
+async def get_last_known_good() -> tuple[float, str] | None:
+    """The persisted last-known-good rate, or None if unset/unreadable."""
+    try:
+        cached = await rds.get(LAST_KNOWN_GOOD_CACHE_KEY)
+        if cached:
+            payload = json.loads(cached)
+            return float(payload["rate_irt"]), payload.get("source") or "unknown"
+    except Exception as e:
+        logger.warning("last-known-good exchange rate cache read failed: %s", e)
+    return None
+
+
+async def resolve_er_api_fallback() -> tuple[float, str] | None:
+    """Accept er-api only within ER_API_MAX_DEVIATION_PCT of last-known-good
+    (skipped with no anchor -- cold cache); otherwise serve last-known-good
+    with its TTL extended. None only when both are unusable, so content.py
+    falls through to its hardcoded floor. Uses content._http, not a
+    module-scope import, for the same late-binding reason as the fetchers
+    above (IMPORT CONTRACT)."""
+    lkg = await get_last_known_good()
+    er_toman = None
+    try:
+        resp = await content._http.get('https://open.er-api.com/v6/latest/USD', follow_redirects=True, timeout=10)
+        resp.raise_for_status()
+        er_toman = float(resp.json()['rates']['IRR']) / 10
+    except Exception as e:
+        logger.warning("er_api USD rate fetch failed: %s", e)
+
+    if er_toman is not None and not is_plausible_usd_irt_toman(er_toman):
+        logger.warning("er_api USD rate %s Toman failed the sanity band, ignoring", er_toman)
+        er_toman = None
+    if er_toman is not None and lkg is not None and lkg[0] > 0:
+        deviation_pct = abs(er_toman - lkg[0]) / lkg[0] * 100
+        if deviation_pct > ER_API_MAX_DEVIATION_PCT:
+            logger.warning("er_api rate %s deviates %.1f%% from last-known-good %s, rejecting", er_toman, deviation_pct, lkg[0])
+            er_toman = None
+
+    if er_toman is not None:
+        await save_last_known_good(er_toman, 'er_api')
+        return er_toman, 'er_api'
+    if lkg is not None:
+        await save_last_known_good(lkg[0], 'last_known_good')
+        return lkg[0], 'last_known_good'
+    return None
 
 
 # ── Flat Toman markup (owner-editable) ────────────────────────────────────
@@ -388,12 +453,14 @@ _MAX_ROWS_TRIED = 8
 
 
 async def resolve_configured_sources() -> tuple[float | None, str | None]:
-    """Walk enabled exchange_rate_sources rows in priority order (lowest
-    first), dispatching by `kind`. Returns the first candidate that both
-    fetches successfully and passes is_plausible_usd_irt_toman(), else
-    (None, None). Every row's failure -- network error, bad parse, an
-    implausible number -- is caught here and just skips to the next row;
-    this function must never raise and never return an unvalidated rate.
+    """Walk every enabled exchange_rate_sources row (priority order only
+    bounds how many are tried, see _MAX_ROWS_TRIED), dispatching by `kind`.
+    Fetches ALL -- never stops at the first success -- and returns the
+    MAXIMUM candidate that fetched successfully and passed
+    is_plausible_usd_irt_toman(), else (None, None): loss-safe by design
+    (2026-08-29), the higher of two disagreeing sources is the safer number
+    under "no request sold at a loss". Every row's failure just skips to
+    the next; this function must never raise or return an unvalidated rate.
     """
     if not async_session:
         return None, None
@@ -408,6 +475,7 @@ async def resolve_configured_sources() -> tuple[float | None, str | None]:
         logger.warning('exchange_rate_sources read failed: %s', e)
         return None, None
 
+    best: tuple[float, str] | None = None
     for row in rows[:_MAX_ROWS_TRIED]:
         try:
             if row.kind == 'bonbast':
@@ -426,6 +494,7 @@ async def resolve_configured_sources() -> tuple[float | None, str | None]:
         if not is_plausible_usd_irt_toman(rate):
             logger.warning('exchange source %s returned an implausible rate %r Toman, rejecting', row.source_key, rate)
             continue
-        return rate, row.source_key
+        if best is None or rate > best[0]:
+            best = (rate, row.source_key)
 
-    return None, None
+    return best if best is not None else (None, None)

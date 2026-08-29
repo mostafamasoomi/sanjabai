@@ -210,6 +210,41 @@ class TestResolveConfiguredSources:
         assert (rate, source) == (210_000.0, 'mysite')
 
     @pytest.mark.asyncio
+    async def test_two_plausible_rows_the_higher_wins(self, mock_async_session):
+        # Loss-safe per-ROW selection: when two configured sources BOTH fetch a
+        # plausible rate, the MAX must win — not the first row, not the min.
+        # This guards the internal comparison inside resolve_configured_sources()
+        # that the _compute_exchange_rate()-level tests mock away entirely (QA
+        # found a min-mutation here survived the whole suite). Reachable in prod
+        # the moment an admin enables Bonbast + a custom source together — which
+        # the product explicitly supports. Here the SECOND row is the higher one,
+        # so a "first row wins" bug would also be caught.
+        bonbast_row = make_row(source_key='bonbast', display_name='Bonbast.com', kind='bonbast',
+                                url=None, unit='toman', extract_regex=None, timeout_s=8)
+        custom_row = make_row(source_key='mysite', display_name='My Site', kind='custom_regex',
+                               url='https://example.com/x', unit='toman', extract_regex=r'usd=(\d+)', timeout_s=5)
+        mock_async_session._execute_result = make_result(fetchall=[bonbast_row, custom_row])
+        with patch.object(es, '_fetch_bonbast_rate', new=AsyncMock(return_value=200_000.0)), \
+             patch.object(es, '_fetch_custom_regex_rate', new=AsyncMock(return_value=215_000.0)):
+            rate, source = await es.resolve_configured_sources()
+        assert (rate, source) == (215_000.0, 'mysite')
+
+    @pytest.mark.asyncio
+    async def test_two_plausible_rows_max_wins_regardless_of_order(self, mock_async_session):
+        # Symmetric to the above: now the FIRST row (bonbast) is the higher one,
+        # so a "last row wins" bug is caught too. Together the pair pins
+        # max-of-rows in both directions.
+        bonbast_row = make_row(source_key='bonbast', display_name='Bonbast.com', kind='bonbast',
+                                url=None, unit='toman', extract_regex=None, timeout_s=8)
+        custom_row = make_row(source_key='mysite', display_name='My Site', kind='custom_regex',
+                               url='https://example.com/x', unit='toman', extract_regex=r'usd=(\d+)', timeout_s=5)
+        mock_async_session._execute_result = make_result(fetchall=[bonbast_row, custom_row])
+        with patch.object(es, '_fetch_bonbast_rate', new=AsyncMock(return_value=215_000.0)), \
+             patch.object(es, '_fetch_custom_regex_rate', new=AsyncMock(return_value=200_000.0)):
+            rate, source = await es.resolve_configured_sources()
+        assert (rate, source) == (215_000.0, 'bonbast')
+
+    @pytest.mark.asyncio
     async def test_unknown_kind_is_skipped_not_crashed(self, mock_async_session):
         row = make_row(source_key='mystery', display_name='?', kind='not_a_real_kind',
                         url=None, unit='toman', extract_regex=None, timeout_s=5)
@@ -334,9 +369,11 @@ class TestFetchCustomRegexRate:
 
 class TestComputeExchangeRateWithConfiguredSources:
     """content._compute_exchange_rate() must still exist and still call
-    services.exchange_sources when tgju fails -- this is the one seam
-    between the two files, asserted here so a future edit to either side
-    trips a test instead of silently breaking the wiring."""
+    services.exchange_sources -- this is the one seam between the two files,
+    asserted here so a future edit to either side trips a test instead of
+    silently breaking the wiring. Under the loss-safe policy the configured
+    sources are consulted on EVERY resolve (not only when tgju fails), and the
+    higher plausible quote wins."""
 
     @pytest.mark.asyncio
     async def test_configured_source_wins_when_tgju_fails(self, mock_async_session):
@@ -347,13 +384,29 @@ class TestComputeExchangeRateWithConfiguredSources:
         assert (rate, source) == (210_000.0, 'bonbast')
 
     @pytest.mark.asyncio
-    async def test_tgju_success_never_reaches_configured_sources(self, mock_async_session):
+    async def test_tgju_success_still_consults_configured_sources_and_max_wins(self, mock_async_session):
+        # Loss-safe policy (replaces the old short-circuit): even when tgju
+        # returns a good number, configured sources are STILL fetched and the
+        # higher plausible quote wins, so a frozen-LOW tgju cannot win by tier
+        # order. tgju 1,000,000 IRR / 10 = 100,000 Toman; bonbast 210,000
+        # Toman -> bonbast wins, and resolve_configured_sources IS awaited.
         mock_async_session._execute_result = make_result(fetchone=None)
         with patch.object(content_mod, '_fetch_tgju_rate', new=AsyncMock(return_value=1_000_000.0)), \
-             patch.object(es, 'resolve_configured_sources', new=AsyncMock()) as mock_resolve:
+             patch.object(es, 'resolve_configured_sources', new=AsyncMock(return_value=(210_000.0, 'bonbast'))) as mock_resolve:
             rate, pct, source = await content_mod._compute_exchange_rate()
-        assert source == 'tgju'
-        mock_resolve.assert_not_awaited()
+        assert (rate, source) == (210_000.0, 'bonbast')
+        mock_resolve.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_tgju_wins_when_it_is_the_higher_plausible_quote(self, mock_async_session):
+        # Symmetric to the above: tgju 2,200,000 IRR / 10 = 220,000 Toman
+        # beats a lower bonbast 210,000 -> tgju wins, still loss-safe.
+        mock_async_session._execute_result = make_result(fetchone=None)
+        with patch.object(content_mod, '_fetch_tgju_rate', new=AsyncMock(return_value=2_200_000.0)), \
+             patch.object(es, 'resolve_configured_sources', new=AsyncMock(return_value=(210_000.0, 'bonbast'))) as mock_resolve:
+            rate, pct, source = await content_mod._compute_exchange_rate()
+        assert (rate, source) == (220_000.0, 'tgju')
+        mock_resolve.assert_awaited()
 
     @pytest.mark.asyncio
     async def test_implausible_tgju_rate_is_rejected_then_falls_through(self, mock_async_session):

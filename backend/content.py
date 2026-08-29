@@ -67,7 +67,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-EXCHANGE_RATE_CACHE_TTL = 3600  # 1 hour
+EXCHANGE_RATE_CACHE_TTL = 900  # 15 min -- matches the _pricing_refresh_loop tick, so each tick actually refetches instead of serving a stale hour-old cache
 EXCHANGE_RATE_CACHE_KEY = "exchange_rate:usd_irt:resolved"
 EXCHANGE_RATE_NEGATIVE_TTL = 300  # cache upstream failures briefly too
 TGJU_TIMEOUT_S = 4.0  # was an effectively unbounded 15s through a dead proxy
@@ -241,30 +241,37 @@ async def _fetch_tgju_rate() -> float | None:
 async def _compute_exchange_rate() -> tuple[float, int, str]:
     """Return the live USD→IRT (Toman) rate, markup percentage, and provenance.
 
-    Order of resolution (the returned `source` records which tier won):
-      1. A manual DB override (exchange_rate_overrides) if present -> 'db_override'.
-      2. Live tgju.org market rate (authoritative for IRT) -> 'tgju'.
-      2b. Admin-configured sources (Bonbast.com + any admin-added custom
-          source, migrations/0047_exchange_sources.sql) -> the source's own
-          `source_key`, e.g. 'bonbast'. See services/exchange_sources.py.
-      3. Fallback to open.er-api.com -> 'er_api'.
-      4. Hardcoded fallback constant -> 'hardcoded_fallback'.
+    Order of resolution (`source` records which tier won):
+      1. A manual DB override (exchange_rate_overrides) if present ->
+         'db_override'. Absolute: overrides everything below.
+      2. Loss-safe MAX of every plausible market candidate from BOTH
+         tgju.org AND the admin-configured sources (Bonbast.com + any
+         custom source, migrations/0047_exchange_sources.sql) -> 'tgju' or
+         the winning `source_key`, e.g. 'bonbast'. Both always fetched
+         (never stop at the first); the higher of two reputable quotes is
+         the loss-safe pick under "no request sold at a loss", and it makes
+         a frozen-LOW tgju quote harmless. See services/exchange_sources.py.
+      3. Last resort, only when NEITHER tgju nor a configured source is
+         plausible: open.er-api.com bounded against the last-known-good
+         rate -> 'er_api', or the last-known-good rate itself if er-api is
+         unavailable/out of band -> 'last_known_good'. See
+         services.exchange_sources.resolve_er_api_fallback().
+      4. Hardcoded fallback -> 'hardcoded_fallback'. True final floor, only
+         when there is no last-known-good rate at all.
 
-    Tiers 2, 2b, and 3 are each passed through
-    services.exchange_sources.is_plausible_usd_irt_toman() before being
-    trusted -- an order-of-magnitude sanity band that rejects a scrape gone
-    wrong (garbage number, or a Rial/Toman mixup) rather than ever letting
-    it reach the catalogue. Tier 1 (an explicit admin override) and tier 4
-    (a fixed code constant) are not run through the band: an override is
-    already a deliberate human decision, and the hardcoded constant cannot
-    itself be "a bad scrape".
+    Every market candidate passes is_plausible_usd_irt_toman() first (an
+    order-of-magnitude sanity band against a bad scrape or Rial/Toman
+    mixup). Tiers 1 and 4 skip it: an override is a deliberate human
+    decision, and the hardcoded constant can't itself be "a bad scrape".
     """
-    from services.exchange_sources import is_plausible_usd_irt_toman, resolve_configured_sources
+    from services.exchange_sources import (
+        is_plausible_usd_irt_toman, resolve_configured_sources,
+        resolve_er_api_fallback, save_last_known_good,
+    )
 
     markup_pct = await get_global_markup_pct()
-    rate_irr = None
 
-    # 1. Manual DB override (highest priority)
+    # 1. Manual DB override (highest priority, absolute)
     try:
         if async_session is not None:
             async with async_session() as session:
@@ -280,40 +287,34 @@ async def _compute_exchange_rate() -> tuple[float, int, str]:
     except Exception:
         pass
 
-    # 2. Live tgju.org
-    rate_irr = await _fetch_tgju_rate()
-    source = 'tgju'
-    if rate_irr is not None and not is_plausible_usd_irt_toman(rate_irr / 10):
-        logger.warning("tgju USD rate %s Toman failed the sanity band, ignoring", rate_irr / 10)
-        rate_irr = None
+    # 2 & 2b. Gather every plausible candidate (tgju + configured sources)
+    # and take the loss-safe MAX; both always fetched, never stop at first.
+    candidates: list[tuple[float, str]] = []
 
-    # 2b. Admin-configured sources (Bonbast.com + any custom source)
-    if rate_irr is None:
-        configured_rate, configured_source = await resolve_configured_sources()
-        if configured_rate is not None:
-            return configured_rate, markup_pct, configured_source
+    tgju_irr = await _fetch_tgju_rate()
+    if tgju_irr is not None:
+        tgju_toman = tgju_irr / 10
+        if is_plausible_usd_irt_toman(tgju_toman):
+            candidates.append((tgju_toman, 'tgju'))
+        else:
+            logger.warning("tgju USD rate %s Toman failed the sanity band, ignoring", tgju_toman)
 
-    # 3. Fallback to open.er-api.com
-    if rate_irr is None:
-        source = 'er_api'
-        try:
-            resp2 = await _http.get('https://open.er-api.com/v6/latest/USD', follow_redirects=True, timeout=10)
-            resp2.raise_for_status()
-            candidate_irr = float(resp2.json()['rates']['IRR'])
-            if is_plausible_usd_irt_toman(candidate_irr / 10):
-                rate_irr = candidate_irr
-            else:
-                logger.warning("er_api USD rate %s Toman failed the sanity band, ignoring", candidate_irr / 10)
-        except Exception:
-            pass
+    configured_rate, configured_source = await resolve_configured_sources()
+    if configured_rate is not None and configured_source is not None:
+        candidates.append((configured_rate, configured_source))
 
-    # 4. Hardcoded fallback
-    if rate_irr is None:
-        source = 'hardcoded_fallback'
-        rate_irr = 1_264_884
+    if candidates:
+        rate_irt, source = max(candidates, key=lambda c: c[0])
+        await save_last_known_good(rate_irt, source)
+        return rate_irt, markup_pct, source
 
-    rate_irt = rate_irr / 10  # IRR → IRT (Toman)
-    return rate_irt, markup_pct, source
+    # 3. Last resort: open.er-api.com, bounded against last-known-good.
+    fallback = await resolve_er_api_fallback()
+    if fallback is not None:
+        return fallback[0], markup_pct, fallback[1]
+
+    # 4. Hardcoded fallback -- true final floor, no last-known-good exists.
+    return 1_264_884 / 10, markup_pct, 'hardcoded_fallback'
 
 
 async def _get_exchange_rate() -> tuple[float, int]:
@@ -407,82 +408,32 @@ async def api_exchange_rate() -> JSONResponse:
 
     Dual paths:
     - `/exchange-rate` — used by Next.js rewrite (`/api/exchange-rate` → backend `/exchange-rate`)
-    - `/api/exchange-rate` — direct backend / external clients
+    - `/api/exchange-rate` — direct backend / external clients (public /pricing reads this)
+
+    USD resolution goes through the shared loss-safe resolver
+    (`get_exchange_rate_meta()` -> `_get_exchange_rate()` -> `_compute_exchange_rate()`)
+    so this public endpoint can never diverge from the admin panel and catalog
+    pricing again. It used to carry its OWN duplicate tgju→er-api ladder that
+    hard-preferred tgju and cached under a separate `exchange_rate:usd_irt`
+    key — which meant a frozen tgju quote stayed frozen here even after the
+    shared path was fixed, and the /pricing page showed a stale rate. Both the
+    duplicate ladder and that duplicate cache key are gone; the shared
+    resolver's cache governs freshness. `usd_to_irt` stays the BARE market
+    rate (no flat markup), exactly as before. EUR stays on its own cached path
+    (Hermes server pricing / ops visibility only, never a user currency).
     """
-    cached = await rds.get('exchange_rate:usd_irt')
-    if cached:
-        return JSONResponse(json.loads(cached))
-
-    # 1. Check DB override first (market rate)
-    rate_irt = None
-    source = 'fallback'
-    markup_pct = await get_global_markup_pct()
-    try:
-        if async_session is not None:
-            async with async_session() as session:
-                res = await session.execute(sqlalchemy.text(
-                    "SELECT rate FROM exchange_rate_overrides "
-                    "WHERE from_currency='USD' AND to_currency='IRT' AND active=TRUE "
-                    "ORDER BY id DESC LIMIT 1"
-                ))
-                row = res.fetchone()
-                if row:
-                    rate_irt = float(row.rate)
-                    source = 'manual-override'
-    except Exception:
-        pass
-
-    # 2. Primary: tgju.org (Iran market, live)
-    if rate_irt is None:
-        rate_irr = None
-        try:
-            import re, urllib.request as _ur
-            # No hard-coded backhaul-proxy IP here — this repo is public.
-            # HTTP(S)_PROXY is the same env var the Bynara traffic path uses
-            # (see chat.py); when unset we just go direct.
-            proxy_url = os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY")
-            if proxy_url:
-                _opener = _ur.build_opener(_ur.ProxyHandler({"http": proxy_url, "https": proxy_url}))
-            else:
-                _opener = _ur.build_opener()
-            _resp = _opener.open("https://www.tgju.org/profile/price_dollar_rl", timeout=15)
-            _text = _resp.read().decode()
-            _m = re.search(r'class="price"[^>]*>([\d,]+)<', _text)
-            if _m:
-                rate_irr = float(_m.group(1).replace(",", ""))
-                source = "tgju.org"
-        except Exception:
-            pass
-
-# 3. Fallback to open.er-api.com
-        if rate_irr is None:
-            try:
-                resp2 = await _http.get('https://open.er-api.com/v6/latest/USD', follow_redirects=True, timeout=10)
-                resp2.raise_for_status()
-                rate_irr = float(resp2.json()['rates']['IRR'])
-                source = 'open.er-api.com'
-            except Exception:
-                pass
-
-        if rate_irr is None:
-            rate_irr = 1_264_884  # hardcoded fallback
-
-        rate_irt = rate_irr / 10  # IRR → IRT (Toman)
-
+    meta = await get_exchange_rate_meta()
+    bare = float(meta['rate_irt_bare'])
     eur_to_irt = await _get_cached_eur_to_irt()
 
     result = jsonable_encoder({
-        'usd_to_irt': round(rate_irt),
-        'usd_to_irr': round(rate_irt * 10),
-        # EUR rate is used internally to price the Hermes server product
-        # (Hetzner bills in EUR); exposed here for admin/ops visibility only
-        # -- never surfaced as a currency choice to end users.
+        'usd_to_irt': round(bare),
+        'usd_to_irr': round(bare * 10),
         'eur_to_irt': round(eur_to_irt),
-        'markup_pct': markup_pct,
-        'source': source,
+        'markup_pct': meta['markup_pct'],
+        'source': meta['source'],
         'cached_at': datetime.now(timezone.utc).isoformat(),
     })
-    await rds.setex('exchange_rate:usd_irt', EXCHANGE_RATE_CACHE_TTL, json.dumps(result))
     return JSONResponse(result)
 
 

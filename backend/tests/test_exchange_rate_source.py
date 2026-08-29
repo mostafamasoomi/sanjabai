@@ -25,6 +25,7 @@ from starlette.testclient import TestClient
 
 import content as content_mod
 import exchange_rate_admin
+import services.exchange_sources as es
 from tests.conftest import make_result, make_row
 
 
@@ -49,7 +50,18 @@ def _mock_http_json(irr_value: float):
 
 
 class TestComputeExchangeRateSource:
-    """_compute_exchange_rate() reports which of the 4 tiers won."""
+    """_compute_exchange_rate() reports which tier won.
+
+    2026-08-29: tier 2 changed from a strict ladder (tgju first, configured
+    sources only as a fallback) to a loss-safe MAX of every plausible market
+    candidate gathered from BOTH tgju and the configured sources (Bonbast) --
+    see TestLossSafeMaxOfSources below for that policy's dedicated coverage.
+    The four tests here are untouched because none of them populate a second
+    candidate (no configured-source DB row, no last-known-good cache entry),
+    so each one still exercises exactly the single-tier path its name says --
+    proof that the new policy is a strict superset of the old one, not a
+    silent behaviour change for the common single-source case.
+    """
 
     @pytest.mark.asyncio
     async def test_tier1_db_override_reports_source(self, mock_async_session):
@@ -85,6 +97,101 @@ class TestComputeExchangeRateSource:
             rate, pct, source = await content_mod._compute_exchange_rate()
         assert source == 'hardcoded_fallback'
         assert rate == pytest.approx(1_264_884 / 10)
+
+
+class TestLossSafeMaxOfSources:
+    """The 2026-08-29 policy change (owner-approved, see NEXT-SESSION.md):
+    tgju.org's quote had gone stale (frozen since Aug 27) while the resolver
+    ladder hard-preferred it whenever it returned a plausible number, so a
+    fresher Bonbast quote was never even consulted. Now BOTH tgju and the
+    configured sources are always fetched, and the loss-safe MAXIMUM of
+    whatever comes back plausible wins -- under the house "no request may be
+    sold at a loss" rule, the higher of two reputable market quotes is
+    always the safer number to charge from, and a frozen-LOW tgju becomes
+    automatically harmless instead of silently winning by tier order.
+
+    Each test here is written to FAIL on the pre-change strict ladder and
+    PASS with the max-of-sources policy.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_frozen_low_tgju_loses_to_higher_bonbast(self, mock_async_session):
+        """tgju frozen-LOW + Bonbast higher-and-plausible -> resolver
+        returns the Bonbast (max) value, source recorded as Bonbast. Fails
+        on the old ladder, which returns tgju's 100,000 the moment tgju
+        answers at all and never even calls resolve_configured_sources()."""
+        mock_async_session._execute_result = make_result(fetchone=None)
+        with patch.object(content_mod, '_fetch_tgju_rate', new=AsyncMock(return_value=1_000_000.0)), \
+             patch.object(es, 'resolve_configured_sources', new=AsyncMock(return_value=(150_000.0, 'bonbast'))):
+            rate, pct, source = await content_mod._compute_exchange_rate()
+        assert source == 'bonbast'
+        assert rate == 150_000.0
+
+    @pytest.mark.asyncio
+    async def test_b_both_plausible_returns_max_not_whichever_answered_first(self, mock_async_session):
+        """Both tgju and Bonbast plausible, tgju happens to be the higher of
+        the two this time -> tgju still wins, but only because it is the
+        max, not because it is tier 2 -- proven by asserting
+        resolve_configured_sources() was awaited anyway (always fetch both,
+        never stop at the first). Fails on the old ladder, which never
+        awaits resolve_configured_sources() once tgju has already
+        succeeded."""
+        mock_async_session._execute_result = make_result(fetchone=None)
+        with patch.object(content_mod, '_fetch_tgju_rate', new=AsyncMock(return_value=2_000_000.0)), \
+             patch.object(es, 'resolve_configured_sources',
+                           new=AsyncMock(return_value=(150_000.0, 'bonbast'))) as mock_resolve:
+            rate, pct, source = await content_mod._compute_exchange_rate()
+        assert source == 'tgju'
+        assert rate == 200_000.0
+        mock_resolve.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_c_er_api_deviating_from_last_known_good_is_rejected(self, mock_async_session):
+        """tgju and Bonbast both unavailable, er-api's value is >15% below
+        the last-known-good rate (the packet's own real-world numbers:
+        er-api ~143,644 Toman vs. a ~200,000 Toman last-known-good, ~28%
+        low) -> er-api is REJECTED and the last-known-good rate is served
+        instead, not the ~30%-under-market er-api figure. Money invariant:
+        the served rate is exactly the last-known-good value, not a mangled
+        one -- no accidental extra /10 or *10 anywhere in this path."""
+        mock_async_session._execute_result = make_result(fetchone=None)
+        lkg_payload = json.dumps({'rate_irt': 200_000.0, 'source': 'tgju', 'saved_at': 'x'})
+        with patch.object(content_mod, '_fetch_tgju_rate', new=AsyncMock(return_value=None)), \
+             patch.object(es, 'resolve_configured_sources', new=AsyncMock(return_value=(None, None))), \
+             patch.object(content_mod.rds, 'get', new=AsyncMock(return_value=lkg_payload)), \
+             patch.object(content_mod.rds, 'setex', new=AsyncMock()), \
+             patch.object(content_mod, '_http', _mock_http_json(1_436_440.0)):  # -> 143,644 Toman
+            rate, pct, source = await content_mod._compute_exchange_rate()
+        assert source == 'last_known_good'
+        assert rate == 200_000.0
+
+    @pytest.mark.asyncio
+    async def test_d_er_api_within_band_of_last_known_good_is_accepted(self, mock_async_session):
+        """tgju and Bonbast both unavailable, er-api's value is within 15%
+        of the last-known-good rate -> er-api IS accepted (the guard is a
+        deviation bound, not an outright ban on the fallback tier)."""
+        mock_async_session._execute_result = make_result(fetchone=None)
+        lkg_payload = json.dumps({'rate_irt': 200_000.0, 'source': 'tgju', 'saved_at': 'x'})
+        with patch.object(content_mod, '_fetch_tgju_rate', new=AsyncMock(return_value=None)), \
+             patch.object(es, 'resolve_configured_sources', new=AsyncMock(return_value=(None, None))), \
+             patch.object(content_mod.rds, 'get', new=AsyncMock(return_value=lkg_payload)), \
+             patch.object(content_mod.rds, 'setex', new=AsyncMock()), \
+             patch.object(content_mod, '_http', _mock_http_json(2_100_000.0)):  # -> 210,000 Toman, 5% above LKG
+            rate, pct, source = await content_mod._compute_exchange_rate()
+        assert source == 'er_api'
+        assert rate == 210_000.0
+
+    @pytest.mark.asyncio
+    async def test_e_db_override_still_wins_over_everything(self, mock_async_session):
+        """The absolute tier: an admin's exchange_rate_overrides row wins
+        even when tgju/Bonbast would otherwise disagree -- resolve_configured_sources
+        must never even be consulted."""
+        mock_async_session._execute_result = make_result(fetchone=make_row(rate=900_000.0))
+        with patch.object(content_mod, '_fetch_tgju_rate', new=AsyncMock(return_value=1_000_000.0)), \
+             patch.object(es, 'resolve_configured_sources', new=AsyncMock()) as mock_resolve:
+            rate, pct, source = await content_mod._compute_exchange_rate()
+        assert (rate, source) == (900_000.0, 'db_override')
+        mock_resolve.assert_not_awaited()
 
 
 class TestGetExchangeRateBackwardCompat:

@@ -26,6 +26,7 @@ function actually runs, by which point content.py has finished executing
 """
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -90,9 +91,23 @@ async def refresh_pricing() -> dict[str, Any]:
     model_catalog; Toman (IRT) prices are derived from the live USD→IRT rate.
     Models with no OpenRouter price are left untouched (existing values kept).
     """
-    # 1. Fetch fresh exchange rate (now live from tgju)
+    # 1. Fetch fresh exchange rate (loss-safe max of tgju/configured sources,
+    # see content._compute_exchange_rate())
     await rds.delete('exchange_rate:usd_irt')  # force refresh
     rate_irt, markup_pct = await content._get_exchange_rate()
+    # Truthful provenance: `_get_exchange_rate()` only returns the 2-tuple
+    # (rate, markup_pct) contract every price-computing caller depends on
+    # (see content.py's TestGetExchangeRateBackwardCompat), so the winning
+    # source is read back off the cache payload it just wrote/refreshed,
+    # rather than hardcoding a source name here that may not be the one
+    # that actually won.
+    exchange_source = 'unknown'
+    try:
+        cached = await rds.get(content.EXCHANGE_RATE_CACHE_KEY)
+        if cached:
+            exchange_source = json.loads(cached).get('source') or 'unknown'
+    except Exception as e:
+        logger.warning('failed to read back exchange rate source for refresh_pricing log: %s', e)
     # NOTE: the percentage markup is deliberately NOT folded into this
     # multiplier. model_catalog.input_per_million/output_per_million store
     # the BASE Toman price (USD * rate_irt only); the effective markup
@@ -181,7 +196,7 @@ async def refresh_pricing() -> dict[str, Any]:
     return {
         'status': 'ok',
         'exchange_rate': rate_irt,
-        'exchange_source': 'tgju.org',
+        'exchange_source': exchange_source,
         'markup_pct': markup_pct,
         'models_matched': len(or_prices) // 3,
         'models_updated': updated,

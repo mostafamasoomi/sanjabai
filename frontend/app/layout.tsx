@@ -26,8 +26,12 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     metadataBase: new URL('https://sanjabai.com'),
+    // TEMPORARY: matches the static <title> in RootLayout's <head> below so
+    // the async-resolved title can't flip it back after hydration while the
+    // gateway's title-based verification is pending. REVERT together with
+    // that <title> tag once the gateway confirms.
     title: {
-      default: 'Sanjabai — پلتفرم هوش مصنوعی فارسی',
+      default: '22040799',
       template: '%s | Sanjabai',
     },
     description,

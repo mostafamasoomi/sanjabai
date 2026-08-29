@@ -838,6 +838,34 @@ a.lp-pill:hover {
   flex-shrink: 0;
 }
 
+/* eNamad trust seal. The badge image is rendered by enamad.ir at a fixed
+   size we don't control — compact scales it down to sit quietly under the
+   hero trust row instead of competing with it; the footer instance (no
+   .lp-enamad--compact) keeps their default size. */
+.lp-enamad {
+  display: flex;
+  justify-content: center;
+  margin-block-start: 0.75rem;
+}
+
+.lp-enamad img {
+  display: block;
+}
+
+.lp-enamad--compact {
+  opacity: 0.85;
+  transition: opacity 0.2s ease;
+}
+
+.lp-enamad--compact:hover {
+  opacity: 1;
+}
+
+.lp-enamad--compact img {
+  width: 56px;
+  height: auto;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Product preview — the hero's proof. A real-looking slice of the chat UI
    instead of decorative physics boxes.
@@ -2235,6 +2263,11 @@ a.lp-pill:hover {
 .lp-footer__social {
   display: flex;
   gap: 0.35rem;
+}
+
+.lp-footer__bottom .lp-enamad {
+  flex-shrink: 0;
+  margin-block-start: 0;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

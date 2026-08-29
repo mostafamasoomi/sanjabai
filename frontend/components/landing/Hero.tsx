@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLang } from '../LanguageToggle'
 import { CheckGlyph, ForwardArrow, ProviderLogo } from './primitives'
+import { EnamadBadge } from './EnamadBadge'
 import { heroContent } from './content'
 import { heroStrings } from './Hero.strings'
 import { useTilt } from './useTilt'
@@ -215,6 +216,8 @@ export function Hero() {
               </li>
             ))}
           </ul>
+
+          <EnamadBadge compact />
         </div>
 
         <ProductPreview />

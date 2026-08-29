@@ -9,6 +9,7 @@ import { ThemeToggle } from '@/components/ThemeToggle'
 import { LanguageToggle, useLang, type Lang } from '@/components/LanguageToggle'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { useCommandPalette } from '@/components/CommandPalette'
+import { useProductTour, tourSeen } from '@/components/ProductTour'
 import { isOnboarded } from '@/lib/onboarding'
 import { getPanelPreference, isNavItemVisibleForPanel } from '@/lib/panel'
 import { navIcon } from '@/lib/i18n'
@@ -124,6 +125,15 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
   // has its own separate drawer (sidebarOpen above) and never collapses.
   const [collapsed, setCollapsed] = usePersistedBoolean('sanjabai_sidebar_collapsed', false)
   const { CommandPalette, setOpen: openPalette } = useCommandPalette()
+  // Interactive product tour — the launch-anytime multi-step popup. Called by
+  // the top-bar help button below and by a window event any page can dispatch
+  // (see ProductTour.tsx). Hook runs on every route, above the early returns,
+  // to keep hook order stable — same rule as useCommandPalette.
+  const { ProductTour, openTour, launchLabel: tourLabel } = useProductTour()
+  // One-time "new" nudge dot on the launcher until the user opens it once.
+  // Read once on mount (post-hydration) so SSR and first client render agree.
+  const [tourNudge, setTourNudge] = useState(false)
+  useEffect(() => { setTourNudge(!tourSeen()) }, [])
 
   // Consumer/developer panel preference (lib/panel.ts). This is a UI
   // preference only -- it decides which nav *links* are rendered, not which
@@ -391,6 +401,28 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Interactive guide launcher. Always visible (icon-only) for a
+                signed-in user, mobile included, so the tour is reachable from
+                the top bar on every screen — the owner's explicit ask. The
+                nudge dot appears until first open. */}
+            {user && (
+              <button
+                type="button"
+                onClick={() => { setTourNudge(false); openTour() }}
+                className="btn btn-ghost btn-icon relative"
+                title={tourLabel}
+                aria-label={tourLabel}
+              >
+                <Icon name="info" size={18} />
+                {tourNudge && (
+                  <span
+                    aria-hidden
+                    className="absolute top-1 rounded-full"
+                    style={{ insetInlineEnd: '0.25rem', width: '0.4rem', height: '0.4rem', background: 'var(--accent)' }}
+                  />
+                )}
+              </button>
+            )}
             <LanguageToggle />
             <ThemeToggle />
             {!loading && !user && (
@@ -476,6 +508,9 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
 
       {/* ── Command Palette ────────────────────────────────── */}
       {CommandPalette}
+
+      {/* ── Interactive product tour (multi-step popup) ─────── */}
+      {ProductTour}
 
       {/* ── Toast ──────────────────────────────────────────── */}
       <ToastContainer />

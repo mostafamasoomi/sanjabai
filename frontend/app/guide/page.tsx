@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
 import { dirFor } from '@/lib/i18n'
+import { TOUR_OPEN_EVENT } from '@/components/ProductTour'
+import { productTourStrings } from '@/components/ProductTour.strings'
 import { guideStrings, GUIDE_SECTION_ORDER, type GuideSection } from './guide.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -65,14 +67,30 @@ function SectionCard({ section, questionLabels }: { section: GuideSection; quest
 export default function GuidePage() {
   const lang = useLang()
   const s = guideStrings(lang)
+  const t = productTourStrings(lang)
+
+  // The cards below are the reference dictionary (what/when/cost per feature);
+  // the interactive tour is the guided, workflow-first walkthrough. Offer it
+  // up top so a reader who wants to be *shown* rather than *look up* has one
+  // click to it. Dispatched as a window event that AppShell's tour listens for
+  // (no shared context needed) — see ProductTour.tsx.
+  const startTour = () => {
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event(TOUR_OPEN_EVENT))
+  }
 
   return (
     <div className="flex flex-col gap-6" dir={dirFor(lang)}>
-      <div>
-        <h1 className="page-title">{s.pageTitle}</h1>
-        <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-          {s.pageSubtitle}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="page-title">{s.pageTitle}</h1>
+          <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+            {s.pageSubtitle}
+          </p>
+        </div>
+        <button type="button" onClick={startTour} className="btn btn-primary btn-sm shrink-0">
+          <Icon name="sparkles" size={16} />
+          {t.guideCta}
+        </button>
       </div>
 
       <div

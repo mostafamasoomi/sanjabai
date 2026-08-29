@@ -163,7 +163,12 @@ async def recompute_states() -> int:
                         latency_p95_ms = EXCLUDED.latency_p95_ms,
                         sample_count = EXCLUDED.sample_count,
                         consecutive_failures = EXCLUDED.consecutive_failures,
-                        last_ok_at = EXCLUDED.last_ok_at, last_error = EXCLUDED.last_error,
+                        -- COALESCE, not EXCLUDED: a window with only failures
+                        -- must not erase the proof that this model once
+                        -- answered (mirrors model_health_record.py's writer).
+                        last_ok_at = COALESCE(EXCLUDED.last_ok_at,
+                                              model_health_state.last_ok_at),
+                        last_error = EXCLUDED.last_error,
                         last_error_at = EXCLUDED.last_error_at,
                         checked_at = now(), updated_at = now()
                     """

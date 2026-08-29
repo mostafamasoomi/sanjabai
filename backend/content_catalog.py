@@ -129,7 +129,17 @@ async def _load_catalog_rows() -> list[dict[str, Any]]:
                 'reasoning_per_million, price_version, effective_from, availability, audience, '
                 'rate_limit, deprecated_at, last_verified_at, provenance, '
                 'usd_input_per_million, usd_output_per_million, public_id, markup_pct '
-                "FROM model_catalog WHERE availability = 'available' AND NOT (audience @> '[\"admin\"]')"
+                "FROM model_catalog WHERE availability = 'available' AND NOT (audience @> '[\"admin\"]') "
+                # Honest labelling, defense-in-depth: `availability` alone
+                # says nothing about whether this row has ever actually
+                # answered a live probe. last_ok_at IS NOT NULL (ever-probed-
+                # OK, not a freshness window -- a freshness gate here would
+                # mass-hide the whole catalog during a prober outage) is the
+                # same condition model_health.py's own catalog mirror and
+                # services/probe_gate.py already use to decide "servable".
+                "AND EXISTS (SELECT 1 FROM model_health_state s "
+                "WHERE (s.model_id = model_catalog.id OR s.model_id = model_catalog.provider_model_id) "
+                "AND s.last_ok_at IS NOT NULL) "
                 f"{public_filter} ORDER BY provider, id"
             ))
             return [dict(r._mapping) for r in res.fetchall()]
@@ -199,7 +209,11 @@ async def list_models(request: Request) -> dict[str, Any]:
                         "SELECT id, provider_model_id, public_id, display_name, context_window, availability, "
                         "input_per_million, output_per_million, currency, "
                         "usd_input_per_million, usd_output_per_million, markup_pct "
-                        "FROM model_catalog WHERE availability = 'available' AND NOT (audience @> '[\"admin\"]')"
+                        "FROM model_catalog WHERE availability = 'available' AND NOT (audience @> '[\"admin\"]') "
+                        # Same honest-labelling gate as _load_catalog_rows above.
+                        "AND EXISTS (SELECT 1 FROM model_health_state s "
+                        "WHERE (s.model_id = model_catalog.id OR s.model_id = model_catalog.provider_model_id) "
+                        "AND s.last_ok_at IS NOT NULL) "
                         f"{public_filter} ORDER BY id"
                     )
                 )

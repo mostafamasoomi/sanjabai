@@ -369,7 +369,18 @@ async def get_working_models() -> frozenset[str]:
     try:
         async with chat.async_session() as session:
             res = await session.execute(sqlalchemy.text(
-                "SELECT provider_model_id, id, public_id FROM model_catalog WHERE availability = 'available'"
+                "SELECT provider_model_id, id, public_id FROM model_catalog "
+                "WHERE availability = 'available' "
+                # Honest labelling, defense-in-depth: `availability` alone
+                # says nothing about whether this row has ever actually
+                # answered a live probe (see content_catalog.py's identical
+                # gate on the public catalog queries). last_ok_at IS NOT NULL
+                # is ever-probed-OK, not a freshness window -- a freshness
+                # gate here would mass-reject every chat request during a
+                # prober outage, not just hide a listing.
+                "AND EXISTS (SELECT 1 FROM model_health_state s "
+                "WHERE (s.model_id = model_catalog.id OR s.model_id = model_catalog.provider_model_id) "
+                "AND s.last_ok_at IS NOT NULL)"
             ))
             ids: set[str] = set()
             for row in res.fetchall():
@@ -420,7 +431,22 @@ async def _is_model_allowed(model_id: str) -> bool:
         async with chat.async_session() as session:
             res = await session.execute(
                 sqlalchemy.text(
-                    "SELECT 1 FROM model_catalog WHERE (provider_model_id = :mid OR id = :mid OR public_id = :mid) AND availability='available' LIMIT 1"
+                    "SELECT 1 FROM model_catalog WHERE (provider_model_id = :mid OR id = :mid OR public_id = :mid) "
+                    "AND availability='available' "
+                    # Same probe-history gate as get_working_models() above --
+                    # required here too, not just there: this query is the
+                    # DB fallback _is_model_allowed() falls through to on a
+                    # working-set cache miss, and every chat/compare/smart-
+                    # chat/document-generator call site gates on
+                    # _is_model_allowed(), not get_working_models() directly.
+                    # Gating only the cache and leaving this raw check
+                    # ungated would make the working-set gate above a no-op
+                    # in practice -- any never-probed-OK model would simply
+                    # fall through to this query and still pass.
+                    "AND EXISTS (SELECT 1 FROM model_health_state s "
+                    "WHERE (s.model_id = model_catalog.id OR s.model_id = model_catalog.provider_model_id) "
+                    "AND s.last_ok_at IS NOT NULL) "
+                    "LIMIT 1"
                 ),
                 {'mid': model_id},
             )

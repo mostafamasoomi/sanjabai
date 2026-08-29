@@ -19,7 +19,7 @@ model_health.py's module-level comments for the full writeup.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -241,6 +241,76 @@ class TestQuarantineRecheckSweep:
         assert params == {'recheck': False}
 
 
+class TestRecomputeStatesPreservesLastOkAt:
+    """The P1 regression: recompute_states()'s ON CONFLICT upsert must not
+    erase a model's proof-of-life just because the current 180-minute window
+    happens to hold only failures.
+
+    model_health_record.py's single-probe writer already guards this with
+    COALESCE(EXCLUDED.last_ok_at, model_health_state.last_ok_at) (see the
+    comment there) -- the windowed rollup upsert a few lines below it in this
+    same table never got the same guard, so a bad window could null out a
+    last_ok_at a fresh live probe had just set moments earlier, right back to
+    "never proven to work" -- which services/probe_gate.py treats as
+    never-servable.
+
+    _FakeUpsertSession below does not hardcode the fix into the fake: it
+    reads whichever SET clause the real code under test actually issues and
+    applies THAT semantics to its in-memory state. Revert the COALESCE in
+    model_health.py back to a bare `EXCLUDED.last_ok_at` and this test goes
+    red on its own, because the fake now nulls the state exactly like a real
+    Postgres ON CONFLICT DO UPDATE would.
+    """
+
+    @pytest.mark.asyncio
+    async def test_all_failing_window_does_not_null_a_prior_last_ok_at(self):
+        prior_last_ok_at = 'PRIOR-OK-TIMESTAMP'
+        session = _FakeUpsertSession(
+            event_row=_MappingRow(
+                model_id='m1', provider='litellm', sample_count=3,
+                success_rate=0.0, p50=None, p95=None,
+                last_ok_at=None,  # the window itself has zero successes
+                last_error_at='NEW-ERROR-TIMESTAMP',
+            ),
+            streak_rows=[(False,), (False,), (False,)],
+            fault_row=SimpleNamespace(
+                failures=3, provider_fault_failures=0, last_error='timeout',
+            ),
+            existing_last_ok_at=prior_last_ok_at,
+        )
+        with patch.object(model_health, 'async_session', lambda: _FakeSessionCtx(session)), \
+             patch.object(model_health.rds, 'delete', AsyncMock()):
+            await model_health.recompute_states()
+
+        assert session.state['last_ok_at'] == prior_last_ok_at, (
+            'an all-failing rollup window nulled a previously-recorded '
+            'last_ok_at -- the model looks like it has never once answered'
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_window_with_a_success_still_advances_last_ok_at(self):
+        """Sanity check on the other direction: COALESCE must not get stuck
+        -- a window that DOES contain a success still has to move the
+        watermark forward, not freeze it at the old value."""
+        session = _FakeUpsertSession(
+            event_row=_MappingRow(
+                model_id='m1', provider='litellm', sample_count=3,
+                success_rate=0.667, p50=200, p95=300,
+                last_ok_at='NEW-OK-TIMESTAMP', last_error_at=None,
+            ),
+            streak_rows=[(True,)],
+            fault_row=SimpleNamespace(
+                failures=1, provider_fault_failures=0, last_error='timeout',
+            ),
+            existing_last_ok_at='OLD-OK-TIMESTAMP',
+        )
+        with patch.object(model_health, 'async_session', lambda: _FakeSessionCtx(session)), \
+             patch.object(model_health.rds, 'delete', AsyncMock()):
+            await model_health.recompute_states()
+
+        assert session.state['last_ok_at'] == 'NEW-OK-TIMESTAMP'
+
+
 class TestParkedProbeLane:
     """Lane 3 of _probe_targets: admin-parked / discovery-landed rows are
     MEASURED on a rotating slice so their model_health_state.last_ok_at can
@@ -293,6 +363,15 @@ class TestParkedProbeLane:
 # into model_health._probe_targets needs.
 
 
+class _MappingRow:
+    """Minimal stand-in for a SQLAlchemy Row exposing `_mapping` -- same
+    helper other test files in this suite use, since
+    `dict(r._mapping)` is what recompute_states() calls on each row."""
+
+    def __init__(self, **kwargs):
+        self._mapping = dict(kwargs)
+
+
 class _FakeResult:
     def __init__(self, rows):
         self._rows = rows
@@ -302,6 +381,62 @@ class _FakeResult:
 
     def fetchone(self):
         return self._rows[0] if self._rows else None
+
+
+class _FakeUpsertSession:
+    """Drives recompute_states() through a single model's worth of rows,
+    with just enough SQL-text awareness to route each of its five queries
+    (window aggregate, failure streak, fault classification, the
+    model_health_state upsert, the stale-status sweep) plus the catalog
+    mirror/orphan-check tail queries, which are given empty results so that
+    part of recompute_states is a no-op here -- this test is only about the
+    upsert's last_ok_at semantics.
+
+    The upsert branch does NOT hardcode COALESCE: it inspects the literal SET
+    clause the code under test issues and applies that semantics to
+    ``self.state``, the same way a real ON CONFLICT DO UPDATE would. That is
+    what makes a revert of the model_health.py fix turn this test red.
+    """
+
+    def __init__(self, event_row, streak_rows, fault_row, existing_last_ok_at):
+        self._event_row = event_row
+        self._streak_rows = streak_rows
+        self._fault_row = fault_row
+        self.state = {'last_ok_at': existing_last_ok_at}
+        self.calls: list[tuple[str, dict]] = []
+
+    async def execute(self, stmt, params=None):
+        sql = str(stmt)
+        params = params or {}
+        self.calls.append((sql, params))
+
+        if 'FROM model_health_event WHERE created_at >= :cutoff GROUP BY model_id' in sql:
+            return _FakeResult([self._event_row])
+        if 'ORDER BY created_at DESC LIMIT 10' in sql:
+            return _FakeResult(self._streak_rows)
+        if 'provider_fault_failures' in sql:
+            return _FakeResult([self._fault_row])
+        if 'INSERT INTO model_health_state' in sql:
+            if 'last_ok_at = COALESCE(EXCLUDED.last_ok_at' in sql:
+                if params.get('last_ok') is not None:
+                    self.state['last_ok_at'] = params['last_ok']
+                # else: preserve self.state['last_ok_at'] unchanged
+            else:
+                # Whatever else the SET clause says, a bare EXCLUDED
+                # reference always takes the freshly-computed value —
+                # including NULL, which is the bug this test guards.
+                self.state['last_ok_at'] = params.get('last_ok')
+            return _FakeResult([])
+        if "SET status = 'unknown'" in sql:
+            return _FakeResult([])
+        if 'FROM model_catalog c WHERE' in sql:
+            return _FakeResult([])
+        if "availability = 'available'" in sql and 'public_id IS NULL' in sql:
+            return _FakeResult([])
+        return _FakeResult([])
+
+    async def commit(self):
+        pass
 
 
 class _FakeSession:

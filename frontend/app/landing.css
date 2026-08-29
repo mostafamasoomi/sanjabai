@@ -2264,10 +2264,6 @@ a.lp-pill:hover {
   gap: 0.35rem;
 }
 
-.lp-footer__bottom .lp-enamad {
-  flex-shrink: 0;
-}
-
 /* ═══════════════════════════════════════════════════════════════════════════
    Responsive — three breakpoints, each one collapsing a whole tier of the
    grid rather than patching individual components.

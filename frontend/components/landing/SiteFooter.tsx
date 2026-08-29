@@ -3,7 +3,6 @@
 import { useLang } from '../LanguageToggle'
 import { toFaDigits } from '@/lib/format'
 import { BrandMark } from './primitives'
-import { EnamadBadge } from './EnamadBadge'
 import { footerContent } from './content'
 import { siteFooterStrings } from './SiteFooter.strings'
 
@@ -46,7 +45,6 @@ export function SiteFooter() {
         <div className="lp-footer__bottom">
           <span>{s.copyright(year)}</span>
           <span>{s.madeFor}</span>
-          <EnamadBadge />
         </div>
       </div>
     </footer>

@@ -42,6 +42,9 @@ export async function generateMetadata(): Promise<Metadata> {
       description: ogDescription,
     },
     robots: { index: true, follow: true },
+    other: {
+      enamad: '22040799',
+    },
   }
 }
 

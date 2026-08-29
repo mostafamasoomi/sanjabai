@@ -17,6 +17,7 @@ import { fmt, type Formatters } from '@/lib/i18n'
 import { healthOf, isUsableModel, healthLabel } from '@/app/chat/components/modelUtils'
 import type { HealthStatus, ModelCatalogItem } from '@/types/catalog'
 import { modelsPageStrings } from './page.strings'
+import { tourAnchor } from '@/components/tour/anchors'
 
 type Strings = ReturnType<typeof modelsPageStrings>
 
@@ -322,6 +323,7 @@ export default function ModelsPage() {
           <input
             type="text"
             className="input"
+            {...tourAnchor('models.search')}
             style={{ paddingInlineStart: '2.25rem' }}
             placeholder={s.searchPlaceholder}
             aria-label={s.searchAriaLabel}

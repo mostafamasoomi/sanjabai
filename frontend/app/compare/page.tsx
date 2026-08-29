@@ -12,6 +12,7 @@ import { Skeleton, EmptyState, toast } from '@/components/ui'
 import MarkdownRenderer from '@/app/chat/components/MarkdownRenderer'
 import ModelPicker from '@/app/chat/components/ModelPicker'
 import { comparePageStrings } from './page.strings'
+import { tourAnchor } from '@/components/tour/anchors'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Model Compare — Split view side-by-side
@@ -301,6 +302,7 @@ export default function ComparePage() {
         <div className="compare-input-row">
           <textarea dir="auto"
             className="input flex-1"
+            {...tourAnchor('compare.prompt')}
             rows={2}
             placeholder={s.promptPlaceholder}
             value={prompt}

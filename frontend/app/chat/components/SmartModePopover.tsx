@@ -7,6 +7,7 @@ import { useLang } from '@/components/LanguageToggle'
 import { dirFor, fmt } from '@/lib/i18n'
 import { useKeepInViewport } from '../hooks/useKeepInViewport'
 import { smartModePopoverStrings } from './SmartModePopover.strings'
+import { tourAnchor } from '@/components/tour/anchors'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Smart Mode selector — off / automatic / smart router / one of my combos.
@@ -178,6 +179,7 @@ export default function SmartModePopover({
       <button
         type="button"
         className="smart-mode-toggle"
+        {...tourAnchor('chat.smartMode')}
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen(o => !o)}

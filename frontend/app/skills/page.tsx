@@ -12,6 +12,7 @@ import UseSkillModal from './components/UseSkillModal'
 import CreateSkillModal from './components/CreateSkillModal'
 import { type Skill, CATEGORY_KEYS, categoryLabel } from './types'
 import { skillsPageStrings } from './page.strings'
+import { tourAnchor } from '@/components/tour/anchors'
 
 /* ═══════════════════════════════════════════════════════════════
    Skeleton
@@ -142,6 +143,7 @@ export default function SkillsPage() {
         </div>
         <button
           className="btn btn-primary"
+          {...tourAnchor('skills.create')}
           onClick={() => setShowCreateModal(true)}
           style={{ fontSize: '0.875rem' }}
         >

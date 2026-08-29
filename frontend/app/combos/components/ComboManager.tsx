@@ -13,6 +13,7 @@ import ComboEditor, {
   type Combo, type ComboDraft,
 } from './ComboEditor'
 import { comboStrings } from './ComboManager.strings'
+import { tourAnchor } from '@/components/tour/anchors'
 
 /* ═══════════════════════════════════════════════════════════════════════
    Combo manager — the list, and every call to /api/me/combos.
@@ -148,6 +149,7 @@ export default function ComboManager({ token }: { token: string | null }) {
         <span className="badge badge-accent">{s.comboCount(f.num(combos.length), f.num(MAX_COMBOS))}</span>
         <button
           className="btn btn-primary"
+          {...tourAnchor('combos.create')}
           disabled={atMaxCombos || loading}
           title={atMaxCombos ? s.comboLimitReached(f.num(MAX_COMBOS)) : undefined}
           onClick={() => { setEditorError(null); setDialog({ mode: 'create' }) }}

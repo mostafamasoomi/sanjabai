@@ -1,14 +1,15 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import Link from 'next/link'
-import { Icon } from './ui/Icon'
+import type { ReactNode } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import { useLang } from './LanguageToggle'
-import { dirFor } from '@/lib/i18n'
-import { productTourStrings, TOUR_STEP_ORDER } from './ProductTour.strings'
+import { productTourStrings, TOUR_STEP_ORDER, type TourStep } from './ProductTour.strings'
+import { useAnchorRect } from './tour/useAnchorRect'
+import { SpotlightOverlay, TourHeader, TourFooter, TourBody } from './tour/SpotlightOverlay'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Product tour — launch-anytime, multi-step popup.
+   Product tour — launch-anytime, anchored-spotlight coach-mark tour.
 
    Mirrors useCommandPalette's shape exactly (returns the rendered element +
    an imperative opener; AppShellInner renders {ProductTour}) so wiring is one
@@ -20,10 +21,21 @@ import { productTourStrings, TOUR_STEP_ORDER } from './ProductTour.strings'
         shared React context is needed;
      3. Escape closes.
 
-   Deliberately NOT a spotlight/coach-mark tour (owner chose the popup): it
-   never targets real page DOM, so it can't break when a page's markup
-   changes and needs no per-page instrumentation. Every step's CTA is a plain
-   <Link> to a real route; productTour.test.ts asserts each href exists.
+   v2 (this file): steps with a `route`/`anchor` land ON the real element on
+   the real page instead of a generic centered popup — see
+   components/tour/anchors.ts, useAnchorRect.ts and SpotlightOverlay.tsx. A
+   step with neither renders the plain centered card (`CenteredStep` below),
+   same shape as v1. Every anchored step still carries ctaHref/ctaLabel
+   because the anchored path can ALWAYS fall back to that centered card —
+   logged out, route bounced to /login, element never mounted, whatever the
+   reason: the tour must never dead-end.
+
+   Engine state machine, per active step:
+     no anchor/route          → 'centered'  (CenteredStep, as v1)
+     anchor+route, wrong path → router.push(route), 'waiting'
+     anchor+route, right path → useAnchorRect polls; found → 'anchored'
+                                 (SpotlightOverlay), timeout/unmount/`/login`
+                                 → 'fallback' (CenteredStep, same renderer)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export const TOUR_OPEN_EVENT = 'sanjabai:tour:open'
@@ -40,11 +52,83 @@ export function tourSeen(): boolean {
   }
 }
 
+type CenteredStepProps = {
+  step: TourStep
+  lang: ReturnType<typeof useLang>
+  dialogLabel: string
+  idx: number
+  total: number
+  isFirst: boolean
+  isLast: boolean
+  onJump: (i: number) => void
+  onClose: () => void
+  onPrev: () => void
+  onNext: () => void
+  stepOfLabel: string
+  closeLabel: string
+  skipLabel: string
+  prevLabel: string
+  nextLabel: string
+  finishLabel: string
+}
+
+/** The v1 renderer, kept verbatim as the welcome step AND the anchored-tour
+ *  fallback (element never appeared). Header/footer are the same components
+ *  SpotlightOverlay uses — lifted, not duplicated. */
+function CenteredStep({
+  step,
+  lang,
+  dialogLabel,
+  idx,
+  total,
+  isFirst,
+  isLast,
+  onJump,
+  onClose,
+  onPrev,
+  onNext,
+  stepOfLabel,
+  closeLabel,
+  skipLabel,
+  prevLabel,
+  nextLabel,
+  finishLabel,
+}: CenteredStepProps) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={dialogLabel}
+        className="relative w-full max-w-md bg-[var(--bg-elevated)] border border-[var(--border)] rounded-[var(--radius-xl)] shadow-[var(--shadow-lg)] overflow-hidden fade-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <TourHeader total={total} idx={idx} onJump={onJump} onClose={onClose} stepOfLabel={stepOfLabel} closeLabel={closeLabel} />
+        <TourBody content={step} lang={lang} onCtaClick={onClose} />
+        <TourFooter
+          isFirst={isFirst}
+          isLast={isLast}
+          onPrev={onPrev}
+          onNext={onNext}
+          onSkipOrClose={onClose}
+          skipLabel={skipLabel}
+          prevLabel={prevLabel}
+          nextLabel={nextLabel}
+          finishLabel={finishLabel}
+        />
+      </div>
+    </div>
+  )
+}
+
 export function useProductTour() {
   const lang = useLang()
   const s = productTourStrings(lang)
   const [open, setOpen] = useState(false)
   const [idx, setIdx] = useState(0)
+  const pathname = usePathname()
+  const router = useRouter()
 
   const openTour = useCallback(() => {
     setIdx(0)
@@ -88,97 +172,90 @@ export function useProductTour() {
 
   const next = () => (isLast ? setOpen(false) : setIdx((i) => Math.min(i + 1, total - 1)))
   const prev = () => setIdx((i) => Math.max(i - 1, 0))
+  const close = () => setOpen(false)
+  const onJump = (i: number) => setIdx(i)
 
-  const ProductTour = open ? (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
-      onClick={() => setOpen(false)}
-      dir={dirFor(lang)}
-    >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={s.dialogLabel}
-        className="relative w-full max-w-md bg-[var(--bg-elevated)] border border-[var(--border)] rounded-[var(--radius-xl)] shadow-[var(--shadow-lg)] overflow-hidden fade-in"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header: progress dots (clickable to jump) + step counter + close */}
-        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[var(--border)]">
-          <div className="flex items-center gap-1.5" aria-hidden>
-            {TOUR_STEP_ORDER.map((id, i) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setIdx(i)}
-                className="rounded-full transition-all"
-                style={{
-                  width: i === idx ? '1.25rem' : '0.4rem',
-                  height: '0.4rem',
-                  background: i <= idx ? 'var(--accent)' : 'var(--border)',
-                }}
-                aria-label={s.stepOf(String(i + 1), String(total))}
-              />
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-[var(--text-muted)] num">{s.stepOf(String(idx + 1), String(total))}</span>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="btn btn-ghost btn-icon"
-              aria-label={s.close}
-            >
-              <Icon name="close" size={16} />
-            </button>
-          </div>
-        </div>
+  const isAnchoredStep = !!step.anchor && !!step.route
+  const onTargetRoute = isAnchoredStep && pathname === step.route
 
-        {/* Body */}
-        <div className="px-5 py-5 flex flex-col gap-3">
-          <div className="flex items-center gap-2 text-xs font-semibold text-[var(--accent)]">
-            <Icon name={step.icon} size={16} />
-            <span>{step.chapter}</span>
-          </div>
-          <h2 className="text-lg font-extrabold text-[var(--text-primary)]">{step.title}</h2>
-          {step.combo && (
-            <span
-              className="self-start text-xs px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-secondary)] bg-[var(--bg-surface)]"
-              dir={dirFor(lang)}
-            >
-              {step.combo}
-            </span>
-          )}
-          <p className="text-sm leading-8 text-[var(--text-secondary)]">{step.body}</p>
-          {step.ctaHref && step.ctaLabel && (
-            <Link
-              href={step.ctaHref}
-              onClick={() => setOpen(false)}
-              className="btn btn-secondary btn-sm self-start no-underline"
-            >
-              {step.ctaLabel}
-              <Icon name="arrowLeft" size={14} />
-            </Link>
-          )}
-        </div>
+  // Navigate to the step's route the instant an anchored step activates.
+  // Re-runs only when the step or path actually changes, so it never fights
+  // a user who navigates away mid-tour.
+  useEffect(() => {
+    if (!open || !isAnchoredStep || onTargetRoute) return
+    router.push(step.route!)
+  }, [open, isAnchoredStep, onTargetRoute, step.route, router])
 
-        {/* Footer: prev / next(finish). Skip on the first step doubles as an
-            escape hatch for a returning user who only wanted one section. */}
-        <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-[var(--border)]">
-          <button
-            type="button"
-            onClick={isFirst ? () => setOpen(false) : prev}
-            className="btn btn-ghost btn-sm"
-          >
-            {isFirst ? s.skip : s.prev}
-          </button>
-          <button type="button" onClick={next} className="btn btn-primary btn-sm">
-            {isLast ? s.finish : s.next}
-          </button>
-        </div>
-      </div>
-    </div>
-  ) : null
+  const anchorActive = open && isAnchoredStep && onTargetRoute
+  const { rect, status } = useAnchorRect(step.anchor, anchorActive)
+
+  // An auth redirect while navigating is a dead end for the anchor by
+  // definition — the target lives on a page the user was bounced off of.
+  const loginBounce = open && isAnchoredStep && pathname === '/login'
+
+  type EngineState = 'idle' | 'centered' | 'waiting' | 'anchored' | 'fallback'
+  let engineState: EngineState
+  if (!open) engineState = 'idle'
+  else if (!isAnchoredStep) engineState = 'centered'
+  else if (loginBounce || status === 'timeout') engineState = 'fallback'
+  else if (onTargetRoute && status === 'found' && rect) engineState = 'anchored'
+  else engineState = 'waiting'
+
+  const stepOfLabel = s.stepOf(String(idx + 1), String(total))
+  const headerCommon = { total, idx, onJump, stepOfLabel, closeLabel: s.close }
+  const footerCommon = {
+    isFirst,
+    isLast,
+    onPrev: prev,
+    onNext: next,
+    onSkipOrClose: close,
+    skipLabel: s.skip,
+    prevLabel: s.prev,
+    nextLabel: s.next,
+    finishLabel: s.finish,
+  }
+
+  let ProductTour: ReactNode = null
+  if (engineState === 'centered' || engineState === 'fallback') {
+    ProductTour = (
+      <CenteredStep
+        step={step}
+        lang={lang}
+        dialogLabel={s.dialogLabel}
+        idx={idx}
+        total={total}
+        isFirst={isFirst}
+        isLast={isLast}
+        onJump={onJump}
+        onClose={close}
+        onPrev={prev}
+        onNext={next}
+        stepOfLabel={stepOfLabel}
+        closeLabel={s.close}
+        skipLabel={s.skip}
+        prevLabel={s.prev}
+        nextLabel={s.next}
+        finishLabel={s.finish}
+      />
+    )
+  } else if (engineState === 'anchored' && rect) {
+    ProductTour = (
+      <SpotlightOverlay
+        rect={rect}
+        content={step}
+        lang={lang}
+        dialogLabel={s.dialogLabel}
+        header={headerCommon}
+        footer={footerCommon}
+        onClose={close}
+        onCtaClick={close}
+      />
+    )
+  }
+  // engineState === 'waiting' renders nothing: the route just changed and the
+  // element hasn't mounted yet (or the previous anchor is being re-measured
+  // for the next step). Transient — resolves to 'anchored' or 'fallback'
+  // within ANCHOR_TIMEOUT_MS, never left hanging.
 
   return { open, setOpen, openTour, ProductTour, launchLabel: s.launchTitle }
 }

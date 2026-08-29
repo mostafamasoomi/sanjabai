@@ -10,6 +10,7 @@ import { LanguageToggle, useLang, type Lang } from '@/components/LanguageToggle'
 import { Icon, type IconName } from '@/components/ui/Icon'
 import { useCommandPalette } from '@/components/CommandPalette'
 import { useProductTour, tourSeen } from '@/components/ProductTour'
+import { tourAnchor } from '@/components/tour/anchors'
 import { isOnboarded } from '@/lib/onboarding'
 import { getPanelPreference, isNavItemVisibleForPanel } from '@/lib/panel'
 import { navIcon } from '@/lib/i18n'
@@ -412,6 +413,7 @@ function AppShellInner({ children }: { children: React.ReactNode }) {
                 className="btn btn-ghost btn-icon relative"
                 title={tourLabel}
                 aria-label={tourLabel}
+                {...tourAnchor('topbar.help')}
               >
                 <Icon name="info" size={18} />
                 {tourNudge && (

@@ -6,6 +6,7 @@ import { useLang } from '@/components/LanguageToggle'
 import { dirFor } from '@/lib/i18n'
 import { TOUR_OPEN_EVENT } from '@/components/ProductTour'
 import { productTourStrings } from '@/components/ProductTour.strings'
+import TemplateGallery from '@/components/templates/TemplateGallery'
 import { guideStrings, GUIDE_SECTION_ORDER, type GuideSection } from './guide.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -104,6 +105,11 @@ export default function GuidePage() {
           <SectionCard key={key} section={s.sections[key]} questionLabels={s.questionLabels} />
         ))}
       </div>
+
+      {/* The gallery is the workflow-first companion to the dictionary cards
+          above: 14 starter recipes, each a real feature combination one
+          click away from being built or run. See components/templates/. */}
+      <TemplateGallery />
     </div>
   )
 }

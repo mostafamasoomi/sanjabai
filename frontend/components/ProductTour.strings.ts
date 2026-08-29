@@ -1,5 +1,6 @@
 import { dict } from '@/lib/i18n'
 import { type IconName } from './ui/Icon'
+import { type TourAnchorId } from './tour/anchors'
 
 /* ═══ Product tour — the launch-anytime, multi-step popup ════════════════════
    The static /guide page (app/guide) is a *dictionary*: one card per feature,
@@ -27,6 +28,7 @@ export type TourStepId =
   | 'smart'
   | 'file'
   | 'tasks'
+  | 'templates'
   | 'explore'
 
 /** Fixed order. Chapters group consecutive steps; the modal shows the chapter
@@ -40,6 +42,7 @@ export const TOUR_STEP_ORDER: readonly TourStepId[] = [
   'smart',
   'file',
   'tasks',
+  'templates',
   'explore',
 ]
 
@@ -52,9 +55,20 @@ export type TourStep = {
   /** The workflow this chapter teaches, e.g. "دستیار + مهارت + حافظه". Optional. */
   combo?: string
   /** Call-to-action label + a REAL route under frontend/app/. Both optional
-   *  (the welcome step has none). productTour.test.ts asserts ctaHref exists. */
+   *  (the welcome step has none). productTour.test.ts asserts ctaHref exists,
+   *  and every anchored step (below) still carries one as the fallback when
+   *  the live element never appears. */
   ctaLabel?: string
   ctaHref?: string
+  /** Anchored-spotlight targeting. Both optional together — the welcome step
+   *  has neither and renders as the centered card, same as today. When set,
+   *  the tour engine navigates to `route` if not already there, waits for
+   *  `anchor` to mount (see components/tour/anchors.ts + useAnchorRect), and
+   *  spotlights it; on timeout/unmount/`/login` it falls back to the centered
+   *  card using ctaHref/ctaLabel above — so an anchored step must never be
+   *  wired without a fallback CTA. */
+  route?: string
+  anchor?: TourAnchorId
 }
 
 const FA = {
@@ -83,6 +97,8 @@ const FA = {
       body: 'دستیار یک شخصیت و دستورِ ثابت است که هر گفتگوی تازه با همان شروع می‌شود — مثلاً «ویراستار فارسی» یا «مشاور کد». یک‌بار می‌سازی، همیشه همان لحن و زمینه را داری. ساختنش رایگان است و گفتگو با آن مثل هر گفتگوی دیگر حساب می‌شود.',
       ctaLabel: 'رفتن به دستیارها',
       ctaHref: '/assistants',
+      route: '/assistants',
+      anchor: 'assistants.create',
     },
     skills: {
       chapter: 'متخصص شخصی‌ات را بساز',
@@ -92,6 +108,8 @@ const FA = {
       body: 'مهارت الگوی آماده‌ای از پرامپت است؛ می‌توانی یک‌بار اجرایش کنی یا «فعال» نگهش داری تا روی همهٔ پیام‌های بعدی خودکار اعمال شود. مهارتِ فعال به هر پیام اضافه می‌شود، پس هزینه‌اش در هر پیام دوباره حساب می‌شود، نه فقط یک‌بار.',
       ctaLabel: 'رفتن به مهارت‌ها',
       ctaHref: '/skills',
+      route: '/skills',
+      anchor: 'skills.create',
     },
     memory: {
       chapter: 'متخصص شخصی‌ات را بساز',
@@ -101,6 +119,8 @@ const FA = {
       body: 'سنجاب‌ای خودکار نکات مهمِ گفتگوها را نگه می‌دارد تا لازم نباشد هر بار خودت را از نو معرفی کنی. ساختِ این حافظه رایگان است؛ فقط وقتی در گفتگویی تازه استفاده شود مثل هر پیام عادی حساب می‌شود. این سه با هم — دستیار نقش، مهارت کار، حافظه شناختِ تو — یک متخصص می‌سازند که دقیقاً برای تو کوک شده.',
       ctaLabel: 'رفتن به حافظه',
       ctaHref: '/memory',
+      route: '/memory',
+      anchor: 'memory.header',
     },
     combos: {
       chapter: 'هرگز شکست نخور، همیشه ارزان',
@@ -110,6 +130,8 @@ const FA = {
       body: 'ترکیب، فهرستی مرتب از چند مدل است؛ اگر مدل اول در دسترس نباشد یا خطا بدهد، درخواست به‌جای شکست به مدل بعدیِ همان فهرست می‌رود. یک مدل سریع و ارزان را با یک پشتیبانِ دقیق‌تر کنار هم بگذار تا درخواست همیشه جواب بگیرد. ساختن و ویرایش ترکیب رایگان است؛ فقط مدلی که واقعاً پاسخ می‌دهد به قیمت خودش حساب می‌شود.',
       ctaLabel: 'رفتن به ترکیب‌ها',
       ctaHref: '/combos',
+      route: '/combos',
+      anchor: 'combos.create',
     },
     smart: {
       chapter: 'هرگز شکست نخور، همیشه ارزان',
@@ -119,6 +141,8 @@ const FA = {
       body: 'در گفتگو، حالت هوشمند به‌جای تو مدلِ مناسبِ هر پیام را انتخاب می‌کند. بعضی گزینه‌هایش (مثل مسیریاب هوشمند) هزینه‌ای جدا از خودِ مدل دارند و پیش از استفاده صادقانه می‌گویند. کنار ترکیب مدل، یعنی هم انتخاب درست، هم پشتیبانِ همیشه‌آماده.',
       ctaLabel: 'رفتن به گفتگو',
       ctaHref: '/chat',
+      route: '/chat',
+      anchor: 'chat.smartMode',
     },
     file: {
       chapter: 'از سند خودت بپرس',
@@ -127,6 +151,8 @@ const FA = {
       body: 'می‌توانی یک فایل را به پیام در گفتگو پیوست کنی تا پاسخ از روی همان سند داده شود، نه فقط دانش عمومی مدل — مثلاً یک قرارداد یا گزارش. هم پردازش فایل و هم گفتگویی که از آن استفاده می‌کند، مثل مصرف عادی توکن از کیف پول کم می‌شود.',
       ctaLabel: 'رفتن به گفتگو',
       ctaHref: '/chat',
+      route: '/chat',
+      anchor: 'chat.attach',
     },
     tasks: {
       chapter: 'کارها را خودکار کن',
@@ -135,6 +161,18 @@ const FA = {
       body: 'وظیفه‌ای که یک پرامپت مشخص را طبق زمان‌بندی، بدون اینکه خودت هر بار اجرایش کنی، خودکار اجرا می‌کند — مثل خلاصهٔ روزانه یا یادآوری دوره‌ای. هر بار که اجرا می‌شود، دقیقاً مثل اجرای دستیِ همان پرامپت حساب می‌شود.',
       ctaLabel: 'رفتن به تسک‌ها',
       ctaHref: '/tasks',
+      route: '/tasks',
+      anchor: 'tasks.create',
+    },
+    templates: {
+      chapter: 'شروع را آسان کن',
+      icon: 'file',
+      title: 'الگو: به‌جای صفحهٔ خالی، یک شروعِ آماده',
+      body: 'راهنما مجموعه‌ای از الگوهای آمادهٔ پرکاربرد را کنار هم گذاشته — برای نوشتن، خلاصه‌سازی، کدنویسی و کارهای روزمرهٔ دیگر. به‌جای شروع از صفر، یکی را باز می‌کنی، متن خودت را جای پرانتزها می‌گذاری و همان‌جا در گفتگو ادامه می‌دهی؛ استفاده از الگو خودش رایگان است، فقط گفتگویی که با آن باز می‌کنی مثل هر گفتگوی دیگر حساب می‌شود.',
+      ctaLabel: 'رفتن به راهنما',
+      ctaHref: '/guide',
+      route: '/guide',
+      anchor: 'guide.templates',
     },
     explore: {
       chapter: 'حالا کاوش کن',
@@ -143,6 +181,8 @@ const FA = {
       body: 'در «مدل‌ها» می‌بینی چه مدل‌هایی زنده‌اند و کدام به کارت می‌آید؛ در «مقایسه» یک پرسش را هم‌زمان به چند مدل می‌دهی؛ «کیف پول» و «مصرف» خرجت را شفاف نشان می‌دهند. هر وقت خواستی همین راهنما را از دکمهٔ راهنما بالای صفحه باز کن.',
       ctaLabel: 'دیدن مدل‌ها',
       ctaHref: '/models',
+      route: '/models',
+      anchor: 'models.search',
     },
   } as Record<TourStepId, TourStep>,
 }
@@ -173,6 +213,8 @@ const EN: typeof FA = {
       body: 'An assistant is a preset persona and a fixed instruction every new conversation starts from — an editor, a coding advisor. Build it once, and always get the same tone and context. Creating one is free, and chatting with it is billed like any other conversation.',
       ctaLabel: 'Go to Assistants',
       ctaHref: '/assistants',
+      route: '/assistants',
+      anchor: 'assistants.create',
     },
     skills: {
       chapter: 'Build your personal expert',
@@ -182,6 +224,8 @@ const EN: typeof FA = {
       body: 'A skill is a ready-made prompt template you can run once or keep active so it applies to every future message automatically. An active skill is added to every message, so its cost is charged again on each message, not just once.',
       ctaLabel: 'Go to Skills',
       ctaHref: '/skills',
+      route: '/skills',
+      anchor: 'skills.create',
     },
     memory: {
       chapter: 'Build your personal expert',
@@ -191,6 +235,8 @@ const EN: typeof FA = {
       body: 'Sanjabai automatically keeps the important facts from your conversations so you don\'t re-introduce yourself every time. Building this memory is free; only using it in a new conversation is billed like any other message. Together — assistant for the role, skill for the task, memory for knowing you — the three make an expert tuned exactly to you.',
       ctaLabel: 'Go to Memory',
       ctaHref: '/memory',
+      route: '/memory',
+      anchor: 'memory.header',
     },
     combos: {
       chapter: 'Never fail, always cheap',
@@ -200,6 +246,8 @@ const EN: typeof FA = {
       body: 'A combo is an ordered list of models; if the first is unavailable or errors out, the request moves to the next in the same list instead of failing. Pair a fast, cheap model with a more capable backup so a request always gets answered. Building and editing a combo is free; only the model that actually answers is billed, at its own price.',
       ctaLabel: 'Go to Combos',
       ctaHref: '/combos',
+      route: '/combos',
+      anchor: 'combos.create',
     },
     smart: {
       chapter: 'Never fail, always cheap',
@@ -209,6 +257,8 @@ const EN: typeof FA = {
       body: 'In chat, smart mode picks the right model for each message on your behalf. Some of its options (like the smart router) cost extra on top of the model itself, and say so honestly before you use them. Alongside a combo, that\'s the right pick plus an always-ready backup.',
       ctaLabel: 'Go to Chat',
       ctaHref: '/chat',
+      route: '/chat',
+      anchor: 'chat.smartMode',
     },
     file: {
       chapter: 'Ask your own document',
@@ -217,6 +267,8 @@ const EN: typeof FA = {
       body: 'Attach a file to a message in chat so the answer comes from that document instead of only the model\'s general knowledge — a contract, a report. Both processing the file and the conversation that uses it are billed like normal token usage from your wallet.',
       ctaLabel: 'Go to Chat',
       ctaHref: '/chat',
+      route: '/chat',
+      anchor: 'chat.attach',
     },
     tasks: {
       chapter: 'Automate the work',
@@ -225,6 +277,18 @@ const EN: typeof FA = {
       body: 'A task runs a specific prompt on a schedule without you triggering it — a daily summary, a periodic reminder. Every run is billed exactly like running that same prompt manually.',
       ctaLabel: 'Go to Tasks',
       ctaHref: '/tasks',
+      route: '/tasks',
+      anchor: 'tasks.create',
+    },
+    templates: {
+      chapter: 'Make the start easy',
+      icon: 'file',
+      title: 'Template: a ready start instead of a blank page',
+      body: 'The guide gathers ready-made templates for the workflows people reach for most — writing, summarizing, coding, everyday tasks. Instead of starting from nothing, open one, drop your own text in where the brackets are, and keep going in that same chat; using a template is free by itself, only the conversation you open with it is billed like any other.',
+      ctaLabel: 'Go to Guide',
+      ctaHref: '/guide',
+      route: '/guide',
+      anchor: 'guide.templates',
     },
     explore: {
       chapter: 'Now explore',
@@ -233,6 +297,8 @@ const EN: typeof FA = {
       body: '"Models" shows which models are live and which suit you; "Compare" sends one question to several models at once; "Wallet" and "Usage" show your spending transparently. Reopen this guide any time from the help button in the top bar.',
       ctaLabel: 'See Models',
       ctaHref: '/models',
+      route: '/models',
+      anchor: 'models.search',
     },
   },
 }

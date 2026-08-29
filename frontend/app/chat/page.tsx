@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useAuth } from '@/lib/auth'
 import { useCatalog } from '@/lib/useCatalog'
+import { tourAnchor } from '@/components/tour/anchors'
 import { type ModelCatalogItem } from '@/types/catalog'
 import { Icon } from '@/components/ui/Icon'
 import { EmptyState, toast } from '@/components/ui'
@@ -435,6 +436,7 @@ export default function ChatPage() {
                 className="btn btn-ghost btn-icon rounded-xl shrink-0"
                 aria-label={s.attachFile}
                 title={s.attachFileHint}
+                {...tourAnchor('chat.attach')}
               >
                 <Icon name="paperclip" size={18} />
               </button>
@@ -457,6 +459,7 @@ export default function ChatPage() {
                 rows={1}
                 className="chat-composer-input"
                 style={{ fieldSizing: 'content' } as React.CSSProperties}
+                {...tourAnchor('chat.composer')}
               />
               <button
                 type="submit"

@@ -12,6 +12,7 @@ import TaskCard from './components/TaskCard'
 import TaskFormModal from './components/TaskFormModal'
 import ExecutionHistoryModal from './components/ExecutionHistoryModal'
 import { tasksPageStrings } from './page.strings'
+import { tourAnchor } from '@/components/tour/anchors'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Scheduled Tasks Page
@@ -237,7 +238,7 @@ export default function TasksPage() {
             </p>
           </div>
         </div>
-        <button onClick={openCreate} className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <button onClick={openCreate} className="btn btn-primary" {...tourAnchor('tasks.create')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <Icon name="plus" size={16} />
           {s.createTask}
         </button>

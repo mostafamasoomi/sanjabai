@@ -3,6 +3,7 @@
 import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
 import { memoryHeaderStrings } from './MemoryHeader.strings'
+import { tourAnchor } from '@/components/tour/anchors'
 
 /* ═══════════════════════════════════════════════════════════════
    Page header. Split out of page.tsx verbatim -- no behaviour change.
@@ -13,7 +14,7 @@ export function MemoryHeader() {
   const s = memoryHeaderStrings(lang)
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 24 }} {...tourAnchor('memory.header')}>
       <div
         style={{
           width: 40,

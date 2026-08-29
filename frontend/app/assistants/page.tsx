@@ -8,6 +8,7 @@ import { Icon, type IconName } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
 import { fmt } from '@/lib/i18n'
 import { assistantsPageStrings } from './page.strings'
+import { tourAnchor } from '@/components/tour/anchors'
 
 /* ═══════════════════════════════════════════════════════════════
    Types
@@ -221,6 +222,7 @@ export default function AssistantsPage() {
         </div>
         <button
           className="btn btn-primary"
+          {...tourAnchor('assistants.create')}
           onClick={() => router.push('/assistants/new')}
         >
           <Icon name="plus" size={16} />

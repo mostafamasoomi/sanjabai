@@ -1,27 +1,53 @@
-"""Referral rewards: pay an inviter (and, optionally, the invitee) a bonus
-the moment the INVITEE's first payment succeeds -- never at signup.
+"""Referral rewards: pay the invitee a welcome bonus at signup, and pay the
+inviter (and, historically, the invitee too) when the INVITEE's first
+payment succeeds.
 
 See migrations/0051_referral_rewards.sql for the schema (`referral_reward`,
 one row per (inviter, invitee) pair) and the three `app_setting` numbers
 this module reads.
 
-── Owner decision, 2026-08-28, not up for re-litigation here ─────────────
+── Owner decision, 2026-08-30, supersedes the 2026-08-28 decision below ──
+The invitee-side bonus is now paid IMMEDIATELY at signup, not deferred to
+first payment. The free-money-farm risk documented below (no email
+verification, a beatable rate-limiter key, a four-domain disposable-email
+blocklist) is explicitly OWNER-ACCEPTED for this leg -- do not reintroduce
+a verification gate here without a new owner decision. `auth.py::signup`
+now calls `credit_invitee_signup_reward()` (below) right after
+`record_attribution()`, in the same referrer-exists branch. The INVITER
+leg is unaffected by this change and still only pays out on the invitee's
+first successful payment (`settle_on_first_payment()`), because paying an
+inviter at signup time -- before the referral has cost the platform
+anything real -- was never the question the owner revisited.
+
+Both the signup credit and the settle credit target the invitee with the
+exact same idempotency_key (`referral:invitee:{invitee_id}`), so
+`services.billing.credit_wallet()`'s own idempotency guard makes a
+double-pay of the invitee structurally impossible even if some future call
+site forgot the row-status bookkeeping entirely. `settle_on_first_payment()`
+additionally treats a non-zero `invitee_amount_toman` already on the row as
+"this leg was paid at signup" and skips crediting it again, preserving the
+signup-time amount in that column instead of recomputing it from
+(possibly since-changed) config -- see that function's docstring.
+
+── Original 2026-08-28 decision (invitee leg only, now superseded above) ──
 Paying a referral reward at signup was refused because this server has no
 way to tell a real signup from a scripted one at that point in time:
 `models/_users.py` has no email-verification column, the signup rate
 limiter's key is `sha256(ip + user-agent)` (security.py:106-126, beaten by
 rotating the User-Agent header), and the disposable-email blocklist
 (security.py:306) covers four domains. Under those three facts, crediting a
-wallet at signup is free money for a loop. The invitee's first successful
-payment is an external, costly event a script cannot fabricate, so that is
-the only trigger this module honours. **The signup path
-(auth.py::signup) must stay wallet-credit-free -- record_attribution()
-below only ever writes a 'pending' row, never touches a wallet.**
+wallet at signup is free money for a loop. That risk analysis still stands
+as a fact about this server; the owner reviewed it on 2026-08-30 and
+decided to accept it for the invitee leg specifically, in exchange for the
+growth benefit of an immediate reward. The INVITER leg's trigger (the
+invitee's first successful payment, an external event a script cannot
+fabricate) is untouched.
 
-── Two functions, two very different failure contracts ───────────────────
-record_attribution() runs on the signup hot path (auth.py) and therefore
-must NEVER raise -- a referral bookkeeping failure must not turn into a
-failed signup. settle_on_first_payment() runs from the payment callback
+── Three functions, three very different failure contracts ───────────────
+record_attribution() and credit_invitee_signup_reward() both run on the
+signup hot path (auth.py) and therefore must NEVER raise -- a referral
+bookkeeping or crediting failure must not turn into a failed signup.
+settle_on_first_payment() runs from the payment callback
 (payment_endpoints.py) AFTER the user has already been told their payment
 succeeded, so it must also never raise -- see that call site's own
 try/except for why (defence in depth, matching the existing
@@ -29,17 +55,19 @@ grant_for_payment() pattern in services/entitlement_gate.py).
 
 ── Config caching (copied from services/free_tier_config.py) ─────────────
 Same idiom, same TTL, same fail-safe-to-defaults contract, because this is
-also read on a request path (the payment callback) and must degrade to
-"feature off" rather than raise if app_setting is briefly unreadable.
+also read on a request path (the payment callback, and now the signup
+path too) and must degrade to "feature off" rather than raise if
+app_setting is briefly unreadable.
 
 ── The only sanctioned credit path ────────────────────────────────────────
-settle_on_first_payment() is the ONLY place in this module (and, by
-tests/test_credit_paths.py's allowlist, the only place outside
-payment.py/admin_user_ops.py/services/billing.py anywhere in the backend)
-that calls services.billing.credit_wallet(). Two independent calls, one per
-leg (inviter, invitee), each with its own stable idempotency_key, so a
-retry/replay of the settle path can never double-pay either side even if
-the row-status guard below were somehow raced.
+credit_invitee_signup_reward() and settle_on_first_payment() are the ONLY
+places in this module (and, by tests/test_credit_paths.py's allowlist, the
+only places outside payment.py/admin_user_ops.py/services/billing.py
+anywhere in the backend) that call services.billing.credit_wallet(). Every
+call carries its own stable idempotency_key -- the invitee's key is shared
+between the two functions on purpose (see above) -- so a retry/replay of
+either path can never double-pay any leg even if the row-status guard
+below were somehow raced.
 """
 from __future__ import annotations
 
@@ -146,7 +174,9 @@ _INSERT_ATTRIBUTION_SQL = sqlalchemy.text(
 
 async def record_attribution(session, inviter_id: int, invitee_id: int) -> None:
     """Record that ``inviter_id`` referred ``invitee_id``, as a 'pending'
-    row -- no wallet is touched here, ever (see module docstring).
+    row -- no wallet is touched HERE, ever. (The caller, auth.py, calls
+    ``credit_invitee_signup_reward()`` below separately, right after this,
+    for the invitee's signup bonus -- see module docstring.)
 
     Self-referral (inviter_id == invitee_id) writes nothing. A user who was
     already attributed to someone (an earlier signup, or a second referral
@@ -174,10 +204,76 @@ async def record_attribution(session, inviter_id: int, invitee_id: int) -> None:
         )
 
 
+# ── signup-time invitee bonus (owner decision 2026-08-30) ──────────────────
+
+_MARK_SIGNUP_INVITEE_PAID_SQL = sqlalchemy.text(
+    "UPDATE referral_reward SET invitee_amount_toman = :amount "
+    "WHERE invitee_id = :invitee_id AND status = 'pending' AND invitee_amount_toman = 0"
+)
+
+
+async def credit_invitee_signup_reward(session, invitee_id: int) -> Optional[dict]:
+    """Credit the invitee's welcome bonus immediately at signup.
+
+    Called from auth.py's signup handler right after ``record_attribution``,
+    on the same session, only in the branch where a referrer was actually
+    resolved -- see module docstring for the 2026-08-30 owner decision that
+    moved this leg off the "only on first payment" trigger.
+
+    Reads ``referral_invitee_reward_toman`` fresh (through the shared 60s
+    cache); a value of 0 or less (the feature-off / unconfigured state) is a
+    silent no-op -- no wallet touch, no row write.
+
+    Otherwise credits ``invitee_id`` via the SAME idempotency key
+    ``settle_on_first_payment`` uses for the invitee leg
+    (``referral:invitee:{invitee_id}``), so ``credit_wallet``'s own
+    idempotency guard makes it structurally impossible for this call and a
+    later ``settle_on_first_payment`` call to both pay the invitee -- see
+    that function's own skip-if-already-signup-paid logic for the second,
+    row-level layer of the same guarantee.
+
+    Also stamps ``invitee_amount_toman`` on the pending ``referral_reward``
+    row (guarded so it only ever fires once, on a still-'pending', still-
+    zero row) so ``settle_on_first_payment`` can see this leg was already
+    paid and skip it, and so the amount that actually landed is preserved
+    even if an admin edits the setting before the inviter's leg settles --
+    row ``status`` itself is deliberately left 'pending': the INVITER leg is
+    unresolved and marking the whole row 'paid' here would let
+    settle_on_first_payment's `SELECT ... WHERE status = 'pending'` miss it
+    forever, permanently stranding the inviter's reward.
+
+    Never raises: this runs on the signup hot path, same contract as
+    ``record_attribution``. Commits on the session it was given.
+    """
+    try:
+        cfg = await config()
+        amount = int(cfg.get('referral_invitee_reward_toman', 0))
+        if amount <= 0:
+            return None
+        repo = SqlBillingRepo(session)
+        await credit_wallet(
+            repo, invitee_id, Money(amount),
+            reason='پاداش خوش‌آمدگویی دعوت',
+            idempotency_key=f'referral:invitee:{invitee_id}',
+            txn_type='referral_bonus',
+        )
+        await session.execute(
+            _MARK_SIGNUP_INVITEE_PAID_SQL,
+            {'invitee_id': int(invitee_id), 'amount': amount},
+        )
+        await session.commit()
+        return {'invitee_id': invitee_id, 'invitee_amount_toman': amount}
+    except Exception as e:
+        logger.error(
+            f"referral.credit_invitee_signup_reward failed invitee_id={invitee_id}: {e}"
+        )
+        return None
+
+
 # ── settlement (first-payment path) ────────────────────────────────────────
 
 _SELECT_PENDING_SQL = sqlalchemy.text(
-    "SELECT id, inviter_id, invitee_id FROM referral_reward "
+    "SELECT id, inviter_id, invitee_id, invitee_amount_toman FROM referral_reward "
     "WHERE invitee_id = :invitee_id AND status = 'pending'"
 )
 
@@ -218,7 +314,20 @@ async def settle_on_first_payment(user_id: int) -> Optional[dict]:
         credited.
       {'capped': False, 'inviter_id': ..., 'invitee_id': ...,
        'inviter_amount_toman': ..., 'invitee_amount_toman': ...}
-        -- one or both legs were credited; row -> 'paid'.
+        -- one or both legs were credited (or the invitee leg was already
+        credited at signup -- see below); row -> 'paid'.
+
+    ── SINGLE-PAY (owner decision 2026-08-30) ──────────────────────────────
+    The invitee leg may already have been paid at signup by
+    ``credit_invitee_signup_reward()``. This function detects that by
+    reading the row's own ``invitee_amount_toman``: a non-zero value means
+    that leg already landed, so it is NOT recredited here (``credit_wallet``
+    would no-op it anyway via the shared idempotency key -- this is the
+    row-level half of that same guarantee, not a substitute for it) and the
+    row is closed out with the AMOUNT THAT ACTUALLY LANDED AT SIGNUP, not
+    whatever ``referral_invitee_reward_toman`` reads as right now (an admin
+    may have changed it in between). The inviter leg is completely
+    unaffected by any of this -- it still only ever pays here.
     """
     try:
         if async_session is None:
@@ -231,15 +340,24 @@ async def settle_on_first_payment(user_id: int) -> Optional[dict]:
             reward_id = row.id
             inviter_id = row.inviter_id
             invitee_id = row.invitee_id
+            # Non-zero here means credit_invitee_signup_reward() already paid
+            # this leg at signup -- preserve that landed amount, don't
+            # recredit and don't recompute it from (possibly changed) config.
+            signup_invitee_amount = int(getattr(row, 'invitee_amount_toman', 0) or 0)
+            invitee_already_paid = signup_invitee_amount > 0
 
             cfg = await config()
             inviter_amount = int(cfg['referral_reward_toman'])
-            invitee_amount = int(cfg['referral_invitee_reward_toman'])
+            invitee_amount = (
+                signup_invitee_amount if invitee_already_paid
+                else int(cfg['referral_invitee_reward_toman'])
+            )
             cap = int(cfg['referral_reward_cap'])
 
             if inviter_amount <= 0 and invitee_amount <= 0:
-                # Feature off. Row stays 'pending' -- an admin turning the
-                # reward on later can still pay this exact attribution.
+                # Feature off, and this leg was never paid at signup either.
+                # Row stays 'pending' -- an admin turning the reward on
+                # later can still pay this exact attribution.
                 return None
 
             count_res = await session.execute(_COUNT_PAID_SQL, {'inviter_id': inviter_id})
@@ -257,7 +375,7 @@ async def settle_on_first_payment(user_id: int) -> Optional[dict]:
                     idempotency_key=f'referral:inviter:{inviter_id}:{invitee_id}',
                     txn_type='referral_bonus',
                 )
-            if invitee_amount > 0:
+            if invitee_amount > 0 and not invitee_already_paid:
                 await credit_wallet(
                     repo, invitee_id, Money(invitee_amount),
                     reason='پاداش خوش‌آمدگویی دعوت — اولین پرداخت شما',

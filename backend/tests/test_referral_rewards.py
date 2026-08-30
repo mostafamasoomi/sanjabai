@@ -1,15 +1,28 @@
 """Tests for services/referral.py -- the referral reward.
 
-Owner decision, recorded 2026-08-28 (see services/referral.py's module
-docstring for the full reasoning): a referral reward is never paid at
-signup. It is paid only on the INVITEE's first successful payment, via
-services.referral.settle_on_first_payment(), called from
-payment_endpoints.py after the wallet has already been credited for that
-payment. auth.py's signup handler calls only
-services.referral.record_attribution(), which records a 'pending'
-bookkeeping row and MUST NOT touch a wallet -- see
-test_signup_time_attribution_never_credits_a_wallet below, which is this
-file's version of that invariant.
+── Owner decision, 2026-08-30 (see services/referral.py's module docstring
+for the full reasoning) ───────────────────────────────────────────────────
+The INVITEE leg is now paid IMMEDIATELY at signup, via
+services.referral.credit_invitee_signup_reward(), called from auth.py's
+signup handler right after record_attribution() (same session, same
+referrer-exists branch). This supersedes the 2026-08-28 decision that both
+legs waited for the invitee's first payment. The INVITER leg is unaffected:
+it still only pays via services.referral.settle_on_first_payment(), called
+from payment_endpoints.py after the invitee's first successful payment.
+SINGLE-PAY for the invitee leg is enforced two ways at once: the same
+idempotency_key (`referral:invitee:{invitee_id}`) is used by both
+functions (credit_wallet's own idempotency guard), AND
+settle_on_first_payment() detects a non-zero invitee_amount_toman already
+on the row and skips crediting that leg again -- see
+test_single_pay_signup_then_settle_credits_invitee_exactly_once below,
+which is this file's highest-risk test.
+
+auth.py's signup handler calls record_attribution() (still 'pending'
+bookkeeping only, never touches a wallet -- see
+test_signup_time_attribution_never_credits_a_wallet below) followed by
+credit_invitee_signup_reward() (the actual wallet touch). Both must never
+raise -- a referral bookkeeping or crediting failure must not fail a
+signup.
 
 No live Postgres is available (tests/conftest.py), so these tests drive
 services.referral against a small in-memory fake standing in for
@@ -18,14 +31,15 @@ tests/test_entitlements.py uses for services/entitlements.py: every
 statement in referral.py is a raw sqlalchemy.text() clause, so the fake
 session dispatches on a distinctive substring of the compiled SQL text.
 
-The actual wallet credit is never exercised against real ORM Wallet/Ledger
-machinery here -- services.billing.credit_wallet is monkeypatched to an
-AsyncMock, and these tests assert on ITS call arguments (txn_type,
-idempotency_key, amount). services/billing.py's own credit_wallet
-correctness (balance math, idempotency-by-key, wallet creation) is already
-covered by tests/test_billing.py; this file's job is only the referral
-orchestration around it -- whether, how many times, and with what
-arguments it gets called.
+Most tests here monkeypatch services.billing.credit_wallet to an AsyncMock
+and assert on ITS call arguments (txn_type, idempotency_key, amount) --
+services/billing.py's own credit_wallet correctness (balance math,
+idempotency-by-key, wallet creation) is already covered by
+tests/test_billing.py, so this file's job is only the referral
+orchestration around it. The SINGLE-PAY test is the one exception: it
+deliberately exercises the REAL credit_wallet against a shared
+MemoryBillingRepo so the single-pay claim is proven against actual wallet
+balance math, not just call-count bookkeeping.
 """
 from __future__ import annotations
 
@@ -126,6 +140,15 @@ class _FakeSession:
                     row['invitee_amount_toman'] = params['invitee_amount']
             return result
 
+        if 'SET invitee_amount_toman' in sql:
+            # credit_invitee_signup_reward()'s signup-time stamp -- only
+            # fires on a still-pending, still-zero row (mirrors the real
+            # WHERE clause's guard against double-stamping).
+            row = self.db.rows.get(params['invitee_id'])
+            if row is not None and row['status'] == 'pending' and row['invitee_amount_toman'] == 0:
+                row['invitee_amount_toman'] = params['amount']
+            return result
+
         if 'referral_count' in sql:
             # stats()
             inviter_id = params['inviter_id']
@@ -149,12 +172,13 @@ class _FakeSession:
             result.fetchone.return_value = _row(c=count)
             return result
 
-        if "status = 'pending'" in sql and 'invitee_id' in params:
+        if "status = 'pending'" in sql and 'invitee_id' in params and sql.strip().startswith('SELECT'):
             # SELECT pending by invitee
             row = self.db.rows.get(params['invitee_id'])
             if row is not None and row['status'] == 'pending':
                 result.fetchone.return_value = _row(
                     id=row['id'], inviter_id=row['inviter_id'], invitee_id=row['invitee_id'],
+                    invitee_amount_toman=row['invitee_amount_toman'],
                 )
             return result
 
@@ -203,12 +227,14 @@ def credit(monkeypatch):
     return mock
 
 
-# ── (a) signup never credits a wallet ───────────────────────────────────
+# ── (a) record_attribution never credits a wallet ───────────────────────
 
 @pytest.mark.asyncio
 async def test_signup_time_attribution_never_credits_a_wallet(db, credit):
-    """record_attribution() -- the only thing auth.py's signup handler
-    calls -- writes a 'pending' row and must never touch the wallet."""
+    """record_attribution() -- the bookkeeping half of auth.py's signup
+    handler -- writes a 'pending' row and must never touch the wallet
+    itself. (The actual signup-time wallet touch is a SEPARATE call,
+    credit_invitee_signup_reward(), covered below.)"""
     session = _FakeSession(db)
     await referral_mod.record_attribution(session, inviter_id=1, invitee_id=2)
 
@@ -218,6 +244,13 @@ async def test_signup_time_attribution_never_credits_a_wallet(db, credit):
 
 
 # ── (b) settle_on_first_payment credits both legs ──────────────────────
+#
+# NOTE: credit_invitee_signup_reward() itself (the signup-time invitee
+# bonus) and the SINGLE-PAY interaction between it and settle_on_first_payment
+# are tested in tests/test_signup_bonus.py, not here -- this file was
+# already close to the house 500-line cap, and that new surface belongs in
+# its own file per the cap's "new surface goes in a new file" rule. It
+# reuses this file's _FakeReferralDB/_FakeSession/fixtures via import.
 
 @pytest.mark.asyncio
 async def test_settle_credits_both_legs_with_referral_bonus_txn_type(patched, credit):
@@ -262,6 +295,12 @@ async def test_settle_called_twice_credits_only_once(patched, credit):
     assert first is not None and first['capped'] is False
     assert second is None  # no pending row left to find
     assert credit.await_count == 2  # not 4 -- the second call credited nothing
+
+
+# NOTE: the SINGLE-PAY interaction (credit_invitee_signup_reward() then
+# settle_on_first_payment() for the same invitee) and the "inviter leg
+# unaffected when the invitee already got paid at signup" case both live in
+# tests/test_signup_bonus.py -- see the note above the (b) section header.
 
 
 # ── (ت) cap ──────────────────────────────────────────────────────────────
@@ -427,6 +466,12 @@ def test_signup_records_the_referral_attribution():
     # Without this, there is no 'pending' row for the payment callback to
     # find later, so the settle site above becomes a permanent no-op.
     assert 'record_attribution' in _awaited_call_names(_BACKEND / 'auth.py')
+
+
+# NOTE: the wiring guard for credit_invitee_signup_reward() (auth.py must
+# call it right after record_attribution()) lives in
+# tests/test_signup_bonus.py, not here -- see the note above the (b)
+# section header for why the new surface moved to its own file.
 
 
 def test_the_settlement_cannot_fail_the_payment_it_follows():

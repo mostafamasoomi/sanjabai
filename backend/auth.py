@@ -185,27 +185,33 @@ async def signup(payload: AuthSignup, request: Request) -> JSONResponse:
                 ref_res = await s2.execute(User.__table__.select().where(User.referral_code == ref_code))
                 referrer = ref_res.fetchone()
                 if referrer and referrer.id != user.id:
-                    # Referral attribution only: who invited whom is recorded
-                    # (and surfaced via /referral/stats) but no wallet credit
-                    # is issued for it. A wallet may be credited only by the
-                    # payment gateway or an admin — see backend/tests/test_credit_paths.py.
+                    # Referral attribution + invitee welcome credit. Who
+                    # invited whom is recorded (surfaced via /referral/stats);
+                    # the invitee is also credited referral_invitee_reward_toman
+                    # immediately (owner decision 2026-08-30, superseding the
+                    # 2026-08-28 "only on first payment" rule — see
+                    # services/referral.py's docstring). The wallet credit is
+                    # issued by services/referral.py (an allowlisted crediting
+                    # module), NOT here — auth.py itself never calls
+                    # credit_wallet; see backend/tests/test_credit_paths.py.
                     await s2.execute(
                         User.__table__.update().where(User.id == user.id),
                         {'referred_by': referrer.id}
                     )
                     await s2.commit()
-                    # services/referral.py: record the (inviter, invitee)
-                    # pair as 'pending' -- payout, if any, only happens on
-                    # this invitee's first successful payment (owner
-                    # decision 2026-08-28; see that module's docstring).
-                    # Never raises, so a bookkeeping failure here can never
-                    # fail this signup.
+                    # record the (inviter, invitee) pair as 'pending', then
+                    # credit the invitee's welcome reward on the same session.
+                    # The inviter's leg still settles later, on this invitee's
+                    # first successful payment. Both calls never raise, so a
+                    # bookkeeping failure here can never fail this signup.
                     await referral_service.record_attribution(s2, referrer.id, user.id)
+                    await referral_service.credit_invitee_signup_reward(s2, user.id)
 
-        # No signup gift: a new user starts at a zero wallet balance. The
-        # on-ramp is the existing free-tier allowance (services/free_tier.py),
-        # not a wallet credit — a wallet may be credited only by the payment
-        # gateway or an admin. See backend/tests/test_credit_paths.py.
+        # No UNCONDITIONAL signup gift: a user who arrives without a valid
+        # invite code starts at a zero wallet balance (the invitee credit
+        # above only fires in the referral branch). Their on-ramp is the
+        # existing free-tier allowance (services/free_tier.py), not a wallet
+        # credit. See backend/tests/test_credit_paths.py.
         quota = Quota(user_id=user.id, daily_limit=200000, used_today=0, reset_at=(datetime.now(timezone.utc) + timedelta(days=1)).replace(tzinfo=None))
         session.add(quota)
         await session.commit()

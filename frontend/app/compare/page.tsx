@@ -1,43 +1,36 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth'
-import { apiFetch } from '@/lib/apiFetch'
-import { useCatalog, priceBand, PRICE_BAND_LABEL } from '@/lib/useCatalog'
+import { useCatalog } from '@/lib/useCatalog'
 import { type ModelCatalogItem } from '@/types/catalog'
 import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
-import { fmt } from '@/lib/i18n'
 import { Skeleton, EmptyState, toast } from '@/components/ui'
-import MarkdownRenderer from '@/app/chat/components/MarkdownRenderer'
+import { usePersistedBoolean } from '@/components/usePersistedBoolean'
 import ModelPicker from '@/app/chat/components/ModelPicker'
 import { comparePageStrings } from './page.strings'
 import { tourAnchor } from '@/components/tour/anchors'
+import CompareSessionSidebar from './components/CompareSessionSidebar'
+import CompareResultPanel from './components/CompareResultPanel'
+import { useCompareSessions } from './hooks/useCompareSessions'
+import { useCompareConversation } from './hooks/useCompareConversation'
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Model Compare — Split view side-by-side
-   Pick two models, enter a prompt, see results + stats simultaneously.
+   Model Compare — Split view side-by-side, with history + continue.
+   Pick two models, enter a prompt, see results side by side. Once a
+   session exists (first compare's response echoes `session_id`, or a
+   history entry was reopened) the same shared composer keeps sending to
+   BOTH threads, and one small secondary button under each panel sends
+   the same composer text to only that side -- see the design spec at
+   docs/superpowers/specs/2026-08-30-compare-history-continue-design.md.
+
+   Kept intentionally thin (JSX + page-local UI state only) -- the
+   send/session logic lives in hooks/useCompareConversation.ts and the
+   history list/open/delete logic in hooks/useCompareSessions.ts, same
+   split app/chat/page.tsx uses over useChatStream.ts/useConversations.ts,
+   for the same reason (house 500-line cap per file).
    ═══════════════════════════════════════════════════════════════════════════ */
-
-type CompareResult = {
-  model: string
-  content: string
-  elapsed: number
-  input_tokens: number
-  output_tokens: number
-  cost: number
-  error: string | null
-}
-
-type CompareResponse = {
-  model_a: CompareResult
-  model_b: CompareResult
-  faster: 'model_a' | 'model_b' | null
-  cheaper: 'model_a' | 'model_b' | null
-  messages: { role: string; content: string }[]
-}
-
-type Side = 'a' | 'b'
 
 function Spinner({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
   const sz = size === 'sm' ? 16 : size === 'lg' ? 32 : 24
@@ -49,30 +42,43 @@ function Spinner({ size = 'md' }: { size?: 'sm' | 'md' | 'lg' }) {
   )
 }
 
-function formatElapsed(sec: number): string {
-  if (sec < 1) return `${(sec * 1000).toFixed(0)}ms`
-  return `${sec.toFixed(1)}s`
-}
-
 export default function ComparePage() {
   const { token } = useAuth()
   const lang = useLang()
   const s = comparePageStrings(lang)
-  const f = fmt(lang)
   const { models, loading: catalogLoading, error: catalogError } = useCatalog()
+  const sessionsHook = useCompareSessions({ token })
+
   const [modelA, setModelA] = useState<ModelCatalogItem | null>(null)
   const [modelB, setModelB] = useState<ModelCatalogItem | null>(null)
-  const [comparedModelA, setComparedModelA] = useState<ModelCatalogItem | null>(null)
-  const [comparedModelB, setComparedModelB] = useState<ModelCatalogItem | null>(null)
-  const [prompt, setPrompt] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [results, setResults] = useState<CompareResponse | null>(null)
-  const [error, setError] = useState('')
+
   // Same localStorage key as app/chat/page.tsx so the preference carries
   // across chat and compare.
   const [webSearch, setWebSearch] = useState<boolean>(() => {
     try { return localStorage.getItem('sanjabai_web_search') === 'true' } catch { return false }
   })
+
+  const conv = useCompareConversation({
+    models, modelA, modelB, setModelA, setModelB, webSearch,
+    openSession: sessionsHook.openSession,
+    deleteSession: sessionsHook.deleteSession,
+    refetchSessions: sessionsHook.fetchSessions,
+  })
+
+  const [sidebarOpen, setSidebarOpen] = usePersistedBoolean('sanjabai_compare_sidebar_open', true)
+  // Below 768px, `.conv-sidebar` (styles-chat-sidebar.css) is force-hidden
+  // regardless of `sidebarOpen` -- same breakpoint app/chat/page.tsx uses,
+  // and the same reason: the desktop sidebar's fixed 280px width doesn't
+  // fit. Mirrors chat's isMobile + mobile drawer (`.conv-drawer*` classes,
+  // also global) rather than leaving history unreachable on mobile.
+  const [isMobile, setIsMobile] = useState(false)
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
 
   // Default to first two working models from catalog
   useEffect(() => {
@@ -90,288 +96,217 @@ export default function ComparePage() {
     try { localStorage.setItem('sanjabai_web_search', webSearch ? 'true' : 'false') } catch {}
   }, [webSearch])
 
-  const canCompare = useMemo(
-    () => modelA && modelB && modelA.id !== modelB.id && prompt.trim() && !busy,
-    [modelA, modelB, prompt, busy],
-  )
+  const startNewComparison = () => {
+    conv.startNewComparison()
+    setMobileDrawerOpen(false)
+  }
 
-  const handleCompare = async () => {
-    if (!canCompare || !modelA || !modelB) return
-
-    setBusy(true)
-    setResults(null)
-    setError('')
-    setComparedModelA(modelA)
-    setComparedModelB(modelB)
-
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (token) headers['Authorization'] = `Bearer ${token}`
-
-    try {
-      const res = await apiFetch('/api/v1/compare', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          model_a: modelA.providerModelId || modelA.id,
-          model_b: modelB.providerModelId || modelB.id,
-          messages: [{ role: 'user', content: prompt.trim() }],
-          ...(webSearch ? { web_search: true } : {}),
-        }),
-      })
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        // errData?.error?.message / errData?.detail are backend-sourced error
-        // messages (Persian only for now) -- see the i18n handoff report.
-        const msg = errData?.error?.message || errData?.detail || s.serverError(f.num(res.status))
-        if (res.status === 429) throw new Error('INSUFFICIENT_BALANCE')
-        throw new Error(msg)
-      }
-
-      const data: CompareResponse = await res.json()
-      setResults(data)
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : s.connectionError
-      if (msg === 'INSUFFICIENT_BALANCE') {
-        setError(s.insufficientBalance)
-      } else {
-        setError(msg)
-      }
-    } finally {
-      setBusy(false)
-    }
+  const handleOpenSession = async (id: number) => {
+    await conv.handleOpenSession(id)
+    setMobileDrawerOpen(false)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
-      handleCompare()
+      conv.handleSend('both')
     }
   }
 
-  const renderResultPanel = (side: Side, model: ModelCatalogItem | null, result: CompareResult | null) => {
-    const isFaster = results?.faster === `model_${side}`
-    const isCheaper = results?.cheaper === `model_${side}`
-
-    return (
-      <div className="compare-panel">
-        {/* Panel header */}
-        <div className="compare-panel-header">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: 'var(--accent-dim)' }}>
-              <Icon name="models" size={16} className="text-[var(--accent)]" />
-            </div>
-            <div className="min-w-0">
-              {model ? (
-                <>
-                  <span className="compare-model-name" dir="ltr">{model.displayName}</span>
-                  {/* PRICE_BAND_LABEL (lib/useCatalog.ts) is a hardcoded
-                      Persian record outside this directory's allowed scope --
-                      it renders Persian even in the English UI. See the i18n
-                      handoff report. */}
-                  <span className="compare-model-provider">{PRICE_BAND_LABEL[priceBand(model, models)]}</span>
-                </>
-              ) : (
-                <span className="text-sm text-[var(--text-muted)]">{s.noModelSelected}</span>
-              )}
-            </div>
-          </div>
-
-          {/* Winner badges */}
-          {result && !result.error && (
-            <div className="compare-badges">
-              {isFaster && (
-                <span className="compare-badge compare-badge-fast" title={s.faster}>
-                  ⚡ {s.faster}
-                </span>
-              )}
-              {isCheaper && (
-                <span className="compare-badge compare-badge-cheap" title={s.cheaper}>
-                  💰 {s.cheaper}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Stats bar */}
-        {result && !result.error && (
-          <div className="compare-stats">
-            <div className="compare-stat">
-              <span className="compare-stat-label">{s.time}</span>
-              <span className={`compare-stat-value ${isFaster ? 'compare-stat-winner' : ''}`}>
-                {formatElapsed(result.elapsed)}
-              </span>
-            </div>
-            <div className="compare-stat">
-              <span className="compare-stat-label">{s.tokensInput}</span>
-              <span className="compare-stat-value num">{f.num(result.input_tokens)}</span>
-            </div>
-            <div className="compare-stat">
-              <span className="compare-stat-label">{s.tokensOutput}</span>
-              <span className="compare-stat-value num">{f.num(result.output_tokens)}</span>
-            </div>
-            <div className="compare-stat">
-              <span className="compare-stat-label">{s.cost}</span>
-              {/* Toman via f.price — no page-local ÷1000 formatter, no "IRT"
-                  label on a divided value (that was the old 10x-style trap). */}
-              <span className={`compare-stat-value ${isCheaper ? 'compare-stat-winner' : ''}`}>
-                {f.price(result.cost)}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Content area */}
-        <div className="compare-content">
-          {busy ? (
-            <div className="compare-loading">
-              <Spinner size="md" />
-              <span className="text-sm text-[var(--text-secondary)] mt-2">{s.receiving}</span>
-            </div>
-          ) : result?.error ? (
-            <div className="compare-error">
-              <Icon name="close" size={20} className="text-[var(--danger)]" />
-              {/* result.error is a backend-sourced error message (Persian
-                  only for now) -- see the i18n handoff report. */}
-              <span className="text-sm text-[var(--danger)]">{result.error}</span>
-            </div>
-          ) : result?.content ? (
-            <div className="compare-markdown">
-              <MarkdownRenderer content={result.content} />
-            </div>
-          ) : (
-            <div className="compare-placeholder">
-              <Icon name="compare" size={24} className="text-[var(--text-muted)]" />
-              <span className="text-sm text-[var(--text-muted)]">{s.placeholder}</span>
-            </div>
-          )}
-        </div>
-      </div>
-    )
-  }
+  const sidebarContent = (
+    <CompareSessionSidebar
+      startNewComparison={startNewComparison}
+      loadingSessions={sessionsHook.loadingSessions}
+      sessions={sessionsHook.sessions}
+      activeSessionId={conv.sessionId}
+      openSession={handleOpenSession}
+      confirmDeleteId={sessionsHook.confirmDeleteId}
+      setConfirmDeleteId={sessionsHook.setConfirmDeleteId}
+      deletingId={sessionsHook.deletingId}
+      deleteSession={conv.handleDeleteSession}
+    />
+  )
 
   return (
-    <div className="compare-page">
-      {/* Header */}
-      <div className="compare-header">
-        <div>
-          <h1 className="text-2xl font-bold text-gradient">{s.title}</h1>
-          <p className="text-sm text-[var(--text-secondary)] mt-1">
-            {s.subtitle}
-          </p>
-        </div>
-      </div>
-
-      {/* Model pickers + prompt */}
-      <div className="card">
-        <div className="compare-controls">
-          {/* Model A picker */}
-          <div className="compare-picker-col">
-            <label className="compare-picker-label">
-              <span className="compare-picker-badge a">{s.modelA}</span>
-            </label>
-            {catalogLoading ? (
-              <Skeleton className="w-full" height="2.5rem" />
-            ) : (
-              <ModelPicker
-                models={models.filter(m => m.id !== modelB?.id)}
-                selected={modelA}
-                onSelect={setModelA}
-                loading={false}
-                disabled={busy}
-              />
-            )}
+    <>
+      {/* Mobile drawer overlay -- `.conv-drawer*` (styles-chat-sidebar.css)
+          is global, identical mechanism to app/chat/page.tsx's mobile
+          conversation drawer. */}
+      {isMobile && mobileDrawerOpen && (
+        <div className="conv-drawer-overlay" onClick={() => setMobileDrawerOpen(false)} />
+      )}
+      {isMobile && (
+        <aside className={`conv-drawer ${mobileDrawerOpen ? 'conv-drawer-open' : ''}`} aria-label={s.historyAriaLabel}>
+          <div className="conv-drawer-header">
+            <span className="conv-drawer-title">{s.historyAriaLabel}</span>
+            <button onClick={() => setMobileDrawerOpen(false)} className="conv-drawer-close" aria-label={s.closeSidebar}>
+              <Icon name="close" size={18} />
+            </button>
           </div>
-
-          {/* VS divider */}
-          <div className="compare-vs">
-            <span>{s.vs}</span>
-          </div>
-
-          {/* Model B picker */}
-          <div className="compare-picker-col">
-            <label className="compare-picker-label">
-              <span className="compare-picker-badge b">{s.modelB}</span>
-            </label>
-            {catalogLoading ? (
-              <Skeleton className="w-full" height="2.5rem" />
-            ) : (
-              <ModelPicker
-                models={models.filter(m => m.id !== modelA?.id)}
-                selected={modelB}
-                onSelect={setModelB}
-                loading={false}
-                disabled={busy}
-              />
-            )}
-          </div>
-        </div>
-
-        {/* Prompt input */}
-        <div className="compare-input-row">
-          <button
-            type="button"
-            onClick={() => setWebSearch(!webSearch)}
-            className={"btn btn-ghost btn-icon rounded-xl shrink-0" + (webSearch ? " text-[var(--accent)]" : "")}
-            aria-label={s.webSearch}
-            title={s.webSearch}
-            style={webSearch ? { color: 'var(--accent)' } : {}}
-            disabled={busy}
-          >
-            <Icon name="globe" size={18} />
-          </button>
-          <textarea dir="auto"
-            className="input flex-1"
-            {...tourAnchor('compare.prompt')}
-            rows={2}
-            placeholder={s.promptPlaceholder}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={busy}
-          />
-          <button
-            className="btn btn-primary compare-submit-btn"
-            onClick={handleCompare}
-            disabled={!canCompare}
-          >
-            {busy ? (
-              <>
-                <Spinner size="sm" />
-                {s.comparing}
-              </>
-            ) : (
-              <>
-                <Icon name="compare" size={16} />
-                {s.compare}
-              </>
-            )}
-          </button>
-        </div>
-
-        {error && (
-          <div className="compare-error-banner">
-            <Icon name="close" size={16} />
-            <span>{error}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Empty state */}
-      {!catalogLoading && !catalogError && models.length === 0 && (
-        <EmptyState
-          icon="compare"
-          title={s.noModelsTitle}
-          description={s.noModelsDesc}
-        />
+          {sidebarContent}
+        </aside>
       )}
 
-      {/* Results — split view */}
-      <div className="compare-results">
-        {renderResultPanel('a', comparedModelA || modelA, results?.model_a ?? null)}
-        {renderResultPanel('b', comparedModelB || modelB, results?.model_b ?? null)}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
+        {!isMobile && sidebarOpen && (
+          <aside
+            className="conv-sidebar"
+            aria-label={s.historyAriaLabel}
+            style={{ height: 'auto', maxHeight: 'calc(100vh - 8rem)', overflowY: 'auto', position: 'sticky', top: '1rem', flexShrink: 0 }}
+          >
+            {sidebarContent}
+          </aside>
+        )}
+
+        <div className="compare-page" style={{ flex: 1, minWidth: 0 }}>
+          {/* Header */}
+          <div className="compare-header">
+            <div>
+              <h1 className="text-2xl font-bold text-gradient">{s.title}</h1>
+              <p className="text-sm text-[var(--text-secondary)] mt-1">
+                {s.subtitle}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => (isMobile ? setMobileDrawerOpen(true) : setSidebarOpen(prev => !prev))}
+              className="conv-toggle-btn"
+              title={isMobile || !sidebarOpen ? s.openSidebar : s.closeSidebar}
+              aria-label={isMobile || !sidebarOpen ? s.openSidebar : s.closeSidebar}
+            >
+              <Icon name="history" size={16} />
+            </button>
+          </div>
+
+          {/* Model pickers + prompt */}
+          <div className="card">
+            <div className="compare-controls">
+              {/* Model A picker */}
+              <div className="compare-picker-col">
+                <label className="compare-picker-label">
+                  <span className="compare-picker-badge a">{s.modelA}</span>
+                </label>
+                {catalogLoading ? (
+                  <Skeleton className="w-full" height="2.5rem" />
+                ) : (
+                  <ModelPicker
+                    models={models.filter(m => m.id !== modelB?.id)}
+                    selected={modelA}
+                    onSelect={setModelA}
+                    loading={false}
+                    disabled={conv.busy || conv.sessionId != null}
+                  />
+                )}
+              </div>
+
+              {/* VS divider */}
+              <div className="compare-vs">
+                <span>{s.vs}</span>
+              </div>
+
+              {/* Model B picker */}
+              <div className="compare-picker-col">
+                <label className="compare-picker-label">
+                  <span className="compare-picker-badge b">{s.modelB}</span>
+                </label>
+                {catalogLoading ? (
+                  <Skeleton className="w-full" height="2.5rem" />
+                ) : (
+                  <ModelPicker
+                    models={models.filter(m => m.id !== modelA?.id)}
+                    selected={modelB}
+                    onSelect={setModelB}
+                    loading={false}
+                    disabled={conv.busy || conv.sessionId != null}
+                  />
+                )}
+              </div>
+            </div>
+
+            {/* Prompt input */}
+            <div className="compare-input-row">
+              <button
+                type="button"
+                onClick={() => setWebSearch(!webSearch)}
+                className={"btn btn-ghost btn-icon rounded-xl shrink-0" + (webSearch ? " text-[var(--accent)]" : "")}
+                aria-label={s.webSearch}
+                title={s.webSearch}
+                style={webSearch ? { color: 'var(--accent)' } : {}}
+                disabled={conv.busy}
+              >
+                <Icon name="globe" size={18} />
+              </button>
+              <textarea dir="auto"
+                className="input flex-1"
+                {...tourAnchor('compare.prompt')}
+                rows={2}
+                placeholder={conv.sessionId != null ? s.continuePlaceholder : s.promptPlaceholder}
+                value={conv.prompt}
+                onChange={(e) => conv.setPrompt(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={conv.busy}
+              />
+              <button
+                className="btn btn-primary compare-submit-btn"
+                onClick={() => conv.handleSend('both')}
+                disabled={!conv.canSend}
+              >
+                {conv.busy ? (
+                  <>
+                    <Spinner size="sm" />
+                    {s.comparing}
+                  </>
+                ) : (
+                  <>
+                    <Icon name="compare" size={16} />
+                    {s.compare}
+                  </>
+                )}
+              </button>
+            </div>
+
+            {conv.error && (
+              <div className="compare-error-banner">
+                <Icon name="close" size={16} />
+                <span>{conv.error}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Empty state */}
+          {!catalogLoading && !catalogError && models.length === 0 && (
+            <EmptyState
+              icon="compare"
+              title={s.noModelsTitle}
+              description={s.noModelsDesc}
+            />
+          )}
+
+          {/* Results — split view */}
+          <div className="compare-results">
+            <CompareResultPanel
+              side="a"
+              model={conv.comparedModelA}
+              label={conv.labelA}
+              thread={conv.threadA}
+              isPending={conv.pendingTarget === 'both' || conv.pendingTarget === 'a'}
+              sessionActive={conv.sessionId != null}
+              canSend={conv.canSend}
+              onSendSide={conv.handleSend}
+            />
+            <CompareResultPanel
+              side="b"
+              model={conv.comparedModelB}
+              label={conv.labelB}
+              thread={conv.threadB}
+              isPending={conv.pendingTarget === 'both' || conv.pendingTarget === 'b'}
+              sessionActive={conv.sessionId != null}
+              canSend={conv.canSend}
+              onSendSide={conv.handleSend}
+            />
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   )
 }

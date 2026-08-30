@@ -52,6 +52,7 @@ from ._content import (
 )
 from ._conversations import (
     Assistant,
+    CompareSession,
     Conversation,
     ScheduledTask,
     TaskExecution,
@@ -77,7 +78,7 @@ from ._hermes import (
 
 __all__ = [
     'AboutContent', 'Any', 'ApiKey', 'Assistant', 'AuditLog', 'Base',
-    'Conversation', 'CreditPackage', 'Decimal', 'Discount', 'Feature',
+    'CompareSession', 'Conversation', 'CreditPackage', 'Decimal', 'Discount', 'Feature',
     'HermesAgentEvent', 'HermesOffering', 'HermesOrder', 'HermesServer',
     'HermesServerSkill', 'HermesSkillCatalog', 'JSONB', 'Ledger', 'Mapped',
     'ModelAlias', 'Notification', 'Payment', 'Pricing',

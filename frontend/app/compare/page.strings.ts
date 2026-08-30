@@ -25,6 +25,15 @@ const FA = {
   connectionError: 'خطا در ارتباط',
   serverError: (status: string) => `خطای سرور: ${status}`,
   webSearch: 'جستجوی وب',
+  // ── History + continue (session mode) ──────────────────────────────────
+  continuePlaceholder: 'ادامه گفتگو را بنویسید... (Ctrl+Enter برای ارسال به هر دو)',
+  sendToA: 'فقط ارسال به A',
+  sendToB: 'فقط ارسال به B',
+  openSidebar: 'نمایش تاریخچه',
+  closeSidebar: 'پنهان‌کردن تاریخچه',
+  historyAriaLabel: 'تاریخچه مقایسه‌ها',
+  loadSessionFailed: 'خطا در بارگذاری تاریخچه مقایسه',
+  deleteSessionFailed: 'خطا در حذف مقایسه',
 }
 
 const EN: typeof FA = {
@@ -52,6 +61,15 @@ const EN: typeof FA = {
   connectionError: 'Connection error',
   serverError: (status) => `Server error: ${status}`,
   webSearch: 'Web search',
+  // ── History + continue (session mode) ──────────────────────────────────
+  continuePlaceholder: 'Continue the conversation... (Ctrl+Enter to send to both)',
+  sendToA: 'Send to A only',
+  sendToB: 'Send to B only',
+  openSidebar: 'Show history',
+  closeSidebar: 'Hide history',
+  historyAriaLabel: 'Compare history',
+  loadSessionFailed: 'Failed to load the compare history',
+  deleteSessionFailed: 'Failed to delete the comparison',
 }
 
 export const comparePageStrings = dict(FA, EN)

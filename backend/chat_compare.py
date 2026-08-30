@@ -27,7 +27,7 @@ import sqlalchemy
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 
-from models import Quota
+from models import CompareSession, Quota
 from services.context_injection import get_injection_messages, inject_messages
 from services.token_budget import apply_outbound_budget
 from services.billing import SqlBillingRepo, InsufficientBalanceError
@@ -37,6 +37,9 @@ from services.free_tier import covers_request
 from middleware.compression import compress_messages, compression_enabled_for
 from model_output import clean_response_dict
 from i18n import err, err_openai
+# Reused verbatim (not reimplemented) so title generation can never drift
+# between /conversations and /v1/compare -- see conversations.py's docstring.
+from conversations import _auto_generate_title
 
 import chat
 from providers import COMPLETION_TIMEOUT_SECONDS
@@ -347,10 +350,54 @@ async def compare_models(request: Request, payload: CompareRequest) -> Response:
         elif result_b['cost'] < result_a['cost']:
             cheaper = 'model_b'
 
+    # Persist a compare_sessions row (migration 0054) so this comparison can
+    # be reopened/continued later -- see chat_compare.py's module docstring
+    # and CompareSession's docstring in models/_conversations.py. Additive
+    # only: session_id is a NEW response field, everything above is
+    # unchanged. Best-effort -- a persistence failure must not turn an
+    # otherwise-successful comparison into a 500 (same fail-open shape as
+    # the reservation fallback above), it just means this comparison has no
+    # history entry.
+    session_id = None
+    try:
+        title = await _auto_generate_title(payload.messages)
+        thread_a = list(messages) + [{'role': 'assistant', 'content': result_a['content']}]
+        thread_b = list(messages) + [{'role': 'assistant', 'content': result_b['content']}]
+        async with chat.async_session() as _cs_session:
+            _cs = CompareSession(
+                user_id=uid, model_a=model_a, model_b=model_b,
+                model_a_requested=model_a_requested, model_b_requested=model_b_requested,
+                title=title, thread_a=thread_a, thread_b=thread_b,
+            )
+            _cs_session.add(_cs)
+            await _cs_session.commit()
+            await _cs_session.refresh(_cs)
+            session_id = _cs.id
+    except Exception as e:
+        logger.warning(f"Compare session persistence failed uid={uid}: {e}")
+
     return JSONResponse({
         'model_a': result_a,
         'model_b': result_b,
         'faster': faster,
         'cheaper': cheaper,
         'messages': messages,
+        'session_id': session_id,
     })
+
+
+# Side-effecting import -- registers the four /v1/compare/sessions* routes
+# (POST .../continue, GET list, GET .../{id}, DELETE .../{id}) on
+# `chat.router`. They live in chat_compare_sessions.py, a separate file
+# purely to keep THIS file under the house 500-line cap (same reason
+# chat.py itself split into chat_web.py/chat_models.py/chat_search.py/
+# chat_billing.py/chat_stream.py/this file, chat_smart.py) -- see that
+# module's docstring. `_call_model_once` above is imported back from there,
+# not duplicated, so the reserve/gather/release + billing/error shape stays
+# defined in exactly one place.
+from chat_compare_sessions import (  # noqa: F401,E402
+    continue_compare_session,
+    list_compare_sessions,
+    get_compare_session,
+    delete_compare_session,
+)

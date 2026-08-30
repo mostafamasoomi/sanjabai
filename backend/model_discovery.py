@@ -18,8 +18,11 @@ what it finds. Two rules keep it safe to run unattended:
 """
 from __future__ import annotations
 
+import functools
 import json
 import logging
+import os
+import pathlib
 import re
 from typing import Any
 
@@ -48,6 +51,42 @@ _INFRA_TOKENS = frozenset({
     'bynaraa2', 'cloudflare', 'opencode', 'horde', 'openrouter', 'tllm',
     'ddgw', 'nothink',
 })
+
+
+# Upstream route prefixes permanently banned from the catalog (owner decision
+# 2026-08-30, see docs/ROADMAP.md): a set of free/reseller routes that were
+# purged once and must never be re-landed by a discovery sweep.
+#
+# The prefixes are supply-chain identifiers and this repo is PUBLIC, so they are
+# NOT written into tracked source. They load from the DISCOVERY_DENYLIST_PREFIXES
+# env var (comma- or newline-separated), or failing that from the gitignored
+# `discovery_denylist.txt` beside this module (one prefix per line, `#` comments
+# allowed). When neither is configured the set is empty, so a misconfigured
+# deploy bans nothing rather than silently mangling the catalog.
+@functools.lru_cache(maxsize=1)
+def _denylist_prefixes() -> tuple[str, ...]:
+    raw = os.getenv('DISCOVERY_DENYLIST_PREFIXES', '')
+    if not raw.strip():
+        cfg = pathlib.Path(__file__).with_name('discovery_denylist.txt')
+        if cfg.exists():
+            raw = cfg.read_text()
+    seen: dict[str, None] = {}
+    for line in raw.replace(',', '\n').splitlines():
+        token = line.strip().lower()
+        if token and not token.startswith('#'):
+            seen[token] = None
+    return tuple(seen)
+
+
+def _is_denylisted(model_id: str) -> bool:
+    """True if the model's raw upstream route prefix is on the ban list.
+
+    Matched on the id prefix (the part before the first `/`) exactly, or on a
+    shard suffix `<prefix>-...` -- what the upstream actually reports, not the
+    derived `provider` column, which does not exist until after this check.
+    """
+    prefix = model_id.split('/', 1)[0].strip().lower()
+    return any(prefix == b or prefix.startswith(b + '-') for b in _denylist_prefixes())
 
 
 def _display_name(model_id: str) -> str:
@@ -161,6 +200,11 @@ async def sync_provider(p: Provider) -> dict[str, Any]:
             # Embeddings and rerankers are not chat models; offering them in a
             # chat picker would just produce confusing errors.
             if 'embedding' in model_id.lower() or 'rerank' in model_id.lower():
+                continue
+
+            # Owner-banned upstream routes (see _denylist_prefixes above) --
+            # purged 2026-08-30 and must never be re-landed by a rediscovery.
+            if _is_denylisted(model_id):
                 continue
 
             # NOTE on the ON CONFLICT branches below: `model_catalog.provenance

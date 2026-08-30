@@ -68,6 +68,11 @@ export default function ComparePage() {
   const [busy, setBusy] = useState(false)
   const [results, setResults] = useState<CompareResponse | null>(null)
   const [error, setError] = useState('')
+  // Same localStorage key as app/chat/page.tsx so the preference carries
+  // across chat and compare.
+  const [webSearch, setWebSearch] = useState<boolean>(() => {
+    try { return localStorage.getItem('sanjabai_web_search') === 'true' } catch { return false }
+  })
 
   // Default to first two working models from catalog
   useEffect(() => {
@@ -80,6 +85,10 @@ export default function ComparePage() {
   useEffect(() => {
     if (catalogError) toast(s.fetchModelsError, 'error')
   }, [catalogError, s])
+
+  useEffect(() => {
+    try { localStorage.setItem('sanjabai_web_search', webSearch ? 'true' : 'false') } catch {}
+  }, [webSearch])
 
   const canCompare = useMemo(
     () => modelA && modelB && modelA.id !== modelB.id && prompt.trim() && !busy,
@@ -106,6 +115,7 @@ export default function ComparePage() {
           model_a: modelA.providerModelId || modelA.id,
           model_b: modelB.providerModelId || modelB.id,
           messages: [{ role: 'user', content: prompt.trim() }],
+          ...(webSearch ? { web_search: true } : {}),
         }),
       })
 
@@ -300,6 +310,17 @@ export default function ComparePage() {
 
         {/* Prompt input */}
         <div className="compare-input-row">
+          <button
+            type="button"
+            onClick={() => setWebSearch(!webSearch)}
+            className={"btn btn-ghost btn-icon rounded-xl shrink-0" + (webSearch ? " text-[var(--accent)]" : "")}
+            aria-label={s.webSearch}
+            title={s.webSearch}
+            style={webSearch ? { color: 'var(--accent)' } : {}}
+            disabled={busy}
+          >
+            <Icon name="globe" size={18} />
+          </button>
           <textarea dir="auto"
             className="input flex-1"
             {...tourAnchor('compare.prompt')}

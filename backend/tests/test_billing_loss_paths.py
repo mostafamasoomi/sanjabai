@@ -251,3 +251,30 @@ class TestL4ShortfallChargesAvailableAndRecords:
         assert result["cost"] == 1
         assert session.wallet.balance == 0
         assert result["balance_after"] == 0
+
+    @pytest.mark.asyncio
+    async def test_full_shortfall_at_zero_balance_writes_no_ledger_row(self, caplog):
+        """A zero-balance settlement charges 0, so NO ledger row may be
+        written: the ledger_amount_check constraint forbids amount=0, and a
+        zero-amount entry would mean "money moved" when none did. Regression
+        for the live IntegrityError that crashed usage recording for a
+        zero-balance user (charged=0 -> Ledger(amount=0) -> constraint
+        violation -> the whole _track_usage aborted, chat still returned 200
+        but nothing was recorded and the logs filled with errors)."""
+        session = _FakeSession(wallet_balance=0, price=_price())
+        usage = {"total_tokens": 1000, "prompt_tokens": 800, "completion_tokens": 200}
+        with caplog.at_level(logging.WARNING):
+            result = await chat_mod._record_usage(
+                session, uid=22, payload={"model": "some-model"}, usage=usage,
+            )
+        assert result["cost"] == 0
+        assert session.wallet.balance == 0
+        assert result["balance_after"] == 0
+        ledger_rows = [o for o in session.added if type(o).__name__ == "Ledger"]
+        # No money moved -> no ledger row at all, and never a zero-amount one.
+        assert ledger_rows == []
+        assert all(r.amount != 0 for r in ledger_rows)
+        # The shortfall is still made visible for reconciliation (the log).
+        shortfall_logs = [r.message for r in caplog.records if "L4 shortfall" in r.message]
+        assert len(shortfall_logs) == 1
+        assert "balance_before=0" in shortfall_logs[0]

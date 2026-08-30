@@ -56,6 +56,7 @@ from services.entitlement_gate import covering_entitlement
 from services.memory_extractor import extract_memories, MIN_MSG_COUNT
 from services.free_tier import check_and_consume, covers_request
 from services.premium_quota import check_and_consume as premium_check_and_consume
+from services.model_identity import apply_model_identity
 from middleware.compression import compress_messages, compression_enabled_for, estimate_savings
 from model_output import clean_response_dict
 
@@ -120,11 +121,9 @@ class ChatRequest(BaseModel):
     max_tokens: int | None = None
     web_search: bool = False
     assistant_id: int | None = None
-    # Opt-in to the tool-calling loop; the VALUE is discarded. What the model
-    # is offered is built server-side from the user's autonomy level
-    # (services/chat_tools.py) -- forwarding a caller's definition would hand
-    # an API key an open dispatch surface. Absent, exclude_none=True omits it,
-    # so today's traffic reaches the upstream byte-identical.
+    # Opt-in to the tool-calling loop; the VALUE is discarded -- tools are built
+    # server-side from the user's autonomy level (services/chat_tools.py), so a
+    # caller can't hand an API key an open dispatch surface. exclude_none omits it.
     tools: list | None = None
 
 
@@ -133,6 +132,7 @@ class CompareRequest(BaseModel):
     model_b: str
     messages: list = []
     stream: bool = False
+    web_search: bool = False
 
 
 # ── Model resolution / availability (chat_models.py) ──────────────────
@@ -401,6 +401,7 @@ async def chat(request: Request, payload: ChatRequest) -> Response:
 
     # Web search injection (shared helper -- see _apply_web_search)
     await _apply_web_search(payload_dict, handler='chat.completions')
+    await apply_model_identity(payload_dict)  # honest model identity (services/model_identity.py)
 
     # Compress old messages to reduce token usage -- ONLY for a user who has
     # explicitly opted in. Until 2026-08-28 this ran for everybody and silently

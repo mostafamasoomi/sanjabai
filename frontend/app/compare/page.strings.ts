@@ -24,6 +24,7 @@ const FA = {
   insufficientBalance: 'موجودی کیف پول کافی نیست. لطفاً حساب خود را شارژ کنید.',
   connectionError: 'خطا در ارتباط',
   serverError: (status: string) => `خطای سرور: ${status}`,
+  webSearch: 'جستجوی وب',
 }
 
 const EN: typeof FA = {
@@ -50,6 +51,7 @@ const EN: typeof FA = {
   insufficientBalance: 'Your wallet balance is insufficient. Please top up your account.',
   connectionError: 'Connection error',
   serverError: (status) => `Server error: ${status}`,
+  webSearch: 'Web search',
 }
 
 export const comparePageStrings = dict(FA, EN)

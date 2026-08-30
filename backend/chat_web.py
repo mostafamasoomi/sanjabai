@@ -351,6 +351,8 @@ async def chat_with_file(
     _ws_payload = {'messages': msgs, 'web_search': web_search}
     await chat._apply_persian_style_guard_for_model(_ws_payload, model)
     await _apply_web_search(_ws_payload, handler='chat.with-file')
+    # Honest model identity injection (see services/model_identity.py)
+    await chat.apply_model_identity(_ws_payload)
     msgs = _ws_payload['messages']
     # NOT named `err`: this function also calls the i18n helper `err()`, and
     # Python binds a name assigned anywhere in a body as local for the WHOLE

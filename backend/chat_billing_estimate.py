@@ -22,6 +22,7 @@ from __future__ import annotations
 import math
 import os
 import secrets
+from typing import Any
 
 # ── Billing fallbacks (loss-path hardening) ──────────────────────
 #
@@ -167,3 +168,20 @@ def _extract_response_text(response_data: dict) -> str:
         if isinstance(content, str):
             parts.append(content)
     return ''.join(parts)
+
+
+def _reconcile_usage(response_data: Any, cost_info: dict[str, Any]) -> None:
+    """Overwrite the raw upstream `usage` block echoed to the client with
+    what was actually billed. Upstreams can inject phantom preamble tokens
+    (e.g. prompt_tokens=2206) that _record_usage correctly discounts before
+    charging (e.g. input_tokens=316) -- billing was never wrong, only the
+    echoed usage was stale. Mutates response_data in place; never raises.
+    """
+    try:
+        usage = response_data.get('usage') if isinstance(response_data, dict) else None
+        in_t, out_t = cost_info.get('input_tokens'), cost_info.get('output_tokens')
+        if not isinstance(usage, dict) or not isinstance(in_t, int) or not isinstance(out_t, int):
+            return
+        usage['prompt_tokens'], usage['completion_tokens'], usage['total_tokens'] = in_t, out_t, in_t + out_t
+    except Exception:
+        pass

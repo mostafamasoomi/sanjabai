@@ -28,7 +28,7 @@ class SkillTemplate(Base):
     usage_count: Mapped[int] = mapped_column(default=0)
     rating_sum: Mapped[int] = mapped_column(default=0)
     rating_count: Mapped[int] = mapped_column(default=0)
-    tags: Mapped[list | None] = mapped_column(sqlalchemy.JSON, default=list)
+    tags: Mapped[list | None] = mapped_column(sqlalchemy.ARRAY(sqlalchemy.Text), default=list)
     created_at: Mapped[datetime] = mapped_column(default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(default=_utcnow)
 

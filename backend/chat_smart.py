@@ -55,6 +55,8 @@ from middleware.compression import compress_messages, compression_enabled_for, e
 from model_output import clean_response_dict
 from i18n import err, err_openai
 
+from models import Assistant
+
 import chat
 import chat_smart_mode
 import services.smart_router as smart_router  # module import on purpose -- see docstring
@@ -76,7 +78,13 @@ _CODE_KEYWORDS = _re.compile(
     r'(```|def\s|class\s|function\s|import\s|from\s+\w+\s+import|'
     r'async\s+def|const\s|let\s|var\s|=>|return\s|if\s*\(|for\s*\(|'
     r'while\s*\(|try\s*{|except\s|raise\s|throw\s|new\s+\w+|'
-    r'print\(|console\.log|SELECT\s|INSERT\s|UPDATE\s|DELETE\s)',
+    r'print\(|console\.log|SELECT\s|INSERT\s|UPDATE\s|DELETE\s|'
+    # Persian coding/programming vocabulary -- without these, every Persian
+    # coding prompt fell through to 'simple'/'medium' and was routed to a
+    # weaker tier than an identical English prompt got.
+    r'کد|برنامه|برنامه‌نویسی|تابع|کلاس|متغیر|حلقه|آرایه|باگ|خطا|'
+    r'دیباگ|کامپایل|اسکریپت|کوئری|پایتون|جاوااسکریپت|دستور|الگوریتم|'
+    r'ریفکتور|فانکشن)',
     _re.IGNORECASE,
 )
 
@@ -84,7 +92,8 @@ _REASONING_KEYWORDS = _re.compile(
     r'(analyze|analyse|explain|compare|contrast|evaluate|reason|prove|'
     r'derive|derive|optimize|strategy|trade-?off|pros?\s*and\s*cons?|'
     r'logic|argument|hypothesis|theorem|algorithm|proof|'
-    r'چرا|چگونه|تحلیل|مقایسه|ارزیابی|استراتژی)',
+    r'چرا|چگونه|تحلیل|مقایسه|ارزیابی|استراتژی|'
+    r'اثبات|استدلال|منطق|بهینه|مقابسه‌کن|توضیح‌بده|فرضیه)',
     _re.IGNORECASE,
 )
 
@@ -138,6 +147,42 @@ async def _get_user_balance(uid: int) -> int:
     except Exception as e:
         logger.warning(f"_get_user_balance failed uid={uid}: {e}")
         return 0
+
+
+async def _inject_assistant(payload_dict: dict, messages: list, uid: int) -> None:
+    """FIX C: mirrors chat.py:376-392's assistant injection for the smart-chat
+    path. Before this, `/v1/smart-chat` never read `assistant_id` at all --
+    the frontend routes every Smart-Mode-ON request here, so a custom
+    assistant's `system_prompt` had zero effect for any Smart Mode user even
+    though the field round-tripped through `ChatRequest` and got silently
+    dropped. Mutates `messages` (and, since `payload_dict['messages']` is the
+    same list object by the time this runs -- see the call site -- that
+    mutation is visible there too) plus `payload_dict` in place; does not
+    return anything, matching the caller's "everything happens by
+    side-effect on payload_dict/messages" style used throughout this file.
+
+    Idempotent: if `messages[0]` is already the exact system message this
+    assistant would inject, it is not inserted a second time. Never raises --
+    a broken assistant lookup must not break the chat.
+    """
+    _assistant_id = payload_dict.pop('assistant_id', None)
+    if not _assistant_id or chat.async_session is None:
+        return
+    try:
+        async with chat.async_session() as _asession:
+            _ares = await _asession.execute(
+                Assistant.__table__.select().where(Assistant.id == int(_assistant_id))
+            )
+            _arow = _ares.fetchone()
+            if _arow and _arow.system_prompt:
+                _sys_msg = {'role': 'system', 'content': _arow.system_prompt}
+                if not (messages and messages[0] == _sys_msg):
+                    messages.insert(0, _sys_msg)
+                    payload_dict['messages'] = messages
+                if _arow.model_id and not payload_dict.get('model'):
+                    payload_dict['model'] = _arow.model_id
+    except Exception as e:
+        logger.warning(f"smart_chat assistant injection failed aid={_assistant_id} uid={uid}: {e}")
 
 
 @chat.router.post('/v1/smart-chat')
@@ -301,6 +346,13 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
 
     payload_dict['model'] = selected_model
 
+    # FIX C: assistant_id was accepted by ChatRequest and silently dropped
+    # here -- see _inject_assistant's docstring. Must run before the
+    # memory/context/web-search injections below so the assistant's
+    # system_prompt lands at messages[0] ahead of them, same ordering as
+    # chat.py's identical block.
+    await _inject_assistant(payload_dict, messages, uid)
+
     # Use helper for injection (S2 deduplication)
     try:
         injs = await chat.get_injection_messages(uid, messages=messages)
@@ -314,6 +366,9 @@ async def smart_chat(request: Request, payload: ChatRequest) -> Response:
     # smart-chat never read `web_search` at all: the flag was silently dropped
     # AND the stray key was forwarded upstream in the JSON body unread.
     await chat._apply_web_search(payload_dict, handler='smart-chat')
+
+    # Honest model identity injection (see services/model_identity.py)
+    await chat.apply_model_identity(payload_dict)
 
     # Compress old messages -- opt-in only; see the gate's rationale in chat.py.
     if await compression_enabled_for(uid):

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Any
 
@@ -26,6 +27,8 @@ _stats: dict[str, Any] = {
     "enabled": True,
     "last_extraction": None,       # datetime or None
     "total_extracted": 0,          # lifetime count of memories saved
+    "last_error": None,            # str or None — last failure seen, if any
+    "error_count": 0,              # lifetime count of failed extraction calls
 }
 
 
@@ -35,6 +38,8 @@ def get_auto_status() -> dict[str, Any]:
         "enabled": _stats["enabled"],
         "last_extraction": _stats["last_extraction"].isoformat() if _stats["last_extraction"] else None,
         "total_extracted": _stats["total_extracted"],
+        "last_error": _stats["last_error"],
+        "error_count": _stats["error_count"],
     }
 
 
@@ -80,66 +85,87 @@ async def extract_memories(
 
     # ── Call LiteLLM to extract facts ───────────────────────────
     facts: list[str] = []
-    try:
-        from database import _http, LITELLM_HOST
+    from database import _http, LITELLM_HOST
 
-        prompt = (
-            "Extract 1-3 key facts about the user from this conversation. "
-            "Return as a JSON array of strings. Be concise. "
-            "Only extract factual, persistent information (e.g. name, preferences, "
-            "skills, interests, background, goals). "
-            "Do NOT extract transient chat content or questions. "
-            "If there is nothing worth remembering, return an empty array [].\n\n"
-            f"Conversation:\n{conversation_text}"
-        )
+    prompt = (
+        "Extract 1-3 key facts about the user from this conversation. "
+        "Return as a JSON array of strings. Be concise. "
+        "Only extract factual, persistent information (e.g. name, preferences, "
+        "skills, interests, background, goals). "
+        "Do NOT extract transient chat content or questions. "
+        "If there is nothing worth remembering, return an empty array [].\n\n"
+        f"Conversation:\n{conversation_text}"
+    )
 
-        r = await _http.post(
-            f"{LITELLM_HOST}/v1/chat/completions",
-            json={
-                "model": "tencent-hy3",
-                "messages": [
-                    {"role": "system", "content": "You are a memory extraction assistant. Return ONLY a JSON array of strings, nothing else."},
-                    {"role": "user", "content": prompt},
-                ],
-                "temperature": 0.1,
-                "max_tokens": 300,
-            },
-            headers={"Accept": "application/json"},
-            timeout=30,
-        )
+    # The primary model is fast but occasionally ReadTimeouts on a flaky
+    # upstream; the fallback is slower but steadier. Extraction is a background
+    # task, so a longer timeout + one fallback attempt costs the user nothing
+    # and stops a transient blip from silently dropping a memory. A 200 with an
+    # empty [] is a valid "nothing to remember" -- do not treat it as a failure.
+    _models = [m for m in (
+        os.getenv("MEMORY_EXTRACT_MODEL", "deepseek-v4-flash"),
+        os.getenv("MEMORY_EXTRACT_FALLBACK", "stepfun-3.7-flash"),
+    ) if m]
+    _got_response = False
+    _last_err: str | None = None
+    for _model in _models:
+        try:
+            r = await _http.post(
+                f"{LITELLM_HOST}/v1/chat/completions",
+                json={
+                    "model": _model,
+                    "messages": [
+                        {"role": "system", "content": "You are a memory extraction assistant. Return ONLY a JSON array of strings, nothing else."},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": 0.1,
+                    "max_tokens": 300,
+                },
+                headers={"Accept": "application/json"},
+                timeout=45,
+            )
+        except Exception as e:
+            _last_err = f"{type(e).__name__}: {str(e)[:150]}"
+            logger.warning(f"extract_memories: LiteLLM call failed uid={uid} model={_model}: {_last_err}")
+            continue
+        if r.status_code != 200:
+            _last_err = f"litellm {r.status_code} ({_model})"
+            logger.warning(f"extract_memories: LiteLLM returned {r.status_code} for uid={uid} model={_model}")
+            continue
 
-        if r.status_code == 200:
-            data = r.json()
-            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-            # Parse the JSON array
+        _got_response = True
+        data = r.json()
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        # Parse the JSON array
+        content = content.strip()
+        # Strip markdown code fences if present
+        if content.startswith("```"):
+            content = content.split("\n", 1)[-1] if "\n" in content else content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
             content = content.strip()
-            # Strip markdown code fences if present
-            if content.startswith("```"):
-                content = content.split("\n", 1)[-1] if "\n" in content else content[3:]
-                if content.endswith("```"):
-                    content = content[:-3]
-                content = content.strip()
-            try:
-                parsed = json.loads(content)
-                if isinstance(parsed, list):
-                    facts = [str(f).strip()[:MAX_MEM_CHAR] for f in parsed if f]
-                elif isinstance(parsed, str):
-                    facts = [parsed.strip()[:MAX_MEM_CHAR]] if parsed.strip() else []
-            except (json.JSONDecodeError, ValueError):
-                # Try to extract array from text
-                import re as _re
-                arr_match = _re.search(r'\[.*?\]', content, _re.DOTALL)
-                if arr_match:
-                    try:
-                        parsed = json.loads(arr_match.group(0))
-                        if isinstance(parsed, list):
-                            facts = [str(f).strip()[:MAX_MEM_CHAR] for f in parsed if f]
-                    except (json.JSONDecodeError, ValueError):
-                        pass
-        else:
-            logger.warning(f"extract_memories: LiteLLM returned {r.status_code} for uid={uid}")
-    except Exception as e:
-        logger.warning(f"extract_memories: LiteLLM call failed uid={uid}: {e}")
+        try:
+            parsed = json.loads(content)
+            if isinstance(parsed, list):
+                facts = [str(f).strip()[:MAX_MEM_CHAR] for f in parsed if f]
+            elif isinstance(parsed, str):
+                facts = [parsed.strip()[:MAX_MEM_CHAR]] if parsed.strip() else []
+        except (json.JSONDecodeError, ValueError):
+            # Try to extract array from text
+            import re as _re
+            arr_match = _re.search(r'\[.*?\]', content, _re.DOTALL)
+            if arr_match:
+                try:
+                    parsed = json.loads(arr_match.group(0))
+                    if isinstance(parsed, list):
+                        facts = [str(f).strip()[:MAX_MEM_CHAR] for f in parsed if f]
+                except (json.JSONDecodeError, ValueError):
+                    pass
+        break
+
+    if not _got_response:
+        _stats["last_error"] = _last_err or "extraction failed"
+        _stats["error_count"] += 1
         return 0
 
     if not facts:

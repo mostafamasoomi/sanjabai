@@ -103,7 +103,16 @@ async def _call_model_once(
 ) -> dict[str, Any]:
     """Call a single model and return response + timing + usage + cost."""
     start = time.monotonic()
-    payload = {'model': model, 'messages': messages, 'stream': False}
+    # Per-model copy -- `messages` is the SAME list object shared with the
+    # sibling model's concurrent _call_model_once() call (asyncio.gather in
+    # compare_models), so mutating it in place here (injection/compression
+    # below) would leak this model's system messages into the other model's
+    # request. list(...) breaks that aliasing; the shared elements are dicts
+    # and stay unmodified by anything below (only insert/replace happen).
+    payload = {'model': model, 'messages': list(messages), 'stream': False}
+
+    # Honest model identity injection (see services/model_identity.py)
+    await chat.apply_model_identity(payload)
 
     # Memory + soul injection
     try:
@@ -187,6 +196,13 @@ async def compare_models(request: Request, payload: CompareRequest) -> Response:
     _disabled = await chat._chat_preflight(uid, payload.messages)
     if _disabled is not None:
         return _disabled
+
+    if payload.stream:
+        return err_openai(
+            'مقایسه هم‌زمان دو مدل فعلاً به‌صورت جریانی پشتیبانی نمی‌شود.',
+            'Streaming is not supported for model comparison yet.',
+            400, code='stream_unsupported', err_type='invalid_request',
+        )
 
     model_a = payload.model_a
     model_b = payload.model_b
@@ -283,6 +299,15 @@ async def compare_models(request: Request, payload: CompareRequest) -> Response:
         quota_err = await _check_quota_pre(uid)
         if quota_err is not None:
             return quota_err
+
+    # Web search injection (shared helper -- see _apply_web_search), run ONCE
+    # here on the shared prompt -- not inside _call_model_once -- so a
+    # search is never fetched (and never paid for) twice for the same
+    # comparison. Both models below then see the identical grounded
+    # `messages`, same as chat.py's single-model path.
+    _ws = {'messages': messages, 'web_search': payload.web_search}
+    await chat._apply_web_search(_ws, handler='compare')
+    messages = _ws['messages']
 
     # Run both models in parallel
     results = await asyncio.gather(

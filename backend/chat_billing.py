@@ -34,7 +34,7 @@ tests/test_upstream_overhead.py) and `chat_billing.<name>` reference
 (tests/test_entitlement_wiring.py) keeps resolving exactly as before. These
 are pure functions with no `chat` module dependency, so -- unlike
 `_record_usage`/`_track_usage`/`_bill_stream_usage` above -- nothing here
-needed the late-binding `chat.<name>` treatment.
+needed the late-binding `chat.<name>` treatment. `_reconcile_usage` joined this list 2026-08-30 for the same reason.
 """
 from __future__ import annotations
 
@@ -63,6 +63,7 @@ from chat_billing_estimate import (  # noqa: F401
     _extract_reasoning_tokens,
     _usage_idempotency_key,
     _extract_response_text,
+    _reconcile_usage,
 )
 
 logger = logging.getLogger('chat')  # keep all chat_*.py logs under the pre-split 'chat' logger name
@@ -396,8 +397,9 @@ async def _record_usage(session: AsyncSession, uid: int, payload: dict[str, Any]
         reason = f'مصرف {model}'
         if charged < cost:
             reason += ' (کسری موجودی)'
-        entry = Ledger(user_id=uid, txn_type='usage', amount=-charged, balance_after=new_balance, reason=reason, idempotency_key=idempotency_key)
-        session.add(entry)
+        if charged > 0:  # zero movement => no ledger row (ledger_amount_check: amount<>0); shortfall still logged + on usage_event
+            entry = Ledger(user_id=uid, txn_type='usage', amount=-charged, balance_after=new_balance, reason=reason, idempotency_key=idempotency_key)
+            session.add(entry)
     result['cost'] = charged
     result['balance_after'] = new_balance
 
@@ -473,6 +475,7 @@ async def _track_usage(request: Request, payload: dict[str, Any], response_data:
         async with chat.async_session() as session:
             cost_info = await _record_usage(session, uid, payload, usage, idempotency_key=idempotency_key, response_text=response_text)
             await session.commit()
+            _reconcile_usage(response_data, cost_info)
             return cost_info
     except Exception as e:
         logger.warning(f"_track_usage failed uid={uid} model={payload.get('model')}: {e}")

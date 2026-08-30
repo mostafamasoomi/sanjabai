@@ -2,10 +2,17 @@
 
 Split out of chat_web.py on 2026-08-23 purely to stay under the house
 500-line cap -- chat_web.py crossed it when the DuckDuckGo Instant Answer
-parser was hardened against non-dict JSON. Nothing here changed in the
-move; see git history for the substantive rewrite that replaced the dead
-DuckDuckGo HTML scraper with the Instant Answer API plus language-aware
-Wikipedia intro extracts.
+parser was hardened against non-dict JSON. See git history for the
+substantive rewrite that first replaced the (then-dead) DuckDuckGo HTML
+scraper with the Instant Answer API plus language-aware Wikipedia intro
+extracts, and this file's own history for 2026-08-30, when the HTML
+scraper was reintroduced (`_parse_ddg_html_results` + the DDG-HTML tier in
+`_web_search`) after a fresh probe showed html.duckduckgo.com/html/ *does*
+return real organic results in bursts of ~7 requests before its anomaly
+detector kicks in for this server's IP -- the Instant Answer API alone is
+encyclopedic-only and cannot answer a time-sensitive query at all, which
+is the underlying bug this reintroduction fixes. See `_web_search`'s
+docstring for the full source order and the anomaly-detector evidence.
 
 IMPORT CONTRACT -- read before moving anything again. chat.py line 276 does
 `from chat_web import _apply_web_search, _web_search, ...`, and the test
@@ -27,11 +34,75 @@ from __future__ import annotations
 import html as _html
 import logging
 import re as _re
+from urllib.parse import parse_qs as _parse_qs, urlsplit as _urlsplit
 
 import chat
 
 logger = logging.getLogger('chat')  # keep all chat_*.py logs under the pre-split 'chat' logger name
 
+
+
+def _unwrap_ddg_redirect(href: str) -> str:
+    """Resolve a DuckDuckGo HTML-SERP result href to its real destination.
+
+    ``href`` must already be HTML-unescaped (the raw markup uses `&amp;`
+    between query params, which would otherwise not split as `&`). DDG's
+    HTML endpoint linked results directly (`href="https://example.com/"`)
+    in some probes and through its own redirect endpoint
+    (`href="//duckduckgo.com/l/?uddg=<url-encoded target>&rut=..."`) in
+    others on the same day -- confirmed both shapes live on 2026-08-30, so
+    this has to handle either one rather than assume a single format.
+    ``parse_qs`` already fully URL-decodes the ``uddg`` value, so no
+    separate ``unquote`` call is needed (that would double-decode). A bare
+    protocol-relative href (`//host/...`) is upgraded to `https:` since a
+    literal `//...` is not a usable URL to show a user or cite to a model.
+    """
+    if 'duckduckgo.com/l/' in href:
+        _target = _parse_qs(_urlsplit(href).query).get('uddg', [''])[0]
+        if _target:
+            return _target
+    if href.startswith('//'):
+        return 'https:' + href
+    return href
+
+
+def _parse_ddg_html_results(html_text: str, max_results: int) -> list[dict]:
+    """Extract organic results from a DuckDuckGo HTML SERP page
+    (html.duckduckgo.com/html/) into ``[{'title', 'url', 'snippet'}, ...]``.
+
+    Pure text-in/data-out parsing, no network call -- kept separate from
+    `_web_search` so it can be unit-tested directly against a saved HTML
+    fixture (tests/test_web_search_freehtml.py).
+
+    Splits on each result's own container div
+    (`<div class="result results_links`) rather than pairing
+    `result__a`/`result__snippet` regexes positionally across the whole
+    page: positional pairing silently misaligns the moment a result has no
+    snippet (sponsored slots, some file/PDF results), which is not
+    hypothetical on this endpoint. Returns [] for anything that is not a
+    real result list -- including the bot-challenge ("anomaly") page this
+    endpoint serves once a source IP has sent too many requests too fast,
+    which has zero `result__a` occurrences and so parses to [] rather than
+    raising. That is what lets `_web_search` fall through to the next
+    source instead of surfacing a scrape error to the user.
+    """
+    results: list[dict] = []
+    for block in _re.split(r'<div class="result results_links', html_text)[1:]:
+        if len(results) >= max_results:
+            break
+        _m_title = _re.search(r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', block, _re.S)
+        if not _m_title:
+            continue
+        _url = _unwrap_ddg_redirect(_html.unescape(_m_title.group(1)).strip())
+        _title = _html.unescape(_re.sub(r'<[^>]+>', '', _m_title.group(2))).strip()
+        if not _url or not _title:
+            continue
+        _snippet = ''
+        _m_snippet = _re.search(r'class="result__snippet"[^>]*>(.*?)</a>', block, _re.S)
+        if _m_snippet:
+            _snippet = _html.unescape(_re.sub(r'<[^>]+>', '', _m_snippet.group(1))).strip()
+        results.append({'title': _title, 'url': _url, 'snippet': _snippet})
+    return results
 
 
 async def _web_search(query: str, max_results: int = 5) -> str:
@@ -40,23 +111,35 @@ async def _web_search(query: str, max_results: int = 5) -> str:
     Source order (all measured reachable from this server; see NEXT-SESSION
     for the live probe log this was built from):
       0. A keyed commercial index -- Brave, Tavily or Serper -- via
-         services/search_providers.py, when one is configured. This is the
-         only source here that is a real web index; sources 1 and 2 are
-         encyclopedic and cannot answer anything time-sensitive. Skipped
-         with zero network cost when no key is set, which is why the
-         keyless sources below remain load-bearing rather than vestigial.
-      1. DuckDuckGo Instant Answer API (api.duckduckgo.com/?format=json) --
-         a *different* DDG endpoint from the HTML scraper this replaces.
-         html.duckduckgo.com/html/ came back HTTP 202 ("anomaly" bot
-         challenge, zero results) on every probe -- three in a row, still
-         202 after a 45s cooldown, unaffected by a spoofed browser
-         User-Agent -- so that scraper (and its `result__a`/`result__snippet`
-         regex parsing, and the proxy-retry loop that existed only to work
-         around it) is gone from this file entirely. A source that returns
-         202 every time is not a fallback, it is dead weight on every
-         request. The Instant Answer API returned real prose (AbstractText)
-         plus RelatedTopics with no challenge in every probe.
-      2. Wikipedia intro extracts (`prop=extracts&exintro&explaintext` with
+         services/search_providers.py, when one is configured. Skipped with
+         zero network cost when no key is set, which is why the keyless
+         sources below remain load-bearing rather than vestigial.
+      1. DuckDuckGo HTML SERP (html.duckduckgo.com/html/, GET, parsed by
+         `_parse_ddg_html_results`) -- the primary keyless source, and the
+         only keyless source here that is a real web index rather than an
+         encyclopedia; sources 2 and 3 below cannot answer anything
+         time-sensitive at all. A prior version of this file removed an
+         HTML scraper against this same endpoint after three straight
+         probes came back HTTP 202 ("anomaly" bot challenge, zero results),
+         still 202 after a 45s cooldown. Re-probed 2026-08-30 from this
+         server: NOT dead -- a burst of ~7 GETs in quick succession each
+         returned HTTP 200 with ten real organic results (verified against
+         live queries: "قیمت طلای امروز" returned tgju.org gold-price
+         content, not an encyclopedia article), then the 8th and every
+         request after it in that burst came back 202 with the same
+         anomaly-challenge page, and stayed 202 for several minutes before
+         a later probe in the same session succeeded again. So this source
+         is real but bursty: under sustained traffic most requests will
+         likely find it in its blocked window and fall through to source 2.
+         Every attempt here is wrapped exactly like the sources below --
+         non-200, unparseable, or zero-result HTML degrades straight to the
+         next source, never raises.
+      2. DuckDuckGo Instant Answer API (api.duckduckgo.com/?format=json) --
+         a *different*, always-reachable DDG endpoint (not the anomaly-gated
+         one above). Encyclopedic only, but cheap and did not get blocked in
+         probing, so it is kept as a second keyless layer between the HTML
+         SERP and Wikipedia.
+      3. Wikipedia intro extracts (`prop=extracts&exintro&explaintext` with
          `generator=search`) -- real prose, not the old `srprop=snippet`
          teaser fragment. Language-aware: a query containing Arabic-script
          characters tries fa.wikipedia.org first, then en.wikipedia.org;
@@ -137,7 +220,46 @@ async def _web_search(query: str, max_results: int = 5) -> str:
         if _lines:
             return '\n'.join(_lines)
 
-    # ── 1) DuckDuckGo Instant Answer API ──────────────────────────────────
+    # ── 1) DuckDuckGo HTML SERP (real organic results, keyless) ───────────
+    # Best-effort: html.duckduckgo.com/html/ answers with real 200 pages in
+    # bursts, then flips to a 202 anomaly-challenge page once this server's
+    # IP has sent too many requests too fast -- see the module/function
+    # docstrings for the probe evidence. Every attempt is wrapped the same
+    # way as the DDG-IA loop below so a 202/challenge/timeout/parse-miss
+    # degrades straight to source 2 instead of raising.
+    _ddg_html_text = None
+    for cfg in _attempts:
+        try:
+            kwargs = {'timeout': 15, 'follow_redirects': True, 'proxy': cfg['proxy']}
+            async with httpx.AsyncClient(**kwargs) as _sc:
+                r = await _sc.get(
+                    'https://html.duckduckgo.com/html/',
+                    params={'q': _q},
+                    headers=_headers,
+                )
+            if r.status_code == 200 and isinstance(r.text, str):
+                _ddg_html_text = r.text
+                break
+        except Exception as e:
+            logger.debug(f"_web_search DDG-HTML attempt proxy={cfg['proxy']} failed: {type(e).__name__}")
+            continue
+
+    if _ddg_html_text:
+        _serp_hits = _parse_ddg_html_results(_ddg_html_text, max_results)
+        if _serp_hits:
+            lines = []
+            for _h in _serp_hits[:max_results]:
+                try:
+                    _host = _urlparse(_h['url']).hostname or 'وب'
+                except Exception:
+                    _host = 'وب'
+                _snippet = f"\n  {_h['snippet']}" if _h['snippet'] else ''
+                lines.append(f"• {_h['title']} ({_host}){_snippet}\n  {_h['url']}")
+            if lines:
+                logger.info(f"_web_search used DDG-HTML SERP for query={_q[:80]}")
+                return '\n'.join(lines)
+
+    # ── 2) DuckDuckGo Instant Answer API ──────────────────────────────────
     _ddg_data = None
     for cfg in _attempts:
         try:
@@ -179,7 +301,7 @@ async def _web_search(query: str, max_results: int = 5) -> str:
         if lines:
             return '\n'.join(lines[:max_results])
 
-    # ── 2) Wikipedia intro extracts, language-aware ───────────────────────
+    # ── 3) Wikipedia intro extracts, language-aware ───────────────────────
     # Arabic-script query (covers Persian) -> fa first; otherwise en first.
     # Direct (bypassing env proxy) is tried before the configured proxy for
     # each language, same as the DDG loop above.

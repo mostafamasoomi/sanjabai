@@ -114,11 +114,15 @@ async def _web_search(query: str, max_results: int = 5) -> str:
          services/search_providers.py, when one is configured. Skipped with
          zero network cost when no key is set, which is why the keyless
          sources below remain load-bearing rather than vestigial.
+      0.5 Self-hosted SearXNG (sanjabai_searxng, internal net, format=json)
+         -- the PRIMARY keyless source: a metasearch index we run ourselves,
+         aggregating many engines, so it is not gated by the single-IP anomaly
+         challenge that makes source 1 bursty. Overridable via SEARXNG_URL; a
+         dead/missing instance degrades to source 1.
       1. DuckDuckGo HTML SERP (html.duckduckgo.com/html/, GET, parsed by
-         `_parse_ddg_html_results`) -- the primary keyless source, and the
-         only keyless source here that is a real web index rather than an
-         encyclopedia; sources 2 and 3 below cannot answer anything
-         time-sensitive at all. A prior version of this file removed an
+         `_parse_ddg_html_results`) -- keyless fallback, and (with SearXNG) a
+         real web index rather than an encyclopedia; sources 2 and 3 below
+         cannot answer anything time-sensitive at all. A prior version of this file removed an
          HTML scraper against this same endpoint after three straight
          probes came back HTTP 202 ("anomaly" bot challenge, zero results),
          still 202 after a 45s cooldown. Re-probed 2026-08-30 from this
@@ -219,6 +223,47 @@ async def _web_search(query: str, max_results: int = 5) -> str:
             _lines.append(f'• {_h.title} ({_host}){_snippet}\n  {_h.url}')
         if _lines:
             return '\n'.join(_lines)
+
+    # ── 0.5) Self-hosted SearXNG (real metasearch index, keyless, PRIMARY) ─
+    # A SearXNG instance we run on this box (sanjabai_searxng, internal net
+    # only). Unlike the DDG-HTML scraper below it aggregates many upstream
+    # engines and is not gated by a single IP-anomaly challenge, so it is the
+    # reliable keyless real-time source; DDG-HTML/IA/Wikipedia below remain as
+    # degrade-fallbacks. Endpoint is overridable via SEARXNG_URL; a missing or
+    # dead instance (connection refused, non-200, empty, parse miss) degrades
+    # straight to source 1 and never raises -- same contract as every source.
+    _searx_url = _os.getenv('SEARXNG_URL', 'http://sanjabai_searxng:8080/search')
+    if _searx_url:
+        try:
+            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as _sc:
+                r = await _sc.get(
+                    _searx_url,
+                    params={'q': _q, 'format': 'json'},
+                    headers=_headers,
+                )
+            if r.status_code == 200:
+                _sx = r.json()
+                _sx_hits = _sx.get('results', []) if isinstance(_sx, dict) else []
+                lines = []
+                for _h in _sx_hits[:max_results]:
+                    if not isinstance(_h, dict):
+                        continue
+                    _title = _html.unescape((_h.get('title') or '').strip())
+                    _url = (_h.get('url') or '').strip()
+                    if not _title or not _url:
+                        continue
+                    try:
+                        _host = _urlparse(_url).hostname or 'وب'
+                    except Exception:
+                        _host = 'وب'
+                    _content = _html.unescape((_h.get('content') or '').strip())
+                    _snippet = f'\n  {_content}' if _content else ''
+                    lines.append(f'• {_title} ({_host}){_snippet}\n  {_url}')
+                if lines:
+                    logger.info(f'_web_search used SearXNG for query={_q[:80]}')
+                    return '\n'.join(lines)
+        except Exception as e:
+            logger.debug(f'_web_search SearXNG unavailable: {type(e).__name__}: {e}')
 
     # ── 1) DuckDuckGo HTML SERP (real organic results, keyless) ───────────
     # Best-effort: html.duckduckgo.com/html/ answers with real 200 pages in

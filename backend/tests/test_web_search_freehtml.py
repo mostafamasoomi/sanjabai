@@ -80,9 +80,15 @@ _KEY_VARS = ['WEB_SEARCH_PROVIDER', 'BRAVE_SEARCH_API_KEY', 'TAVILY_API_KEY', 'S
 @pytest.fixture(autouse=True)
 def _clear_search_env(monkeypatch):
     """No keyed provider leaks in from the ambient environment -- these
-    tests must reliably reach the DDG-HTML tier, not the keyed tier."""
+    tests must reliably reach the DDG-HTML tier, not the keyed tier. Also
+    neutralize SEARXNG_URL: SearXNG is now the primary keyless source (tried
+    before DDG-HTML), so leaving it set would make _web_search reach for the
+    internal SearXNG host first; setting it empty skips that tier so these
+    DDG-focused tests exercise exactly the path they pin. The SearXNG tier
+    has its own suite (test_web_search_searxng.py)."""
     for var in _KEY_VARS:
         monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv('SEARXNG_URL', '')
 
 
 def _fake_response(status_code=200, text=''):

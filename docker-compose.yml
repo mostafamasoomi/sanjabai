@@ -25,6 +25,18 @@ services:
       - sanjabai_redis_data:/data
     networks: [sanjabai_net]
 
+  # Self-hosted metasearch for free real-time web search (queried server-side by
+  # sanjabai_api over the internal net at http://sanjabai_searxng:8080). NOT exposed
+  # to the public internet (no host ports). Config + secret in ./searxng (gitignored).
+  sanjabai_searxng:
+    image: searxng/searxng@sha256:b36af7984b87191b595bc5301418ed6432c047668a4547ab531a7439b816fac3
+    restart: unless-stopped
+    volumes:
+      - ./searxng:/etc/searxng:rw
+    environment:
+      - SEARXNG_BASE_URL=http://sanjabai_searxng:8080/
+    networks: [sanjabai_net]
+
   sanjabai_litellm:
     build:
       context: ./backend

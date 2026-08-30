@@ -29,6 +29,7 @@ from admin_analytics_timeseries import (
     coverage_of,
     margin_or_none,
     resolve_window,
+    returning_purchaser_rate_or_none,
 )
 from tests.conftest import ADMIN_TOKEN, make_row
 
@@ -114,6 +115,29 @@ class TestMarginNullRule:
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# Section 2b: the churn-proxy has the same NULL-means-no-data rule
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestReturningPurchaserRate:
+
+    def test_zero_purchasers_is_none_not_zero(self):
+        # 0 of 0 is not a 0% returning rate -- it is no data. Reporting 0.0
+        # would read as "everyone churned" on a window nobody bought
+        # anything in, which is the same class of lie a fake 100%-margin
+        # day would be.
+        assert returning_purchaser_rate_or_none(0, 0) is None
+
+    def test_all_new_is_zero(self):
+        assert returning_purchaser_rate_or_none(3, 0) == 0.0
+
+    def test_all_returning_is_one(self):
+        assert returning_purchaser_rate_or_none(0, 3) == 1.0
+
+    def test_a_mix_divides_correctly(self):
+        assert returning_purchaser_rate_or_none(new_purchasers=1, returning_purchasers=3) == pytest.approx(0.75)
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # Section 3: the endpoint actually routes its data through those rules
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -124,11 +148,18 @@ def _result(rows):
     return res
 
 
-def _fake_db(cost_rows, gateway_rows=(), captured_params=None):
+def _fake_db(cost_rows, gateway_rows=(), captured_params=None,
+             purchaser_payments=(), purchaser_orders=()):
     """Fake Postgres dispatching on SQL TEXT, never on call order.
 
     Order-independent by construction, so reordering the queries inside the
     endpoint cannot silently feed one series another's data.
+
+    ``purchaser_payments``/``purchaser_orders`` back the two purchaser-
+    lifecycle lookback queries (section 1c). Each is checked by matching
+    exactly ONE of 'FROM payments' / 'FROM payment_orders' -- the windowed
+    `gateway` query above matches on BOTH being present (it UNIONs them) and
+    is checked first, so this cannot shadow it.
     """
     async def fake_execute(query, params=None, *args, **kwargs):
         if not isinstance(query, sqlalchemy.sql.elements.TextClause):
@@ -140,6 +171,10 @@ def _fake_db(cost_rows, gateway_rows=(), captured_params=None):
             return _result([make_row(_mapping=row) for row in cost_rows])
         if 'FROM payments' in sql and 'FROM payment_orders' in sql:
             return _result([make_row(_mapping=row) for row in gateway_rows])
+        if 'FROM payments' in sql:
+            return _result([make_row(_mapping=row) for row in purchaser_payments])
+        if 'FROM payment_orders' in sql:
+            return _result([make_row(_mapping=row) for row in purchaser_orders])
         return _result([])
     return fake_execute
 
@@ -315,3 +350,108 @@ class TestEndpointHonesty:
         body = client.get('/admin/analytics/timeseries', headers=admin_headers).json()
         assert body['daily_purchasers'][0]['purchasers'] == 2
         assert body['daily_gateway_revenue'][0]['amount'] == 5_000
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Section 4: the endpoint's purchaser lifecycle -- the churn-proxy totals
+# ═══════════════════════════════════════════════════════════════════════
+
+class TestEndpointPurchaserLifecycle:
+
+    def test_zero_purchasers_is_zero_and_zero_and_null(
+        self, client, mock_async_session, admin_headers,
+    ):
+        # No wiring for either lookback query -- the same "nothing happened"
+        # shape every other totals test in this file starts from.
+        mock_async_session.execute = _fake_db([])
+        body = client.get('/admin/analytics/timeseries', headers=admin_headers).json()
+        assert body['totals']['new_purchasers'] == 0
+        assert body['totals']['returning_purchasers'] == 0
+        assert body['totals']['returning_purchaser_rate'] is None
+
+    def test_a_purchase_before_the_window_and_another_inside_it_is_returning(
+        self, client, mock_async_session, admin_headers,
+    ):
+        mock_async_session.execute = _fake_db(
+            [], purchaser_payments=[
+                {'user_id': 1, 'has_prior': True, 'in_window': True},
+            ],
+        )
+        body = client.get('/admin/analytics/timeseries', headers=admin_headers).json()
+        assert body['totals']['new_purchasers'] == 0
+        assert body['totals']['returning_purchasers'] == 1
+        assert body['totals']['returning_purchaser_rate'] == 1.0
+
+    def test_a_first_ever_purchase_inside_the_window_is_new(
+        self, client, mock_async_session, admin_headers,
+    ):
+        mock_async_session.execute = _fake_db(
+            [], purchaser_payments=[
+                {'user_id': 2, 'has_prior': False, 'in_window': True},
+            ],
+        )
+        body = client.get('/admin/analytics/timeseries', headers=admin_headers).json()
+        assert body['totals']['new_purchasers'] == 1
+        assert body['totals']['returning_purchasers'] == 0
+        assert body['totals']['returning_purchaser_rate'] == 0.0
+
+    def test_a_purchase_only_before_the_window_counts_as_neither(
+        self, client, mock_async_session, admin_headers,
+    ):
+        # Bought once, but not inside the currently selected window -- this
+        # user did not purchase this period at all, so they must not inflate
+        # either bucket, and must not surface a fake rate for a window they
+        # have zero activity in.
+        mock_async_session.execute = _fake_db(
+            [], purchaser_payments=[
+                {'user_id': 3, 'has_prior': True, 'in_window': False},
+            ],
+        )
+        body = client.get('/admin/analytics/timeseries', headers=admin_headers).json()
+        assert body['totals']['new_purchasers'] == 0
+        assert body['totals']['returning_purchasers'] == 0
+        assert body['totals']['returning_purchaser_rate'] is None
+
+    def test_the_two_sources_are_merged_per_user_not_kept_separate(
+        self, client, mock_async_session, admin_headers,
+    ):
+        # Same user_id: their prior payment is in `payments`, their in-window
+        # purchase is in `payment_orders`. A purchaser is a user_id, not a
+        # per-table identity, so this must merge to ONE returning purchaser,
+        # not two independent "new" purchasers.
+        mock_async_session.execute = _fake_db(
+            [],
+            purchaser_payments=[{'user_id': 7, 'has_prior': True, 'in_window': False}],
+            purchaser_orders=[{'user_id': 7, 'has_prior': False, 'in_window': True}],
+        )
+        body = client.get('/admin/analytics/timeseries', headers=admin_headers).json()
+        assert body['totals']['new_purchasers'] == 0
+        assert body['totals']['returning_purchasers'] == 1
+
+    def test_a_mix_of_new_and_returning_computes_the_exact_rate(
+        self, client, mock_async_session, admin_headers,
+    ):
+        mock_async_session.execute = _fake_db(
+            [], purchaser_payments=[
+                {'user_id': 10, 'has_prior': False, 'in_window': True},  # new
+                {'user_id': 11, 'has_prior': False, 'in_window': True},  # new
+                {'user_id': 12, 'has_prior': True, 'in_window': True},   # returning
+            ],
+        )
+        body = client.get('/admin/analytics/timeseries', headers=admin_headers).json()
+        assert body['totals']['new_purchasers'] == 2
+        assert body['totals']['returning_purchasers'] == 1
+        assert body['totals']['returning_purchaser_rate'] == pytest.approx(1 / 3)
+
+    def test_totals_uses_the_null_guard_helper_not_a_hand_rolled_ternary(self):
+        # A source scan for the same reason test_the_cost_sql_itself... above
+        # has one: an inline `returning / (new + returning)` would divide by
+        # zero on the very first empty window instead of returning None.
+        import inspect
+        import admin_analytics_timeseries as mod
+
+        assert 'returning_purchaser_rate_or_none(' in inspect.getsource(mod._totals), (
+            '_totals must delegate to the null-guard helper, not compute the '
+            'rate inline -- an inline division is one missing zero-check away '
+            'from crashing (or worse, silently reporting 0.0) on an empty window'
+        )

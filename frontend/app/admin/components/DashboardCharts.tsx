@@ -3,10 +3,8 @@
 import { Icon } from '@/components/ui/Icon'
 import { useLang } from '@/components/LanguageToggle'
 import { fmt } from '@/lib/i18n'
-import { useAdminResource } from '../useAdminResource'
-import { CardSkeleton, ErrorCard } from '../sections/LoadState'
 import LineChart, { type LineChartSeries } from './charts/LineChart'
-import { dayLabel, type DailyAmount, type DailyUsers } from './AnalyticsCharts'
+import { dayLabel, type TimeseriesData } from './AnalyticsCharts'
 import { dashboardChartsStrings } from './DashboardCharts.strings'
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -16,6 +14,15 @@ import { dashboardChartsStrings } from './DashboardCharts.strings'
    BANNED — the ban's full record is in AnalyticsCharts.tsx; this draws
    through the same hand-written SVG kit (./charts/LineChart).
 
+   PRESENTATIONAL, no fetch of its own: `data` is the SAME
+   GET /admin/analytics/timeseries?days=30 response DashboardSection.tsx
+   fetches once and also feeds to DashboardAlerts / DashboardModelBreakdown
+   and the promoted margin/coverage stat cards — one fetch, one source of
+   truth, so a StatCard figure and this chart can never disagree. (Before
+   this pass, DashboardCharts fetched the same URL independently and threw
+   away everything except two of its ~12 fields; that duplicate request is
+   gone now that the section needs the rest of the payload too.)
+
    Pinned to days=30: the dashboard is a glance, not an analysis. The window
    selector, cost/margin series and the tables live on the analytics page,
    reached through `onOpenAnalytics` — a CALLBACK, deliberately not an
@@ -24,28 +31,10 @@ import { dashboardChartsStrings } from './DashboardCharts.strings'
    has not passed the callback down, the link is simply not rendered.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-interface SparklineData {
-  daily_consumption: DailyAmount[]
-  daily_users: DailyUsers[]
-}
-
-export default function DashboardCharts({ onOpenAnalytics }: { onOpenAnalytics?: () => void }) {
+export default function DashboardCharts({ data, onOpenAnalytics }: { data: TimeseriesData; onOpenAnalytics?: () => void }) {
   const lang = useLang()
   const s = dashboardChartsStrings(lang)
   const f = fmt(lang)
-
-  const { data, error, loading, reload } = useAdminResource<SparklineData>(
-    '/api/admin/analytics/timeseries?days=30',
-    (raw) => ({
-      daily_consumption: (raw?.daily_consumption ?? []) as DailyAmount[],
-      daily_users: (raw?.daily_users ?? []) as DailyUsers[],
-    }),
-    s.loadError,
-  )
-
-  if (error) return <ErrorCard message={error} onRetry={reload} />
-  if (loading && !data) return <CardSkeleton count={2} />
-  if (!data) return null
 
   // Both series come zero-filled off the same date spine; index-aligned.
   const labels = data.daily_consumption.map((d) => dayLabel(d.day, lang))

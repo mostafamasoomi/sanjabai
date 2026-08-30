@@ -116,6 +116,19 @@ def margin_or_none(revenue: int, known_cost: int, coverage: float) -> int | None
     return (revenue - known_cost) if coverage >= 1.0 else None
 
 
+def returning_purchaser_rate_or_none(new_purchasers: int, returning_purchasers: int) -> float | None:
+    """`returning / (new + returning)`, or None when the window had no
+    purchasers at all.
+
+    0 of 0 is not a 0% returning rate -- it is no data, and reporting 0.0
+    would read as "every purchaser churned" on a window nobody bought
+    anything in. Same NULL-means-unmeasured discipline as `margin_or_none`;
+    the churn-proxy used in place of MRR, retired with subscriptions in 0049.
+    """
+    total = new_purchasers + returning_purchasers
+    return (returning_purchasers / total) if total > 0 else None
+
+
 @router.get('/admin/analytics/timeseries')
 async def admin_analytics_timeseries(request: Request) -> JSONResponse:
     """Timeseries for the admin dashboard over a `days` window.
@@ -204,6 +217,29 @@ async def admin_analytics_timeseries(request: Request) -> JSONResponse:
         daily_purchasers = [{'day': str(r._mapping['day']),
                              'purchasers': int(r._mapping['purchasers'])}
                             for r in gateway_rows]
+
+        # 1c) Purchaser lifecycle -- NEW vs RETURNING, this product's
+        # churn-proxy in place of MRR (retired with subscriptions in 0049).
+        # Not a UNION ALL like `gateway`: needs each purchaser's FULL
+        # history, so two single-table queries merged in Python below.
+        res = await session.execute(sqlalchemy.text("""
+            SELECT user_id,
+                   BOOL_OR(DATE(verified_at) < (NOW() - make_interval(days => :days))::date) AS has_prior,
+                   BOOL_OR(DATE(verified_at) >= (NOW() - make_interval(days => :days))::date) AS in_window
+            FROM payments
+            WHERE status = 'completed' AND verified_at IS NOT NULL
+            GROUP BY user_id
+        """), params)
+        purchaser_rows = [dict(r._mapping) for r in res.fetchall()]
+        res = await session.execute(sqlalchemy.text("""
+            SELECT user_id,
+                   BOOL_OR(DATE(completed_at) < (NOW() - make_interval(days => :days))::date) AS has_prior,
+                   BOOL_OR(DATE(completed_at) >= (NOW() - make_interval(days => :days))::date) AS in_window
+            FROM payment_orders
+            WHERE status = 'completed' AND completed_at IS NOT NULL
+            GROUP BY user_id
+        """), params)
+        purchaser_rows += [dict(r._mapping) for r in res.fetchall()]
 
         # 2) Daily active + new users
         res = await session.execute(sqlalchemy.text("""
@@ -379,7 +415,17 @@ async def admin_analytics_timeseries(request: Request) -> JSONResponse:
             'net': margin_or_none(gateway_by_day.get(cost['day'], 0), known, coverage),
         })
 
-    totals = _totals(cost_rows, daily_gateway_revenue)
+    # Merge per user: EITHER source having a prior/in-window payment counts,
+    # the same OR-across-sources shape `gateway`'s UNION ALL gives above.
+    purchaser_state: dict[Any, dict[str, bool]] = {}
+    for row in purchaser_rows:
+        state = purchaser_state.setdefault(row['user_id'], {'has_prior': False, 'in_window': False})
+        state['has_prior'] = state['has_prior'] or bool(row['has_prior'])
+        state['in_window'] = state['in_window'] or bool(row['in_window'])
+    new_purchasers = sum(1 for s in purchaser_state.values() if s['in_window'] and not s['has_prior'])
+    returning_purchasers = sum(1 for s in purchaser_state.values() if s['in_window'] and s['has_prior'])
+
+    totals = _totals(cost_rows, daily_gateway_revenue, new_purchasers, returning_purchasers)
 
     return JSONResponse(jsonable_encoder({
         'days': days,
@@ -419,12 +465,18 @@ def _with_margin(row: dict, revenue_key: str) -> dict:
     return out
 
 
-def _totals(cost_rows: list[dict], gateway: list[dict]) -> dict:
+def _totals(cost_rows: list[dict], gateway: list[dict],
+            new_purchasers: int = 0, returning_purchasers: int = 0) -> dict:
     """Window-wide roll-up, under exactly the same NULL rules as the days.
 
     Summed from the per-day rows rather than re-queried: two queries that
     should agree but are written separately eventually stop agreeing, and the
     one nobody is looking at is the one that drifts.
+
+    `new_purchasers`/`returning_purchasers` are pre-classified by the
+    purchaser-lifecycle merge above, not summed here: "new" vs "returning"
+    is a window-wide property of a user's FULL history, not something day
+    rows can be summed into without double-counting a user who bought twice.
     """
     consumption = sum(int(r['total_revenue']) for r in cost_rows)
     known_cost = sum(int(r['known_cost']) for r in cost_rows)
@@ -442,4 +494,7 @@ def _totals(cost_rows: list[dict], gateway: list[dict]) -> dict:
         'net': margin_or_none(gateway_revenue, known_cost, coverage),
         'unknown_events': sum(int(r['unknown_events']) for r in cost_rows),
         'error_events': sum(int(r['error_events']) for r in cost_rows),
+        'new_purchasers': new_purchasers,
+        'returning_purchasers': returning_purchasers,
+        'returning_purchaser_rate': returning_purchaser_rate_or_none(new_purchasers, returning_purchasers),
     }

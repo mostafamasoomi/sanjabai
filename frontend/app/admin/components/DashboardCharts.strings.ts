@@ -5,10 +5,13 @@ import { dict } from '@/lib/i18n'
  * `as const`, EN annotated with `typeof FA` so a key drift is a compile
  * error. The «۳۰» in the titles is fixed copy, not a formatted value — the
  * dashboard's window is pinned to 30 days; the full analytics page owns the
- * selectable window. */
+ * selectable window.
+ *
+ * No `loadError` here: DashboardCharts is presentational now (data fetched
+ * once by DashboardSection.tsx and passed down) — the load-failure copy
+ * lives in DashboardSection.strings.ts's `seriesLoadError`. */
 
 const FA = {
-  loadError: 'خطا در دریافت نمودارهای داشبورد',
   consumptionTitle: 'روند مصرف — ۳۰ روز اخیر',
   consumptionLegend: 'مصرف روزانه',
   consumptionAria: 'نمودار کوچک مصرف روزانه در سی روز اخیر',
@@ -19,7 +22,6 @@ const FA = {
 }
 
 const EN: typeof FA = {
-  loadError: 'Failed to load dashboard charts',
   consumptionTitle: 'Consumption trend — last 30 days',
   consumptionLegend: 'Daily consumption',
   consumptionAria: 'Sparkline of daily consumption over the last 30 days',
